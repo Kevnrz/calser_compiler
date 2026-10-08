@@ -196,8 +196,13 @@ static int analyze_parameter(ASTNode *node) {
 
     ASTNode *modifier = node->child;
 
-    ASTNode *type =
-        modifier ? modifier->next : NULL;
+    ASTNode *type;
+    if (modifier->kind == AST_MODIFIER) {
+        type =
+            modifier ? modifier->next : NULL;
+    } else {
+        type = modifier ? modifier : NULL;
+    }    
 
     ASTNode *identifier =
         type ? type->next : NULL;

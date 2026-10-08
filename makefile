@@ -5,7 +5,7 @@ TARGET = ccom
 
 all: $(TARGET)
 
-$(TARGET): main.o ast.o parser.tab.o lex.yy.o
+$(TARGET): main.o ast.o parser.tab.o lex.yy.o symbol_table.o semantic.o
 	$(CC) $(CFLAGS) -o $@ $^
 
 parser.tab.c parser.tab.h: parser.y
@@ -22,6 +22,12 @@ lex.yy.o: lex.yy.c parser.tab.h ast.h
 
 ast.o: ast.c ast.h
 	$(CC) $(CFLAGS) -c ast.c
+
+symbol_table.o: symbol_table.c symbol_table.h
+	$(CC) $(CFLAGS) -c symbol_table.c
+
+semantic.o: semantic.c semantic.h
+	$(CC) $(CFLAGS) -c semantic.c
 
 main.o: main.c ast.h
 	$(CC) $(CFLAGS) -c main.c

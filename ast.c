@@ -4,12 +4,7 @@
 
 #include "ast.h"
 
-/* ============================================================
- * Utility
- * ============================================================ */
-
-static char *ast_strdup(const char *str)
-{
+static char *ast_strdup(const char *str) {
     if (str == NULL)
         return NULL;
 
@@ -24,13 +19,9 @@ static char *ast_strdup(const char *str)
     return copy;
 }
 
+// Node creation
 
-/* ============================================================
- * Basic node creation
- * ============================================================ */
-
-ASTNode *ast_new(ASTKind kind)
-{
+ASTNode *ast_new(ASTKind kind) {
     ASTNode *node = malloc(sizeof(ASTNode));
 
     if (node == NULL) {
@@ -47,10 +38,8 @@ ASTNode *ast_new(ASTKind kind)
     return node;
 }
 
-
-/* Add node as the last child of parent */
-void ast_add_child(ASTNode *parent, ASTNode *child)
-{
+// Add node as the last child of parent
+void ast_add_child(ASTNode *parent, ASTNode *child) {
     if (parent == NULL || child == NULL)
         return;
 
@@ -67,25 +56,17 @@ void ast_add_child(ASTNode *parent, ASTNode *child)
     current->next = child;
 }
 
+// Lists
 
-/* ============================================================
- * Lists
- * ============================================================ */
-
-ASTNode *ast_list(ASTKind kind, ASTNode *items)
-{
+ASTNode *ast_list(ASTKind kind, ASTNode *items) {
     ASTNode *node = ast_new(kind);
     node->child = items;
     return node;
 }
 
+// Program structure
 
-/* ============================================================
- * Program structure
- * ============================================================ */
-
-ASTNode *ast_program(ASTNode *globals, ASTNode *functions)
-{
+ASTNode *ast_program(ASTNode *globals, ASTNode *functions) {
     ASTNode *node = ast_new(AST_PROGRAM);
 
     ast_add_child(node, globals);
@@ -94,12 +75,10 @@ ASTNode *ast_program(ASTNode *globals, ASTNode *functions)
     return node;
 }
 
-
 ASTNode *ast_function(char *name,
                       ASTNode *params,
                       ASTNode *return_type,
-                      ASTNode *body)
-{
+                      ASTNode *body) {
     ASTNode *node = ast_new(AST_FUNCTION);
 
     ast_add_child(node, ast_identifier(name));
@@ -110,29 +89,21 @@ ASTNode *ast_function(char *name,
     return node;
 }
 
+// Types / parameters
 
-/* ============================================================
- * Types / parameters
- * ============================================================ */
-
-ASTNode *ast_type(const char *name)
-{
+ASTNode *ast_type(const char *name) {
     ASTNode *node = ast_new(AST_TYPE);
     node->text = ast_strdup(name);
     return node;
 }
 
-
-ASTNode *ast_modifier(const char *name)
-{
+ASTNode *ast_modifier(const char *name) {
     ASTNode *node = ast_new(AST_MODIFIER);
     node->text = ast_strdup(name);
     return node;
 }
 
-
-ASTNode *ast_return_type(ASTNode *type, char *name)
-{
+ASTNode *ast_return_type(ASTNode *type, char *name) {
     ASTNode *node = ast_new(AST_RETURN_TYPE);
 
     ast_add_child(node, type);
@@ -141,21 +112,17 @@ ASTNode *ast_return_type(ASTNode *type, char *name)
     return node;
 }
 
-
-ASTNode *ast_return_void(void)
-{
+ASTNode *ast_return_void(void) {
     ASTNode *node = ast_new(AST_RETURN_TYPE);
     node->text = ast_strdup("void");
 
     return node;
 }
 
-
 ASTNode *ast_parameter(ASTNode *modifier,
                        ASTNode *type,
                        char *name,
-                       ASTNode *dimensions)
-{
+                       ASTNode *dimensions) {
     ASTNode *node = ast_new(AST_PARAMETER);
 
     ast_add_child(node, modifier);
@@ -166,15 +133,11 @@ ASTNode *ast_parameter(ASTNode *modifier,
     return node;
 }
 
-
-ASTNode *ast_dimensions(void)
-{
+ASTNode *ast_dimensions(void) {
     return ast_list(AST_DIMENSIONS, NULL);
 }
 
-
-void ast_add_number(ASTNode *node, long number)
-{
+void ast_add_number(ASTNode *node, long number) {
     if (node == NULL)
         return;
 
@@ -183,13 +146,9 @@ void ast_add_number(ASTNode *node, long number)
     ast_add_child(node, item);
 }
 
+// Statements / declarations
 
-/* ============================================================
- * Statements / declarations
- * ============================================================ */
-
-ASTNode *ast_block(void)
-{
+ASTNode *ast_block(void) {
     return ast_list(AST_BLOCK, NULL);
 }
 
@@ -198,8 +157,7 @@ ASTNode *ast_declaration(ASTNode *modifier,
                          char *name,
                          ASTNode *type,
                          ASTNode *dimensions,
-                         ASTNode *initializer)
-{
+                         ASTNode *initializer) {
     ASTNode *node = ast_new(AST_DECLARATION);
 
     ast_add_child(node, modifier);
@@ -212,8 +170,7 @@ ASTNode *ast_declaration(ASTNode *modifier,
 }
 
 
-ASTNode *ast_initializer_list(ASTNode *elements)
-{
+ASTNode *ast_initializer_list(ASTNode *elements) {
     return ast_list(AST_INITIALIZER_LIST, elements);
 }
 
@@ -221,8 +178,7 @@ ASTNode *ast_initializer_list(ASTNode *elements)
 ASTNode *ast_assignment(char *target,
                         ASTNode *args,
                         ASTNode *index,
-                        ASTNode *value)
-{
+                        ASTNode *value) {
     ASTNode *node = ast_new(AST_ASSIGNMENT);
     ASTNode *target_node = ast_identifier(target);
 
@@ -243,10 +199,8 @@ ASTNode *ast_assignment(char *target,
     return node;
 }
 
-
 ASTNode *ast_call_statement(char *call,
-                           ASTNode *args)
-{
+                           ASTNode *args) {
     ASTNode *node = ast_new(AST_CALL_STATEMENT);
 
     ast_add_child(node, ast_call(call, args));
@@ -254,16 +208,12 @@ ASTNode *ast_call_statement(char *call,
     return node;
 }
 
-
-/* ============================================================
- * Control flow
- * ============================================================ */
+// Control flow
 
 ASTNode *ast_conditional(ASTNode *condition,
                          ASTNode *body,
                          ASTNode *alternatives,
-                         ASTNode *residual)
-{
+                         ASTNode *residual) {
     ASTNode *node = ast_new(AST_CONDITIONAL);
 
     ast_add_child(node, condition);
@@ -274,10 +224,8 @@ ASTNode *ast_conditional(ASTNode *condition,
     return node;
 }
 
-
 ASTNode *ast_alternative(ASTNode *condition,
-                         ASTNode *body)
-{
+                         ASTNode *body) {
     ASTNode *node = ast_new(AST_ALTERNATIVE);
 
     ast_add_child(node, condition);
@@ -286,9 +234,7 @@ ASTNode *ast_alternative(ASTNode *condition,
     return node;
 }
 
-
-ASTNode *ast_residual(ASTNode *body)
-{
+ASTNode *ast_residual(ASTNode *body) {
     ASTNode *node = ast_new(AST_RESIDUAL);
 
     ast_add_child(node, body);
@@ -296,10 +242,8 @@ ASTNode *ast_residual(ASTNode *body)
     return node;
 }
 
-
 ASTNode *ast_loop_l(ASTNode *condition,
-                    ASTNode *body)
-{
+                    ASTNode *body) {
     ASTNode *node = ast_new(AST_LOOP_L);
 
     ast_add_child(node, condition);
@@ -308,13 +252,11 @@ ASTNode *ast_loop_l(ASTNode *condition,
     return node;
 }
 
-
 ASTNode *ast_loop_s(char *id,
                     ASTNode *start,
                     ASTNode *end,
                     ASTNode *step,
-                    ASTNode *body)
-{
+                    ASTNode *body) {
     ASTNode *node = ast_new(AST_LOOP_S);
 
     ast_add_child(node, ast_identifier(id));
@@ -326,16 +268,12 @@ ASTNode *ast_loop_s(char *id,
     return node;
 }
 
-
-ASTNode *ast_emit(void)
-{
+ASTNode *ast_emit(void) {
     return ast_new(AST_EMIT);
 }
 
-
 ASTNode *ast_rewind(char *id,
-                    ASTNode *args)
-{
+                    ASTNode *args) {
     ASTNode *node = ast_new(AST_REWIND);
 
     ast_add_child(node, ast_identifier(id));
@@ -344,23 +282,15 @@ ASTNode *ast_rewind(char *id,
     return node;
 }
 
+// Arguments
 
-/* ============================================================
- * Arguments
- * ============================================================ */
-
-ASTNode *ast_arguments(ASTNode *arguments)
-{
+ASTNode *ast_arguments(ASTNode *arguments) {
     return ast_list(AST_ARGUMENTS, arguments);
 }
 
+// Expressions
 
-/* ============================================================
- * Expressions
- * ============================================================ */
-
-ASTNode *ast_identifier(const char *name)
-{
+ASTNode *ast_identifier(const char *name) {
     ASTNode *node = ast_new(AST_IDENTIFIER);
 
     node->text = ast_strdup(name);
@@ -368,9 +298,7 @@ ASTNode *ast_identifier(const char *name)
     return node;
 }
 
-
-ASTNode *ast_number(long value)
-{
+ASTNode *ast_number(long value) {
     ASTNode *node = ast_new(AST_NUMBER);
 
     node->number = value;
@@ -378,9 +306,7 @@ ASTNode *ast_number(long value)
     return node;
 }
 
-
-ASTNode *ast_boolean(int value)
-{
+ASTNode *ast_boolean(int value) {
     ASTNode *node = ast_new(AST_BOOLEAN);
 
     node->number = value;
@@ -388,11 +314,9 @@ ASTNode *ast_boolean(int value)
     return node;
 }
 
-
 ASTNode *ast_binary(ASTKind kind,
                     ASTNode *left,
-                    ASTNode *right)
-{
+                    ASTNode *right) {
     ASTNode *node = ast_new(kind);
 
     ast_add_child(node, left);
@@ -401,10 +325,8 @@ ASTNode *ast_binary(ASTKind kind,
     return node;
 }
 
-
 ASTNode *ast_unary(ASTKind kind,
-                   ASTNode *operand)
-{
+                   ASTNode *operand) {
     ASTNode *node = ast_new(kind);
 
     ast_add_child(node, operand);
@@ -412,10 +334,8 @@ ASTNode *ast_unary(ASTKind kind,
     return node;
 }
 
-
 ASTNode *ast_call(char *id,
-                  ASTNode *args)
-{
+                  ASTNode *args) {
     ASTNode *node = ast_new(AST_CALL);
 
     ast_add_child(node, ast_identifier(id));
@@ -424,11 +344,9 @@ ASTNode *ast_call(char *id,
     return node;
 }
 
-
 ASTNode *ast_index(char *id,
                    ASTNode *args,
-                   ASTNode *index)
-{
+                   ASTNode *index) {
     ASTNode *node = ast_new(AST_INDEX);
 
     ast_add_child(node, ast_identifier(id));
@@ -438,13 +356,9 @@ ASTNode *ast_index(char *id,
     return node;
 }
 
+// Printing 
 
-/* ============================================================
- * AST printing
- * ============================================================ */
-
-static const char *ast_kind_name(ASTKind kind)
-{
+static const char *ast_kind_name(ASTKind kind) {
     switch (kind) {
 
         case AST_PROGRAM:          return "PROGRAM";
@@ -507,9 +421,7 @@ static const char *ast_kind_name(ASTKind kind)
     }
 }
 
-
-static void ast_print_internal(ASTNode *node, int depth)
-{
+static void ast_print_internal(ASTNode *node, int depth) {
     while (node != NULL) {
 
         for (int i = 0; i < depth; i++)
@@ -535,19 +447,12 @@ static void ast_print_internal(ASTNode *node, int depth)
     }
 }
 
-
-void ast_print(ASTNode *root, int depth)
-{
+void ast_print(ASTNode *root, int depth) {
     ast_print_internal(root, depth);
 }
 
 
-/* ============================================================
- * AST destruction
- * ============================================================ */
-
-void ast_free(ASTNode *node)
-{
+void ast_free(ASTNode *node) {
     if (node == NULL)
         return;
 

@@ -3,8 +3,7 @@
 
 #include <stdio.h>
 
-typedef enum
-{
+typedef enum {
     AST_PROGRAM,
     AST_GLOBALS,
     AST_FUNCTIONS,
@@ -70,9 +69,7 @@ typedef enum
 
 } ASTKind;
 
-
-typedef struct ASTNode
-{
+typedef struct ASTNode {
     ASTKind kind;
 
     char *text;
@@ -83,14 +80,12 @@ typedef struct ASTNode
 
 } ASTNode;
 
-
-/* Generic */
+// Generic 
 ASTNode *ast_new(ASTKind kind);
 void ast_add_child(ASTNode *parent, ASTNode *child);
 ASTNode *ast_list(ASTKind kind, ASTNode *items);
 
-
-/* Program */
+// Program
 ASTNode *ast_program(ASTNode *globals,
                      ASTNode *functions);
 
@@ -100,7 +95,7 @@ ASTNode *ast_function(char *name,
                       ASTNode *body);
 
 
-/* Types */
+// Types
 ASTNode *ast_type(const char *name);
 ASTNode *ast_modifier(const char *name);
 ASTNode *ast_return_type(ASTNode *type,
@@ -112,14 +107,14 @@ void ast_add_number(ASTNode *node,
                     long number);
 
 
-/* Parameters */
+// Parameters
 ASTNode *ast_parameter(ASTNode *modifier,
                        ASTNode *type,
                        char *name,
                        ASTNode *dims);
 
 
-/* Statements */
+// Statements
 ASTNode *ast_block(void);
 
 ASTNode *ast_declaration(ASTNode *modifier,
@@ -160,8 +155,7 @@ ASTNode *ast_emit(void);
 ASTNode *ast_rewind(char *name,
                     ASTNode *args);
 
-
-/* Expressions */
+// Expressions
 ASTNode *ast_number(long value);
 ASTNode *ast_boolean(int value);
 ASTNode *ast_identifier(const char *name);
@@ -181,7 +175,7 @@ ASTNode *ast_index(char *name,
                    ASTNode *index);
 
 
-/* Printing */
+// Printing
 void ast_print(ASTNode *node,
                int indent);
 

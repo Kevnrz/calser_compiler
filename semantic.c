@@ -264,54 +264,34 @@ static int analyze_function(ASTNode *node) {
      * child 2 = return type
      * child 3 = body
      */
-
     ASTNode *identifier = node->child;
-
     ASTNode *params =
         identifier ? identifier->next : NULL;
-
     ASTNode *return_type =
         params ? params->next : NULL;
-
     ASTNode *body =
         return_type ? return_type->next : NULL;
-
     if (identifier == NULL ||
         identifier->kind != AST_IDENTIFIER) {
-
         fprintf(stderr,
                 "Semantic error: invalid function\n");
-
         return 0;
     }
-
-
-    // The function itself belongs to the global scope.
+    // Funcion pertenece a scope global
     ASTNode *actual_return_type = return_type;
-
     SymbolType type = TYPE_VOID;
 
     if (actual_return_type != NULL) {
-
         if (actual_return_type->kind == AST_RETURN_TYPE) {
-
-            ASTNode *type_node =
-                actual_return_type->child;
-
+            ASTNode *type_node = actual_return_type->child;
             if (type_node != NULL)
                 type = get_type(type_node);
         }
     }
-
-
     Symbol *function =
-        symbol_create(identifier->text,
-                      SYMBOL_FUNCTION,
-                      type);
-
+        symbol_create(identifier->text, SYMBOL_FUNCTION, type);
 
     if (!symbol_insert(global_scope, function)) {
-
         fprintf(stderr,
                 "Semantic error: function '%s' already declared\n",
                 identifier->text);
@@ -322,12 +302,11 @@ static int analyze_function(ASTNode *node) {
         return 0;
     }
 
-    // Create function scope.
+    // Crea function scope.
     enter_scope();
 
     // Parameters are inserted into the function scope.
-    if (params != NULL &&
-        params->kind == AST_PARAMS) {
+    if (params != NULL && params->kind == AST_PARAMS) {
 
         ASTNode *parameter = params->child;
 
@@ -343,6 +322,32 @@ static int analyze_function(ASTNode *node) {
     }
 
     // Analyze function body.
+    if (return_type != NULL &&
+        return_type->kind == AST_RETURN_TYPE) {
+
+        ASTNode *ret_type = return_type->child;                 // TYPE
+        ASTNode *ret_id   = ret_type ? ret_type->next : NULL;   // IDENTIFIER
+
+        if (ret_id != NULL &&
+            ret_id->kind == AST_IDENTIFIER) {
+
+            Symbol *ret = symbol_create(ret_id->text,
+                                        SYMBOL_RETURN,
+                                        get_type(ret_type));
+
+            ret->modifier = MODIFIER_VM;   // el cuerpo la asigna
+
+            if (!symbol_insert(current_scope, ret)) {   // choque con un parámetro
+                fprintf(stderr,
+                        "Semantic error: return variable '%s' already declared\n",
+                        ret_id->text);
+                free(ret->name);
+                free(ret);
+                return 0;
+            }
+        }
+    }
+
     if (body != NULL &&
         body->kind == AST_BLOCK) {
 

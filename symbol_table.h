@@ -4,7 +4,8 @@
 typedef enum {
     SYMBOL_VARIABLE,
     SYMBOL_FUNCTION,
-    SYMBOL_PARAMETER
+    SYMBOL_PARAMETER,
+    SYMBOL_RETURN
 } SymbolKind;
 
 

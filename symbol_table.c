@@ -150,6 +150,9 @@ static const char *symbol_kind_string(SymbolKind kind) {
         case SYMBOL_PARAMETER:
             return "parameter";
 
+        case SYMBOL_RETURN:
+            return "return";    
+
         default:
             return "unknown";
     }
@@ -196,17 +199,14 @@ void symbol_table_print(Scope *scope) {
                    symbol->name,
                    symbol_type_string(symbol->type));
 
-            if (symbol->kind == SYMBOL_FUNCTION)
+            if (symbol->kind == SYMBOL_FUNCTION || symbol->kind == SYMBOL_RETURN) {
                 printf(" (%s)",
                        symbol_kind_string(symbol->kind));
-
+                }
             printf("\n");
-
             symbol = symbol->next;
         }
-
         printf("\n");
-
         current_scope = current_scope->next;
         scope_number++;
     }

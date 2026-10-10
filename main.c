@@ -8,6 +8,9 @@ extern FILE *yyin;
 
 extern ASTNode *root;
 
+// Cantidad de errores léxicos (lexer.l).
+extern int lexical_errors;
+
 int main(int argc, char **argv) {
     if (argc != 2) {
         fprintf(stderr,
@@ -30,6 +33,25 @@ int main(int argc, char **argv) {
     int result = yyparse();
 
     fclose(yyin);
+
+    // Con errores léxicos no hay AST, tabla ni análisis semántico: la
+    // recuperación (descartar, truncar, sustituir por 0) cambia el programa
+    // y el semántico podría reportar errores que no existen.
+    if (lexical_errors > 0) {
+
+        if (result != 0)
+            printf("Parsing failed.\n");
+        else
+            ast_free(root);
+
+        fprintf(stderr,
+                "Analisis lexico fallido: %d error(es).\n",
+                lexical_errors);
+
+        diag_free();
+
+        return 1;
+    }
 
     if (result == 0) {
         printf("Parsing successful!\n\n");

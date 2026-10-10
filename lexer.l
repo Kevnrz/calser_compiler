@@ -19,9 +19,36 @@ static int column = 1;
     yylloc.last_column  = column + yyleng - 1;          \
     column += yyleng;
 
-int line_number = 1;
+// §8.4: largo máximo de un identificador y mayor literal entero que admite
+// el analizador léxico. 2147483648 no es error aquí: el signo no forma parte
+// del literal y -2147483648 es válido (lo resuelve el semántico).
+#define MAX_IDENTIFIER 32
+#define MAX_LITERAL    2147483648LL
+
+// Cantidad de errores léxicos. Si hay alguno, el análisis semántico no corre.
+int lexical_errors = 0;
+
+// 1 si un error léxico cortó la entrada (comentario sin cerrar): el error
+// sintáctico que provoque ese fin abrupto sería una cascada.
+int lexical_fatal = 0;
+
+// Posición del #[ que abrió el comentario de bloque actual.
+static int comment_line = 0;
+static int comment_column = 0;
 
 void yyerror(const char *msg);
+
+// Único punto de salida de los errores léxicos (formato de §8.2).
+static void lexical_error(int line, int col, int length,
+                          const char *fmt, ...) {
+    va_list args;
+
+    va_start(args, fmt);
+    diag_verror("error lexico", line, col, length, fmt, args);
+    va_end(args);
+
+    lexical_errors++;
+}
 %}
 
 %option noyywrap
@@ -38,23 +65,41 @@ void yyerror(const char *msg);
 
 [ \t\r]+              ; /* Whitespace */
 
-\n                    { line_number++; column = 1; }
+\n                    { column = 1; }
 
-"#["                  { BEGIN(COMMENT); } /* Multiline comment: #[ ... ]# */
+"#["                  {
+                         /* L-04: se guarda dónde abre, por si nunca cierra */
+                         comment_line = yylineno;
+                         comment_column = yylloc.first_column;
+
+                         BEGIN(COMMENT);
+                       } /* Multiline comment: #[ ... ]# */
 
 <COMMENT>"]#"         { BEGIN(INITIAL); }
 
-<COMMENT>\n           { line_number++; column = 1; }
+<COMMENT>\n           { column = 1; }
 
 <COMMENT>.            ;
 
 <COMMENT><<EOF>>      {
-                         yyerror("unterminated multiline comment");
+                         /* L-04: error fatal, en la posición del #[ */
+                         lexical_error(comment_line,
+                                       comment_column,
+                                       2,
+                                       "comentario abierto en la linea %d "
+                                       "nunca se cierra",
+                                       comment_line);
+
+                         lexical_fatal = 1;
+
                          return 0;
                        }
 
 
-"#"[^\n]*             ; /* Single-line comment */
+ /* L-03: un # seguido de [ nunca es comentario de línea. Ante #[ esta regla
+    solo alcanza el # (largo 1) y gana "#[" (largo 2) por prefijo más largo
+    (libro §3.5.3). Un # solo al final de la línea sigue siendo comentario. */
+"#"([^\[\n][^\n]*)?   ; /* Single-line comment */
 
 "F"                   return TOKEN_F; /* Keywords */
 "Vm"                  return TOKEN_VM;
@@ -109,12 +154,55 @@ void yyerror(const char *msg);
 "."                   return TOKEN_DOT;
 
 [0-9]+                {
-                         yylval.num = strtol(yytext, NULL, 10);
+                         /* L-06: se convierte sin desbordar. Sin ceros a la
+                            izquierda, con más de 10 dígitos ya está fuera
+                            de rango; si no, cabe en un long long. */
+                         const char *digits = yytext;
+
+                         while (digits[0] == '0' && digits[1] != '\0')
+                             digits++;
+
+                         long long value =
+                             strlen(digits) > 10
+                                 ? MAX_LITERAL + 1
+                                 : strtoll(digits, NULL, 10);
+
+                         if (value > MAX_LITERAL) {
+
+                             lexical_error(yylineno,
+                                           yylloc.first_column,
+                                           yyleng,
+                                           "constante entera fuera del rango "
+                                           "de 32 bits");
+
+                             /* Recuperación: se sustituye por 0. */
+                             value = 0;
+                         }
+
+                         yylval.num = (long) value;
+
                          return TOKEN_NUMBER;
                        } /* Number */
 
 [a-z_][a-zA-Z0-9_]* {
-                         yylval.str = strdup(yytext);
+                         /* L-02: el contexto CE1108 §5.7 pedía un buffer
+                            fijo; el grupo decidió mantener la copia con
+                            memoria dinámica (strdup) porque el
+                            comportamiento es idéntico. */
+                         if (yyleng > MAX_IDENTIFIER) {
+
+                             lexical_error(yylineno,
+                                           yylloc.first_column,
+                                           yyleng,
+                                           "identificador excede la longitud "
+                                           "maxima");
+
+                             /* Recuperación: se trunca a 32 caracteres. */
+                             yylval.str = strndup(yytext, MAX_IDENTIFIER);
+                         }
+                         else {
+                             yylval.str = strdup(yytext);
+                         }
 
                          if (!yylval.str)
                          {
@@ -126,14 +214,24 @@ void yyerror(const char *msg);
                        } /* Identifier */
 
 .                     {
-                         diag_error("error lexico",
-                                    yylineno,
-                                    yylloc.first_column,
-                                    1,
-                                    "caracter inesperado '%s'",
-                                    yytext);
+                         /* Un byte que no es ASCII imprimible (0x20-0x7E)
+                            se muestra como \xHH. Cada byte es un error. */
+                         unsigned char byte = (unsigned char) yytext[0];
+                         char shown[8];
 
-                         return TOKEN_ERROR;
+                         if (byte >= 0x20 && byte <= 0x7E)
+                             snprintf(shown, sizeof(shown), "%c", byte);
+                         else
+                             snprintf(shown, sizeof(shown), "\\x%02X", byte);
+
+                         lexical_error(yylineno,
+                                       yylloc.first_column,
+                                       1,
+                                       "caracter no reconocido: '%s'",
+                                       shown);
+
+                         /* L-01 / §8.3: se descarta el carácter y se sigue
+                            desde el siguiente token (no se devuelve nada). */
                        } /* Invalid character */
 
 

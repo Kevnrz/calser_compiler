@@ -8,6 +8,9 @@
 extern int yylex(void);
 extern int yylineno;
 
+// 1 si un error léxico cortó la entrada (lexer.l).
+extern int lexical_fatal;
+
 void yyerror(const char *msg);
 
 ASTNode *root = NULL;
@@ -90,7 +93,6 @@ ASTNode *root = NULL;
 %token TOKEN_COMMA
 %token TOKEN_DOT
 
-%token TOKEN_ERROR
 
 
 /* Values */
@@ -1258,6 +1260,11 @@ acceso
 
 void yyerror(const char *msg)
 {
+    // L-04: tras un error léxico fatal, el error sintáctico que provoca el
+    // fin abrupto de la entrada sería una cascada.
+    if (lexical_fatal)
+        return;
+
     // §8.2: posición del token de preanálisis, donde se detectó el error.
     diag_error("error sintactico",
                yylloc.first_line,

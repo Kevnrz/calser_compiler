@@ -460,6 +460,54 @@ Analisis semantico fallido: 1 error(es).
 --- tabla ---
 --- codigo de salida: 1 ---
 
+===== pruebas/e52_caracter_invalido.cls =====
+--- stderr ---
+pruebas/e52_caracter_invalido.cls:3:11: error lexico: caracter no reconocido: '$'
+     3 |     x = 1 $ ;
+       |           ^
+Analisis lexico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e53_identificador_largo.cls =====
+--- stderr ---
+pruebas/e53_identificador_largo.cls:2:8: error lexico: identificador excede la longitud maxima
+     2 |     Vm abcdefghijabcdefghijabcdefghijabc : int ;
+       |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Analisis lexico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e54_constante_rango.cls =====
+--- stderr ---
+pruebas/e54_constante_rango.cls:3:9: error lexico: constante entera fuera del rango de 32 bits
+     3 |     x = 3000000000 ;
+       |         ^^^^^^^^^^
+Analisis lexico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e55_comentario_abierto.cls =====
+--- stderr ---
+pruebas/e55_comentario_abierto.cls:2:5: error lexico: comentario abierto en la linea 2 nunca se cierra
+     2 |     #[ esto nunca
+       |     ^^
+Analisis lexico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e56_lexico_y_sintactico.cls =====
+--- stderr ---
+pruebas/e56_lexico_y_sintactico.cls:3:9: error lexico: caracter no reconocido: '$'
+     3 |     x = $ ;
+       |         ^
+pruebas/e56_lexico_y_sintactico.cls:3:11: error sintactico: syntax error
+     3 |     x = $ ;
+       |           ^
+Analisis lexico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
 ===== pruebas/p01_llamada_adelante.cls =====
 --- stderr ---
 --- tabla ---
@@ -635,6 +683,17 @@ Scope 5: FUNCTION
 
 Scope 6: S
     i : int width=4 addr=0x0024
+
+--- codigo de salida: 0 ---
+
+===== pruebas/p08_comentarios.cls =====
+--- stderr ---
+--- tabla ---
+Scope 0: GLOBAL
+    main : void (function) params=[] area=0x0000 size=4
+
+Scope 1: FUNCTION
+    x : int width=4 addr=0x0000
 
 --- codigo de salida: 0 ---
 

@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include "semantic.h"
+#include "diagnostics.h"
 
 extern int yyparse(void);
 extern FILE *yyin;
@@ -23,6 +24,9 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    // §8.2: los errores muestran el archivo y la línea del programa.
+    diag_init(argv[1]);
+
     int result = yyparse();
 
     fclose(yyin);
@@ -33,12 +37,18 @@ int main(int argc, char **argv) {
         ast_print(root, 0);
 
         // S-03: si el análisis falla no hay tabla y el código de salida es 1.
+        int errors_before = diag_count();
+
         if (!semantic_analyze(root)) {
-            fprintf(stderr, "Analisis semantico fallido.\n");
+            fprintf(stderr,
+                    "Analisis semantico fallido: %d error(es).\n",
+                    diag_count() - errors_before);
 
             semantic_free();
 
             ast_free(root);
+
+            diag_free();
 
             return 1;
         }
@@ -49,10 +59,14 @@ int main(int argc, char **argv) {
 
         ast_free(root);
 
+        diag_free();
+
         return 0;
     }
 
     printf("Parsing failed.\n");
+
+    diag_free();
 
     return 1;
 }

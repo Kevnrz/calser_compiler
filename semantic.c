@@ -6,6 +6,7 @@
 #include "semantic.h"
 #include "symbol_table.h"
 #include "ast.h"
+#include "diagnostics.h"
 
 static Scope *global_scope = NULL;
 static Scope *current_scope = NULL;
@@ -115,103 +116,6 @@ static SymbolModifier get_modifier(ASTNode *node) {
     return MODIFIER_NONE;
 }
 
-// Errors
-
-// Único punto de salida de los errores semánticos.
-// P-03: line > 0 pone la línea al inicio; 0 = el error no tiene línea.
-static void semantic_error(int line, const char *fmt, ...) {
-    va_list args;
-
-    if (line > 0)
-        fprintf(stderr, "Error semantico (linea %d): ", line);
-    else
-        fprintf(stderr, "Error semantico: ");
-
-    va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
-    va_end(args);
-
-    fprintf(stderr, "\n");
-}
-
-// Libera un símbolo que todavía no pertenece a ningún ámbito.
-static void discard_symbol(Symbol *symbol) {
-    free(symbol->name);
-    free(symbol);
-}
-
-// Memory
-
-// M-2: variables de ccom en 0x0000–0x0FFF; desde 0x1000, archivos de load_file
-#define DATA_BASE  0x0000
-#define DATA_LIMIT 0x1000          // primera dirección que NO se puede usar
-
-static int next_address = DATA_BASE;   // libro §6.3.4: el "offset"
-
-// Libro §6.3.4: el nombre recibe el offset actual y el offset avanza su ancho.
-// line es la del símbolo que se reserva (para el rl, la de la función).
-static int reserve(int width, const char *what, int line, int *out_address) {
-    if (next_address + width > DATA_LIMIT) {
-
-        semantic_error(line,
-                       "'%s' no cabe en la memoria de datos (limite 0x%04X)",
-                       what,
-                       (unsigned int) (DATA_LIMIT - 1));
-
-        return 0;
-    }
-
-    *out_address = next_address;
-    next_address += width;
-
-    return 1;
-}
-
-// M-1: int y bool ocupan 4 bytes (alineados para lw/sw)
-static int type_width(SymbolType type) {
-    switch (type) {
-        case TYPE_INT:
-        case TYPE_BOOL: return 4;
-        default:        return 0;
-    }
-}
-
-// Llena dimensions y dim_sizes a partir del nodo DIMENSIONS.
-// El ancho no se calcula aquí: es distinto en declaraciones y en parámetros.
-// Devuelve 0 si algún tamaño no es válido.
-static int fill_dimensions(Symbol *symbol, ASTNode *dimensions) {
-
-    // A-2: en esa posición puede llegar otro nodo (no DIMENSIONS).
-    if (dimensions == NULL ||
-        dimensions->kind != AST_DIMENSIONS)
-        return 1;
-
-    // Los hijos de DIMENSIONS son nodos NUMBER con el tamaño en number.
-    ASTNode *dimension = dimensions->child;
-
-    while (dimension != NULL &&
-           symbol->dimensions < MAX_DIMS) {
-
-        // S-06: una dimensión de tamaño 0 no reserva nada.
-        if (dimension->number <= 0) {
-
-            semantic_error(symbol->line,
-                           "la dimension de '%s' debe ser mayor que 0",
-                           symbol->name);
-
-            return 0;
-        }
-
-        // Guardar el tamaño antes de incrementar dimensions.
-        symbol->dim_sizes[symbol->dimensions] = (int) dimension->number;
-        symbol->dimensions++;
-
-        dimension = dimension->next;
-    }
-
-    return 1;
-}
-
 // AST helpers
 
 // Primer hijo de node con el kind dado. Los hijos se identifican por kind,
@@ -254,6 +158,132 @@ static ASTNode *find_condition(ASTNode *node) {
     return NULL;
 }
 
+// Errors
+
+/*
+ * Único punto de salida de los errores semánticos (formato de §8.2).
+ * Los errores se acumulan: después de reportar, el análisis sigue.
+ *
+ * Posición y largo del señalador según node:
+ *
+ * NULL                        = sin posición
+ * IDENTIFIER                  = el nodo, strlen(text)
+ * otro con un hijo IDENTIFIER = ese hijo (el nombre declarado), strlen(text)
+ * otro sin hijo IDENTIFIER    = el nodo, 1
+ */
+static void semantic_error(ASTNode *node, const char *fmt, ...) {
+    int line = 0;
+    int column = 0;
+    int length = 1;
+
+    if (node != NULL) {
+
+        ASTNode *name =
+            node->kind == AST_IDENTIFIER
+                ? node
+                : find_child(node, AST_IDENTIFIER);
+
+        if (name != NULL && name->text != NULL) {
+            line = name->line;
+            column = name->column;
+            length = (int) strlen(name->text);
+        }
+        else {
+            line = node->line;
+            column = node->column;
+        }
+    }
+
+    va_list args;
+
+    va_start(args, fmt);
+    diag_verror("error semantico", line, column, length, fmt, args);
+    va_end(args);
+}
+
+// Libera un símbolo que todavía no pertenece a ningún ámbito.
+static void discard_symbol(Symbol *symbol) {
+    free(symbol->name);
+    free(symbol);
+}
+
+// Memory
+
+// M-2: variables de ccom en 0x0000–0x0FFF; desde 0x1000, archivos de load_file
+#define DATA_BASE  0x0000
+#define DATA_LIMIT 0x1000          // primera dirección que NO se puede usar
+
+static int next_address = DATA_BASE;   // libro §6.3.4: el "offset"
+
+// El desborde de la memoria de datos se reporta una sola vez por programa.
+static int memory_reported = 0;
+
+// Libro §6.3.4: el nombre recibe el offset actual y el offset avanza su ancho.
+// node es el nodo que declara lo que se reserva (para el rl, la función).
+// Si no cabe se reporta (solo la primera vez) y se sigue asignando.
+static void reserve(int width, const char *what, ASTNode *node,
+                    int *out_address) {
+    if (next_address + width > DATA_LIMIT &&
+        !memory_reported) {
+
+        semantic_error(node,
+                       "'%s' no cabe en la memoria de datos (limite 0x%04X)",
+                       what,
+                       (unsigned int) (DATA_LIMIT - 1));
+
+        memory_reported = 1;
+    }
+
+    *out_address = next_address;
+    next_address += width;
+}
+
+// M-1: int y bool ocupan 4 bytes (alineados para lw/sw)
+static int type_width(SymbolType type) {
+    switch (type) {
+        case TYPE_INT:
+        case TYPE_BOOL: return 4;
+        default:        return 0;
+    }
+}
+
+// Llena dimensions y dim_sizes a partir del nodo DIMENSIONS.
+// El ancho no se calcula aquí: es distinto en declaraciones y en parámetros.
+// node es la declaración o el parámetro, para ubicar el error.
+static void fill_dimensions(Symbol *symbol, ASTNode *dimensions,
+                            ASTNode *node) {
+
+    // A-2: en esa posición puede llegar otro nodo (no DIMENSIONS).
+    if (dimensions == NULL ||
+        dimensions->kind != AST_DIMENSIONS)
+        return;
+
+    // Los hijos de DIMENSIONS son nodos NUMBER con el tamaño en number.
+    ASTNode *dimension = dimensions->child;
+
+    int reported = 0;
+
+    while (dimension != NULL &&
+           symbol->dimensions < MAX_DIMS) {
+
+        // S-06: una dimensión de tamaño 0 no reserva nada. Se reporta una vez
+        // por declaración y se sigue: el tamaño 0 queda guardado.
+        if (dimension->number <= 0 && !reported) {
+
+            semantic_error(node,
+                           "el tamano de un arreglo debe ser mayor que cero");
+
+            reported = 1;
+        }
+
+        // Guardar el tamaño antes de incrementar dimensions.
+        symbol->dim_sizes[symbol->dimensions] = (int) dimension->number;
+        symbol->dimensions++;
+
+        dimension = dimension->next;
+    }
+}
+
 // Name checking
 
 // Primer ámbito de la función actual (en la lista de todos los ámbitos) que
@@ -278,12 +308,13 @@ static Scope *find_closed_scope(const char *name) {
 
 // Libro §1.6.3 y §2.7: ámbito estático, regla del bloque anidado más cercano.
 // Un nombre usado antes de su declaración todavía no está en la tabla.
-static int check_name(ASTNode *identifier) {
+// Se reporta cada uso de un nombre que no existe.
+static void check_name(ASTNode *identifier) {
     if (identifier == NULL || identifier->text == NULL)
-        return 1;
+        return;
 
     if (symbol_lookup(current_scope, identifier->text) != NULL)
-        return 1;
+        return;
 
     // Fuera de alcance: el nombre existe en un bloque de esta función que ya
     // se cerró. No hace falta excluir los ámbitos abiertos: symbol_lookup ya
@@ -292,117 +323,115 @@ static int check_name(ASTNode *identifier) {
 
     if (closed != NULL) {
 
-        semantic_error(identifier->line,
+        semantic_error(identifier,
                        "'%s' esta fuera de alcance; "
                        "fue declarado en el bloque de la linea %d",
                        identifier->text,
                        closed->line);
 
-        return 0;
+        return;
     }
 
-    semantic_error(identifier->line,
+    semantic_error(identifier,
                    "'%s' no ha sido declarado",
                    identifier->text);
-
-    return 0;
 }
 
-static int check_expression(ASTNode *node);
+static void check_expression(ASTNode *node);
 
 // Verifica cada hijo de node como expresión.
-static int check_children(ASTNode *node) {
+static void check_children(ASTNode *node) {
     if (node == NULL)
-        return 1;
+        return;
 
     ASTNode *child = node->child;
 
     while (child != NULL) {
-
-        if (!check_expression(child))
-            return 0;
-
+        check_expression(child);
         child = child->next;
     }
-
-    return 1;
 }
 
 // CALL, INDEX y REWIND: el nombre y cada argumento. Todavía no se distingue
 // arreglo de función ni se cuentan índices o argumentos.
-static int check_call(ASTNode *node) {
-    if (!check_name(find_child(node, AST_IDENTIFIER)))
-        return 0;
+static void check_call(ASTNode *node) {
+    check_name(find_child(node, AST_IDENTIFIER));
 
     ASTNode *arguments = find_child(node, AST_ARGUMENTS);
 
-    if (!check_children(arguments))
-        return 0;
+    check_children(arguments);
 
     // INDEX: el segundo índice es el hijo que sigue a ARGUMENTS (cualquier
     // expresión, incluso un IDENTIFIER).
     if (node->kind == AST_INDEX && arguments != NULL)
-        return check_expression(arguments->next);
-
-    return 1;
+        check_expression(arguments->next);
 }
 
-// Devuelve 1 si todo nombre usado en la expresión existe, 0 si no.
-static int check_expression(ASTNode *node) {
+// Verifica que todo nombre usado en la expresión exista.
+static void check_expression(ASTNode *node) {
     if (node == NULL)
-        return 1;
+        return;
 
     switch (node->kind) {
 
         case AST_IDENTIFIER:
-            return check_name(node);
+            check_name(node);
+            break;
 
         case AST_NUMBER:
         case AST_BOOLEAN:
-            return 1;
+            break;
 
         case AST_CALL:
         case AST_INDEX:
-            return check_call(node);
+            check_call(node);
+            break;
 
         // INITIALIZER_LIST y cualquier operador binario o unario.
         default:
-            return check_children(node);
+            check_children(node);
+            break;
     }
+}
+
+// Parámetro de la función con ese nombre, o NULL.
+static Symbol *find_parameter(Symbol *function, const char *name) {
+    for (int i = 0; i < function->parameter_count; i++) {
+
+        if (strcmp(function->param_list[i]->name, name) == 0)
+            return function->param_list[i];
+    }
+
+    return NULL;
 }
 
 // Un local (o la variable de un S) no puede llamarse como un parámetro de
 // su función, en ningún bloque. Las globales no se revisan.
-static int check_not_parameter(const char *name, int line) {
-    if (current_function == NULL)
+// node es la declaración local, para ubicar el error. Devuelve 0 si choca.
+static int check_not_parameter(const char *name, ASTNode *node) {
+    if (current_function == NULL ||
+        find_parameter(current_function, name) == NULL)
         return 1;
 
-    for (int i = 0; i < current_function->parameter_count; i++) {
+    semantic_error(node,
+                   "'%s' ya es un parametro de esta funcion",
+                   name);
 
-        if (strcmp(current_function->param_list[i]->name, name) == 0) {
-
-            semantic_error(line,
-                           "'%s' ya es un parametro de esta funcion",
-                           name);
-
-            return 0;
-        }
-    }
-
-    return 1;
+    return 0;
 }
 
 // Inserta symbol en el ámbito actual. Si el nombre ya existe en ese ámbito,
-// reporta el error en la línea de la nueva declaración, señalando la línea
-// del símbolo existente, y descarta symbol.
-static int insert_symbol(Symbol *symbol) {
+// reporta el error en la nueva declaración (node), señalando la línea del
+// símbolo existente, y descarta symbol: los usos posteriores se refieren al
+// primero.
+static int insert_symbol(Symbol *symbol, ASTNode *node) {
     Symbol *existing =
         symbol_lookup_current(current_scope, symbol->name);
 
     if (existing != NULL ||
         !symbol_insert(current_scope, symbol)) {
 
-        semantic_error(symbol->line,
+        semantic_error(node,
                        "'%s' ya fue declarado en este ambito (linea %d)",
                        symbol->name,
                        existing ? existing->line : 0);
@@ -415,6 +444,12 @@ static int insert_symbol(Symbol *symbol) {
 
     return 1;
 }
+
+/*
+ * Las funciones analyze_* devuelven 0 solo ante un error interno (un nodo
+ * inválido), que detiene el análisis. Los errores semánticos se reportan con
+ * semantic_error y el análisis sigue.
+ */
 
 // Variable declaration
 
@@ -462,8 +497,7 @@ static int analyze_declaration(ASTNode *node) {
 
     // El inicializador se verifica antes de insertar el símbolo:
     // Vm x : int = x ;  usa el x de afuera, o es error.
-    if (!check_expression(initializer))
-        return 0;
+    check_expression(initializer);
 
     Symbol *symbol =
         symbol_create(identifier->text,
@@ -472,13 +506,16 @@ static int analyze_declaration(ASTNode *node) {
 
     symbol->modifier = get_modifier(modifier);
     symbol->line = node->line;
+    symbol->decl_node = node;
 
-    if (!fill_dimensions(symbol, dimensions) ||
-        !check_not_parameter(symbol->name, symbol->line)) {
+    fill_dimensions(symbol, dimensions, node);
+
+    // Un local que oculta un parámetro no se inserta.
+    if (!check_not_parameter(symbol->name, node)) {
 
         discard_symbol(symbol);
 
-        return 0;
+        return 1;
     }
 
     // Libro §6.3.4: ancho = ancho del tipo × producto de las dimensiones
@@ -487,12 +524,11 @@ static int analyze_declaration(ASTNode *node) {
 
     symbol->width = type_width(symbol->type) * d1 * d2;   // d = 1 si no aplica
 
-    if (!insert_symbol(symbol))
-        return 0;
+    // Una redeclaración no se inserta.
+    if (!insert_symbol(symbol, node))
+        return 1;
 
-    // El símbolo ya pertenece al ámbito: si no cabe, se libera con él.
-    if (!reserve(symbol->width, symbol->name, symbol->line, &symbol->address))
-        return 0;
+    reserve(symbol->width, symbol->name, node, &symbol->address);
 
     return 1;
 }
@@ -501,7 +537,7 @@ static int analyze_declaration(ASTNode *node) {
 // Parameters
 
 // Crea el símbolo de un parámetro, sin insertarlo en ningún ámbito ni darle
-// dirección. Devuelve NULL si hay error.
+// dirección. Devuelve NULL solo si el nodo es inválido.
 static Symbol *create_parameter(ASTNode *node) {
     /*
      * PARAMETER
@@ -528,13 +564,9 @@ static Symbol *create_parameter(ASTNode *node) {
 
     symbol->modifier = get_modifier(modifier);
     symbol->line = node->line;
+    symbol->decl_node = node;
 
-    if (!fill_dimensions(symbol, dimensions)) {
-
-        discard_symbol(symbol);
-
-        return NULL;
-    }
+    fill_dimensions(symbol, dimensions, node);
 
     // escalar: el valor; arreglo: su dirección (paso por referencia)
     symbol->width = 4;
@@ -584,8 +616,7 @@ static int analyze_block(ASTNode *block, ScopeKind kind) {
 static int analyze_conditional(ASTNode *node) {
 
     // Rama inicial  C [cond] ;
-    if (!check_expression(find_condition(node)))
-        return 0;
+    check_expression(find_condition(node));
 
     if (!analyze_block(find_child(node, AST_BLOCK), SCOPE_C))
         return 0;
@@ -598,8 +629,7 @@ static int analyze_conditional(ASTNode *node) {
 
         if (alternative->kind == AST_ALTERNATIVE) {
 
-            if (!check_expression(find_condition(alternative)))
-                return 0;
+            check_expression(find_condition(alternative));
 
             if (!analyze_block(find_child(alternative, AST_BLOCK),
                                SCOPE_A))
@@ -622,8 +652,7 @@ static int analyze_conditional(ASTNode *node) {
 
 // Ciclo por predicado: la condición se verifica antes de abrir el ámbito.
 static int analyze_loop_l(ASTNode *node) {
-    if (!check_expression(find_condition(node)))
-        return 0;
+    check_expression(find_condition(node));
 
     return analyze_block(find_child(node, AST_BLOCK), SCOPE_L);
 }
@@ -654,37 +683,34 @@ static int analyze_loop_s(ASTNode *node) {
 
     // Inicio y fin se verifican antes de abrir el ámbito del S:
     // S [ i , 0 , i , 1 ]  usa el i de afuera.
-    if (!check_expression(start) ||
-        !check_expression(end))
-        return 0;
+    check_expression(start);
+    check_expression(end);
 
-    if (!check_not_parameter(identifier->text, node->line))
-        return 0;
+    // Si la variable de control oculta un parámetro no se crea: dentro del
+    // cuerpo, el nombre se refiere al parámetro.
+    int declare = check_not_parameter(identifier->text, node);
 
     enter_scope(SCOPE_S, node->line);
 
-    Symbol *control =
-        symbol_create(identifier->text,
-                      SYMBOL_VARIABLE,
-                      TYPE_INT);
+    if (declare) {
 
-    // el ciclo la controla; el cuerpo no puede modificarla
-    control->modifier = MODIFIER_VI;
-    control->width = type_width(control->type);   // M-1
-    control->line = node->line;
+        Symbol *control =
+            symbol_create(identifier->text,
+                          SYMBOL_VARIABLE,
+                          TYPE_INT);
 
-    // El símbolo pasa a pertenecer al ámbito: si no cabe, se libera con él.
-    int result = insert_symbol(control);
+        // el ciclo la controla; el cuerpo no puede modificarla
+        control->modifier = MODIFIER_VI;
+        control->width = type_width(control->type);   // M-1
+        control->line = node->line;
+        control->decl_node = node;
 
-    if (result)
-        result = reserve(control->width,
-                         control->name,
-                         control->line,
-                         &control->address);
+        if (insert_symbol(control, node))
+            reserve(control->width, control->name, node, &control->address);
+    }
 
     // El cuerpo comparte el ámbito del S con su variable (no abre otro).
-    if (result)
-        result = analyze_statements(find_child(node, AST_BLOCK));
+    int result = analyze_statements(find_child(node, AST_BLOCK));
 
     exit_scope();
 
@@ -713,11 +739,13 @@ static int analyze_statement(ASTNode *statement) {
         // Destino (IDENTIFIER, CALL o INDEX) y valor; o el CALL de la sentencia.
         case AST_ASSIGNMENT:
         case AST_CALL_STATEMENT:
-            return check_children(statement);
+            check_children(statement);
+            return 1;
 
         // El nombre y cada argumento.
         case AST_REWIND:
-            return check_call(statement);
+            check_call(statement);
+            return 1;
 
         // EMIT: nada que verificar.
         default:
@@ -727,17 +755,6 @@ static int analyze_statement(ASTNode *statement) {
 
 
 // Function
-
-// Parámetro de la función con ese nombre, o NULL.
-static Symbol *find_parameter(Symbol *function, const char *name) {
-    for (int i = 0; i < function->parameter_count; i++) {
-
-        if (strcmp(function->param_list[i]->name, name) == 0)
-            return function->param_list[i];
-    }
-
-    return NULL;
-}
 
 // Pasada 1: registra la firma de una función (símbolo y parámetros), para que
 // una función pueda llamar a otra escrita después.
@@ -757,6 +774,22 @@ static int register_signature(ASTNode *node) {
         return 0;
     }
 
+    // Función repetida: no se inserta ni se registran sus parámetros. Como
+    // ningún símbolo apunta a este nodo, la pasada 2 no lo analiza.
+    Symbol *existing =
+        symbol_lookup_current(global_scope, identifier->text);
+
+    if (existing != NULL) {
+
+        // Se marca el segundo FUNCTION, señalando la línea del primero.
+        semantic_error(node,
+                       "la funcion '%s' ya fue declarada (linea %d)",
+                       identifier->text,
+                       existing->line);
+
+        return 1;
+    }
+
     // RETURN_TYPE sin hijos es void.
     ASTNode *ret_type = find_child(return_type, AST_TYPE);
     ASTNode *ret_id = find_child(return_type, AST_IDENTIFIER);
@@ -768,30 +801,16 @@ static int register_signature(ASTNode *node) {
                       ret_type ? get_type(ret_type) : TYPE_VOID);
 
     function->line = node->line;
+    function->decl_node = node;
 
-    Symbol *existing =
-        symbol_lookup_current(global_scope, function->name);
-
-    if (existing != NULL ||
-        !symbol_insert(global_scope, function)) {
-
-        // Línea del segundo FUNCTION, señalando la del primero.
-        semantic_error(function->line,
-                       "la funcion '%s' ya fue declarada (linea %d)",
-                       function->name,
-                       existing ? existing->line : 0);
-
-        discard_symbol(function);
-
-        return 0;
-    }
+    symbol_insert(global_scope, function);
 
     /*
      * Los parámetros solo quedan en param_list, que no es dueña: pasan a
      * pertenecer al ámbito de la función cuando la pasada 2 los inserta.
-     * Si el análisis se detiene antes de que la pasada 2 llegue a esta
-     * función, sus parámetros quedan sin liberar. Es una fuga aceptada solo
-     * en ese camino de error.
+     * La pasada 2 llega a todas las funciones registradas, salvo que un
+     * error interno (nodo inválido) detenga el análisis: solo en ese camino
+     * quedarían sin liberar.
      */
     ASTNode *parameter = params ? params->child : NULL;
 
@@ -802,41 +821,41 @@ static int register_signature(ASTNode *node) {
         if (symbol == NULL)
             return 0;
 
-        // Todos los parámetros comparten el ámbito de la función.
+        // Todos los parámetros comparten el ámbito de la función. Un
+        // parámetro duplicado no se agrega a param_list.
         Symbol *first = find_parameter(function, symbol->name);
 
         if (first != NULL) {
 
-            semantic_error(symbol->line,
+            semantic_error(parameter,
                            "'%s' ya fue declarado en este ambito (linea %d)",
                            symbol->name,
                            first->line);
 
             discard_symbol(symbol);
-
-            return 0;
         }
+        else {
 
-        // Lista ordenada de parámetros de la función (también lo cuenta).
-        symbol_add_param(function, symbol);
+            // Lista ordenada de parámetros de la función (también lo cuenta).
+            symbol_add_param(function, symbol);
+        }
 
         parameter = parameter->next;
     }
 
     // La variable de retorno comparte ese ámbito. En el texto el parámetro
     // aparece primero: el error se marca en la variable de retorno y señala
-    // al parámetro.
+    // al parámetro. El parámetro se conserva y la pasada 2 no crea la
+    // variable de retorno.
     Symbol *clash =
         ret_id ? find_parameter(function, ret_id->text) : NULL;
 
     if (clash != NULL) {
 
-        semantic_error(return_type->line,
+        semantic_error(return_type,
                        "'%s' ya fue declarado en este ambito (linea %d)",
                        ret_id->text,
                        clash->line);
-
-        return 0;
     }
 
     return 1;
@@ -861,27 +880,24 @@ static int register_signatures(ASTNode *functions) {
 }
 
 // El programa empieza en main, que no recibe ni devuelve nada.
-static int check_main(void) {
+static void check_main(void) {
     Symbol *main_function = symbol_lookup_current(global_scope, "main");
 
     if (main_function == NULL ||
         main_function->kind != SYMBOL_FUNCTION) {
 
-        semantic_error(0, "falta la funcion 'main'");
+        semantic_error(NULL,
+                       "el archivo principal debe declarar 'main'");
 
-        return 0;
+        return;
     }
 
     if (main_function->parameter_count > 0 ||
         main_function->type != TYPE_VOID) {
 
-        semantic_error(main_function->line,
+        semantic_error(main_function->decl_node,
                        "'main' debe declararse como F main [] : void");
-
-        return 0;
     }
-
-    return 1;
 }
 
 // Pasada 2: ámbito, direcciones y cuerpo de una función ya registrada.
@@ -895,18 +911,21 @@ static int analyze_function(ASTNode *node) {
     ASTNode *return_type = find_child(node, AST_RETURN_TYPE);
     ASTNode *body = find_child(node, AST_BLOCK);
 
-    // La pasada 1 ya creó el símbolo de la función.
-    Symbol *function =
-        identifier
-            ? symbol_lookup_current(global_scope, identifier->text)
-            : NULL;
-
-    if (function == NULL ||
-        function->kind != SYMBOL_FUNCTION) {
+    if (identifier == NULL) {
         fprintf(stderr,
                 "Semantic error: invalid function\n");
         return 0;
     }
+
+    // La pasada 1 ya creó el símbolo de la función.
+    Symbol *function =
+        symbol_lookup_current(global_scope, identifier->text);
+
+    // Función repetida (ya reportada en la pasada 1): el símbolo con ese
+    // nombre no apunta a este nodo, así que no se analiza.
+    if (function == NULL ||
+        function->decl_node != node)
+        return 1;
 
     current_function = function;
 
@@ -925,18 +944,20 @@ static int analyze_function(ASTNode *node) {
 
         int rl_address;   // no hay símbolo para rl
 
-        if (!reserve(4, function->name, function->line, &rl_address))
-            return 0;
+        reserve(4, function->name, node, &rl_address);
     }
 
     // Crea function scope.
     enter_scope(SCOPE_FUNCTION, function->line);
 
     // La variable de retorno va antes que los parámetros (queda en +4).
+    // Si se llama como un parámetro (ya reportado en la pasada 1) no se
+    // crea: el nombre se refiere al parámetro.
     ASTNode *ret_type = find_child(return_type, AST_TYPE);
     ASTNode *ret_id = find_child(return_type, AST_IDENTIFIER);
 
-    if (ret_id != NULL) {
+    if (ret_id != NULL &&
+        find_parameter(function, ret_id->text) == NULL) {
 
         Symbol *ret = symbol_create(ret_id->text,
                                     SYMBOL_RETURN,
@@ -945,29 +966,26 @@ static int analyze_function(ASTNode *node) {
         ret->modifier = MODIFIER_VM;   // el cuerpo la asigna
         ret->width = type_width(ret->type);   // M-1
         ret->line = return_type->line;
+        ret->decl_node = return_type;
 
-        if (!insert_symbol(ret))
-            return 0;
-
-        if (!reserve(ret->width, ret->name, ret->line, &ret->address))
-            return 0;
+        if (insert_symbol(ret, return_type))
+            reserve(ret->width, ret->name, return_type, &ret->address);
     }
 
     // Los parámetros ya existen en param_list: desde aquí pertenecen al
     // ámbito de la función. La inserción no puede fallar (los duplicados se
-    // detectaron en la pasada 1).
+    // descartaron en la pasada 1).
     for (int i = 0; i < function->parameter_count; i++) {
 
         Symbol *parameter = function->param_list[i];
 
         if (!symbol_insert(current_scope, parameter))
-            return 0;
+            continue;
 
-        if (!reserve(parameter->width,
-                     parameter->name,
-                     parameter->line,
-                     &parameter->address))
-            return 0;
+        reserve(parameter->width,
+                parameter->name,
+                parameter->decl_node,
+                &parameter->address);
     }
 
     // S-01: el cuerpo se recorre completo, en el mismo ámbito de la función.
@@ -998,9 +1016,13 @@ int semantic_analyze(ASTNode *root) {
         return 0;
     }
 
+    // Los errores semánticos se acumulan: el resultado sale del contador.
+    int errors_before = diag_count();
+
     enter_global_scope();
 
     next_address = DATA_BASE;
+    memory_reported = 0;
     current_function = NULL;
 
     /*
@@ -1026,8 +1048,7 @@ int semantic_analyze(ASTNode *root) {
     if (!register_signatures(functions))
         return 0;
 
-    if (!check_main())
-        return 0;
+    check_main();
 
     // Pasada 2: ámbitos, direcciones y cuerpos.
     ASTNode *function = functions ? functions->child : NULL;
@@ -1040,7 +1061,7 @@ int semantic_analyze(ASTNode *root) {
         function = function->next;
     }
 
-    return 1;
+    return diag_count() == errors_before;
 }
 
 // Symbol table output

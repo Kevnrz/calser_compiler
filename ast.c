@@ -33,6 +33,7 @@ ASTNode *ast_new(ASTKind kind) {
     node->text = NULL;
     node->number = 0;
     node->line = 0;
+    node->column = 0;
     node->child = NULL;
     node->next = NULL;
 
@@ -57,22 +58,25 @@ void ast_add_child(ASTNode *parent, ASTNode *child) {
     current->next = child;
 }
 
-// P-03: asigna la línea al nodo y a todos sus descendientes que aún no tengan
-// una. Los hijos que ya tienen línea se crearon en reducciones anteriores: se
-// dejan como están y no se baja por ellos.
-void ast_set_line(ASTNode *node, int line) {
+// P-03: asigna la posición (línea y columna) al nodo y a todos sus
+// descendientes que aún no tengan una. Los hijos que ya tienen línea se
+// crearon en reducciones anteriores: se dejan como están y no se baja por
+// ellos.
+void ast_set_location(ASTNode *node, int line, int column) {
     if (node == NULL)
         return;
 
-    if (node->line == 0)
+    if (node->line == 0) {
         node->line = line;
+        node->column = column;
+    }
 
     ASTNode *child = node->child;
 
     while (child != NULL) {
 
         if (child->line == 0)
-            ast_set_line(child, line);
+            ast_set_location(child, line, column);
 
         child = child->next;
     }

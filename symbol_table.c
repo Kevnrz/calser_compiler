@@ -37,6 +37,7 @@ Symbol *symbol_create(const char *name,
     symbol->modifier = MODIFIER_NONE;
     symbol->dimensions = 0;
     symbol->line = 0;
+    symbol->decl_node = NULL;
 
     // Memoria: las direcciones y el área se asignan después; -1 = sin asignar.
     symbol->address = -1;

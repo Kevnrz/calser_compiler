@@ -36,6 +36,7 @@ typedef struct Symbol {
     int dimensions;
 
     int line;                  // línea de su declaración; 0 = sin línea
+    void *decl_node;           // nodo del AST que lo declara (no dueño)
 
     // Memoria (asignación estática, libro §6.3.4 y §7.1.1)
     int address;               // dirección en memoria de datos; -1 = sin asignar

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include "ast.h"
+#include "diagnostics.h"
 
 extern int yylex(void);
 extern int yylineno;
@@ -248,7 +249,7 @@ funcion
 
           free($2);
 
-          ast_set_line($$, @2.first_line);
+          ast_set_location($$, @2.first_line, @2.first_column);
       }
     ;
 
@@ -270,14 +271,14 @@ retorno
 
           free($2);
 
-          ast_set_line($$, @2.first_line);
+          ast_set_location($$, @2.first_line, @2.first_column);
       }
 
     | TOKEN_VOID
       {
           $$ = ast_return_void();
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -325,7 +326,7 @@ param
 
           free($3);
 
-          ast_set_line($$, @3.first_line);
+          ast_set_location($$, @3.first_line, @3.first_column);
       }
     ;
 
@@ -335,14 +336,14 @@ modif
       {
           $$ = ast_modifier("Vm");
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | TOKEN_VI
       {
           $$ = ast_modifier("Vi");
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -365,14 +366,14 @@ tipo
       {
           $$ = ast_type("int");
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | TOKEN_BOOL
       {
           $$ = ast_type("bool");
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -402,7 +403,7 @@ dims
               $2
           );
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | TOKEN_LBRACKET
@@ -417,7 +418,7 @@ dims
           ast_add_number($$, $2);
           ast_add_number($$, $5);
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -510,7 +511,7 @@ decl
 
           free($2);
 
-          ast_set_line($$, @2.first_line);
+          ast_set_location($$, @2.first_line, @2.first_column);
       }
 
     | modif
@@ -532,7 +533,7 @@ decl
 
           free($2);
 
-          ast_set_line($$, @2.first_line);
+          ast_set_location($$, @2.first_line, @2.first_column);
       }
     ;
 
@@ -567,7 +568,7 @@ elems
       {
           $$ = ast_list(AST_INITIALIZER_LIST, $1);
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | elems TOKEN_COMMA elem
@@ -610,7 +611,7 @@ sent_id
 
           free($1);
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | TOKEN_IDENTIFIER
@@ -630,7 +631,7 @@ sent_id
 
           free($1);
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | TOKEN_IDENTIFIER
@@ -653,7 +654,7 @@ sent_id
 
           free($1);
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | TOKEN_IDENTIFIER
@@ -669,7 +670,7 @@ sent_id
 
           free($1);
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -698,7 +699,7 @@ condicional
                     $8
                 );
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -724,7 +725,7 @@ alts
               );
 
           // P-03: línea de la A
-          ast_set_line(alternative, @2.first_line);
+          ast_set_location(alternative, @2.first_line, @2.first_column);
 
           ast_add_child($1, alternative);
 
@@ -745,7 +746,7 @@ residual
       {
           $$ = ast_residual($3);
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -770,7 +771,7 @@ ciclo_l
                     $6
                 );
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -806,7 +807,10 @@ ciclo_s
 
           free($3);
 
-          ast_set_line($$, @1.first_line);
+          // La variable de control recibe su posición real antes del relleno.
+          ast_set_location($$->child, @3.first_line, @3.first_column);
+
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -816,14 +820,14 @@ paso
       {
           $$ = ast_number($1);
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | TOKEN_MINUS TOKEN_NUMBER
       {
           $$ = ast_number(-$2);
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -837,7 +841,7 @@ emit
       {
           $$ = ast_emit();
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -861,7 +865,10 @@ rewind
 
           free($2);
 
-          ast_set_line($$, @1.first_line);
+          // El nombre recibe su posición real antes del relleno.
+          ast_set_location($$->child, @2.first_line, @2.first_column);
+
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -925,7 +932,7 @@ disy
                     $3
                 );
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -944,7 +951,7 @@ conj
                     $3
                 );
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -963,7 +970,7 @@ igualdad
                     $3
                 );
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | igualdad TOKEN_NOT_EQUAL relacion
@@ -974,7 +981,7 @@ igualdad
                     $3
                 );
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -993,7 +1000,7 @@ relacion
                     $3
                 );
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | relacion TOKEN_GREATER aditivo
@@ -1004,7 +1011,7 @@ relacion
                     $3
                 );
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | relacion TOKEN_LESS_EQUAL aditivo
@@ -1015,7 +1022,7 @@ relacion
                     $3
                 );
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | relacion TOKEN_GREATER_EQUAL aditivo
@@ -1026,7 +1033,7 @@ relacion
                     $3
                 );
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -1045,7 +1052,7 @@ aditivo
                     $3
                 );
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | aditivo TOKEN_MINUS multiplicativo
@@ -1056,7 +1063,7 @@ aditivo
                     $3
                 );
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -1075,7 +1082,7 @@ multiplicativo
                     $3
                 );
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | multiplicativo TOKEN_DIVIDE unario
@@ -1086,7 +1093,7 @@ multiplicativo
                     $3
                 );
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | multiplicativo TOKEN_MODULO unario
@@ -1097,7 +1104,7 @@ multiplicativo
                     $3
                 );
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -1110,7 +1117,7 @@ unario
                     $2
                 );
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | TOKEN_NOT unario
@@ -1120,7 +1127,7 @@ unario
                     $2
                 );
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | potencia
@@ -1144,7 +1151,7 @@ potencia
                     $3
                 );
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -1164,21 +1171,21 @@ primario
       {
           $$ = ast_number($1);
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | TOKEN_TRUE
       {
           $$ = ast_boolean(1);
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | TOKEN_FALSE
       {
           $$ = ast_boolean(0);
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -1189,7 +1196,7 @@ acceso
           $$ = ast_identifier($1);
           free($1);
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | TOKEN_IDENTIFIER
@@ -1204,7 +1211,7 @@ acceso
 
           free($1);
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
 
     | TOKEN_IDENTIFIER
@@ -1223,7 +1230,7 @@ acceso
 
           free($1);
 
-          ast_set_line($$, @1.first_line);
+          ast_set_location($$, @1.first_line, @1.first_column);
       }
     ;
 
@@ -1237,8 +1244,11 @@ acceso
 
 void yyerror(const char *msg)
 {
-    fprintf(stderr,
-            "Syntax error at line %d: %s\n",
-            yylineno,
-            msg);
+    // §8.2: posición del token de preanálisis, donde se detectó el error.
+    diag_error("error sintactico",
+               yylloc.first_line,
+               yylloc.first_column,
+               yylloc.last_column - yylloc.first_column + 1,
+               "%s",
+               msg);
 }

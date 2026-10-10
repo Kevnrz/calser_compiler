@@ -5,9 +5,19 @@
 
 #include "ast.h"
 #include "parser.tab.h"
+#include "diagnostics.h"
 
-// P-03: cada token guarda la línea donde aparece (Bison %locations).
-#define YY_USER_ACTION  yylloc.first_line = yylloc.last_line = yylineno;
+// Columna del siguiente carácter. Una tabulación cuenta como UNA columna:
+// el señalador de los errores queda alineado porque copia las tabulaciones
+// de la línea original.
+static int column = 1;
+
+// P-03 / §8.2: cada token guarda línea y columnas (Bison %locations).
+#define YY_USER_ACTION                                  \
+    yylloc.first_line   = yylloc.last_line = yylineno;  \
+    yylloc.first_column = column;                       \
+    yylloc.last_column  = column + yyleng - 1;          \
+    column += yyleng;
 
 int line_number = 1;
 
@@ -28,13 +38,13 @@ void yyerror(const char *msg);
 
 [ \t\r]+              ; /* Whitespace */
 
-\n                    { line_number++; }
+\n                    { line_number++; column = 1; }
 
 "#["                  { BEGIN(COMMENT); } /* Multiline comment: #[ ... ]# */
 
 <COMMENT>"]#"         { BEGIN(INITIAL); }
 
-<COMMENT>\n           { line_number++; }
+<COMMENT>\n           { line_number++; column = 1; }
 
 <COMMENT>.            ;
 
@@ -116,11 +126,12 @@ void yyerror(const char *msg);
                        } /* Identifier */
 
 .                     {
-                         fprintf(stderr,
-                                 "Lexical error at line %d: "
-                                 "unexpected character '%s'\n",
-                                 yylineno,
-                                 yytext);
+                         diag_error("error lexico",
+                                    yylineno,
+                                    yylloc.first_column,
+                                    1,
+                                    "caracter inesperado '%s'",
+                                    yytext);
 
                          return TOKEN_ERROR;
                        } /* Invalid character */

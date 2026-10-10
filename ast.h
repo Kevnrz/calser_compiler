@@ -75,7 +75,8 @@ typedef struct ASTNode {
     char *text;
     long number;
 
-    int line;   // línea del código fuente; 0 = sin línea
+    int line;     // línea del código fuente; 0 = sin línea
+    int column;   // columna del código fuente; 0 = sin columna
 
     struct ASTNode *child;
     struct ASTNode *next;
@@ -86,8 +87,8 @@ typedef struct ASTNode {
 ASTNode *ast_new(ASTKind kind);
 void ast_add_child(ASTNode *parent, ASTNode *child);
 
-// Asigna la línea al nodo y a todos sus descendientes que aún no tengan una.
-void ast_set_line(ASTNode *node, int line);
+// Asigna la posición al nodo y a todos sus descendientes que aún no tengan una.
+void ast_set_location(ASTNode *node, int line, int column);
 ASTNode *ast_list(ASTKind kind, ASTNode *items);
 
 // Program

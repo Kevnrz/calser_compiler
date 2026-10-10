@@ -1,98 +1,147 @@
 ===== pruebas/e01_no_declarado.cls =====
 --- stderr ---
-Error semantico (linea 3): 'b' no ha sido declarado
-Analisis semantico fallido.
+pruebas/e01_no_declarado.cls:3:9: error semantico: 'b' no ha sido declarado
+     3 |     a = b + 1 ;
+       |         ^
+Analisis semantico fallido: 1 error(es).
 --- tabla ---
 --- codigo de salida: 1 ---
 
 ===== pruebas/e02_uso_antes.cls =====
 --- stderr ---
-Error semantico (linea 2): 'x' no ha sido declarado
-Analisis semantico fallido.
+pruebas/e02_uso_antes.cls:2:5: error semantico: 'x' no ha sido declarado
+     2 |     x = 1 ;
+       |     ^
+Analisis semantico fallido: 1 error(es).
 --- tabla ---
 --- codigo de salida: 1 ---
 
 ===== pruebas/e03_fuera_alcance.cls =====
 --- stderr ---
-Error semantico (linea 5): 'bono' esta fuera de alcance; fue declarado en el bloque de la linea 2
-Analisis semantico fallido.
+pruebas/e03_fuera_alcance.cls:5:5: error semantico: 'bono' esta fuera de alcance; fue declarado en el bloque de la linea 2
+     5 |     bono = 1 ;
+       |     ^^^^
+Analisis semantico fallido: 1 error(es).
 --- tabla ---
 --- codigo de salida: 1 ---
 
 ===== pruebas/e04_oculta_parametro.cls =====
 --- stderr ---
-Error semantico (linea 3): 'y' ya es un parametro de esta funcion
-Analisis semantico fallido.
+pruebas/e04_oculta_parametro.cls:3:12: error semantico: 'y' ya es un parametro de esta funcion
+     3 |         Vm y : int ;
+       |            ^
+Analisis semantico fallido: 1 error(es).
 --- tabla ---
 --- codigo de salida: 1 ---
 
 ===== pruebas/e05_param_duplicado.cls =====
 --- stderr ---
-Error semantico (linea 1): 'a' ya fue declarado en este ambito (linea 1)
-Analisis semantico fallido.
+pruebas/e05_param_duplicado.cls:1:19: error semantico: 'a' ya fue declarado en este ambito (linea 1)
+     1 | F f [ int a , int a ] : void ;
+       |                   ^
+Analisis semantico fallido: 1 error(es).
 --- tabla ---
 --- codigo de salida: 1 ---
 
 ===== pruebas/e06_retorno_igual_param.cls =====
 --- stderr ---
-Error semantico (linea 1): 'r' ya fue declarado en este ambito (linea 1)
-Analisis semantico fallido.
+pruebas/e06_retorno_igual_param.cls:1:21: error semantico: 'r' ya fue declarado en este ambito (linea 1)
+     1 | F f [ int r ] : int r ;
+       |                     ^
+Analisis semantico fallido: 1 error(es).
 --- tabla ---
 --- codigo de salida: 1 ---
 
 ===== pruebas/e07_dimension_cero.cls =====
 --- stderr ---
-Error semantico (linea 2): la dimension de 'v' debe ser mayor que 0
-Analisis semantico fallido.
+pruebas/e07_dimension_cero.cls:2:8: error semantico: el tamano de un arreglo debe ser mayor que cero
+     2 |     Vm v : int [0] ;
+       |        ^
+Analisis semantico fallido: 1 error(es).
 --- tabla ---
 --- codigo de salida: 1 ---
 
 ===== pruebas/e08_sin_main.cls =====
 --- stderr ---
-Error semantico: falta la funcion 'main'
-Analisis semantico fallido.
+pruebas/e08_sin_main.cls: error semantico: el archivo principal debe declarar 'main'
+Analisis semantico fallido: 1 error(es).
 --- tabla ---
 --- codigo de salida: 1 ---
 
 ===== pruebas/e09_main_con_params.cls =====
 --- stderr ---
-Error semantico (linea 1): 'main' debe declararse como F main [] : void
-Analisis semantico fallido.
+pruebas/e09_main_con_params.cls:1:3: error semantico: 'main' debe declararse como F main [] : void
+     1 | F main [ int a ] : void ;
+       |   ^^^^
+Analisis semantico fallido: 1 error(es).
 --- tabla ---
 --- codigo de salida: 1 ---
 
 ===== pruebas/e10_dos_main.cls =====
 --- stderr ---
-Error semantico (linea 5): la funcion 'main' ya fue declarada (linea 1)
-Analisis semantico fallido.
+pruebas/e10_dos_main.cls:5:3: error semantico: la funcion 'main' ya fue declarada (linea 1)
+     5 | F main [] : void ;
+       |   ^^^^
+Analisis semantico fallido: 1 error(es).
 --- tabla ---
 --- codigo de salida: 1 ---
 
 ===== pruebas/e11_limite_s_no_declarado.cls =====
 --- stderr ---
-Error semantico (linea 3): 'n' no ha sido declarado
-Analisis semantico fallido.
+pruebas/e11_limite_s_no_declarado.cls:3:17: error semantico: 'n' no ha sido declarado
+     3 |     S [ i , 0 , n , 1 ] ;
+       |                 ^
+Analisis semantico fallido: 1 error(es).
 --- tabla ---
 --- codigo de salida: 1 ---
 
 ===== pruebas/e12_datos_excedidos.cls =====
 --- stderr ---
-Error semantico (linea 4): 'x' no cabe en la memoria de datos (limite 0x0FFF)
-Analisis semantico fallido.
+pruebas/e12_datos_excedidos.cls:4:8: error semantico: 'x' no cabe en la memoria de datos (limite 0x0FFF)
+     4 |     Vm x : int ;
+       |        ^
+Analisis semantico fallido: 1 error(es).
 --- tabla ---
 --- codigo de salida: 1 ---
 
 ===== pruebas/e13_redeclaracion.cls =====
 --- stderr ---
-Error semantico (linea 3): 'x' ya fue declarado en este ambito (linea 2)
-Analisis semantico fallido.
+pruebas/e13_redeclaracion.cls:3:8: error semantico: 'x' ya fue declarado en este ambito (linea 2)
+     3 |     Vm x : bool ;
+       |        ^
+Analisis semantico fallido: 1 error(es).
 --- tabla ---
 --- codigo de salida: 1 ---
 
 ===== pruebas/e14_fuera_alcance_s.cls =====
 --- stderr ---
-Error semantico (linea 6): 'i' esta fuera de alcance; fue declarado en el bloque de la linea 3
-Analisis semantico fallido.
+pruebas/e14_fuera_alcance_s.cls:6:9: error semantico: 'i' esta fuera de alcance; fue declarado en el bloque de la linea 3
+     6 |     t = i ;
+       |         ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e15_varios_errores.cls =====
+--- stderr ---
+pruebas/e15_varios_errores.cls:3:9: error semantico: 'b' no ha sido declarado
+     3 |     a = b ;
+       |         ^
+pruebas/e15_varios_errores.cls:4:8: error semantico: 'a' ya fue declarado en este ambito (linea 2)
+     4 |     Vm a : int ;
+       |        ^
+pruebas/e15_varios_errores.cls:5:5: error semantico: 'c' no ha sido declarado
+     5 |     c = 1 ;
+       |     ^
+Analisis semantico fallido: 3 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e16_falta_punto_coma.cls =====
+--- stderr ---
+pruebas/e16_falta_punto_coma.cls:3:5: error sintactico: syntax error
+     3 |     E ;
+       |     ^
 --- tabla ---
 --- codigo de salida: 1 ---
 

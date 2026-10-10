@@ -1,3 +1,4 @@
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -107,6 +108,32 @@ static SymbolModifier get_modifier(ASTNode *node) {
     return MODIFIER_NONE;
 }
 
+// Errors
+
+// Único punto de salida de los errores semánticos.
+// line > 0 agrega "(linea N)"; por ahora siempre es 0 porque el AST no guarda
+// líneas (P-03).
+static void semantic_error(int line, const char *fmt, ...) {
+    va_list args;
+
+    fprintf(stderr, "Error semantico: ");
+
+    va_start(args, fmt);
+    vfprintf(stderr, fmt, args);
+    va_end(args);
+
+    if (line > 0)
+        fprintf(stderr, " (linea %d)", line);
+
+    fprintf(stderr, "\n");
+}
+
+// Libera un símbolo que todavía no pertenece a ningún ámbito.
+static void discard_symbol(Symbol *symbol) {
+    free(symbol->name);
+    free(symbol);
+}
+
 // Memory
 
 // M-2: variables de ccom en 0x0000–0x0FFF; desde 0x1000, archivos de load_file
@@ -119,10 +146,10 @@ static int next_address = DATA_BASE;   // libro §6.3.4: el "offset"
 static int reserve(int width, const char *what, int *out_address) {
     if (next_address + width > DATA_LIMIT) {
 
-        fprintf(stderr,
-                "Semantic error: '%s' does not fit in data memory (limit 0x%04X)\n",
-                what,
-                (unsigned int) (DATA_LIMIT - 1));
+        semantic_error(0,
+                       "'%s' no cabe en la memoria de datos (limite 0x%04X)",
+                       what,
+                       (unsigned int) (DATA_LIMIT - 1));
 
         return 0;
     }
@@ -144,12 +171,13 @@ static int type_width(SymbolType type) {
 
 // Llena dimensions y dim_sizes a partir del nodo DIMENSIONS.
 // El ancho no se calcula aquí: es distinto en declaraciones y en parámetros.
-static void fill_dimensions(Symbol *symbol, ASTNode *dimensions) {
+// Devuelve 0 si algún tamaño no es válido.
+static int fill_dimensions(Symbol *symbol, ASTNode *dimensions) {
 
     // A-2: en esa posición puede llegar otro nodo (no DIMENSIONS).
     if (dimensions == NULL ||
         dimensions->kind != AST_DIMENSIONS)
-        return;
+        return 1;
 
     // Los hijos de DIMENSIONS son nodos NUMBER con el tamaño en number.
     ASTNode *dimension = dimensions->child;
@@ -157,12 +185,173 @@ static void fill_dimensions(Symbol *symbol, ASTNode *dimensions) {
     while (dimension != NULL &&
            symbol->dimensions < MAX_DIMS) {
 
+        // S-06: una dimensión de tamaño 0 no reserva nada.
+        if (dimension->number <= 0) {
+
+            semantic_error(0,
+                           "la dimension de '%s' debe ser mayor que 0",
+                           symbol->name);
+
+            return 0;
+        }
+
         // Guardar el tamaño antes de incrementar dimensions.
         symbol->dim_sizes[symbol->dimensions] = (int) dimension->number;
         symbol->dimensions++;
 
         dimension = dimension->next;
     }
+
+    return 1;
+}
+
+// AST helpers
+
+// Primer hijo de node con el kind dado. Los hijos se identifican por kind,
+// nunca por posición: los opcionales NULL no se agregan y corren las posiciones.
+static ASTNode *find_child(ASTNode *node, ASTKind kind) {
+    if (node == NULL)
+        return NULL;
+
+    ASTNode *child = node->child;
+
+    while (child != NULL) {
+
+        if (child->kind == kind)
+            return child;
+
+        child = child->next;
+    }
+
+    return NULL;
+}
+
+// Condición de un CONDITIONAL, ALTERNATIVE o LOOP_L: el hijo que no es
+// BLOCK, ALTERNATIVES ni RESIDUAL.
+static ASTNode *find_condition(ASTNode *node) {
+    if (node == NULL)
+        return NULL;
+
+    ASTNode *child = node->child;
+
+    while (child != NULL) {
+
+        if (child->kind != AST_BLOCK &&
+            child->kind != AST_ALTERNATIVES &&
+            child->kind != AST_RESIDUAL)
+            return child;
+
+        child = child->next;
+    }
+
+    return NULL;
+}
+
+// Name checking
+
+// Libro §1.6.3 y §2.7: ámbito estático, regla del bloque anidado más cercano.
+// Un nombre usado antes de su declaración todavía no está en la tabla.
+static int check_name(ASTNode *identifier) {
+    if (identifier == NULL || identifier->text == NULL)
+        return 1;
+
+    if (symbol_lookup(current_scope, identifier->text) == NULL) {
+
+        semantic_error(0,
+                       "'%s' no ha sido declarado",
+                       identifier->text);
+
+        return 0;
+    }
+
+    return 1;
+}
+
+static int check_expression(ASTNode *node);
+
+// Verifica cada hijo de node como expresión.
+static int check_children(ASTNode *node) {
+    if (node == NULL)
+        return 1;
+
+    ASTNode *child = node->child;
+
+    while (child != NULL) {
+
+        if (!check_expression(child))
+            return 0;
+
+        child = child->next;
+    }
+
+    return 1;
+}
+
+// CALL, INDEX y REWIND: el nombre y cada argumento. Todavía no se distingue
+// arreglo de función ni se cuentan índices o argumentos.
+static int check_call(ASTNode *node) {
+    if (!check_name(find_child(node, AST_IDENTIFIER)))
+        return 0;
+
+    ASTNode *arguments = find_child(node, AST_ARGUMENTS);
+
+    if (!check_children(arguments))
+        return 0;
+
+    // INDEX: el segundo índice es el hijo que sigue a ARGUMENTS (cualquier
+    // expresión, incluso un IDENTIFIER).
+    if (node->kind == AST_INDEX && arguments != NULL)
+        return check_expression(arguments->next);
+
+    return 1;
+}
+
+// Devuelve 1 si todo nombre usado en la expresión existe, 0 si no.
+static int check_expression(ASTNode *node) {
+    if (node == NULL)
+        return 1;
+
+    switch (node->kind) {
+
+        case AST_IDENTIFIER:
+            return check_name(node);
+
+        case AST_NUMBER:
+        case AST_BOOLEAN:
+            return 1;
+
+        case AST_CALL:
+        case AST_INDEX:
+            return check_call(node);
+
+        // INITIALIZER_LIST y cualquier operador binario o unario.
+        default:
+            return check_children(node);
+    }
+}
+
+// Función que se está analizando; NULL fuera de las funciones (globales).
+static Symbol *current_function = NULL;
+
+// Un local (o la variable de un S) no puede llamarse como un parámetro de
+// su función, en ningún bloque. Las globales no se revisan.
+static int check_not_parameter(const char *name) {
+    if (current_function == NULL)
+        return 1;
+
+    for (int i = 0; i < current_function->parameter_count; i++) {
+
+        if (strcmp(current_function->param_list[i]->name, name) == 0) {
+
+            semantic_error(0,
+                           "'%s' ya es un parametro de esta funcion",
+                           name);
+
+            return 0;
+        }
+    }
+
+    return 1;
 }
 
 // Variable declaration
@@ -201,6 +390,19 @@ static int analyze_declaration(ASTNode *node) {
         return 0;
     }
 
+    // A-2: el inicializador es el hijo que sigue a TYPE o a DIMENSIONS y que
+    // no es DIMENSIONS.
+    ASTNode *initializer = dimensions;
+
+    if (initializer != NULL &&
+        initializer->kind == AST_DIMENSIONS)
+        initializer = initializer->next;
+
+    // El inicializador se verifica antes de insertar el símbolo:
+    // Vm x : int = x ;  usa el x de afuera, o es error.
+    if (!check_expression(initializer))
+        return 0;
+
     Symbol *symbol =
         symbol_create(identifier->text,
                       SYMBOL_VARIABLE,
@@ -208,7 +410,13 @@ static int analyze_declaration(ASTNode *node) {
 
     symbol->modifier = get_modifier(modifier);
 
-    fill_dimensions(symbol, dimensions);
+    if (!fill_dimensions(symbol, dimensions) ||
+        !check_not_parameter(symbol->name)) {
+
+        discard_symbol(symbol);
+
+        return 0;
+    }
 
     // Libro §6.3.4: ancho = ancho del tipo × producto de las dimensiones
     int d1 = symbol->dimensions > 0 ? symbol->dim_sizes[0] : 1;
@@ -218,13 +426,12 @@ static int analyze_declaration(ASTNode *node) {
 
     if (!symbol_insert(current_scope, symbol)) {
 
-        fprintf(stderr,
-                "Semantic error: '%s' already declared in this scope\n",
-                identifier->text);
+        semantic_error(0,
+                       "'%s' ya fue declarado en este ambito",
+                       identifier->text);
 
         // symbol_insert() didn't take ownership because insertion failed.
-        free(symbol->name);
-        free(symbol);
+        discard_symbol(symbol);
 
         return 0;
     }
@@ -239,42 +446,25 @@ static int analyze_declaration(ASTNode *node) {
 
 // Parameters
 
-static int analyze_parameter(ASTNode *node, Symbol *function) {
-    if (node == NULL)
-        return 1;
-
+// Crea el símbolo de un parámetro, sin insertarlo en ningún ámbito ni darle
+// dirección. Devuelve NULL si hay error.
+static Symbol *create_parameter(ASTNode *node) {
     /*
      * PARAMETER
      *
-     * child 0 = modifier
-     * child 1 = type
-     * child 2 = identifier
-     * child 3 = dimensions
+     * MODIFIER (opcional), TYPE, IDENTIFIER, DIMENSIONS (opcional)
      */
+    ASTNode *modifier = find_child(node, AST_MODIFIER);
+    ASTNode *type = find_child(node, AST_TYPE);
+    ASTNode *identifier = find_child(node, AST_IDENTIFIER);
+    ASTNode *dimensions = find_child(node, AST_DIMENSIONS);
 
-    ASTNode *modifier = node->child;
-
-    ASTNode *type;
-    if (modifier->kind == AST_MODIFIER) {
-        type =
-            modifier ? modifier->next : NULL;
-    } else {
-        type = modifier ? modifier : NULL;
-    }    
-
-    ASTNode *identifier =
-        type ? type->next : NULL;
-
-    ASTNode *dimensions =
-        identifier ? identifier->next : NULL;
-
-    if (identifier == NULL ||
-        identifier->kind != AST_IDENTIFIER) {
+    if (identifier == NULL) {
 
         fprintf(stderr,
                 "Semantic error: invalid parameter\n");
 
-        return 0;
+        return NULL;
     }
 
     Symbol *symbol =
@@ -284,53 +474,21 @@ static int analyze_parameter(ASTNode *node, Symbol *function) {
 
     symbol->modifier = get_modifier(modifier);
 
-    fill_dimensions(symbol, dimensions);
+    if (!fill_dimensions(symbol, dimensions)) {
+
+        discard_symbol(symbol);
+
+        return NULL;
+    }
 
     // escalar: el valor; arreglo: su dirección (paso por referencia)
     symbol->width = 4;
 
-    if (!symbol_insert(current_scope, symbol)) {
-
-        fprintf(stderr,
-                "Semantic error: parameter '%s' already declared\n",
-                identifier->text);
-
-        free(symbol->name);
-        free(symbol);
-
-        return 0;
-    }
-
-    // Lista ordenada de parámetros de la función (también cuenta el parámetro).
-    symbol_add_param(function, symbol);
-
-    if (!reserve(symbol->width, symbol->name, &symbol->address))
-        return 0;
-
-    return 1;
+    return symbol;
 }
 
 
 // Statements
-
-// Primer hijo de node con el kind dado. Los hijos se identifican por kind,
-// nunca por posición: los opcionales NULL no se agregan y corren las posiciones.
-static ASTNode *find_child(ASTNode *node, ASTKind kind) {
-    if (node == NULL)
-        return NULL;
-
-    ASTNode *child = node->child;
-
-    while (child != NULL) {
-
-        if (child->kind == kind)
-            return child;
-
-        child = child->next;
-    }
-
-    return NULL;
-}
 
 static int analyze_statement(ASTNode *statement);
 
@@ -364,63 +522,87 @@ static int analyze_block(ASTNode *block, ScopeKind kind) {
     return result;
 }
 
-// Condicional: un ámbito por cada rama. Las condiciones no se analizan todavía.
+// Condicional: un ámbito por cada rama. Cada condición se verifica antes de
+// abrir el ámbito de su rama.
 static int analyze_conditional(ASTNode *node) {
-    ASTNode *child = node->child;
 
-    while (child != NULL) {
+    // Rama inicial  C [cond] ;
+    if (!check_expression(find_condition(node)))
+        return 0;
 
-        if (child->kind == AST_BLOCK) {
+    if (!analyze_block(find_child(node, AST_BLOCK), SCOPE_C))
+        return 0;
 
-            // Rama inicial  C [cond] ;
-            if (!analyze_block(child, SCOPE_C))
+    // Ramas alternativas  A [cond] ;
+    ASTNode *alternatives = find_child(node, AST_ALTERNATIVES);
+    ASTNode *alternative = alternatives ? alternatives->child : NULL;
+
+    while (alternative != NULL) {
+
+        if (alternative->kind == AST_ALTERNATIVE) {
+
+            if (!check_expression(find_condition(alternative)))
                 return 0;
-        }
-        else if (child->kind == AST_ALTERNATIVES) {
 
-            // Ramas alternativas  A [cond] ;
-            ASTNode *alternative = child->child;
-
-            while (alternative != NULL) {
-
-                if (alternative->kind == AST_ALTERNATIVE &&
-                    !analyze_block(find_child(alternative, AST_BLOCK),
-                                   SCOPE_A))
-                    return 0;
-
-                alternative = alternative->next;
-            }
-        }
-        else if (child->kind == AST_RESIDUAL) {
-
-            // Rama residual  A ;
-            if (!analyze_block(find_child(child, AST_BLOCK),
-                               SCOPE_RESIDUAL))
+            if (!analyze_block(find_child(alternative, AST_BLOCK),
+                               SCOPE_A))
                 return 0;
         }
 
-        child = child->next;
+        alternative = alternative->next;
     }
 
+    // Rama residual  A ;
+    ASTNode *residual = find_child(node, AST_RESIDUAL);
+
+    if (residual != NULL &&
+        !analyze_block(find_child(residual, AST_BLOCK),
+                       SCOPE_RESIDUAL))
+        return 0;
+
     return 1;
+}
+
+// Ciclo por predicado: la condición se verifica antes de abrir el ámbito.
+static int analyze_loop_l(ASTNode *node) {
+    if (!check_expression(find_condition(node)))
+        return 0;
+
+    return analyze_block(find_child(node, AST_BLOCK), SCOPE_L);
 }
 
 // Ciclo acotado: el ámbito del S contiene su variable de control y su cuerpo.
 static int analyze_loop_s(ASTNode *node) {
     /*
-     * LOOP_S
+     * LOOP_S (posición fija: los 5 hijos siempre existen)
      *
-     * IDENTIFIER = variable de control (siempre el primer IDENTIFIER)
-     * inicio, fin, paso
-     * BLOCK
+     * child 0 = identifier (variable de control)
+     * child 1 = inicio
+     * child 2 = fin
+     * child 3 = paso (NUMBER)
+     * child 4 = body
      */
-    ASTNode *identifier = find_child(node, AST_IDENTIFIER);
+    ASTNode *identifier = node->child;
+    ASTNode *start =
+        identifier ? identifier->next : NULL;
+    ASTNode *end =
+        start ? start->next : NULL;
 
-    if (identifier == NULL) {
+    if (identifier == NULL ||
+        identifier->kind != AST_IDENTIFIER) {
         fprintf(stderr,
                 "Semantic error: invalid S loop\n");
         return 0;
     }
+
+    // Inicio y fin se verifican antes de abrir el ámbito del S:
+    // S [ i , 0 , i , 1 ]  usa el i de afuera.
+    if (!check_expression(start) ||
+        !check_expression(end))
+        return 0;
+
+    if (!check_not_parameter(identifier->text))
+        return 0;
 
     enter_scope(SCOPE_S);
 
@@ -435,12 +617,11 @@ static int analyze_loop_s(ASTNode *node) {
 
     if (!symbol_insert(current_scope, control)) {
 
-        fprintf(stderr,
-                "Semantic error: '%s' already declared in this scope\n",
-                identifier->text);
+        semantic_error(0,
+                       "'%s' ya fue declarado en este ambito",
+                       identifier->text);
 
-        free(control->name);
-        free(control);
+        discard_symbol(control);
 
         exit_scope();
 
@@ -474,13 +655,21 @@ static int analyze_statement(ASTNode *statement) {
             return analyze_conditional(statement);
 
         case AST_LOOP_L:
-            return analyze_block(find_child(statement, AST_BLOCK),
-                                 SCOPE_L);
+            return analyze_loop_l(statement);
 
         case AST_LOOP_S:
             return analyze_loop_s(statement);
 
-        // ASSIGNMENT, CALL_STATEMENT, EMIT, REWIND: no declaran nombres.
+        // Destino (IDENTIFIER, CALL o INDEX) y valor; o el CALL de la sentencia.
+        case AST_ASSIGNMENT:
+        case AST_CALL_STATEMENT:
+            return check_children(statement);
+
+        // El nombre y cada argumento.
+        case AST_REWIND:
+            return check_call(statement);
+
+        // EMIT: nada que verificar.
         default:
             return 1;
     }
@@ -489,52 +678,158 @@ static int analyze_statement(ASTNode *statement) {
 
 // Function
 
-static int analyze_function(ASTNode *node) {
+// Pasada 1: registra la firma de una función (símbolo y parámetros), para que
+// una función pueda llamar a otra escrita después.
+static int register_signature(ASTNode *node) {
     /*
      * FUNCTION
      *
-     * child 0 = identifier
-     * child 1 = params
-     * child 2 = return type
-     * child 3 = body
+     * IDENTIFIER, PARAMS, RETURN_TYPE, BLOCK
      */
-    ASTNode *identifier = node->child;
-    ASTNode *params =
-        identifier ? identifier->next : NULL;
-    ASTNode *return_type =
-        params ? params->next : NULL;
-    ASTNode *body =
-        return_type ? return_type->next : NULL;
-    if (identifier == NULL ||
-        identifier->kind != AST_IDENTIFIER) {
+    ASTNode *identifier = find_child(node, AST_IDENTIFIER);
+    ASTNode *params = find_child(node, AST_PARAMS);
+    ASTNode *return_type = find_child(node, AST_RETURN_TYPE);
+
+    if (identifier == NULL) {
         fprintf(stderr,
                 "Semantic error: invalid function\n");
         return 0;
     }
-    // Funcion pertenece a scope global
-    ASTNode *actual_return_type = return_type;
-    SymbolType type = TYPE_VOID;
 
-    if (actual_return_type != NULL) {
-        if (actual_return_type->kind == AST_RETURN_TYPE) {
-            ASTNode *type_node = actual_return_type->child;
-            if (type_node != NULL)
-                type = get_type(type_node);
-        }
-    }
+    // RETURN_TYPE sin hijos es void.
+    ASTNode *ret_type = find_child(return_type, AST_TYPE);
+    ASTNode *ret_id = find_child(return_type, AST_IDENTIFIER);
+
+    // Funcion pertenece a scope global
     Symbol *function =
-        symbol_create(identifier->text, SYMBOL_FUNCTION, type);
+        symbol_create(identifier->text,
+                      SYMBOL_FUNCTION,
+                      ret_type ? get_type(ret_type) : TYPE_VOID);
 
     if (!symbol_insert(global_scope, function)) {
-        fprintf(stderr,
-                "Semantic error: function '%s' already declared\n",
-                identifier->text);
 
-        free(function->name);
-        free(function);
+        semantic_error(0,
+                       "la funcion '%s' ya fue declarada",
+                       identifier->text);
+
+        discard_symbol(function);
 
         return 0;
     }
+
+    /*
+     * Los parámetros solo quedan en param_list, que no es dueña: pasan a
+     * pertenecer al ámbito de la función cuando la pasada 2 los inserta.
+     * Si el análisis se detiene antes de que la pasada 2 llegue a esta
+     * función, sus parámetros quedan sin liberar. Es una fuga aceptada solo
+     * en ese camino de error.
+     */
+    ASTNode *parameter = params ? params->child : NULL;
+
+    while (parameter != NULL) {
+
+        Symbol *symbol = create_parameter(parameter);
+
+        if (symbol == NULL)
+            return 0;
+
+        // Mismo ámbito que la variable de retorno y los demás parámetros.
+        int duplicate =
+            ret_id != NULL && strcmp(ret_id->text, symbol->name) == 0;
+
+        for (int i = 0; !duplicate && i < function->parameter_count; i++) {
+
+            if (strcmp(function->param_list[i]->name, symbol->name) == 0)
+                duplicate = 1;
+        }
+
+        if (duplicate) {
+
+            semantic_error(0,
+                           "'%s' ya fue declarado en este ambito",
+                           symbol->name);
+
+            discard_symbol(symbol);
+
+            return 0;
+        }
+
+        // Lista ordenada de parámetros de la función (también lo cuenta).
+        symbol_add_param(function, symbol);
+
+        parameter = parameter->next;
+    }
+
+    return 1;
+}
+
+// Pasada 1 sobre todas las funciones.
+static int register_signatures(ASTNode *functions) {
+    if (functions == NULL || functions->kind != AST_FUNCTIONS)
+        return 1;
+
+    ASTNode *function = functions->child;
+
+    while (function != NULL) {
+
+        if (!register_signature(function))
+            return 0;
+
+        function = function->next;
+    }
+
+    return 1;
+}
+
+// El programa empieza en main, que no recibe ni devuelve nada.
+static int check_main(void) {
+    Symbol *main_function = symbol_lookup_current(global_scope, "main");
+
+    if (main_function == NULL ||
+        main_function->kind != SYMBOL_FUNCTION) {
+
+        semantic_error(0, "falta la funcion 'main'");
+
+        return 0;
+    }
+
+    if (main_function->parameter_count > 0 ||
+        main_function->type != TYPE_VOID) {
+
+        semantic_error(0,
+                       "'main' debe declararse como F main [] : void");
+
+        return 0;
+    }
+
+    return 1;
+}
+
+// Pasada 2: ámbito, direcciones y cuerpo de una función ya registrada.
+static int analyze_function(ASTNode *node) {
+    /*
+     * FUNCTION
+     *
+     * IDENTIFIER, PARAMS, RETURN_TYPE, BLOCK
+     */
+    ASTNode *identifier = find_child(node, AST_IDENTIFIER);
+    ASTNode *return_type = find_child(node, AST_RETURN_TYPE);
+    ASTNode *body = find_child(node, AST_BLOCK);
+
+    // La pasada 1 ya creó el símbolo de la función.
+    Symbol *function =
+        identifier
+            ? symbol_lookup_current(global_scope, identifier->text)
+            : NULL;
+
+    if (function == NULL ||
+        function->kind != SYMBOL_FUNCTION) {
+        fprintf(stderr,
+                "Semantic error: invalid function\n");
+        return 0;
+    }
+
+    current_function = function;
 
     /*
      * Área estática de la función (libro §7.1.1):
@@ -559,48 +854,45 @@ static int analyze_function(ASTNode *node) {
     enter_scope(SCOPE_FUNCTION);
 
     // La variable de retorno va antes que los parámetros (queda en +4).
-    if (return_type != NULL &&
-        return_type->kind == AST_RETURN_TYPE) {
+    ASTNode *ret_type = find_child(return_type, AST_TYPE);
+    ASTNode *ret_id = find_child(return_type, AST_IDENTIFIER);
 
-        ASTNode *ret_type = return_type->child;                 // TYPE
-        ASTNode *ret_id   = ret_type ? ret_type->next : NULL;   // IDENTIFIER
+    if (ret_id != NULL) {
 
-        if (ret_id != NULL &&
-            ret_id->kind == AST_IDENTIFIER) {
+        Symbol *ret = symbol_create(ret_id->text,
+                                    SYMBOL_RETURN,
+                                    get_type(ret_type));
 
-            Symbol *ret = symbol_create(ret_id->text,
-                                        SYMBOL_RETURN,
-                                        get_type(ret_type));
+        ret->modifier = MODIFIER_VM;   // el cuerpo la asigna
+        ret->width = type_width(ret->type);   // M-1
 
-            ret->modifier = MODIFIER_VM;   // el cuerpo la asigna
-            ret->width = type_width(ret->type);   // M-1
+        if (!symbol_insert(current_scope, ret)) {
 
-            if (!symbol_insert(current_scope, ret)) {
-                fprintf(stderr,
-                        "Semantic error: return variable '%s' already declared\n",
-                        ret_id->text);
-                free(ret->name);
-                free(ret);
-                return 0;
-            }
+            semantic_error(0,
+                           "'%s' ya fue declarado en este ambito",
+                           ret_id->text);
 
-            if (!reserve(ret->width, ret->name, &ret->address))
-                return 0;
+            discard_symbol(ret);
+
+            return 0;
         }
+
+        if (!reserve(ret->width, ret->name, &ret->address))
+            return 0;
     }
 
-    // Parameters are inserted into the function scope.
-    if (params != NULL && params->kind == AST_PARAMS) {
+    // Los parámetros ya existen en param_list: desde aquí pertenecen al
+    // ámbito de la función. La inserción no puede fallar (los duplicados se
+    // detectaron en la pasada 1).
+    for (int i = 0; i < function->parameter_count; i++) {
 
-        ASTNode *parameter = params->child;
+        Symbol *parameter = function->param_list[i];
 
-        while (parameter != NULL) {
+        if (!symbol_insert(current_scope, parameter))
+            return 0;
 
-            if (!analyze_parameter(parameter, function))
-                return 0;
-
-            parameter = parameter->next;
-        }
+        if (!reserve(parameter->width, parameter->name, &parameter->address))
+            return 0;
     }
 
     // S-01: el cuerpo se recorre completo, en el mismo ámbito de la función.
@@ -612,6 +904,8 @@ static int analyze_function(ASTNode *node) {
 
     // Return to global scope.
     exit_scope();
+
+    current_function = NULL;
 
     return 1;
 }
@@ -632,47 +926,43 @@ int semantic_analyze(ASTNode *root) {
     enter_global_scope();
 
     next_address = DATA_BASE;
+    current_function = NULL;
 
     /*
      * PROGRAM
      *
-     * child 0 = globals
-     * child 1 = functions
+     * GLOBALS, FUNCTIONS
      */
-
-    ASTNode *globals = root->child;
-
-    ASTNode *functions =
-        globals ? globals->next : NULL;
+    ASTNode *globals = find_child(root, AST_GLOBALS);
+    ASTNode *functions = find_child(root, AST_FUNCTIONS);
 
     // Global declarations.
-    if (globals != NULL &&
-        globals->kind == AST_GLOBALS) {
+    ASTNode *decl = globals ? globals->child : NULL;
 
-        ASTNode *decl = globals->child;
+    while (decl != NULL) {
 
-        while (decl != NULL) {
+        if (!analyze_declaration(decl))
+            return 0;
 
-            if (!analyze_declaration(decl))
-                return 0;
-
-            decl = decl->next;
-        }
+        decl = decl->next;
     }
 
-    // Functions.
-    if (functions != NULL &&
-        functions->kind == AST_FUNCTIONS) {
+    // Pasada 1: todas las firmas antes que cualquier cuerpo.
+    if (!register_signatures(functions))
+        return 0;
 
-        ASTNode *function = functions->child;
+    if (!check_main())
+        return 0;
 
-        while (function != NULL) {
+    // Pasada 2: ámbitos, direcciones y cuerpos.
+    ASTNode *function = functions ? functions->child : NULL;
 
-            if (!analyze_function(function))
-                return 0;
+    while (function != NULL) {
 
-            function = function->next;
-        }
+        if (!analyze_function(function))
+            return 0;
+
+        function = function->next;
     }
 
     return 1;
@@ -707,4 +997,5 @@ void semantic_free(void)
     scope_list_tail = NULL;
     global_scope = NULL;
     current_scope = NULL;
+    current_function = NULL;
 }

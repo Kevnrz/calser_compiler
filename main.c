@@ -32,10 +32,19 @@ int main(int argc, char **argv) {
 
         ast_print(root, 0);
 
-        semantic_analyze(root);
+        // S-03: si el análisis falla no hay tabla y el código de salida es 1.
+        if (!semantic_analyze(root)) {
+            fprintf(stderr, "Analisis semantico fallido.\n");
+
+            semantic_free();
+
+            ast_free(root);
+
+            return 1;
+        }
 
         semantic_print_symbols();
-        
+
         semantic_free();
 
         ast_free(root);

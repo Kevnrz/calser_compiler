@@ -15,8 +15,8 @@ static Scope *scope_list_tail = NULL;
 
 // Scope management
 
-static Scope *create_scope(void) {
-    Scope *scope = scope_create(current_scope);
+static Scope *create_scope(ScopeKind kind) {
+    Scope *scope = scope_create(current_scope, kind);
 
     if (scope == NULL)
         return NULL;
@@ -39,7 +39,7 @@ static Scope *create_scope(void) {
 static void enter_global_scope(void) {
     current_scope = NULL;
 
-    global_scope = scope_create(NULL);
+    global_scope = scope_create(NULL, SCOPE_GLOBAL);
 
     if (global_scope == NULL) {
         fprintf(stderr, "Error: could not create global scope\n");
@@ -52,8 +52,8 @@ static void enter_global_scope(void) {
     current_scope = global_scope;
 }
 
-static void enter_scope(void) {
-    create_scope();
+static void enter_scope(ScopeKind kind) {
+    create_scope(kind);
 }
 
 static void exit_scope(void) {
@@ -108,6 +108,30 @@ static SymbolModifier get_modifier(ASTNode *node) {
 }
 
 // Memory
+
+// M-2: variables de ccom en 0x0000–0x0FFF; desde 0x1000, archivos de load_file
+#define DATA_BASE  0x0000
+#define DATA_LIMIT 0x1000          // primera dirección que NO se puede usar
+
+static int next_address = DATA_BASE;   // libro §6.3.4: el "offset"
+
+// Libro §6.3.4: el nombre recibe el offset actual y el offset avanza su ancho.
+static int reserve(int width, const char *what, int *out_address) {
+    if (next_address + width > DATA_LIMIT) {
+
+        fprintf(stderr,
+                "Semantic error: '%s' does not fit in data memory (limit 0x%04X)\n",
+                what,
+                (unsigned int) (DATA_LIMIT - 1));
+
+        return 0;
+    }
+
+    *out_address = next_address;
+    next_address += width;
+
+    return 1;
+}
 
 // M-1: int y bool ocupan 4 bytes (alineados para lw/sw)
 static int type_width(SymbolType type) {
@@ -205,6 +229,10 @@ static int analyze_declaration(ASTNode *node) {
         return 0;
     }
 
+    // El símbolo ya pertenece al ámbito: si no cabe, se libera con él.
+    if (!reserve(symbol->width, symbol->name, &symbol->address))
+        return 0;
+
     return 1;
 }
 
@@ -276,7 +304,186 @@ static int analyze_parameter(ASTNode *node, Symbol *function) {
     // Lista ordenada de parámetros de la función (también cuenta el parámetro).
     symbol_add_param(function, symbol);
 
+    if (!reserve(symbol->width, symbol->name, &symbol->address))
+        return 0;
+
     return 1;
+}
+
+
+// Statements
+
+// Primer hijo de node con el kind dado. Los hijos se identifican por kind,
+// nunca por posición: los opcionales NULL no se agregan y corren las posiciones.
+static ASTNode *find_child(ASTNode *node, ASTKind kind) {
+    if (node == NULL)
+        return NULL;
+
+    ASTNode *child = node->child;
+
+    while (child != NULL) {
+
+        if (child->kind == kind)
+            return child;
+
+        child = child->next;
+    }
+
+    return NULL;
+}
+
+static int analyze_statement(ASTNode *statement);
+
+// Recorre las sentencias de un BLOCK en el ámbito actual (no abre ámbito).
+static int analyze_statements(ASTNode *block) {
+    if (block == NULL || block->kind != AST_BLOCK)
+        return 1;
+
+    ASTNode *statement = block->child;
+
+    while (statement != NULL) {
+
+        if (!analyze_statement(statement))
+            return 0;
+
+        statement = statement->next;
+    }
+
+    return 1;
+}
+
+// Abre un ámbito del tipo dado, recorre el BLOCK y lo cierra.
+// Libro §1.6.3 y §2.7: cada bloque tiene su propio ámbito anidado.
+static int analyze_block(ASTNode *block, ScopeKind kind) {
+    enter_scope(kind);
+
+    int result = analyze_statements(block);
+
+    exit_scope();
+
+    return result;
+}
+
+// Condicional: un ámbito por cada rama. Las condiciones no se analizan todavía.
+static int analyze_conditional(ASTNode *node) {
+    ASTNode *child = node->child;
+
+    while (child != NULL) {
+
+        if (child->kind == AST_BLOCK) {
+
+            // Rama inicial  C [cond] ;
+            if (!analyze_block(child, SCOPE_C))
+                return 0;
+        }
+        else if (child->kind == AST_ALTERNATIVES) {
+
+            // Ramas alternativas  A [cond] ;
+            ASTNode *alternative = child->child;
+
+            while (alternative != NULL) {
+
+                if (alternative->kind == AST_ALTERNATIVE &&
+                    !analyze_block(find_child(alternative, AST_BLOCK),
+                                   SCOPE_A))
+                    return 0;
+
+                alternative = alternative->next;
+            }
+        }
+        else if (child->kind == AST_RESIDUAL) {
+
+            // Rama residual  A ;
+            if (!analyze_block(find_child(child, AST_BLOCK),
+                               SCOPE_RESIDUAL))
+                return 0;
+        }
+
+        child = child->next;
+    }
+
+    return 1;
+}
+
+// Ciclo acotado: el ámbito del S contiene su variable de control y su cuerpo.
+static int analyze_loop_s(ASTNode *node) {
+    /*
+     * LOOP_S
+     *
+     * IDENTIFIER = variable de control (siempre el primer IDENTIFIER)
+     * inicio, fin, paso
+     * BLOCK
+     */
+    ASTNode *identifier = find_child(node, AST_IDENTIFIER);
+
+    if (identifier == NULL) {
+        fprintf(stderr,
+                "Semantic error: invalid S loop\n");
+        return 0;
+    }
+
+    enter_scope(SCOPE_S);
+
+    Symbol *control =
+        symbol_create(identifier->text,
+                      SYMBOL_VARIABLE,
+                      TYPE_INT);
+
+    // el ciclo la controla; el cuerpo no puede modificarla
+    control->modifier = MODIFIER_VI;
+    control->width = type_width(control->type);   // M-1
+
+    if (!symbol_insert(current_scope, control)) {
+
+        fprintf(stderr,
+                "Semantic error: '%s' already declared in this scope\n",
+                identifier->text);
+
+        free(control->name);
+        free(control);
+
+        exit_scope();
+
+        return 0;
+    }
+
+    // El símbolo ya pertenece al ámbito: si no cabe, se libera con él.
+    int result =
+        reserve(control->width, control->name, &control->address);
+
+    // El cuerpo comparte el ámbito del S con su variable (no abre otro).
+    if (result)
+        result = analyze_statements(find_child(node, AST_BLOCK));
+
+    exit_scope();
+
+    return result;
+}
+
+// Decide qué hacer con una sentencia según su kind.
+static int analyze_statement(ASTNode *statement) {
+    if (statement == NULL)
+        return 1;
+
+    switch (statement->kind) {
+
+        case AST_DECLARATION:
+            return analyze_declaration(statement);
+
+        case AST_CONDITIONAL:
+            return analyze_conditional(statement);
+
+        case AST_LOOP_L:
+            return analyze_block(find_child(statement, AST_BLOCK),
+                                 SCOPE_L);
+
+        case AST_LOOP_S:
+            return analyze_loop_s(statement);
+
+        // ASSIGNMENT, CALL_STATEMENT, EMIT, REWIND: no declaran nombres.
+        default:
+            return 1;
+    }
 }
 
 
@@ -329,24 +536,29 @@ static int analyze_function(ASTNode *node) {
         return 0;
     }
 
-    // Crea function scope.
-    enter_scope();
+    /*
+     * Área estática de la función (libro §7.1.1):
+     *
+     * +0  rl guardado (todas excepto main)
+     * +4  variable de retorno, si no es void
+     * ... parámetros, en orden
+     * ... locales de todos sus bloques, en el orden del recorrido
+     */
+    function->area_base = next_address;
 
-    // Parameters are inserted into the function scope.
-    if (params != NULL && params->kind == AST_PARAMS) {
+    // M-5: main no guarda rl
+    if (strcmp(function->name, "main") != 0) {
 
-        ASTNode *parameter = params->child;
+        int rl_address;   // no hay símbolo para rl
 
-        while (parameter != NULL) {
-
-            if (!analyze_parameter(parameter, function))
-                return 0;
-
-            parameter = parameter->next;
-        }
+        if (!reserve(4, function->name, &rl_address))
+            return 0;
     }
 
-    // Analyze function body.
+    // Crea function scope.
+    enter_scope(SCOPE_FUNCTION);
+
+    // La variable de retorno va antes que los parámetros (queda en +4).
     if (return_type != NULL &&
         return_type->kind == AST_RETURN_TYPE) {
 
@@ -363,7 +575,7 @@ static int analyze_function(ASTNode *node) {
             ret->modifier = MODIFIER_VM;   // el cuerpo la asigna
             ret->width = type_width(ret->type);   // M-1
 
-            if (!symbol_insert(current_scope, ret)) {   // choque con un parámetro
+            if (!symbol_insert(current_scope, ret)) {
                 fprintf(stderr,
                         "Semantic error: return variable '%s' already declared\n",
                         ret_id->text);
@@ -371,25 +583,32 @@ static int analyze_function(ASTNode *node) {
                 free(ret);
                 return 0;
             }
+
+            if (!reserve(ret->width, ret->name, &ret->address))
+                return 0;
         }
     }
 
-    if (body != NULL &&
-        body->kind == AST_BLOCK) {
+    // Parameters are inserted into the function scope.
+    if (params != NULL && params->kind == AST_PARAMS) {
 
-        ASTNode *statement = body->child;
+        ASTNode *parameter = params->child;
 
-        while (statement != NULL) {
+        while (parameter != NULL) {
 
-            if (statement->kind == AST_DECLARATION) {
+            if (!analyze_parameter(parameter, function))
+                return 0;
 
-                if (!analyze_declaration(statement))
-                    return 0;
-            }
-
-            statement = statement->next;
+            parameter = parameter->next;
         }
     }
+
+    // S-01: el cuerpo se recorre completo, en el mismo ámbito de la función.
+    if (!analyze_statements(body))
+        return 0;
+
+    // El área termina donde quedó el offset.
+    function->area_size = next_address - function->area_base;
 
     // Return to global scope.
     exit_scope();
@@ -411,6 +630,8 @@ int semantic_analyze(ASTNode *root) {
     }
 
     enter_global_scope();
+
+    next_address = DATA_BASE;
 
     /*
      * PROGRAM

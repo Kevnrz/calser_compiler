@@ -82,7 +82,7 @@ void symbol_add_param(Symbol *function, Symbol *param) {
     function->parameter_count++;
 }
 
-Scope *scope_create(Scope *parent) {
+Scope *scope_create(Scope *parent, ScopeKind kind) {
     Scope *scope = malloc(sizeof(Scope));
 
     if (scope == NULL) {
@@ -90,6 +90,7 @@ Scope *scope_create(Scope *parent) {
         exit(EXIT_FAILURE);
     }
 
+    scope->kind = kind;
     scope->symbols = NULL;
     scope->parent = parent;
     scope->next = NULL;
@@ -214,6 +215,44 @@ static const char *symbol_type_string(SymbolType type) {
 }
 
 
+static const char *scope_kind_string(ScopeKind kind) {
+    switch (kind) {
+
+        case SCOPE_GLOBAL:
+            return "GLOBAL";
+
+        case SCOPE_FUNCTION:
+            return "FUNCTION";
+
+        case SCOPE_C:
+            return "C";
+
+        case SCOPE_A:
+            return "A";
+
+        case SCOPE_RESIDUAL:
+            return "RESIDUAL";
+
+        case SCOPE_L:
+            return "L";
+
+        case SCOPE_S:
+            return "S";
+
+        default:
+            return "UNKNOWN";
+    }
+}
+
+// Imprime una dirección en hexadecimal; ---- si todavía no se asignó (-1).
+static void print_address(const char *label, int address) {
+    if (address < 0)
+        printf(" %s=----", label);
+    else
+        printf(" %s=0x%04X", label, (unsigned int) address);
+}
+
+
 void symbol_table_print(Scope *scope) {
     int scope_number = 0;
 
@@ -221,13 +260,10 @@ void symbol_table_print(Scope *scope) {
 
     while (current_scope != NULL) {
 
-        printf("Scope %d", scope_number);
-
-        // The global scope is the scope with no parent.
-        if (current_scope->parent == NULL)
-            printf(": GLOBAL\n");
-        else
-            printf(": FUNCTION\n");
+        // Un ámbito sin símbolos se imprime igual, solo con su cabecera.
+        printf("Scope %d: %s\n",
+               scope_number,
+               scope_kind_string(current_scope->kind));
 
         Symbol *symbol = current_scope->symbols;
 
@@ -239,7 +275,8 @@ void symbol_table_print(Scope *scope) {
 
             if (symbol->kind == SYMBOL_FUNCTION) {
 
-                // Funciones: lista ordenada de parámetros, sin width.
+                // Funciones: lista ordenada de parámetros y área estática,
+                // sin width.
                 printf(" (%s) params=[",
                        symbol_kind_string(symbol->kind));
 
@@ -250,6 +287,9 @@ void symbol_table_print(Scope *scope) {
                 }
 
                 printf("]");
+
+                print_address("area", symbol->area_base);
+                printf(" size=%d", symbol->area_size);
             }
             else {
 
@@ -263,6 +303,7 @@ void symbol_table_print(Scope *scope) {
                 }
 
                 printf(" width=%d", symbol->width);
+                print_address("addr", symbol->address);
             }
             printf("\n");
             symbol = symbol->next;

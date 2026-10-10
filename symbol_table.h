@@ -53,7 +53,20 @@ typedef struct Symbol {
 } Symbol;
 
 
+typedef enum {
+    SCOPE_GLOBAL,
+    SCOPE_FUNCTION,
+    SCOPE_C,          // rama inicial de un condicional
+    SCOPE_A,          // rama alternativa  A [cond] ;
+    SCOPE_RESIDUAL,   // rama residual     A ;
+    SCOPE_L,          // ciclo por predicado
+    SCOPE_S           // ciclo acotado (contiene su variable de control)
+} ScopeKind;
+
+
 typedef struct Scope {
+    ScopeKind kind;
+
     Symbol *symbols;
 
     struct Scope *parent;
@@ -71,7 +84,7 @@ Symbol *symbol_lookup_current(Scope *scope, const char *name);
 
 Symbol *symbol_lookup(Scope *scope, const char *name);
 
-Scope *scope_create(Scope *parent);
+Scope *scope_create(Scope *parent, ScopeKind kind);
 
 void scope_free(Scope *scope);
 

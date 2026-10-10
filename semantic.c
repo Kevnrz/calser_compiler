@@ -429,7 +429,14 @@ typedef struct {
     SymbolType base;       // ET_ARRAY: tipo de los elementos
     int dimensions;        // ET_ARRAY: 1 o 2
     int sizes[MAX_DIMS];   // ET_ARRAY: tamaño de cada dimensión
+
+    int is_const;          // 1 si la expresión es una constante entera conocida
+    long value;            // su valor (solo si is_const)
 } ExprType;
+
+// Rango de un int de 32 bits con signo.
+#define INT32_LOWEST  (-2147483648LL)
+#define INT32_HIGHEST 2147483647LL
 
 #define TYPE_TEXT_SIZE 64   // alcanza para "bool[N][M]"
 
@@ -439,6 +446,8 @@ static ExprType make_type(ExprKind kind) {
     type.kind = kind;
     type.base = TYPE_VOID;
     type.dimensions = 0;
+    type.is_const = 0;
+    type.value = 0;
 
     for (int i = 0; i < MAX_DIMS; i++)
         type.sizes[i] = 0;
@@ -559,6 +568,84 @@ static void check_assignable(ASTNode *target, ExprType destination,
                        "no se puede asignar '%s' a una variable '%s'",
                        value_text,
                        destination_text);
+}
+
+// Call graph
+
+// S-05: sin recursión no hace falta pila. Cada llamada de la pasada 2 se
+// guarda como (función que llama, función llamada, nodo CALL), en el orden
+// en que aparece. R no es una llamada.
+typedef struct {
+    Symbol *caller;
+    Symbol *callee;
+    ASTNode *call;
+} CallEdge;
+
+static CallEdge *call_edges = NULL;
+static int call_count = 0;
+static int call_capacity = 0;
+
+// Funciones analizadas en la pasada 2, en el orden del archivo.
+static Symbol **function_list = NULL;
+static int function_count = 0;
+static int function_capacity = 0;
+
+static void add_call(Symbol *caller, Symbol *callee, ASTNode *call) {
+    if (call_count == call_capacity) {
+
+        int capacity = call_capacity == 0 ? 16 : call_capacity * 2;
+
+        CallEdge *edges =
+            realloc(call_edges, (size_t) capacity * sizeof(CallEdge));
+
+        if (edges == NULL) {
+            fprintf(stderr, "Error: out of memory\n");
+            exit(EXIT_FAILURE);
+        }
+
+        call_edges = edges;
+        call_capacity = capacity;
+    }
+
+    call_edges[call_count].caller = caller;
+    call_edges[call_count].callee = callee;
+    call_edges[call_count].call = call;
+    call_count++;
+}
+
+static void add_function(Symbol *function) {
+    if (function_count == function_capacity) {
+
+        int capacity = function_capacity == 0 ? 16 : function_capacity * 2;
+
+        Symbol **list =
+            realloc(function_list, (size_t) capacity * sizeof(Symbol *));
+
+        if (list == NULL) {
+            fprintf(stderr, "Error: out of memory\n");
+            exit(EXIT_FAILURE);
+        }
+
+        function_list = list;
+        function_capacity = capacity;
+    }
+
+    function_list[function_count] = function;
+    function_count++;
+}
+
+// Libera el grafo (los símbolos y los nodos no son suyos).
+static void free_call_graph(void) {
+    free(call_edges);
+    free(function_list);
+
+    call_edges = NULL;
+    call_count = 0;
+    call_capacity = 0;
+
+    function_list = NULL;
+    function_count = 0;
+    function_capacity = 0;
 }
 
 // Uses
@@ -684,35 +771,15 @@ static void check_argument(ASTNode *argument, ExprType type,
                    type_text(type, received_text));
 }
 
-// Valor de un índice constante literal: NUMBER, o NEG cuyo único hijo es
-// NUMBER. Devuelve 0 si el índice no es literal.
-static int literal_index(ASTNode *index, long *value) {
-    if (index == NULL)
-        return 0;
-
-    if (index->kind == AST_NUMBER) {
-        *value = index->number;
-        return 1;
-    }
-
-    if (index->kind == AST_NEG &&
-        index->child != NULL &&
-        index->child->kind == AST_NUMBER &&
-        index->child->next == NULL) {
-        *value = -index->child->number;
-        return 1;
-    }
-
-    return 0;
-}
-
-// Índice número position (desde 0) de un acceso: si es literal, debe estar
+// Índice número position (desde 0) de un acceso: si es una constante
+// conocida (un literal o una expresión constante como 2 + 3), debe estar
 // dentro de esa dimensión. Los índices variables no se verifican (§5.4.5).
-static void check_index_range(ASTNode *index, Symbol *array, int position) {
-    long value;
-
-    if (!literal_index(index, &value))
+static void check_index_range(ASTNode *index, ExprType type, Symbol *array,
+                              int position) {
+    if (!type.is_const)
         return;
+
+    long value = type.value;
 
     int size = array->dim_sizes[position];
 
@@ -749,7 +816,7 @@ static void check_operand(ASTNode *operand, Symbol *symbol,
                     "el indice debe ser de tipo int");
 
         if (valid)
-            check_index_range(operand, symbol, position);
+            check_index_range(operand, type, symbol, position);
     }
     else if (resolution == RESOLVED_CALL && valid) {
         check_argument(operand, type, symbol, position);
@@ -772,7 +839,21 @@ static ExprType check_call(ASTNode *node, UseContext context) {
     Resolution resolution = RESOLVED_NONE;
     int valid = 0;
 
-    if (symbol != NULL) {
+    // Llamada que se resolvió pero no puede usarse como valor (recursión
+    // directa): sus argumentos se verifican, pero el resultado es ET_ERROR.
+    int poisoned = 0;
+
+    // R solo reinicia la función actual. Si apunta a otra, se verifican los
+    // nombres de sus argumentos, pero no su cantidad ni sus tipos.
+    if (context == USE_REWIND &&
+        symbol != NULL &&
+        symbol->kind == SYMBOL_FUNCTION &&
+        symbol != current_function) {
+
+        semantic_error(node,
+                       "'R' solo puede reiniciar la funcion actual");
+    }
+    else if (symbol != NULL) {
 
         int is_function = symbol->kind == SYMBOL_FUNCTION;
         int is_array = !is_function && symbol->dimensions > 0;
@@ -796,6 +877,25 @@ static ExprType check_call(ASTNode *node, UseContext context) {
                                      symbol,
                                      n_args,
                                      context == USE_REWIND);
+
+            // S-05: R no es una llamada, y llamar a main ya es un error.
+            if (context != USE_REWIND &&
+                strcmp(symbol->name, "main") != 0) {
+
+                if (symbol == current_function) {
+
+                    // Recursión directa: no se agrega al grafo.
+                    semantic_error(node,
+                                   "'%s' se invoca a si misma; "
+                                   "la recursion debe expresarse con 'R'",
+                                   symbol->name);
+
+                    poisoned = 1;
+                }
+                else if (current_function != NULL) {
+                    add_call(current_function, symbol, node);
+                }
+            }
         }
         else if (resolution == RESOLVED_ACCESS) {
 
@@ -840,7 +940,7 @@ static ExprType check_call(ASTNode *node, UseContext context) {
     if (node->kind == AST_INDEX && arguments != NULL)
         check_operand(arguments->next, symbol, resolution, valid, position);
 
-    if (!valid)
+    if (!valid || poisoned)
         return make_type(ET_ERROR);
 
     // Llamada: el tipo de retorno. Acceso: el tipo de los elementos (un
@@ -879,6 +979,130 @@ static OperatorFamily operator_family(ASTKind kind) {
     }
 }
 
+// Literal entero. Todo NUMBER mayor que 2147483647 desborda, salvo
+// 2147483648 como operando directo de un - unario (negated), para que
+// -2147483648 sea válido.
+static ExprType number_type(ASTNode *number, int negated) {
+    long long highest = negated ? INT32_HIGHEST + 1 : INT32_HIGHEST;
+
+    if (number->number > highest) {
+
+        semantic_error(number,
+                       "la expresion constante desborda el rango de int");
+
+        return make_type(ET_ERROR);
+    }
+
+    ExprType type = make_type(ET_INT);
+
+    type.is_const = 1;
+    type.value = number->number;
+
+    return type;
+}
+
+// base ^ exponent con exponent >= 0 (x ^ 0 = 1, también 0 ^ 0), por
+// cuadrados sucesivos. *overflow = 1 si el resultado no cabe en 32 bits.
+static long long const_power(long long base, long long exponent,
+                             int *overflow) {
+    long long result = 1;
+
+    while (exponent > 0) {
+
+        if (exponent & 1) {
+
+            result *= base;
+
+            if (result < INT32_LOWEST || result > INT32_HIGHEST) {
+                *overflow = 1;
+                return 0;
+            }
+        }
+
+        exponent >>= 1;
+
+        if (exponent > 0) {
+
+            base *= base;
+
+            // base se volverá a usar y result no es 0: ya no cabe.
+            if (base > INT32_HIGHEST) {
+                *overflow = 1;
+                return 0;
+            }
+        }
+    }
+
+    return result;
+}
+
+// Valor constante de un operador aritmético cuyos operandos ya son int.
+// Aritmética de un int de 32 bits con signo, calculada en 64 bits. La
+// división trunca hacia cero y % cumple a == (a/b)*b + a%b (C99).
+// Reporta sobre el operador y devuelve ET_ERROR si hay división entre cero,
+// exponente negativo o desborde.
+static ExprType fold_constant(ASTNode *node, ExprType left, ExprType right) {
+    ExprType result = make_type(ET_INT);
+
+    int is_unary = node->kind == AST_NEG;
+
+    // Aunque el dividendo o la base no sean constantes.
+    if ((node->kind == AST_DIV || node->kind == AST_MOD) &&
+        right.is_const && right.value == 0) {
+
+        semantic_error(node, "division entre cero");
+
+        return make_type(ET_ERROR);
+    }
+
+    if (node->kind == AST_POWER &&
+        right.is_const && right.value < 0) {
+
+        semantic_error(node,
+                       "exponente negativo: "
+                       "resultado no representable como int");
+
+        return make_type(ET_ERROR);
+    }
+
+    if (!left.is_const ||
+        (!is_unary && !right.is_const))
+        return result;
+
+    long long a = left.value;
+    long long b = right.value;
+    long long value = 0;
+
+    int overflow = 0;
+
+    switch (node->kind) {
+        case AST_NEG:   value = -a;    break;
+        case AST_ADD:   value = a + b; break;
+        case AST_SUB:   value = a - b; break;
+        case AST_MUL:   value = a * b; break;
+        case AST_DIV:   value = a / b; break;
+        case AST_MOD:   value = a % b; break;
+        case AST_POWER: value = const_power(a, b, &overflow); break;
+        default:        return result;
+    }
+
+    // Solo se reporta el operador más interno que se sale de rango: su padre
+    // recibe ET_ERROR.
+    if (overflow ||
+        value < INT32_LOWEST || value > INT32_HIGHEST) {
+
+        semantic_error(node,
+                       "la expresion constante desborda el rango de int");
+
+        return make_type(ET_ERROR);
+    }
+
+    result.is_const = 1;
+    result.value = (long) value;
+
+    return result;
+}
+
 // Operador binario o unario. Se reporta un error por operador como máximo.
 // Si algún operando es ET_ERROR no se reporta nada y el resultado es el de
 // su familia. Un operador que reporta error devuelve ET_ERROR, para no
@@ -889,7 +1113,12 @@ static ExprType check_operator(ASTNode *node) {
     ASTNode *first = node->child;
     ASTNode *second = first ? first->next : NULL;   // NULL en los unarios
 
-    ExprType left = check_expression(first);
+    // -2147483648: el literal es operando directo del - unario.
+    ExprType left =
+        (node->kind == AST_NEG && first != NULL && first->kind == AST_NUMBER)
+            ? number_type(first, 1)
+            : check_expression(first);
+
     ExprType right = second ? check_expression(second) : left;
 
     OperatorFamily family = operator_family(node->kind);
@@ -950,6 +1179,10 @@ static ExprType check_operator(ASTNode *node) {
     if (diag_count() != errors_before)
         return make_type(ET_ERROR);
 
+    // Tipos correctos: valor constante, si se conoce en compilación.
+    if (family == OP_ARITHMETIC)
+        return fold_constant(node, left, right);
+
     return result;
 }
 
@@ -965,7 +1198,7 @@ static ExprType check_expression(ASTNode *node) {
             return check_identifier(node);
 
         case AST_NUMBER:
-            return make_type(ET_INT);
+            return number_type(node, 0);
 
         case AST_BOOLEAN:
             return make_type(ET_BOOL);
@@ -1430,12 +1663,30 @@ static int analyze_statements(ASTNode *block) {
         return 1;
 
     ASTNode *statement = block->child;
+    ASTNode *previous = NULL;
+
+    int unreachable_reported = 0;
 
     while (statement != NULL) {
+
+        // E y R transfieren el control: lo que sigue en el mismo bloque no
+        // se ejecuta. Se reporta una vez por bloque (la primera sentencia) y
+        // se sigue analizando.
+        if (!unreachable_reported &&
+            previous != NULL &&
+            (previous->kind == AST_EMIT || previous->kind == AST_REWIND)) {
+
+            semantic_error(statement,
+                           "codigo inalcanzable: "
+                           "la sentencia anterior transfiere el control");
+
+            unreachable_reported = 1;
+        }
 
         if (!analyze_statement(statement))
             return 0;
 
+        previous = statement;
         statement = statement->next;
     }
 
@@ -1528,10 +1779,40 @@ static int analyze_loop_s(ASTNode *node) {
 
     // Inicio y fin se verifican antes de abrir el ámbito del S:
     // S [ i , 0 , i , 1 ]  usa el i de afuera.
-    expect_type(start, check_expression(start), ET_INT,
+    ExprType start_type = check_expression(start);
+    ExprType end_type = check_expression(end);
+
+    expect_type(start, start_type, ET_INT,
                 "el limite de 'S' debe ser de tipo int");
-    expect_type(end, check_expression(end), ET_INT,
+    expect_type(end, end_type, ET_INT,
                 "el limite de 'S' debe ser de tipo int");
+
+    // El paso es un NUMBER con su signo ya aplicado.
+    ASTNode *step = end ? end->next : NULL;
+
+    if (step != NULL && step->kind == AST_NUMBER) {
+
+        if (step->number == 0) {
+
+            semantic_error(step, "el paso de 'S' no puede ser cero");
+        }
+        else if (start_type.is_const && end_type.is_const) {
+
+            // Con inicio y fin constantes se conoce el sentido. El fin es
+            // exclusivo: el ciclo solo se ejecuta si el paso se acerca a él.
+            int runs =
+                (step->number > 0 && start_type.value < end_type.value) ||
+                (step->number < 0 && start_type.value > end_type.value);
+
+            if (!runs)
+                semantic_error(node,
+                               "el ciclo 'S' nunca se ejecuta: "
+                               "inicio %ld, fin %ld, paso %ld",
+                               start_type.value,
+                               end_type.value,
+                               step->number);
+        }
+    }
 
     // Si la variable de control oculta un parámetro no se crea: dentro del
     // cuerpo, el nombre se refiere al parámetro.
@@ -1751,6 +2032,27 @@ static void check_main(void) {
     }
 }
 
+// ¿El subárbol de node contiene algún nodo de ese kind?
+static int contains_kind(ASTNode *node, ASTKind kind) {
+    if (node == NULL)
+        return 0;
+
+    if (node->kind == kind)
+        return 1;
+
+    ASTNode *child = node->child;
+
+    while (child != NULL) {
+
+        if (contains_kind(child, kind))
+            return 1;
+
+        child = child->next;
+    }
+
+    return 0;
+}
+
 // Pasada 2: ámbito, direcciones y cuerpo de una función ya registrada.
 static int analyze_function(ASTNode *node) {
     /*
@@ -1779,6 +2081,9 @@ static int analyze_function(ASTNode *node) {
         return 1;
 
     current_function = function;
+
+    // Orden del archivo, para buscar ciclos de llamadas.
+    add_function(function);
 
     /*
      * Área estática de la función (libro §7.1.1):
@@ -1843,6 +2148,21 @@ static int analyze_function(ASTNode *node) {
     if (!analyze_statements(body))
         return 0;
 
+    // Toda función debe tener al menos un E en su cuerpo, contando los
+    // bloques anidados (también main). Con R y sin E nunca terminaría.
+    if (!contains_kind(body, AST_EMIT)) {
+
+        if (contains_kind(body, AST_REWIND))
+            semantic_error(node,
+                           "la funcion '%s' usa 'R' pero no contiene ningun 'E'; "
+                           "la recursion nunca terminaria",
+                           function->name);
+        else
+            semantic_error(node,
+                           "la funcion '%s' no contiene ninguna sentencia 'E'",
+                           function->name);
+    }
+
     // El área termina donde quedó el offset.
     function->area_size = next_address - function->area_base;
 
@@ -1854,6 +2174,124 @@ static int analyze_function(ASTNode *node) {
     return 1;
 }
 
+
+// Recursion
+
+// Colores del recorrido en profundidad.
+enum { WHITE, GRAY, BLACK };
+
+// Posición de la función en function_list, o -1.
+static int function_index(Symbol *function) {
+    for (int i = 0; i < function_count; i++) {
+
+        if (function_list[i] == function)
+            return i;
+    }
+
+    return -1;
+}
+
+// Reporta el ciclo que cierra una llamada hacia una función gris: las
+// funciones desde esa (stack[from]) hasta la actual (stack[depth]), más la
+// primera de nuevo. Se reporta sobre el CALL de esa llamada.
+static void report_cycle(int *stack, int from, int depth, ASTNode *call) {
+    size_t size = 1;
+
+    for (int i = from; i <= depth; i++)
+        size += strlen(function_list[stack[i]]->name) + 4;   // " -> "
+
+    size += strlen(function_list[stack[from]]->name);
+
+    char *text = malloc(size);
+
+    if (text == NULL) {
+        fprintf(stderr, "Error: out of memory\n");
+        exit(EXIT_FAILURE);
+    }
+
+    text[0] = '\0';
+
+    for (int i = from; i <= depth; i++) {
+        strcat(text, function_list[stack[i]]->name);
+        strcat(text, " -> ");
+    }
+
+    strcat(text, function_list[stack[from]]->name);
+
+    semantic_error(call, "ciclo de llamadas: %s", text);
+
+    free(text);
+}
+
+// Recorre las llamadas de la función número index, que queda en la posición
+// depth de la pila del recorrido.
+static void visit_function(int index, int *colors, int *stack, int depth) {
+    colors[index] = GRAY;
+    stack[depth] = index;
+
+    for (int e = 0; e < call_count; e++) {
+
+        if (call_edges[e].caller != function_list[index])
+            continue;
+
+        // Solo la primera llamada de cada par (quien llama, a quien llama),
+        // para que cada ciclo se reporte una vez.
+        int repeated = 0;
+
+        for (int p = 0; p < e && !repeated; p++)
+            repeated = call_edges[p].caller == call_edges[e].caller &&
+                       call_edges[p].callee == call_edges[e].callee;
+
+        if (repeated)
+            continue;
+
+        int callee = function_index(call_edges[e].callee);
+
+        if (callee < 0)
+            continue;
+
+        if (colors[callee] == GRAY) {
+
+            // La función llamada está en la pila: hay un ciclo.
+            int from = 0;
+
+            while (stack[from] != callee)
+                from++;
+
+            report_cycle(stack, from, depth, call_edges[e].call);
+        }
+        else if (colors[callee] == WHITE) {
+            visit_function(callee, colors, stack, depth + 1);
+        }
+    }
+
+    // Una función negra no se vuelve a recorrer.
+    colors[index] = BLACK;
+}
+
+// S-05: recursión indirecta. Recorrido en profundidad (blanco/gris/negro)
+// del grafo de llamadas, empezando por las funciones en orden del archivo.
+static void check_cycles(void) {
+    if (function_count == 0)
+        return;
+
+    int *colors = calloc((size_t) function_count, sizeof(int));   // WHITE
+    int *stack = calloc((size_t) function_count, sizeof(int));
+
+    if (colors == NULL || stack == NULL) {
+        fprintf(stderr, "Error: out of memory\n");
+        exit(EXIT_FAILURE);
+    }
+
+    for (int i = 0; i < function_count; i++) {
+
+        if (colors[i] == WHITE)
+            visit_function(i, colors, stack, 0);
+    }
+
+    free(colors);
+    free(stack);
+}
 
 // Program
 
@@ -1875,6 +2313,8 @@ int semantic_analyze(ASTNode *root) {
     next_address = DATA_BASE;
     memory_reported = 0;
     current_function = NULL;
+
+    free_call_graph();
 
     /*
      * PROGRAM
@@ -1912,6 +2352,9 @@ int semantic_analyze(ASTNode *root) {
         function = function->next;
     }
 
+    // Recursión indirecta: después de analizar todos los cuerpos.
+    check_cycles();
+
     return diag_count() == errors_before;
 }
 
@@ -1945,4 +2388,6 @@ void semantic_free(void)
     global_scope = NULL;
     current_scope = NULL;
     current_function = NULL;
+
+    free_call_graph();
 }

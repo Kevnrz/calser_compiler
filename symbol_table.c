@@ -37,12 +37,49 @@ Symbol *symbol_create(const char *name,
     symbol->modifier = MODIFIER_NONE;
     symbol->dimensions = 0;
 
-    symbol->parameters = NULL;
+    // Memoria: las direcciones y el área se asignan después; -1 = sin asignar.
+    symbol->address = -1;
+    symbol->width = 0;
+    symbol->dim_sizes[0] = 0;
+    symbol->dim_sizes[1] = 0;
+
     symbol->parameter_count = 0;
+    symbol->area_base = -1;
+    symbol->area_size = 0;
+    symbol->param_list = NULL;
+    symbol->param_capacity = 0;
 
     symbol->next = NULL;
 
     return symbol;
+}
+
+// Agrega param al final de la lista ordenada de parámetros de la función.
+// La lista guarda punteros NO dueños: el símbolo pertenece al ámbito de la función.
+void symbol_add_param(Symbol *function, Symbol *param) {
+    if (function == NULL || param == NULL)
+        return;
+
+    if (function->parameter_count == function->param_capacity) {
+
+        // Duplica la capacidad, empezando en 4.
+        int capacity =
+            function->param_capacity == 0 ? 4 : function->param_capacity * 2;
+
+        Symbol **list =
+            realloc(function->param_list, capacity * sizeof(Symbol *));
+
+        if (list == NULL) {
+            fprintf(stderr, "Error: out of memory\n");
+            exit(EXIT_FAILURE);
+        }
+
+        function->param_list = list;
+        function->param_capacity = capacity;
+    }
+
+    function->param_list[function->parameter_count] = param;
+    function->parameter_count++;
 }
 
 Scope *scope_create(Scope *parent) {
@@ -118,8 +155,9 @@ static void symbol_free(Symbol *symbol) {
 
         free(symbol->name);
 
-        // Parameters are also symbols.
-        symbol_free(symbol->parameters);
+        // Solo el arreglo de punteros: los parámetros se liberan con su
+        // ámbito (liberarlos aquí sería un double free).
+        free(symbol->param_list);
 
         free(symbol);
 
@@ -199,10 +237,33 @@ void symbol_table_print(Scope *scope) {
                    symbol->name,
                    symbol_type_string(symbol->type));
 
-            if (symbol->kind == SYMBOL_FUNCTION || symbol->kind == SYMBOL_RETURN) {
-                printf(" (%s)",
+            if (symbol->kind == SYMBOL_FUNCTION) {
+
+                // Funciones: lista ordenada de parámetros, sin width.
+                printf(" (%s) params=[",
                        symbol_kind_string(symbol->kind));
+
+                for (int i = 0; i < symbol->parameter_count; i++) {
+                    printf("%s%s",
+                           i > 0 ? ", " : "",
+                           symbol->param_list[i]->name);
                 }
+
+                printf("]");
+            }
+            else {
+
+                // Tamaño de cada dimensión, pegado al tipo.
+                for (int i = 0; i < symbol->dimensions; i++)
+                    printf("[%d]", symbol->dim_sizes[i]);
+
+                if (symbol->kind == SYMBOL_RETURN) {
+                    printf(" (%s)",
+                           symbol_kind_string(symbol->kind));
+                }
+
+                printf(" width=%d", symbol->width);
+            }
             printf("\n");
             symbol = symbol->next;
         }

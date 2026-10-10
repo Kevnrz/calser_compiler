@@ -23,6 +23,8 @@ typedef enum {
 } SymbolModifier;
 
 
+#define MAX_DIMS 2   // Calser admite hasta 2 dimensiones (gramática: dims)
+
 typedef struct Symbol {
     char *name;
 
@@ -33,9 +35,18 @@ typedef struct Symbol {
 
     int dimensions;
 
-    // functions.
-    struct Symbol *parameters;
+    // Memoria (asignación estática, libro §6.3.4 y §7.1.1)
+    int address;               // dirección en memoria de datos; -1 = sin asignar
+    int width;                 // bytes que ocupa (ancho del tipo)
+    int dim_sizes[MAX_DIMS];   // tamaño de cada dimensión; 0 si no aplica
+
+    // Solo funciones
     int parameter_count;
+    int area_base;             // inicio del área estática; -1 = sin asignar
+    int area_size;             // tamaño del área en bytes
+    struct Symbol **param_list; // parámetros EN ORDEN. Punteros NO dueños:
+                                // los símbolos viven en el ámbito de la función
+    int param_capacity;        // capacidad reservada de param_list
 
     struct Symbol *next;
 
@@ -53,6 +64,8 @@ typedef struct Scope {
 Symbol *symbol_create(const char *name, SymbolKind kind, SymbolType type);
 
 int symbol_insert(Scope *scope, Symbol *symbol);
+
+void symbol_add_param(Symbol *function, Symbol *param);
 
 Symbol *symbol_lookup_current(Scope *scope, const char *name);
 

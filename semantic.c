@@ -107,6 +107,40 @@ static SymbolModifier get_modifier(ASTNode *node) {
     return MODIFIER_NONE;
 }
 
+// Memory
+
+// M-1: int y bool ocupan 4 bytes (alineados para lw/sw)
+static int type_width(SymbolType type) {
+    switch (type) {
+        case TYPE_INT:
+        case TYPE_BOOL: return 4;
+        default:        return 0;
+    }
+}
+
+// Llena dimensions y dim_sizes a partir del nodo DIMENSIONS.
+// El ancho no se calcula aquí: es distinto en declaraciones y en parámetros.
+static void fill_dimensions(Symbol *symbol, ASTNode *dimensions) {
+
+    // A-2: en esa posición puede llegar otro nodo (no DIMENSIONS).
+    if (dimensions == NULL ||
+        dimensions->kind != AST_DIMENSIONS)
+        return;
+
+    // Los hijos de DIMENSIONS son nodos NUMBER con el tamaño en number.
+    ASTNode *dimension = dimensions->child;
+
+    while (dimension != NULL &&
+           symbol->dimensions < MAX_DIMS) {
+
+        // Guardar el tamaño antes de incrementar dimensions.
+        symbol->dim_sizes[symbol->dimensions] = (int) dimension->number;
+        symbol->dimensions++;
+
+        dimension = dimension->next;
+    }
+}
+
 // Variable declaration
 
 static int analyze_declaration(ASTNode *node) {
@@ -150,17 +184,13 @@ static int analyze_declaration(ASTNode *node) {
 
     symbol->modifier = get_modifier(modifier);
 
-    if (dimensions != NULL &&
-        dimensions->kind == AST_DIMENSIONS) {
+    fill_dimensions(symbol, dimensions);
 
-        // Count dimensions.
-        ASTNode *dimension = dimensions->child;
+    // Libro §6.3.4: ancho = ancho del tipo × producto de las dimensiones
+    int d1 = symbol->dimensions > 0 ? symbol->dim_sizes[0] : 1;
+    int d2 = symbol->dimensions > 1 ? symbol->dim_sizes[1] : 1;
 
-        while (dimension != NULL) {
-            symbol->dimensions++;
-            dimension = dimension->next;
-        }
-    }
+    symbol->width = type_width(symbol->type) * d1 * d2;   // d = 1 si no aplica
 
     if (!symbol_insert(current_scope, symbol)) {
 
@@ -181,7 +211,7 @@ static int analyze_declaration(ASTNode *node) {
 
 // Parameters
 
-static int analyze_parameter(ASTNode *node) {
+static int analyze_parameter(ASTNode *node, Symbol *function) {
     if (node == NULL)
         return 1;
 
@@ -226,16 +256,10 @@ static int analyze_parameter(ASTNode *node) {
 
     symbol->modifier = get_modifier(modifier);
 
-    if (dimensions != NULL &&
-        dimensions->kind == AST_DIMENSIONS) {
+    fill_dimensions(symbol, dimensions);
 
-        ASTNode *dimension = dimensions->child;
-
-        while (dimension != NULL) {
-            symbol->dimensions++;
-            dimension = dimension->next;
-        }
-    }
+    // escalar: el valor; arreglo: su dirección (paso por referencia)
+    symbol->width = 4;
 
     if (!symbol_insert(current_scope, symbol)) {
 
@@ -248,6 +272,9 @@ static int analyze_parameter(ASTNode *node) {
 
         return 0;
     }
+
+    // Lista ordenada de parámetros de la función (también cuenta el parámetro).
+    symbol_add_param(function, symbol);
 
     return 1;
 }
@@ -312,10 +339,8 @@ static int analyze_function(ASTNode *node) {
 
         while (parameter != NULL) {
 
-            if (!analyze_parameter(parameter))
+            if (!analyze_parameter(parameter, function))
                 return 0;
-
-            function->parameter_count++;
 
             parameter = parameter->next;
         }
@@ -336,6 +361,7 @@ static int analyze_function(ASTNode *node) {
                                         get_type(ret_type));
 
             ret->modifier = MODIFIER_VM;   // el cuerpo la asigna
+            ret->width = type_width(ret->type);   // M-1
 
             if (!symbol_insert(current_scope, ret)) {   // choque con un parámetro
                 fprintf(stderr,

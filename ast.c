@@ -34,6 +34,7 @@ ASTNode *ast_new(ASTKind kind) {
     node->number = 0;
     node->line = 0;
     node->column = 0;
+    node->symbol = NULL;
     node->child = NULL;
     node->next = NULL;
 
@@ -206,8 +207,9 @@ ASTNode *ast_assignment(char *target,
                         ASTNode *index,
                         ASTNode *value) {
     ASTNode *node = ast_new(AST_ASSIGNMENT);
-    ASTNode *target_node = ast_identifier(target);
+    ASTNode *target_node;
 
+    // P-01: el IDENTIFIER suelto solo se crea en la rama sin corchetes.
     if (args != NULL && index != NULL) {
         target_node = ast_new(AST_INDEX);
         ast_add_child(target_node, ast_identifier(target));
@@ -217,6 +219,8 @@ ASTNode *ast_assignment(char *target,
         target_node = ast_new(AST_CALL);
         ast_add_child(target_node, ast_identifier(target));
         ast_add_child(target_node, args);
+    } else {
+        target_node = ast_identifier(target);
     }
 
     ast_add_child(node, target_node);

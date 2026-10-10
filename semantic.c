@@ -160,6 +160,18 @@ static ASTNode *find_condition(ASTNode *node) {
 
 // Errors
 
+// Cantidad de dígitos de un número (sin signo).
+static int count_digits(long number) {
+    int digits = 1;
+
+    while (number >= 10 || number <= -10) {
+        number /= 10;
+        digits++;
+    }
+
+    return digits;
+}
+
 /*
  * Único punto de salida de los errores semánticos (formato de §8.2).
  * Los errores se acumulan: después de reportar, el análisis sigue.
@@ -168,6 +180,8 @@ static ASTNode *find_condition(ASTNode *node) {
  *
  * NULL                        = sin posición
  * IDENTIFIER                  = el nodo, strlen(text)
+ * NUMBER                      = el nodo, cantidad de dígitos
+ * NEG de un NUMBER            = el nodo, desde el - hasta el último dígito
  * otro con un hijo IDENTIFIER = ese hijo (el nombre declarado), strlen(text)
  * otro sin hijo IDENTIFIER    = el nodo, 1
  */
@@ -183,7 +197,22 @@ static void semantic_error(ASTNode *node, const char *fmt, ...) {
                 ? node
                 : find_child(node, AST_IDENTIFIER);
 
-        if (name != NULL && name->text != NULL) {
+        // Número literal (con o sin signo): el señalador cubre el número.
+        ASTNode *number =
+            node->kind == AST_NEG ? node->child : node;
+
+        if (number != NULL && number->kind == AST_NUMBER) {
+            line = node->line;
+            column = node->column;
+            length = count_digits(number->number);
+
+            // Con signo: desde el - hasta el último dígito.
+            if (number != node)
+                length += number->line == node->line
+                              ? number->column - node->column
+                              : 1;
+        }
+        else if (name != NULL && name->text != NULL) {
             line = name->line;
             column = name->column;
             length = (int) strlen(name->text);
@@ -309,12 +338,20 @@ static Scope *find_closed_scope(const char *name) {
 // Libro §1.6.3 y §2.7: ámbito estático, regla del bloque anidado más cercano.
 // Un nombre usado antes de su declaración todavía no está en la tabla.
 // Se reporta cada uso de un nombre que no existe.
-static void check_name(ASTNode *identifier) {
+// Devuelve el símbolo del nombre, o NULL si no existe (ya reportado).
+static Symbol *resolve_name(ASTNode *identifier) {
     if (identifier == NULL || identifier->text == NULL)
-        return;
+        return NULL;
 
-    if (symbol_lookup(current_scope, identifier->text) != NULL)
-        return;
+    Symbol *symbol = symbol_lookup(current_scope, identifier->text);
+
+    if (symbol != NULL) {
+
+        // Enlace uso -> símbolo: lo usará la generación de código.
+        identifier->symbol = symbol;
+
+        return symbol;
+    }
 
     // Fuera de alcance: el nombre existe en un bloque de esta función que ya
     // se cerró. No hace falta excluir los ámbitos abiertos: symbol_lookup ya
@@ -329,13 +366,24 @@ static void check_name(ASTNode *identifier) {
                        identifier->text,
                        closed->line);
 
-        return;
+        return NULL;
     }
 
     semantic_error(identifier,
                    "'%s' no ha sido declarado",
                    identifier->text);
+
+    return NULL;
 }
+
+// A-1: la gramática produce el mismo nodo para v [ i ] y para f [ x ]. Cada
+// uso se resuelve contra la tabla de símbolos, según dónde aparece.
+typedef enum {
+    USE_EXPRESSION,   // CALL o INDEX dentro de una expresión
+    USE_TARGET,       // CALL o INDEX como destino de una asignación
+    USE_STATEMENT,    // CALL de un CALL_STATEMENT
+    USE_REWIND        // REWIND
+} UseContext;
 
 static void check_expression(ASTNode *node);
 
@@ -352,12 +400,191 @@ static void check_children(ASTNode *node) {
     }
 }
 
-// CALL, INDEX y REWIND: el nombre y cada argumento. Todavía no se distingue
-// arreglo de función ni se cuentan índices o argumentos.
-static void check_call(ASTNode *node) {
-    check_name(find_child(node, AST_IDENTIFIER));
+// Cantidad de hijos de node.
+static int count_children(ASTNode *node) {
+    int count = 0;
 
+    ASTNode *child = node ? node->child : NULL;
+
+    while (child != NULL) {
+        count++;
+        child = child->next;
+    }
+
+    return count;
+}
+
+// Nombre suelto (en una expresión o como destino): una función solo puede
+// usarse invocándola. Un arreglo suelto no es error aquí (copia o paso por
+// referencia; los tipos se verifican después).
+static void check_identifier(ASTNode *identifier) {
+    Symbol *symbol = resolve_name(identifier);
+
+    if (symbol != NULL &&
+        symbol->kind == SYMBOL_FUNCTION) {
+
+        semantic_error(identifier,
+                       "'%s' es una funcion; debe invocarse con corchetes",
+                       identifier->text);
+    }
+}
+
+// Llamada a una función: punto de entrada y cantidad de argumentos.
+// node es el CALL o el REWIND.
+static void check_invocation(ASTNode *node, Symbol *function,
+                             int n_args, int is_rewind) {
+
+    // main solo la invoca el arranque del programa (no aplica a REWIND).
+    if (!is_rewind &&
+        strcmp(function->name, "main") == 0) {
+
+        semantic_error(node,
+                       "'main' es el punto de entrada y no puede invocarse");
+    }
+
+    if (n_args != function->parameter_count) {
+
+        semantic_error(node,
+                       "'%s' espera %d argumentos, se recibieron %d",
+                       function->name,
+                       function->parameter_count,
+                       n_args);
+    }
+}
+
+// Valor de un índice constante literal: NUMBER, o NEG cuyo único hijo es
+// NUMBER. Devuelve 0 si el índice no es literal.
+static int literal_index(ASTNode *index, long *value) {
+    if (index == NULL)
+        return 0;
+
+    if (index->kind == AST_NUMBER) {
+        *value = index->number;
+        return 1;
+    }
+
+    if (index->kind == AST_NEG &&
+        index->child != NULL &&
+        index->child->kind == AST_NUMBER &&
+        index->child->next == NULL) {
+        *value = -index->child->number;
+        return 1;
+    }
+
+    return 0;
+}
+
+// Índice número position (desde 0) de un acceso: si es literal, debe estar
+// dentro de esa dimensión. Los índices variables no se verifican (§5.4.5).
+static void check_index_range(ASTNode *index, Symbol *array, int position) {
+    long value;
+
+    if (!literal_index(index, &value))
+        return;
+
+    int size = array->dim_sizes[position];
+
+    // Dimensión 0: ya se reportó en la declaración (S-06).
+    if (size <= 0)
+        return;
+
+    if (value < 0 || value >= size) {
+
+        semantic_error(index,
+                       "indice %ld fuera del rango [0..%d]",
+                       value,
+                       size - 1);
+    }
+}
+
+// Acceso a un arreglo: cantidad de índices y rango de los índices literales.
+// node es el CALL (índices = hijos de ARGUMENTS) o el INDEX (uno más: el
+// hijo que sigue a ARGUMENTS).
+static void check_access(ASTNode *node, Symbol *array, ASTNode *arguments) {
+    int used =
+        count_children(arguments) + (node->kind == AST_INDEX ? 1 : 0);
+
+    if (used != array->dimensions) {
+
+        semantic_error(node,
+                       "'%s' tiene %d dimensiones, se usaron %d indices",
+                       array->name,
+                       array->dimensions,
+                       used);
+
+        return;
+    }
+
+    // used == dimensions, así que position nunca pasa de MAX_DIMS.
+    int position = 0;
+
+    ASTNode *index = arguments ? arguments->child : NULL;
+
+    while (index != NULL) {
+        check_index_range(index, array, position);
+        position++;
+        index = index->next;
+    }
+
+    if (node->kind == AST_INDEX && arguments != NULL)
+        check_index_range(arguments->next, array, position);
+}
+
+// CALL, INDEX y REWIND: resuelve el nombre y verifica que se use bien según
+// el contexto. Los argumentos e índices se verifican aunque haya error.
+static void check_call(ASTNode *node, UseContext context) {
     ASTNode *arguments = find_child(node, AST_ARGUMENTS);
+
+    // Si el nombre no existe ya se reportó y no se dice nada más de este uso.
+    Symbol *symbol = resolve_name(find_child(node, AST_IDENTIFIER));
+
+    if (symbol != NULL) {
+
+        int is_function = symbol->kind == SYMBOL_FUNCTION;
+        int is_array = !is_function && symbol->dimensions > 0;
+
+        int n_args = count_children(arguments);
+
+        switch (context) {
+
+            // En una expresión, un CALL es llamada o acceso; un INDEX solo
+            // puede ser acceso.
+            case USE_EXPRESSION:
+                if (is_function && node->kind == AST_CALL)
+                    check_invocation(node, symbol, n_args, 0);
+                else if (is_array)
+                    check_access(node, symbol, arguments);
+                else
+                    semantic_error(node,
+                                   "'%s' no es un arreglo",
+                                   symbol->name);
+                break;
+
+            // Solo se puede asignar a un elemento de un arreglo.
+            case USE_TARGET:
+                if (is_array)
+                    check_access(node, symbol, arguments);
+                else
+                    semantic_error(node,
+                                   "'%s' no es un arreglo",
+                                   symbol->name);
+                break;
+
+            // Una sentencia de llamada y un R solo admiten funciones.
+            case USE_STATEMENT:
+            case USE_REWIND:
+                if (is_function)
+                    check_invocation(node,
+                                     symbol,
+                                     n_args,
+                                     context == USE_REWIND);
+                else
+                    semantic_error(node,
+                                   "'%s' no es una funcion",
+                                   symbol->name);
+                break;
+        }
+    }
 
     check_children(arguments);
 
@@ -367,7 +594,7 @@ static void check_call(ASTNode *node) {
         check_expression(arguments->next);
 }
 
-// Verifica que todo nombre usado en la expresión exista.
+// Verifica que todo nombre usado en la expresión exista y se use bien.
 static void check_expression(ASTNode *node) {
     if (node == NULL)
         return;
@@ -375,7 +602,7 @@ static void check_expression(ASTNode *node) {
     switch (node->kind) {
 
         case AST_IDENTIFIER:
-            check_name(node);
+            check_identifier(node);
             break;
 
         case AST_NUMBER:
@@ -384,13 +611,112 @@ static void check_expression(ASTNode *node) {
 
         case AST_CALL:
         case AST_INDEX:
-            check_call(node);
+            check_call(node, USE_EXPRESSION);
             break;
 
         // INITIALIZER_LIST y cualquier operador binario o unario.
         default:
             check_children(node);
             break;
+    }
+}
+
+// Destino de una asignación: un nombre suelto, o un elemento de un arreglo.
+static void check_target(ASTNode *target) {
+    if (target == NULL)
+        return;
+
+    if (target->kind == AST_CALL ||
+        target->kind == AST_INDEX)
+        check_call(target, USE_TARGET);
+    else
+        check_expression(target);
+}
+
+// ¿Algún hijo de la lista es a su vez una lista?
+static int has_nested_list(ASTNode *list) {
+    return find_child(list, AST_INITIALIZER_LIST) != NULL;
+}
+
+// Forma de una lista de inicialización contra las dimensiones declaradas.
+// Todos los errores se reportan sobre la DECLARATION (node). Las filas se
+// numeran desde 0, como los índices. Los tipos de los valores no se revisan.
+static void check_initializer_list(Symbol *symbol, ASTNode *list,
+                                   ASTNode *node) {
+    if (symbol->dimensions == 0) {
+
+        semantic_error(node,
+                       "'%s' no es un arreglo",
+                       symbol->name);
+
+        return;
+    }
+
+    // Dimensión 0: ya se reportó en la declaración (S-06).
+    for (int i = 0; i < symbol->dimensions; i++) {
+
+        if (symbol->dim_sizes[i] <= 0)
+            return;
+    }
+
+    int count = count_children(list);
+
+    if (count != symbol->dim_sizes[0]) {
+
+        semantic_error(node,
+                       "se recibieron %d valores, se esperaban %d",
+                       count,
+                       symbol->dim_sizes[0]);
+
+        // Si el número de filas no coincide, no se revisa cada fila.
+        if (symbol->dimensions > 1)
+            return;
+    }
+
+    // Una dimensión: ningún elemento es una lista (se reporta una vez).
+    if (symbol->dimensions == 1) {
+
+        if (has_nested_list(list))
+            semantic_error(node,
+                           "se recibio una lista donde se esperaba un valor");
+
+        return;
+    }
+
+    // Dos dimensiones: cada elemento es una fila de dim_sizes[1] valores.
+    int columns = symbol->dim_sizes[1];
+    int row_number = 0;
+
+    ASTNode *row = list->child;
+
+    while (row != NULL) {
+
+        if (row->kind != AST_INITIALIZER_LIST) {
+
+            semantic_error(node,
+                           "la fila %d debe ser una lista de %d valores",
+                           row_number,
+                           columns);
+        }
+        else {
+
+            int values = count_children(row);
+
+            if (values != columns)
+                semantic_error(node,
+                               "la fila %d tiene %d valores, se esperaban %d",
+                               row_number,
+                               values,
+                               columns);
+
+            // Ningún valor de la fila es una lista (una vez por fila).
+            if (has_nested_list(row))
+                semantic_error(node,
+                               "se recibio una lista donde se esperaba un valor");
+        }
+
+        row_number++;
+        row = row->next;
     }
 }
 
@@ -509,6 +835,12 @@ static int analyze_declaration(ASTNode *node) {
     symbol->decl_node = node;
 
     fill_dimensions(symbol, dimensions, node);
+
+    // Forma de la lista de inicialización. Un inicializador que no es lista
+    // no se revisa aquí (los tipos se verifican después).
+    if (initializer != NULL &&
+        initializer->kind == AST_INITIALIZER_LIST)
+        check_initializer_list(symbol, initializer, node);
 
     // Un local que oculta un parámetro no se inserta.
     if (!check_not_parameter(symbol->name, node)) {
@@ -736,15 +1068,22 @@ static int analyze_statement(ASTNode *statement) {
         case AST_LOOP_S:
             return analyze_loop_s(statement);
 
-        // Destino (IDENTIFIER, CALL o INDEX) y valor; o el CALL de la sentencia.
+        // Destino (primer hijo: IDENTIFIER, CALL o INDEX) y valor (segundo).
         case AST_ASSIGNMENT:
-        case AST_CALL_STATEMENT:
-            check_children(statement);
+            check_target(statement->child);
+            check_expression(statement->child
+                                 ? statement->child->next
+                                 : NULL);
             return 1;
 
-        // El nombre y cada argumento.
+        // El CALL de la sentencia debe ser una llamada.
+        case AST_CALL_STATEMENT:
+            check_call(find_child(statement, AST_CALL), USE_STATEMENT);
+            return 1;
+
+        // El nombre debe ser una función; se verifica cada argumento.
         case AST_REWIND:
-            check_call(statement);
+            check_call(statement, USE_REWIND);
             return 1;
 
         // EMIT: nada que verificar.

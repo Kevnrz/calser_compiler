@@ -145,6 +145,96 @@ pruebas/e16_falta_punto_coma.cls:3:5: error sintactico: syntax error
 --- tabla ---
 --- codigo de salida: 1 ---
 
+===== pruebas/e17_args_de_mas.cls =====
+--- stderr ---
+pruebas/e17_args_de_mas.cls:8:9: error semantico: 'doble' espera 1 argumentos, se recibieron 2
+     8 |     r = doble [ 1 , 2 ] ;
+       |         ^^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e18_no_es_arreglo.cls =====
+--- stderr ---
+pruebas/e18_no_es_arreglo.cls:3:5: error semantico: 't' no es un arreglo
+     3 |     t [ 0 ] = 1 ;
+       |     ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e19_no_es_funcion.cls =====
+--- stderr ---
+pruebas/e19_no_es_funcion.cls:3:5: error semantico: 't' no es una funcion
+     3 |     t [ 1 ] ;
+       |     ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e20_indices_de_menos.cls =====
+--- stderr ---
+pruebas/e20_indices_de_menos.cls:4:9: error semantico: 'm' tiene 2 dimensiones, se usaron 1 indices
+     4 |     x = m [ 1 ] ;
+       |         ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e21_indice_fuera_rango.cls =====
+--- stderr ---
+pruebas/e21_indice_fuera_rango.cls:3:9: error semantico: indice 5 fuera del rango [0..2]
+     3 |     v [ 5 ] = 1 ;
+       |         ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e22_lista_tamano.cls =====
+--- stderr ---
+pruebas/e22_lista_tamano.cls:2:8: error semantico: se recibieron 2 valores, se esperaban 5
+     2 |     Vm v : int [5] = [ 1 , 2 ] ;
+       |        ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e23_lista_forma.cls =====
+--- stderr ---
+pruebas/e23_lista_forma.cls:2:8: error semantico: la fila 1 tiene 2 valores, se esperaban 3
+     2 |     Vm m : int [2][3] = [ [ 1 , 2 , 3 ] , [ 4 , 5 ] ] ;
+       |        ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e24_invocar_main.cls =====
+--- stderr ---
+pruebas/e24_invocar_main.cls:2:5: error semantico: 'main' es el punto de entrada y no puede invocarse
+     2 |     main [ ] ;
+       |     ^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e25_funcion_como_valor.cls =====
+--- stderr ---
+pruebas/e25_funcion_como_valor.cls:8:9: error semantico: 'doble' es una funcion; debe invocarse con corchetes
+     8 |     r = doble ;
+       |         ^^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e26_rewind_args.cls =====
+--- stderr ---
+pruebas/e26_rewind_args.cls:3:11: error semantico: 'cuenta' espera 1 argumentos, se recibieron 2
+     3 |         R cuenta [ n - 1 , 2 ] ;
+       |           ^^^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
 ===== pruebas/p01_llamada_adelante.cls =====
 --- stderr ---
 --- tabla ---
@@ -233,6 +323,33 @@ Scope 4: FUNCTION
 
 Scope 5: L
     paso : int width=4 addr=0x0058
+
+--- codigo de salida: 0 ---
+
+===== pruebas/p05_arreglos_llamadas.cls =====
+--- stderr ---
+--- tabla ---
+Scope 0: GLOBAL
+    main : void (function) params=[] area=0x0020 size=40
+    poner : void (function) params=[v, k] area=0x0014 size=12
+    suma_fila : int (function) params=[m, f] area=0x0000 size=20
+
+Scope 1: FUNCTION
+    f : int width=4 addr=0x000C
+    m : int[2][3] width=4 addr=0x0008
+    s : int (return) width=4 addr=0x0004
+
+Scope 2: S
+    j : int width=4 addr=0x0010
+
+Scope 3: FUNCTION
+    k : int width=4 addr=0x001C
+    v : int[3] width=4 addr=0x0018
+
+Scope 4: FUNCTION
+    r : int width=4 addr=0x0044
+    w : int[3] width=12 addr=0x0038
+    t : int[2][3] width=24 addr=0x0020
 
 --- codigo de salida: 0 ---
 

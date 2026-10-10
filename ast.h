@@ -78,6 +78,8 @@ typedef struct ASTNode {
     int line;     // línea del código fuente; 0 = sin línea
     int column;   // columna del código fuente; 0 = sin columna
 
+    void *symbol;   // símbolo al que se refiere este nombre (no dueño); NULL si no aplica
+
     struct ASTNode *child;
     struct ASTNode *next;
 

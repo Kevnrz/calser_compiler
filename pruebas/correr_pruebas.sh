@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.." || exit 1
 out="${1:-pruebas/resultados.txt}"
 : > "$out"
 
-for f in factorial.cls suma.cls memoria.cls grande.cls pruebas/*.cls; do
+for f in pruebas/*.cls; do
     ./ccom "$f" > /tmp/ccom_out.txt 2> /tmp/ccom_err.txt
     code=$?
 

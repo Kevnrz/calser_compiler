@@ -26,10 +26,10 @@ ast.o: ast.c ast.h
 symbol_table.o: symbol_table.c symbol_table.h
 	$(CC) $(CFLAGS) -c symbol_table.c
 
-semantic.o: semantic.c semantic.h
+semantic.o: semantic.c semantic.h symbol_table.h ast.h
 	$(CC) $(CFLAGS) -c semantic.c
 
-main.o: main.c ast.h
+main.o: main.c semantic.h ast.h
 	$(CC) $(CFLAGS) -c main.c
 
 clean:

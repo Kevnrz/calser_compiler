@@ -155,6 +155,9 @@ ASTNode *root = NULL;
 %type <node> acceso
 
 
+/* P-03: cada token y cada símbolo de una producción lleva su línea (@n). */
+%locations
+
 %start programa
 
 
@@ -244,6 +247,8 @@ funcion
                 );
 
           free($2);
+
+          ast_set_line($$, @2.first_line);
       }
     ;
 
@@ -264,11 +269,15 @@ retorno
                 );
 
           free($2);
+
+          ast_set_line($$, @2.first_line);
       }
 
     | TOKEN_VOID
       {
           $$ = ast_return_void();
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -315,6 +324,8 @@ param
                 );
 
           free($3);
+
+          ast_set_line($$, @3.first_line);
       }
     ;
 
@@ -323,11 +334,15 @@ modif
     : TOKEN_VM
       {
           $$ = ast_modifier("Vm");
+
+          ast_set_line($$, @1.first_line);
       }
 
     | TOKEN_VI
       {
           $$ = ast_modifier("Vi");
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -349,11 +364,15 @@ tipo
     : TOKEN_INT
       {
           $$ = ast_type("int");
+
+          ast_set_line($$, @1.first_line);
       }
 
     | TOKEN_BOOL
       {
           $$ = ast_type("bool");
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -382,6 +401,8 @@ dims
               $$,
               $2
           );
+
+          ast_set_line($$, @1.first_line);
       }
 
     | TOKEN_LBRACKET
@@ -395,6 +416,8 @@ dims
 
           ast_add_number($$, $2);
           ast_add_number($$, $5);
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -486,6 +509,8 @@ decl
                 );
 
           free($2);
+
+          ast_set_line($$, @2.first_line);
       }
 
     | modif
@@ -506,6 +531,8 @@ decl
                 );
 
           free($2);
+
+          ast_set_line($$, @2.first_line);
       }
     ;
 
@@ -539,6 +566,8 @@ elems
     : elem
       {
           $$ = ast_list(AST_INITIALIZER_LIST, $1);
+
+          ast_set_line($$, @1.first_line);
       }
 
     | elems TOKEN_COMMA elem
@@ -580,6 +609,8 @@ sent_id
                 );
 
           free($1);
+
+          ast_set_line($$, @1.first_line);
       }
 
     | TOKEN_IDENTIFIER
@@ -598,6 +629,8 @@ sent_id
                 );
 
           free($1);
+
+          ast_set_line($$, @1.first_line);
       }
 
     | TOKEN_IDENTIFIER
@@ -619,6 +652,8 @@ sent_id
                 );
 
           free($1);
+
+          ast_set_line($$, @1.first_line);
       }
 
     | TOKEN_IDENTIFIER
@@ -633,6 +668,8 @@ sent_id
                 );
 
           free($1);
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -660,6 +697,8 @@ condicional
                     $7,
                     $8
                 );
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -684,6 +723,9 @@ alts
                   $7
               );
 
+          // P-03: línea de la A
+          ast_set_line(alternative, @2.first_line);
+
           ast_add_child($1, alternative);
 
           $$ = $1;
@@ -702,6 +744,8 @@ residual
       cuerpo
       {
           $$ = ast_residual($3);
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -725,6 +769,8 @@ ciclo_l
                     $3,
                     $6
                 );
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -759,6 +805,8 @@ ciclo_s
                 );
 
           free($3);
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -767,11 +815,15 @@ paso
     : TOKEN_NUMBER
       {
           $$ = ast_number($1);
+
+          ast_set_line($$, @1.first_line);
       }
 
     | TOKEN_MINUS TOKEN_NUMBER
       {
           $$ = ast_number(-$2);
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -784,6 +836,8 @@ emit
     : TOKEN_E TOKEN_SEMICOLON
       {
           $$ = ast_emit();
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -806,6 +860,8 @@ rewind
                 );
 
           free($2);
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -868,6 +924,8 @@ disy
                     $1,
                     $3
                 );
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -885,6 +943,8 @@ conj
                     $1,
                     $3
                 );
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -902,6 +962,8 @@ igualdad
                     $1,
                     $3
                 );
+
+          ast_set_line($$, @1.first_line);
       }
 
     | igualdad TOKEN_NOT_EQUAL relacion
@@ -911,6 +973,8 @@ igualdad
                     $1,
                     $3
                 );
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -928,6 +992,8 @@ relacion
                     $1,
                     $3
                 );
+
+          ast_set_line($$, @1.first_line);
       }
 
     | relacion TOKEN_GREATER aditivo
@@ -937,6 +1003,8 @@ relacion
                     $1,
                     $3
                 );
+
+          ast_set_line($$, @1.first_line);
       }
 
     | relacion TOKEN_LESS_EQUAL aditivo
@@ -946,6 +1014,8 @@ relacion
                     $1,
                     $3
                 );
+
+          ast_set_line($$, @1.first_line);
       }
 
     | relacion TOKEN_GREATER_EQUAL aditivo
@@ -955,6 +1025,8 @@ relacion
                     $1,
                     $3
                 );
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -972,6 +1044,8 @@ aditivo
                     $1,
                     $3
                 );
+
+          ast_set_line($$, @1.first_line);
       }
 
     | aditivo TOKEN_MINUS multiplicativo
@@ -981,6 +1055,8 @@ aditivo
                     $1,
                     $3
                 );
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -998,6 +1074,8 @@ multiplicativo
                     $1,
                     $3
                 );
+
+          ast_set_line($$, @1.first_line);
       }
 
     | multiplicativo TOKEN_DIVIDE unario
@@ -1007,6 +1085,8 @@ multiplicativo
                     $1,
                     $3
                 );
+
+          ast_set_line($$, @1.first_line);
       }
 
     | multiplicativo TOKEN_MODULO unario
@@ -1016,6 +1096,8 @@ multiplicativo
                     $1,
                     $3
                 );
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -1027,6 +1109,8 @@ unario
                     AST_NEG,
                     $2
                 );
+
+          ast_set_line($$, @1.first_line);
       }
 
     | TOKEN_NOT unario
@@ -1035,6 +1119,8 @@ unario
                     AST_NOT,
                     $2
                 );
+
+          ast_set_line($$, @1.first_line);
       }
 
     | potencia
@@ -1057,6 +1143,8 @@ potencia
                     $1,
                     $3
                 );
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -1075,16 +1163,22 @@ primario
     | TOKEN_NUMBER
       {
           $$ = ast_number($1);
+
+          ast_set_line($$, @1.first_line);
       }
 
     | TOKEN_TRUE
       {
           $$ = ast_boolean(1);
+
+          ast_set_line($$, @1.first_line);
       }
 
     | TOKEN_FALSE
       {
           $$ = ast_boolean(0);
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 
@@ -1094,6 +1188,8 @@ acceso
       {
           $$ = ast_identifier($1);
           free($1);
+
+          ast_set_line($$, @1.first_line);
       }
 
     | TOKEN_IDENTIFIER
@@ -1107,6 +1203,8 @@ acceso
                 );
 
           free($1);
+
+          ast_set_line($$, @1.first_line);
       }
 
     | TOKEN_IDENTIFIER
@@ -1124,6 +1222,8 @@ acceso
                 );
 
           free($1);
+
+          ast_set_line($$, @1.first_line);
       }
     ;
 

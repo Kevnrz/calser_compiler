@@ -1,4 +1,118 @@
-===== factorial.cls =====
+===== pruebas/e01_no_declarado.cls =====
+--- stderr ---
+Error semantico (linea 3): 'b' no ha sido declarado
+Analisis semantico fallido.
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e02_uso_antes.cls =====
+--- stderr ---
+Error semantico (linea 2): 'x' no ha sido declarado
+Analisis semantico fallido.
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e03_fuera_alcance.cls =====
+--- stderr ---
+Error semantico (linea 5): 'bono' esta fuera de alcance; fue declarado en el bloque de la linea 2
+Analisis semantico fallido.
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e04_oculta_parametro.cls =====
+--- stderr ---
+Error semantico (linea 3): 'y' ya es un parametro de esta funcion
+Analisis semantico fallido.
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e05_param_duplicado.cls =====
+--- stderr ---
+Error semantico (linea 1): 'a' ya fue declarado en este ambito (linea 1)
+Analisis semantico fallido.
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e06_retorno_igual_param.cls =====
+--- stderr ---
+Error semantico (linea 1): 'r' ya fue declarado en este ambito (linea 1)
+Analisis semantico fallido.
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e07_dimension_cero.cls =====
+--- stderr ---
+Error semantico (linea 2): la dimension de 'v' debe ser mayor que 0
+Analisis semantico fallido.
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e08_sin_main.cls =====
+--- stderr ---
+Error semantico: falta la funcion 'main'
+Analisis semantico fallido.
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e09_main_con_params.cls =====
+--- stderr ---
+Error semantico (linea 1): 'main' debe declararse como F main [] : void
+Analisis semantico fallido.
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e10_dos_main.cls =====
+--- stderr ---
+Error semantico (linea 5): la funcion 'main' ya fue declarada (linea 1)
+Analisis semantico fallido.
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e11_limite_s_no_declarado.cls =====
+--- stderr ---
+Error semantico (linea 3): 'n' no ha sido declarado
+Analisis semantico fallido.
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e12_datos_excedidos.cls =====
+--- stderr ---
+Error semantico (linea 4): 'x' no cabe en la memoria de datos (limite 0x0FFF)
+Analisis semantico fallido.
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e13_redeclaracion.cls =====
+--- stderr ---
+Error semantico (linea 3): 'x' ya fue declarado en este ambito (linea 2)
+Analisis semantico fallido.
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e14_fuera_alcance_s.cls =====
+--- stderr ---
+Error semantico (linea 6): 'i' esta fuera de alcance; fue declarado en el bloque de la linea 3
+Analisis semantico fallido.
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/p01_llamada_adelante.cls =====
+--- stderr ---
+--- tabla ---
+Scope 0: GLOBAL
+    doble : int (function) params=[n] area=0x0004 size=12
+    main : void (function) params=[] area=0x0000 size=4
+
+Scope 1: FUNCTION
+    r : int width=4 addr=0x0000
+
+Scope 2: FUNCTION
+    n : int width=4 addr=0x000C
+    d : int (return) width=4 addr=0x0008
+
+--- codigo de salida: 0 ---
+
+===== pruebas/p02_factorial.cls =====
 --- stderr ---
 --- tabla ---
 Scope 0: GLOBAL
@@ -20,7 +134,7 @@ Scope 4: FUNCTION
 
 --- codigo de salida: 0 ---
 
-===== suma.cls =====
+===== pruebas/p03_suma.cls =====
 --- stderr ---
 --- tabla ---
 Scope 0: GLOBAL
@@ -40,7 +154,7 @@ Scope 3: FUNCTION
 
 --- codigo de salida: 0 ---
 
-===== memoria.cls =====
+===== pruebas/p04_memoria.cls =====
 --- stderr ---
 --- tabla ---
 Scope 0: GLOBAL
@@ -70,106 +184,6 @@ Scope 4: FUNCTION
 
 Scope 5: L
     paso : int width=4 addr=0x0058
-
---- codigo de salida: 0 ---
-
-===== grande.cls =====
---- stderr ---
-Error semantico: 'x' no cabe en la memoria de datos (limite 0x0FFF)
-Analisis semantico fallido.
---- tabla ---
---- codigo de salida: 1 ---
-
-===== pruebas/e01_no_declarado.cls =====
---- stderr ---
-Error semantico: 'b' no ha sido declarado
-Analisis semantico fallido.
---- tabla ---
---- codigo de salida: 1 ---
-
-===== pruebas/e02_uso_antes.cls =====
---- stderr ---
-Error semantico: 'x' no ha sido declarado
-Analisis semantico fallido.
---- tabla ---
---- codigo de salida: 1 ---
-
-===== pruebas/e03_fuera_alcance.cls =====
---- stderr ---
-Error semantico: 'bono' no ha sido declarado
-Analisis semantico fallido.
---- tabla ---
---- codigo de salida: 1 ---
-
-===== pruebas/e04_oculta_parametro.cls =====
---- stderr ---
-Error semantico: 'y' ya es un parametro de esta funcion
-Analisis semantico fallido.
---- tabla ---
---- codigo de salida: 1 ---
-
-===== pruebas/e05_param_duplicado.cls =====
---- stderr ---
-Error semantico: 'a' ya fue declarado en este ambito
-Analisis semantico fallido.
---- tabla ---
---- codigo de salida: 1 ---
-
-===== pruebas/e06_retorno_igual_param.cls =====
---- stderr ---
-Error semantico: 'r' ya fue declarado en este ambito
-Analisis semantico fallido.
---- tabla ---
---- codigo de salida: 1 ---
-
-===== pruebas/e07_dimension_cero.cls =====
---- stderr ---
-Error semantico: la dimension de 'v' debe ser mayor que 0
-Analisis semantico fallido.
---- tabla ---
---- codigo de salida: 1 ---
-
-===== pruebas/e08_sin_main.cls =====
---- stderr ---
-Error semantico: falta la funcion 'main'
-Analisis semantico fallido.
---- tabla ---
---- codigo de salida: 1 ---
-
-===== pruebas/e09_main_con_params.cls =====
---- stderr ---
-Error semantico: 'main' debe declararse como F main [] : void
-Analisis semantico fallido.
---- tabla ---
---- codigo de salida: 1 ---
-
-===== pruebas/e10_dos_main.cls =====
---- stderr ---
-Error semantico: la funcion 'main' ya fue declarada
-Analisis semantico fallido.
---- tabla ---
---- codigo de salida: 1 ---
-
-===== pruebas/e11_limite_s_no_declarado.cls =====
---- stderr ---
-Error semantico: 'n' no ha sido declarado
-Analisis semantico fallido.
---- tabla ---
---- codigo de salida: 1 ---
-
-===== pruebas/p01_llamada_adelante.cls =====
---- stderr ---
---- tabla ---
-Scope 0: GLOBAL
-    doble : int (function) params=[n] area=0x0004 size=12
-    main : void (function) params=[] area=0x0000 size=4
-
-Scope 1: FUNCTION
-    r : int width=4 addr=0x0000
-
-Scope 2: FUNCTION
-    n : int width=4 addr=0x000C
-    d : int (return) width=4 addr=0x0008
 
 --- codigo de salida: 0 ---
 

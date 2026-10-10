@@ -36,6 +36,7 @@ Symbol *symbol_create(const char *name,
 
     symbol->modifier = MODIFIER_NONE;
     symbol->dimensions = 0;
+    symbol->line = 0;
 
     // Memoria: las direcciones y el área se asignan después; -1 = sin asignar.
     symbol->address = -1;
@@ -91,6 +92,8 @@ Scope *scope_create(Scope *parent, ScopeKind kind) {
     }
 
     scope->kind = kind;
+    scope->line = 0;
+    scope->owner = NULL;
     scope->symbols = NULL;
     scope->parent = parent;
     scope->next = NULL;

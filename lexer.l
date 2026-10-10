@@ -6,6 +6,9 @@
 #include "ast.h"
 #include "parser.tab.h"
 
+// P-03: cada token guarda la línea donde aparece (Bison %locations).
+#define YY_USER_ACTION  yylloc.first_line = yylloc.last_line = yylineno;
+
 int line_number = 1;
 
 void yyerror(const char *msg);

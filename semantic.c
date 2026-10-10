@@ -14,13 +14,20 @@ static Scope *current_scope = NULL;
 static Scope *scope_list_head = NULL;
 static Scope *scope_list_tail = NULL;
 
+// Función que se está analizando; NULL fuera de las funciones (globales).
+static Symbol *current_function = NULL;
+
 // Scope management
 
-static Scope *create_scope(ScopeKind kind) {
+static Scope *create_scope(ScopeKind kind, int line) {
     Scope *scope = scope_create(current_scope, kind);
 
     if (scope == NULL)
         return NULL;
+
+    // P-03: línea donde abre el bloque y función a la que pertenece.
+    scope->line = line;
+    scope->owner = current_function;
 
     // Add scope to the list of all scopes.
     if (scope_list_head == NULL) {
@@ -53,8 +60,8 @@ static void enter_global_scope(void) {
     current_scope = global_scope;
 }
 
-static void enter_scope(ScopeKind kind) {
-    create_scope(kind);
+static void enter_scope(ScopeKind kind, int line) {
+    create_scope(kind, line);
 }
 
 static void exit_scope(void) {
@@ -111,19 +118,18 @@ static SymbolModifier get_modifier(ASTNode *node) {
 // Errors
 
 // Único punto de salida de los errores semánticos.
-// line > 0 agrega "(linea N)"; por ahora siempre es 0 porque el AST no guarda
-// líneas (P-03).
+// P-03: line > 0 pone la línea al inicio; 0 = el error no tiene línea.
 static void semantic_error(int line, const char *fmt, ...) {
     va_list args;
 
-    fprintf(stderr, "Error semantico: ");
+    if (line > 0)
+        fprintf(stderr, "Error semantico (linea %d): ", line);
+    else
+        fprintf(stderr, "Error semantico: ");
 
     va_start(args, fmt);
     vfprintf(stderr, fmt, args);
     va_end(args);
-
-    if (line > 0)
-        fprintf(stderr, " (linea %d)", line);
 
     fprintf(stderr, "\n");
 }
@@ -143,10 +149,11 @@ static void discard_symbol(Symbol *symbol) {
 static int next_address = DATA_BASE;   // libro §6.3.4: el "offset"
 
 // Libro §6.3.4: el nombre recibe el offset actual y el offset avanza su ancho.
-static int reserve(int width, const char *what, int *out_address) {
+// line es la del símbolo que se reserva (para el rl, la de la función).
+static int reserve(int width, const char *what, int line, int *out_address) {
     if (next_address + width > DATA_LIMIT) {
 
-        semantic_error(0,
+        semantic_error(line,
                        "'%s' no cabe en la memoria de datos (limite 0x%04X)",
                        what,
                        (unsigned int) (DATA_LIMIT - 1));
@@ -188,7 +195,7 @@ static int fill_dimensions(Symbol *symbol, ASTNode *dimensions) {
         // S-06: una dimensión de tamaño 0 no reserva nada.
         if (dimension->number <= 0) {
 
-            semantic_error(0,
+            semantic_error(symbol->line,
                            "la dimension de '%s' debe ser mayor que 0",
                            symbol->name);
 
@@ -249,22 +256,56 @@ static ASTNode *find_condition(ASTNode *node) {
 
 // Name checking
 
+// Primer ámbito de la función actual (en la lista de todos los ámbitos) que
+// contiene el nombre; NULL si no hay ninguno o si no se está en una función.
+static Scope *find_closed_scope(const char *name) {
+    if (current_function == NULL)
+        return NULL;
+
+    Scope *scope = scope_list_head;
+
+    while (scope != NULL) {
+
+        if (scope->owner == current_function &&
+            symbol_lookup_current(scope, name) != NULL)
+            return scope;
+
+        scope = scope->next;
+    }
+
+    return NULL;
+}
+
 // Libro §1.6.3 y §2.7: ámbito estático, regla del bloque anidado más cercano.
 // Un nombre usado antes de su declaración todavía no está en la tabla.
 static int check_name(ASTNode *identifier) {
     if (identifier == NULL || identifier->text == NULL)
         return 1;
 
-    if (symbol_lookup(current_scope, identifier->text) == NULL) {
+    if (symbol_lookup(current_scope, identifier->text) != NULL)
+        return 1;
 
-        semantic_error(0,
-                       "'%s' no ha sido declarado",
-                       identifier->text);
+    // Fuera de alcance: el nombre existe en un bloque de esta función que ya
+    // se cerró. No hace falta excluir los ámbitos abiertos: symbol_lookup ya
+    // buscó en el actual y en sus padres.
+    Scope *closed = find_closed_scope(identifier->text);
+
+    if (closed != NULL) {
+
+        semantic_error(identifier->line,
+                       "'%s' esta fuera de alcance; "
+                       "fue declarado en el bloque de la linea %d",
+                       identifier->text,
+                       closed->line);
 
         return 0;
     }
 
-    return 1;
+    semantic_error(identifier->line,
+                   "'%s' no ha sido declarado",
+                   identifier->text);
+
+    return 0;
 }
 
 static int check_expression(ASTNode *node);
@@ -330,12 +371,9 @@ static int check_expression(ASTNode *node) {
     }
 }
 
-// Función que se está analizando; NULL fuera de las funciones (globales).
-static Symbol *current_function = NULL;
-
 // Un local (o la variable de un S) no puede llamarse como un parámetro de
 // su función, en ningún bloque. Las globales no se revisan.
-static int check_not_parameter(const char *name) {
+static int check_not_parameter(const char *name, int line) {
     if (current_function == NULL)
         return 1;
 
@@ -343,12 +381,36 @@ static int check_not_parameter(const char *name) {
 
         if (strcmp(current_function->param_list[i]->name, name) == 0) {
 
-            semantic_error(0,
+            semantic_error(line,
                            "'%s' ya es un parametro de esta funcion",
                            name);
 
             return 0;
         }
+    }
+
+    return 1;
+}
+
+// Inserta symbol en el ámbito actual. Si el nombre ya existe en ese ámbito,
+// reporta el error en la línea de la nueva declaración, señalando la línea
+// del símbolo existente, y descarta symbol.
+static int insert_symbol(Symbol *symbol) {
+    Symbol *existing =
+        symbol_lookup_current(current_scope, symbol->name);
+
+    if (existing != NULL ||
+        !symbol_insert(current_scope, symbol)) {
+
+        semantic_error(symbol->line,
+                       "'%s' ya fue declarado en este ambito (linea %d)",
+                       symbol->name,
+                       existing ? existing->line : 0);
+
+        // symbol_insert() didn't take ownership because insertion failed.
+        discard_symbol(symbol);
+
+        return 0;
     }
 
     return 1;
@@ -409,9 +471,10 @@ static int analyze_declaration(ASTNode *node) {
                       get_type(type));
 
     symbol->modifier = get_modifier(modifier);
+    symbol->line = node->line;
 
     if (!fill_dimensions(symbol, dimensions) ||
-        !check_not_parameter(symbol->name)) {
+        !check_not_parameter(symbol->name, symbol->line)) {
 
         discard_symbol(symbol);
 
@@ -424,20 +487,11 @@ static int analyze_declaration(ASTNode *node) {
 
     symbol->width = type_width(symbol->type) * d1 * d2;   // d = 1 si no aplica
 
-    if (!symbol_insert(current_scope, symbol)) {
-
-        semantic_error(0,
-                       "'%s' ya fue declarado en este ambito",
-                       identifier->text);
-
-        // symbol_insert() didn't take ownership because insertion failed.
-        discard_symbol(symbol);
-
+    if (!insert_symbol(symbol))
         return 0;
-    }
 
     // El símbolo ya pertenece al ámbito: si no cabe, se libera con él.
-    if (!reserve(symbol->width, symbol->name, &symbol->address))
+    if (!reserve(symbol->width, symbol->name, symbol->line, &symbol->address))
         return 0;
 
     return 1;
@@ -473,6 +527,7 @@ static Symbol *create_parameter(ASTNode *node) {
                       get_type(type));
 
     symbol->modifier = get_modifier(modifier);
+    symbol->line = node->line;
 
     if (!fill_dimensions(symbol, dimensions)) {
 
@@ -513,7 +568,9 @@ static int analyze_statements(ASTNode *block) {
 // Abre un ámbito del tipo dado, recorre el BLOCK y lo cierra.
 // Libro §1.6.3 y §2.7: cada bloque tiene su propio ámbito anidado.
 static int analyze_block(ASTNode *block, ScopeKind kind) {
-    enter_scope(kind);
+
+    // P-03: la línea del BLOCK es la de la palabra clave que lo abre.
+    enter_scope(kind, block ? block->line : 0);
 
     int result = analyze_statements(block);
 
@@ -601,10 +658,10 @@ static int analyze_loop_s(ASTNode *node) {
         !check_expression(end))
         return 0;
 
-    if (!check_not_parameter(identifier->text))
+    if (!check_not_parameter(identifier->text, node->line))
         return 0;
 
-    enter_scope(SCOPE_S);
+    enter_scope(SCOPE_S, node->line);
 
     Symbol *control =
         symbol_create(identifier->text,
@@ -614,23 +671,16 @@ static int analyze_loop_s(ASTNode *node) {
     // el ciclo la controla; el cuerpo no puede modificarla
     control->modifier = MODIFIER_VI;
     control->width = type_width(control->type);   // M-1
+    control->line = node->line;
 
-    if (!symbol_insert(current_scope, control)) {
+    // El símbolo pasa a pertenecer al ámbito: si no cabe, se libera con él.
+    int result = insert_symbol(control);
 
-        semantic_error(0,
-                       "'%s' ya fue declarado en este ambito",
-                       identifier->text);
-
-        discard_symbol(control);
-
-        exit_scope();
-
-        return 0;
-    }
-
-    // El símbolo ya pertenece al ámbito: si no cabe, se libera con él.
-    int result =
-        reserve(control->width, control->name, &control->address);
+    if (result)
+        result = reserve(control->width,
+                         control->name,
+                         control->line,
+                         &control->address);
 
     // El cuerpo comparte el ámbito del S con su variable (no abre otro).
     if (result)
@@ -678,6 +728,17 @@ static int analyze_statement(ASTNode *statement) {
 
 // Function
 
+// Parámetro de la función con ese nombre, o NULL.
+static Symbol *find_parameter(Symbol *function, const char *name) {
+    for (int i = 0; i < function->parameter_count; i++) {
+
+        if (strcmp(function->param_list[i]->name, name) == 0)
+            return function->param_list[i];
+    }
+
+    return NULL;
+}
+
 // Pasada 1: registra la firma de una función (símbolo y parámetros), para que
 // una función pueda llamar a otra escrita después.
 static int register_signature(ASTNode *node) {
@@ -706,11 +767,19 @@ static int register_signature(ASTNode *node) {
                       SYMBOL_FUNCTION,
                       ret_type ? get_type(ret_type) : TYPE_VOID);
 
-    if (!symbol_insert(global_scope, function)) {
+    function->line = node->line;
 
-        semantic_error(0,
-                       "la funcion '%s' ya fue declarada",
-                       identifier->text);
+    Symbol *existing =
+        symbol_lookup_current(global_scope, function->name);
+
+    if (existing != NULL ||
+        !symbol_insert(global_scope, function)) {
+
+        // Línea del segundo FUNCTION, señalando la del primero.
+        semantic_error(function->line,
+                       "la funcion '%s' ya fue declarada (linea %d)",
+                       function->name,
+                       existing ? existing->line : 0);
 
         discard_symbol(function);
 
@@ -733,21 +802,15 @@ static int register_signature(ASTNode *node) {
         if (symbol == NULL)
             return 0;
 
-        // Mismo ámbito que la variable de retorno y los demás parámetros.
-        int duplicate =
-            ret_id != NULL && strcmp(ret_id->text, symbol->name) == 0;
+        // Todos los parámetros comparten el ámbito de la función.
+        Symbol *first = find_parameter(function, symbol->name);
 
-        for (int i = 0; !duplicate && i < function->parameter_count; i++) {
+        if (first != NULL) {
 
-            if (strcmp(function->param_list[i]->name, symbol->name) == 0)
-                duplicate = 1;
-        }
-
-        if (duplicate) {
-
-            semantic_error(0,
-                           "'%s' ya fue declarado en este ambito",
-                           symbol->name);
+            semantic_error(symbol->line,
+                           "'%s' ya fue declarado en este ambito (linea %d)",
+                           symbol->name,
+                           first->line);
 
             discard_symbol(symbol);
 
@@ -758,6 +821,22 @@ static int register_signature(ASTNode *node) {
         symbol_add_param(function, symbol);
 
         parameter = parameter->next;
+    }
+
+    // La variable de retorno comparte ese ámbito. En el texto el parámetro
+    // aparece primero: el error se marca en la variable de retorno y señala
+    // al parámetro.
+    Symbol *clash =
+        ret_id ? find_parameter(function, ret_id->text) : NULL;
+
+    if (clash != NULL) {
+
+        semantic_error(return_type->line,
+                       "'%s' ya fue declarado en este ambito (linea %d)",
+                       ret_id->text,
+                       clash->line);
+
+        return 0;
     }
 
     return 1;
@@ -796,7 +875,7 @@ static int check_main(void) {
     if (main_function->parameter_count > 0 ||
         main_function->type != TYPE_VOID) {
 
-        semantic_error(0,
+        semantic_error(main_function->line,
                        "'main' debe declararse como F main [] : void");
 
         return 0;
@@ -846,12 +925,12 @@ static int analyze_function(ASTNode *node) {
 
         int rl_address;   // no hay símbolo para rl
 
-        if (!reserve(4, function->name, &rl_address))
+        if (!reserve(4, function->name, function->line, &rl_address))
             return 0;
     }
 
     // Crea function scope.
-    enter_scope(SCOPE_FUNCTION);
+    enter_scope(SCOPE_FUNCTION, function->line);
 
     // La variable de retorno va antes que los parámetros (queda en +4).
     ASTNode *ret_type = find_child(return_type, AST_TYPE);
@@ -865,19 +944,12 @@ static int analyze_function(ASTNode *node) {
 
         ret->modifier = MODIFIER_VM;   // el cuerpo la asigna
         ret->width = type_width(ret->type);   // M-1
+        ret->line = return_type->line;
 
-        if (!symbol_insert(current_scope, ret)) {
-
-            semantic_error(0,
-                           "'%s' ya fue declarado en este ambito",
-                           ret_id->text);
-
-            discard_symbol(ret);
-
+        if (!insert_symbol(ret))
             return 0;
-        }
 
-        if (!reserve(ret->width, ret->name, &ret->address))
+        if (!reserve(ret->width, ret->name, ret->line, &ret->address))
             return 0;
     }
 
@@ -891,7 +963,10 @@ static int analyze_function(ASTNode *node) {
         if (!symbol_insert(current_scope, parameter))
             return 0;
 
-        if (!reserve(parameter->width, parameter->name, &parameter->address))
+        if (!reserve(parameter->width,
+                     parameter->name,
+                     parameter->line,
+                     &parameter->address))
             return 0;
     }
 

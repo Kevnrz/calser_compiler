@@ -35,6 +35,8 @@ typedef struct Symbol {
 
     int dimensions;
 
+    int line;                  // línea de su declaración; 0 = sin línea
+
     // Memoria (asignación estática, libro §6.3.4 y §7.1.1)
     int address;               // dirección en memoria de datos; -1 = sin asignar
     int width;                 // bytes que ocupa (ancho del tipo)
@@ -66,6 +68,9 @@ typedef enum {
 
 typedef struct Scope {
     ScopeKind kind;
+
+    int line;                  // línea donde abre el bloque; 0 = sin línea
+    struct Symbol *owner;      // función a la que pertenece; NULL en el global
 
     Symbol *symbols;
 

@@ -61,4 +61,5 @@ Thumbs.db
 # ============================================================
 
 *.tmp
-*.temppruebas/resultados_asan.txt
+*.temp
+pruebas/resultados_asan.txt

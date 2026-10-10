@@ -932,7 +932,8 @@ disy
                     $3
                 );
 
-          ast_set_location($$, @1.first_line, @1.first_column);
+          // El nodo queda en la posición del operador (señalador de errores).
+          ast_set_location($$, @2.first_line, @2.first_column);
       }
     ;
 
@@ -951,7 +952,8 @@ conj
                     $3
                 );
 
-          ast_set_location($$, @1.first_line, @1.first_column);
+          // El nodo queda en la posición del operador (señalador de errores).
+          ast_set_location($$, @2.first_line, @2.first_column);
       }
     ;
 
@@ -970,7 +972,8 @@ igualdad
                     $3
                 );
 
-          ast_set_location($$, @1.first_line, @1.first_column);
+          // El nodo queda en la posición del operador (señalador de errores).
+          ast_set_location($$, @2.first_line, @2.first_column);
       }
 
     | igualdad TOKEN_NOT_EQUAL relacion
@@ -981,7 +984,8 @@ igualdad
                     $3
                 );
 
-          ast_set_location($$, @1.first_line, @1.first_column);
+          // El nodo queda en la posición del operador (señalador de errores).
+          ast_set_location($$, @2.first_line, @2.first_column);
       }
     ;
 
@@ -1000,7 +1004,8 @@ relacion
                     $3
                 );
 
-          ast_set_location($$, @1.first_line, @1.first_column);
+          // El nodo queda en la posición del operador (señalador de errores).
+          ast_set_location($$, @2.first_line, @2.first_column);
       }
 
     | relacion TOKEN_GREATER aditivo
@@ -1011,7 +1016,8 @@ relacion
                     $3
                 );
 
-          ast_set_location($$, @1.first_line, @1.first_column);
+          // El nodo queda en la posición del operador (señalador de errores).
+          ast_set_location($$, @2.first_line, @2.first_column);
       }
 
     | relacion TOKEN_LESS_EQUAL aditivo
@@ -1022,7 +1028,8 @@ relacion
                     $3
                 );
 
-          ast_set_location($$, @1.first_line, @1.first_column);
+          // El nodo queda en la posición del operador (señalador de errores).
+          ast_set_location($$, @2.first_line, @2.first_column);
       }
 
     | relacion TOKEN_GREATER_EQUAL aditivo
@@ -1033,7 +1040,8 @@ relacion
                     $3
                 );
 
-          ast_set_location($$, @1.first_line, @1.first_column);
+          // El nodo queda en la posición del operador (señalador de errores).
+          ast_set_location($$, @2.first_line, @2.first_column);
       }
     ;
 
@@ -1052,7 +1060,8 @@ aditivo
                     $3
                 );
 
-          ast_set_location($$, @1.first_line, @1.first_column);
+          // El nodo queda en la posición del operador (señalador de errores).
+          ast_set_location($$, @2.first_line, @2.first_column);
       }
 
     | aditivo TOKEN_MINUS multiplicativo
@@ -1063,7 +1072,8 @@ aditivo
                     $3
                 );
 
-          ast_set_location($$, @1.first_line, @1.first_column);
+          // El nodo queda en la posición del operador (señalador de errores).
+          ast_set_location($$, @2.first_line, @2.first_column);
       }
     ;
 
@@ -1082,7 +1092,8 @@ multiplicativo
                     $3
                 );
 
-          ast_set_location($$, @1.first_line, @1.first_column);
+          // El nodo queda en la posición del operador (señalador de errores).
+          ast_set_location($$, @2.first_line, @2.first_column);
       }
 
     | multiplicativo TOKEN_DIVIDE unario
@@ -1093,7 +1104,8 @@ multiplicativo
                     $3
                 );
 
-          ast_set_location($$, @1.first_line, @1.first_column);
+          // El nodo queda en la posición del operador (señalador de errores).
+          ast_set_location($$, @2.first_line, @2.first_column);
       }
 
     | multiplicativo TOKEN_MODULO unario
@@ -1104,7 +1116,8 @@ multiplicativo
                     $3
                 );
 
-          ast_set_location($$, @1.first_line, @1.first_column);
+          // El nodo queda en la posición del operador (señalador de errores).
+          ast_set_location($$, @2.first_line, @2.first_column);
       }
     ;
 
@@ -1151,7 +1164,8 @@ potencia
                     $3
                 );
 
-          ast_set_location($$, @1.first_line, @1.first_column);
+          // El nodo queda en la posición del operador (señalador de errores).
+          ast_set_location($$, @2.first_line, @2.first_column);
       }
     ;
 

@@ -160,6 +160,29 @@ static ASTNode *find_condition(ASTNode *node) {
 
 // Errors
 
+// Símbolo de un operador (binario o unario); NULL si el nodo no es operador.
+static const char *operator_symbol(ASTKind kind) {
+    switch (kind) {
+        case AST_OR:            return "|";
+        case AST_AND:           return "&";
+        case AST_EQUAL:         return "==";
+        case AST_NOT_EQUAL:     return "!=";
+        case AST_LESS:          return "<";
+        case AST_GREATER:       return ">";
+        case AST_LESS_EQUAL:    return "<=";
+        case AST_GREATER_EQUAL: return ">=";
+        case AST_ADD:           return "+";
+        case AST_SUB:           return "-";
+        case AST_MUL:           return "*";
+        case AST_DIV:           return "/";
+        case AST_MOD:           return "%";
+        case AST_POWER:         return "^";
+        case AST_NEG:           return "-";
+        case AST_NOT:           return "!";
+        default:                return NULL;
+    }
+}
+
 // Cantidad de dígitos de un número (sin signo).
 static int count_digits(long number) {
     int digits = 1;
@@ -182,6 +205,8 @@ static int count_digits(long number) {
  * IDENTIFIER                  = el nodo, strlen(text)
  * NUMBER                      = el nodo, cantidad de dígitos
  * NEG de un NUMBER            = el nodo, desde el - hasta el último dígito
+ * operador (binario o unario) = el nodo, strlen de su símbolo
+ * BOOLEAN                     = el nodo, largo de verdadero o falso
  * otro con un hijo IDENTIFIER = ese hijo (el nombre declarado), strlen(text)
  * otro sin hijo IDENTIFIER    = el nodo, 1
  */
@@ -211,6 +236,18 @@ static void semantic_error(ASTNode *node, const char *fmt, ...) {
                 length += number->line == node->line
                               ? number->column - node->column
                               : 1;
+        }
+        // Operador: el nodo está en la posición del operador (parser.y).
+        // Va antes de buscar el hijo IDENTIFIER, que sería un operando.
+        else if (operator_symbol(node->kind) != NULL) {
+            line = node->line;
+            column = node->column;
+            length = (int) strlen(operator_symbol(node->kind));
+        }
+        else if (node->kind == AST_BOOLEAN) {
+            line = node->line;
+            column = node->column;
+            length = node->number ? 9 : 5;   // verdadero / falso
         }
         else if (name != NULL && name->text != NULL) {
             line = name->line;
@@ -376,6 +413,156 @@ static Symbol *resolve_name(ASTNode *identifier) {
     return NULL;
 }
 
+// Types
+
+// Tipo de una expresión.
+typedef enum {
+    ET_ERROR,   // ya hubo un error en esta expresión: no reportar nada más sobre ella
+    ET_INT,
+    ET_BOOL,
+    ET_VOID,    // resultado de llamar a una función void
+    ET_ARRAY    // arreglo completo (nombre suelto de un arreglo)
+} ExprKind;
+
+typedef struct {
+    ExprKind kind;
+    SymbolType base;       // ET_ARRAY: tipo de los elementos
+    int dimensions;        // ET_ARRAY: 1 o 2
+    int sizes[MAX_DIMS];   // ET_ARRAY: tamaño de cada dimensión
+} ExprType;
+
+#define TYPE_TEXT_SIZE 64   // alcanza para "bool[N][M]"
+
+static ExprType make_type(ExprKind kind) {
+    ExprType type;
+
+    type.kind = kind;
+    type.base = TYPE_VOID;
+    type.dimensions = 0;
+
+    for (int i = 0; i < MAX_DIMS; i++)
+        type.sizes[i] = 0;
+
+    return type;
+}
+
+// Tipo escalar que corresponde a un tipo declarado.
+static ExprType scalar_type(SymbolType type) {
+    switch (type) {
+        case TYPE_INT:  return make_type(ET_INT);
+        case TYPE_BOOL: return make_type(ET_BOOL);
+        default:        return make_type(ET_VOID);
+    }
+}
+
+// Tipo de un símbolo usado por su nombre suelto: escalar o arreglo completo.
+// Un arreglo con una dimensión 0 ya se reportó (S-06): cuenta como ET_ERROR
+// para no provocar más errores.
+static ExprType symbol_value_type(Symbol *symbol) {
+    if (symbol->dimensions == 0)
+        return scalar_type(symbol->type);
+
+    ExprType type = make_type(ET_ARRAY);
+
+    type.base = symbol->type;
+    type.dimensions = symbol->dimensions;
+
+    for (int i = 0; i < symbol->dimensions; i++) {
+
+        if (symbol->dim_sizes[i] <= 0)
+            return make_type(ET_ERROR);
+
+        type.sizes[i] = symbol->dim_sizes[i];
+    }
+
+    return type;
+}
+
+// Mismo tipo: igual clase y, en arreglos, igual base, dimensiones y tamaños.
+static int same_type(ExprType a, ExprType b) {
+    if (a.kind != b.kind)
+        return 0;
+
+    if (a.kind != ET_ARRAY)
+        return 1;
+
+    if (a.base != b.base || a.dimensions != b.dimensions)
+        return 0;
+
+    for (int i = 0; i < a.dimensions; i++) {
+
+        if (a.sizes[i] != b.sizes[i])
+            return 0;
+    }
+
+    return 1;
+}
+
+// Texto del tipo para los mensajes: int, bool, void, int[3], bool[2][4].
+static const char *type_text(ExprType type, char *buffer) {
+    const char *base;
+
+    switch (type.kind) {
+        case ET_INT:   base = "int";  break;
+        case ET_BOOL:  base = "bool"; break;
+        case ET_VOID:  base = "void"; break;
+        case ET_ARRAY: base = type.base == TYPE_BOOL ? "bool" : "int"; break;
+        default:       base = "?";    break;
+    }
+
+    int length = snprintf(buffer, TYPE_TEXT_SIZE, "%s", base);
+
+    for (int i = 0; type.kind == ET_ARRAY && i < type.dimensions; i++) {
+
+        if (length < TYPE_TEXT_SIZE)
+            length += snprintf(buffer + length,
+                               TYPE_TEXT_SIZE - (size_t) length,
+                               "[%d]",
+                               type.sizes[i]);
+    }
+
+    return buffer;
+}
+
+// Exige un tipo en un lugar (condición, límite de S, índice). ET_ERROR no
+// reporta nada: el error ya se dijo.
+static void expect_type(ASTNode *node, ExprType type, ExprKind wanted,
+                        const char *message) {
+    if (type.kind != ET_ERROR &&
+        type.kind != wanted)
+        semantic_error(node, "%s", message);
+}
+
+// Asignación de un valor a un destino (ASSIGNMENT, o DECLARATION con un
+// inicializador que no es lista). El error se reporta sobre el destino.
+static void check_assignable(ASTNode *target, ExprType destination,
+                             ExprType value) {
+    if (destination.kind == ET_ERROR ||
+        value.kind == ET_ERROR ||
+        same_type(destination, value))
+        return;
+
+    char value_text[TYPE_TEXT_SIZE];
+    char destination_text[TYPE_TEXT_SIZE];
+
+    type_text(value, value_text);
+    type_text(destination, destination_text);
+
+    // Arreglo completo: copia el contenido, así que la forma debe coincidir.
+    if (destination.kind == ET_ARRAY)
+        semantic_error(target,
+                       "no se puede asignar %s a %s",
+                       value_text,
+                       destination_text);
+    else
+        semantic_error(target,
+                       "no se puede asignar '%s' a una variable '%s'",
+                       value_text,
+                       destination_text);
+}
+
+// Uses
+
 // A-1: la gramática produce el mismo nodo para v [ i ] y para f [ x ]. Cada
 // uso se resuelve contra la tabla de símbolos, según dónde aparece.
 typedef enum {
@@ -385,20 +572,9 @@ typedef enum {
     USE_REWIND        // REWIND
 } UseContext;
 
-static void check_expression(ASTNode *node);
-
-// Verifica cada hijo de node como expresión.
-static void check_children(ASTNode *node) {
-    if (node == NULL)
-        return;
-
-    ASTNode *child = node->child;
-
-    while (child != NULL) {
-        check_expression(child);
-        child = child->next;
-    }
-}
+// Devuelve el tipo de la expresión y verifica nombres, usos y tipos.
+// Cada expresión se evalúa UNA sola vez, para no repetir sus errores.
+static ExprType check_expression(ASTNode *node);
 
 // Cantidad de hijos de node.
 static int count_children(ASTNode *node) {
@@ -415,24 +591,30 @@ static int count_children(ASTNode *node) {
 }
 
 // Nombre suelto (en una expresión o como destino): una función solo puede
-// usarse invocándola. Un arreglo suelto no es error aquí (copia o paso por
-// referencia; los tipos se verifican después).
-static void check_identifier(ASTNode *identifier) {
+// usarse invocándola. Un arreglo suelto es el arreglo completo.
+static ExprType check_identifier(ASTNode *identifier) {
     Symbol *symbol = resolve_name(identifier);
 
-    if (symbol != NULL &&
-        symbol->kind == SYMBOL_FUNCTION) {
+    if (symbol == NULL)
+        return make_type(ET_ERROR);
+
+    if (symbol->kind == SYMBOL_FUNCTION) {
 
         semantic_error(identifier,
                        "'%s' es una funcion; debe invocarse con corchetes",
                        identifier->text);
+
+        return make_type(ET_ERROR);
     }
+
+    return symbol_value_type(symbol);
 }
 
 // Llamada a una función: punto de entrada y cantidad de argumentos.
-// node es el CALL o el REWIND.
-static void check_invocation(ASTNode *node, Symbol *function,
-                             int n_args, int is_rewind) {
+// node es el CALL o el REWIND. Devuelve 0 si hubo error.
+static int check_invocation(ASTNode *node, Symbol *function,
+                            int n_args, int is_rewind) {
+    int valid = 1;
 
     // main solo la invoca el arranque del programa (no aplica a REWIND).
     if (!is_rewind &&
@@ -440,6 +622,8 @@ static void check_invocation(ASTNode *node, Symbol *function,
 
         semantic_error(node,
                        "'main' es el punto de entrada y no puede invocarse");
+
+        valid = 0;
     }
 
     if (n_args != function->parameter_count) {
@@ -449,7 +633,55 @@ static void check_invocation(ASTNode *node, Symbol *function,
                        function->name,
                        function->parameter_count,
                        n_args);
+
+        valid = 0;
     }
+
+    return valid;
+}
+
+// Argumento número position (desde 0) de una llamada, contra el parámetro en
+// la misma posición. Solo se llama si la cantidad de argumentos coincide.
+static void check_argument(ASTNode *argument, ExprType type,
+                           Symbol *function, int position) {
+    Symbol *parameter = function->param_list[position];
+
+    if (type.kind == ET_ERROR)
+        return;
+
+    // Un arreglo se pasa por referencia: uno inmutable no puede llegar a un
+    // parámetro que permite modificarlo. Los escalares se pasan por valor.
+    Symbol *symbol =
+        argument->kind == AST_IDENTIFIER ? argument->symbol : NULL;
+
+    if (symbol != NULL &&
+        type.kind == ET_ARRAY &&
+        symbol->modifier == MODIFIER_VI &&
+        parameter->dimensions > 0 &&
+        parameter->modifier != MODIFIER_VI) {
+
+        semantic_error(argument,
+                       "'%s' es inmutable; el parametro '%s' permite modificacion",
+                       symbol->name,
+                       parameter->name);
+    }
+
+    // Escalar: el mismo tipo. Arreglo: misma base, dimensiones y tamaños.
+    ExprType expected = symbol_value_type(parameter);
+
+    if (expected.kind == ET_ERROR ||
+        same_type(expected, type))
+        return;
+
+    char expected_text[TYPE_TEXT_SIZE];
+    char received_text[TYPE_TEXT_SIZE];
+
+    semantic_error(argument,
+                   "argumento %d de '%s': se esperaba %s, se recibio %s",
+                   position + 1,
+                   function->name,
+                   type_text(expected, expected_text),
+                   type_text(type, received_text));
 }
 
 // Valor de un índice constante literal: NUMBER, o NEG cuyo único hijo es
@@ -497,157 +729,431 @@ static void check_index_range(ASTNode *index, Symbol *array, int position) {
     }
 }
 
-// Acceso a un arreglo: cantidad de índices y rango de los índices literales.
-// node es el CALL (índices = hijos de ARGUMENTS) o el INDEX (uno más: el
-// hijo que sigue a ARGUMENTS).
-static void check_access(ASTNode *node, Symbol *array, ASTNode *arguments) {
-    int used =
-        count_children(arguments) + (node->kind == AST_INDEX ? 1 : 0);
+// Qué resultó ser un CALL, INDEX o REWIND al resolver su nombre.
+typedef enum {
+    RESOLVED_NONE,     // nombre no encontrado o mal usado (ya reportado)
+    RESOLVED_CALL,     // llamada a una función
+    RESOLVED_ACCESS    // acceso a un elemento de un arreglo
+} Resolution;
 
-    if (used != array->dimensions) {
+// Evalúa un argumento o índice (una sola vez) y lo verifica según lo que
+// resultó ser el nodo que lo contiene. valid indica que la cantidad de
+// argumentos o de índices es correcta.
+static void check_operand(ASTNode *operand, Symbol *symbol,
+                          Resolution resolution, int valid, int position) {
+    ExprType type = check_expression(operand);
 
-        semantic_error(node,
-                       "'%s' tiene %d dimensiones, se usaron %d indices",
-                       array->name,
-                       array->dimensions,
-                       used);
+    if (resolution == RESOLVED_ACCESS) {
 
-        return;
+        expect_type(operand, type, ET_INT,
+                    "el indice debe ser de tipo int");
+
+        if (valid)
+            check_index_range(operand, symbol, position);
     }
-
-    // used == dimensions, así que position nunca pasa de MAX_DIMS.
-    int position = 0;
-
-    ASTNode *index = arguments ? arguments->child : NULL;
-
-    while (index != NULL) {
-        check_index_range(index, array, position);
-        position++;
-        index = index->next;
+    else if (resolution == RESOLVED_CALL && valid) {
+        check_argument(operand, type, symbol, position);
     }
-
-    if (node->kind == AST_INDEX && arguments != NULL)
-        check_index_range(arguments->next, array, position);
 }
 
-// CALL, INDEX y REWIND: resuelve el nombre y verifica que se use bien según
-// el contexto. Los argumentos e índices se verifican aunque haya error.
-static void check_call(ASTNode *node, UseContext context) {
+// CALL, INDEX y REWIND: resuelve el nombre, verifica que se use bien según
+// el contexto y devuelve el tipo del resultado (ET_VOID si es una llamada a
+// una función void; ET_ERROR si hubo un error de resolución o de cantidad de
+// índices o argumentos). Los argumentos e índices se verifican aunque haya
+// error.
+static ExprType check_call(ASTNode *node, UseContext context) {
     ASTNode *arguments = find_child(node, AST_ARGUMENTS);
+
+    int n_args = count_children(arguments);
 
     // Si el nombre no existe ya se reportó y no se dice nada más de este uso.
     Symbol *symbol = resolve_name(find_child(node, AST_IDENTIFIER));
+
+    Resolution resolution = RESOLVED_NONE;
+    int valid = 0;
 
     if (symbol != NULL) {
 
         int is_function = symbol->kind == SYMBOL_FUNCTION;
         int is_array = !is_function && symbol->dimensions > 0;
 
-        int n_args = count_children(arguments);
+        // En una expresión, un CALL es llamada o acceso; un INDEX solo puede
+        // ser acceso. Solo se puede asignar a un elemento de un arreglo. Una
+        // sentencia de llamada y un R solo admiten funciones.
+        if (context == USE_EXPRESSION &&
+            is_function && node->kind == AST_CALL)
+            resolution = RESOLVED_CALL;
+        else if ((context == USE_STATEMENT || context == USE_REWIND) &&
+                 is_function)
+            resolution = RESOLVED_CALL;
+        else if ((context == USE_EXPRESSION || context == USE_TARGET) &&
+                 is_array)
+            resolution = RESOLVED_ACCESS;
 
-        switch (context) {
+        if (resolution == RESOLVED_CALL) {
 
-            // En una expresión, un CALL es llamada o acceso; un INDEX solo
-            // puede ser acceso.
-            case USE_EXPRESSION:
-                if (is_function && node->kind == AST_CALL)
-                    check_invocation(node, symbol, n_args, 0);
-                else if (is_array)
-                    check_access(node, symbol, arguments);
-                else
-                    semantic_error(node,
-                                   "'%s' no es un arreglo",
-                                   symbol->name);
-                break;
-
-            // Solo se puede asignar a un elemento de un arreglo.
-            case USE_TARGET:
-                if (is_array)
-                    check_access(node, symbol, arguments);
-                else
-                    semantic_error(node,
-                                   "'%s' no es un arreglo",
-                                   symbol->name);
-                break;
-
-            // Una sentencia de llamada y un R solo admiten funciones.
-            case USE_STATEMENT:
-            case USE_REWIND:
-                if (is_function)
-                    check_invocation(node,
+            valid = check_invocation(node,
                                      symbol,
                                      n_args,
                                      context == USE_REWIND);
-                else
-                    semantic_error(node,
-                                   "'%s' no es una funcion",
-                                   symbol->name);
-                break;
+        }
+        else if (resolution == RESOLVED_ACCESS) {
+
+            // Índices usados: los de ARGUMENTS y, en INDEX, uno más.
+            int used = n_args + (node->kind == AST_INDEX ? 1 : 0);
+
+            valid = used == symbol->dimensions;
+
+            if (!valid)
+                semantic_error(node,
+                               "'%s' tiene %d dimensiones, se usaron %d indices",
+                               symbol->name,
+                               symbol->dimensions,
+                               used);
+        }
+        else if (context == USE_STATEMENT || context == USE_REWIND) {
+            semantic_error(node,
+                           "'%s' no es una funcion",
+                           symbol->name);
+        }
+        else {
+            semantic_error(node,
+                           "'%s' no es un arreglo",
+                           symbol->name);
         }
     }
 
-    check_children(arguments);
+    // Argumentos o índices, en orden. Si valid, position nunca pasa de la
+    // cantidad de parámetros ni de MAX_DIMS.
+    int position = 0;
+
+    ASTNode *operand = arguments ? arguments->child : NULL;
+
+    while (operand != NULL) {
+        check_operand(operand, symbol, resolution, valid, position);
+        position++;
+        operand = operand->next;
+    }
 
     // INDEX: el segundo índice es el hijo que sigue a ARGUMENTS (cualquier
     // expresión, incluso un IDENTIFIER).
     if (node->kind == AST_INDEX && arguments != NULL)
-        check_expression(arguments->next);
+        check_operand(arguments->next, symbol, resolution, valid, position);
+
+    if (!valid)
+        return make_type(ET_ERROR);
+
+    // Llamada: el tipo de retorno. Acceso: el tipo de los elementos (un
+    // índice fuera de rango no lo cambia).
+    return scalar_type(symbol->type);
 }
 
-// Verifica que todo nombre usado en la expresión exista y se use bien.
-static void check_expression(ASTNode *node) {
+// Familias de operadores (§2).
+typedef enum {
+    OP_ARITHMETIC,   // + - * / % ^ y - unario: int -> int
+    OP_RELATIONAL,   // < > <= >=: int -> bool
+    OP_LOGICAL,      // & | y ! unario: bool -> bool
+    OP_EQUALITY      // == !=: dos escalares del mismo tipo -> bool
+} OperatorFamily;
+
+static OperatorFamily operator_family(ASTKind kind) {
+    switch (kind) {
+
+        case AST_LESS:
+        case AST_GREATER:
+        case AST_LESS_EQUAL:
+        case AST_GREATER_EQUAL:
+            return OP_RELATIONAL;
+
+        case AST_OR:
+        case AST_AND:
+        case AST_NOT:
+            return OP_LOGICAL;
+
+        case AST_EQUAL:
+        case AST_NOT_EQUAL:
+            return OP_EQUALITY;
+
+        default:
+            return OP_ARITHMETIC;
+    }
+}
+
+// Operador binario o unario. Se reporta un error por operador como máximo.
+// Si algún operando es ET_ERROR no se reporta nada y el resultado es el de
+// su familia. Un operador que reporta error devuelve ET_ERROR, para no
+// provocar otro error en el operador de afuera.
+static ExprType check_operator(ASTNode *node) {
+    const char *symbol = operator_symbol(node->kind);
+
+    ASTNode *first = node->child;
+    ASTNode *second = first ? first->next : NULL;   // NULL en los unarios
+
+    ExprType left = check_expression(first);
+    ExprType right = second ? check_expression(second) : left;
+
+    OperatorFamily family = operator_family(node->kind);
+
+    ExprType result =
+        make_type(family == OP_ARITHMETIC ? ET_INT : ET_BOOL);
+
+    if (left.kind == ET_ERROR ||
+        right.kind == ET_ERROR)
+        return result;
+
+    char text[TYPE_TEXT_SIZE];
+
+    int errors_before = diag_count();
+
+    switch (family) {
+
+        case OP_ARITHMETIC:
+            if (left.kind != ET_INT || right.kind != ET_INT)
+                semantic_error(node,
+                               "el operador '%s' requiere operandos de tipo int",
+                               symbol);
+            break;
+
+        // Se nombra el tipo del primer operando que no es int.
+        case OP_RELATIONAL:
+            if (left.kind != ET_INT || right.kind != ET_INT)
+                semantic_error(node,
+                               "el operador '%s' no acepta operandos de tipo %s",
+                               symbol,
+                               type_text(left.kind != ET_INT ? left : right,
+                                         text));
+            break;
+
+        case OP_LOGICAL:
+            if (left.kind != ET_BOOL || right.kind != ET_BOOL)
+                semantic_error(node,
+                               "el operador '%s' requiere operandos de tipo bool",
+                               symbol);
+            break;
+
+        // Solo se comparan escalares, y del mismo tipo.
+        case OP_EQUALITY:
+            if (left.kind == ET_ARRAY || right.kind == ET_ARRAY)
+                semantic_error(node,
+                               "el operador '%s' no acepta operandos de tipo %s",
+                               symbol,
+                               type_text(left.kind == ET_ARRAY ? left : right,
+                                         text));
+            else if (left.kind != right.kind)
+                semantic_error(node,
+                               "el operador '%s' requiere operandos del mismo tipo",
+                               symbol);
+            break;
+    }
+
+    // El operador reportó un error: no se dice nada más sobre esta expresión.
+    if (diag_count() != errors_before)
+        return make_type(ET_ERROR);
+
+    return result;
+}
+
+// Devuelve el tipo de la expresión. Nunca devuelve ET_VOID: una función void
+// usada como valor se reporta aquí y cuenta como ET_ERROR hacia arriba.
+static ExprType check_expression(ASTNode *node) {
     if (node == NULL)
-        return;
+        return make_type(ET_ERROR);
 
     switch (node->kind) {
 
         case AST_IDENTIFIER:
-            check_identifier(node);
-            break;
+            return check_identifier(node);
 
         case AST_NUMBER:
+            return make_type(ET_INT);
+
         case AST_BOOLEAN:
-            break;
+            return make_type(ET_BOOL);
 
         case AST_CALL:
-        case AST_INDEX:
-            check_call(node, USE_EXPRESSION);
-            break;
+        case AST_INDEX: {
+            ExprType type = check_call(node, USE_EXPRESSION);
 
-        // INITIALIZER_LIST y cualquier operador binario o unario.
+            if (type.kind == ET_VOID) {
+
+                ASTNode *name = find_child(node, AST_IDENTIFIER);
+
+                semantic_error(node,
+                               "la funcion '%s' no devuelve valor",
+                               name ? name->text : "");
+
+                return make_type(ET_ERROR);
+            }
+
+            return type;
+        }
+
         default:
-            check_children(node);
             break;
     }
+
+    if (operator_symbol(node->kind) != NULL)
+        return check_operator(node);
+
+    // Cualquier otro nodo no es una expresión con tipo: solo se verifican
+    // los nombres que contiene.
+    ASTNode *child = node->child;
+
+    while (child != NULL) {
+        check_expression(child);
+        child = child->next;
+    }
+
+    return make_type(ET_ERROR);
+}
+
+// Condición de un C, A [ ] o L: debe ser bool.
+static void check_condition(ASTNode *node) {
+    ASTNode *condition = find_condition(node);
+
+    expect_type(condition, check_expression(condition), ET_BOOL,
+                "la condicion debe ser de tipo bool");
 }
 
 // Destino de una asignación: un nombre suelto, o un elemento de un arreglo.
-static void check_target(ASTNode *target) {
+// Verifica la mutabilidad (§5.2) y devuelve el tipo del destino.
+// Es inmutable todo símbolo con MODIFIER_VI: variables Vi, parámetros Vi y la
+// variable de un S. Los parámetros sin modificador son modificables.
+static ExprType check_target(ASTNode *target) {
     if (target == NULL)
-        return;
+        return make_type(ET_ERROR);
 
     if (target->kind == AST_CALL ||
-        target->kind == AST_INDEX)
-        check_call(target, USE_TARGET);
-    else
-        check_expression(target);
+        target->kind == AST_INDEX) {
+
+        ExprType type = check_call(target, USE_TARGET);
+
+        ASTNode *name = find_child(target, AST_IDENTIFIER);
+        Symbol *symbol = name ? name->symbol : NULL;
+
+        if (symbol != NULL &&
+            symbol->kind != SYMBOL_FUNCTION &&
+            symbol->dimensions > 0 &&
+            symbol->modifier == MODIFIER_VI) {
+
+            semantic_error(target,
+                           "'%s' es inmutable; sus elementos no pueden modificarse",
+                           symbol->name);
+        }
+
+        return type;
+    }
+
+    ExprType type = check_expression(target);
+
+    Symbol *symbol =
+        target->kind == AST_IDENTIFIER ? target->symbol : NULL;
+
+    if (symbol != NULL &&
+        symbol->kind != SYMBOL_FUNCTION &&
+        symbol->modifier == MODIFIER_VI) {
+
+        semantic_error(target,
+                       "'%s' es inmutable y no puede modificarse",
+                       symbol->name);
+    }
+
+    return type;
 }
 
-// ¿Algún hijo de la lista es a su vez una lista?
-static int has_nested_list(ASTNode *list) {
-    return find_child(list, AST_INITIALIZER_LIST) != NULL;
+// Asignación: mutabilidad del destino (§5.2) y después tipos (§5.1).
+static void check_assignment(ASTNode *statement) {
+    ASTNode *target = statement->child;               // primer hijo
+    ASTNode *value = target ? target->next : NULL;    // segundo hijo
+
+    ExprType destination = check_target(target);
+
+    check_assignable(target, destination, check_expression(value));
 }
 
-// Forma de una lista de inicialización contra las dimensiones declaradas.
+// Verifica los nombres de todos los valores de una lista, sin exigir tipos.
+static void check_list_names(ASTNode *node) {
+    if (node == NULL)
+        return;
+
+    if (node->kind != AST_INITIALIZER_LIST) {
+        check_expression(node);
+        return;
+    }
+
+    ASTNode *child = node->child;
+
+    while (child != NULL) {
+        check_list_names(child);
+        child = child->next;
+    }
+}
+
+// Tipo incorrecto de los valores de una lista: se reporta una sola vez por
+// declaración, con el tipo del primer valor incorrecto (ET_ERROR = ninguno).
+static void report_list_type(ExprType wrong, Symbol *symbol, ASTNode *node) {
+    if (wrong.kind == ET_ERROR)
+        return;
+
+    char wrong_text[TYPE_TEXT_SIZE];
+    char base_text[TYPE_TEXT_SIZE];
+
+    semantic_error(node,
+                   "no se puede asignar '%s' a una variable '%s'",
+                   type_text(wrong, wrong_text),
+                   type_text(scalar_type(symbol->type), base_text));
+}
+
+// Valores de una lista de una dimensión, o de una fila: ninguno es una lista
+// (se reporta una vez por lista o por fila) y todos son del tipo base del
+// arreglo. El primer tipo incorrecto se guarda en wrong, que comparten todas
+// las filas: lo reporta quien llama, con report_list_type.
+static void check_list_values(ASTNode *list, Symbol *symbol, ASTNode *node,
+                              ExprType *wrong) {
+    ExprType base = scalar_type(symbol->type);
+
+    int nested = 0;
+
+    ASTNode *value = list->child;
+
+    while (value != NULL) {
+
+        if (value->kind == AST_INITIALIZER_LIST) {
+            nested = 1;
+            check_list_names(value);
+        }
+        else {
+
+            ExprType type = check_expression(value);
+
+            if (wrong->kind == ET_ERROR &&
+                type.kind != ET_ERROR &&
+                !same_type(type, base))
+                *wrong = type;
+        }
+
+        value = value->next;
+    }
+
+    if (nested)
+        semantic_error(node,
+                       "se recibio una lista donde se esperaba un valor");
+}
+
+// Forma y tipos de una lista de inicialización contra la declaración.
 // Todos los errores se reportan sobre la DECLARATION (node). Las filas se
-// numeran desde 0, como los índices. Los tipos de los valores no se revisan.
+// numeran desde 0, como los índices.
 static void check_initializer_list(Symbol *symbol, ASTNode *list,
                                    ASTNode *node) {
+
+    // Un escalar no admite lista: solo se verifican los nombres.
     if (symbol->dimensions == 0) {
 
         semantic_error(node,
                        "'%s' no es un arreglo",
                        symbol->name);
+
+        check_list_names(list);
 
         return;
     }
@@ -655,35 +1161,38 @@ static void check_initializer_list(Symbol *symbol, ASTNode *list,
     // Dimensión 0: ya se reportó en la declaración (S-06).
     for (int i = 0; i < symbol->dimensions; i++) {
 
-        if (symbol->dim_sizes[i] <= 0)
+        if (symbol->dim_sizes[i] <= 0) {
+            check_list_names(list);
             return;
+        }
     }
 
     int count = count_children(list);
 
-    if (count != symbol->dim_sizes[0]) {
-
+    if (count != symbol->dim_sizes[0])
         semantic_error(node,
                        "se recibieron %d valores, se esperaban %d",
                        count,
                        symbol->dim_sizes[0]);
 
-        // Si el número de filas no coincide, no se revisa cada fila.
-        if (symbol->dimensions > 1)
-            return;
-    }
+    // Primer valor de tipo incorrecto en toda la lista.
+    ExprType wrong = make_type(ET_ERROR);
 
-    // Una dimensión: ningún elemento es una lista (se reporta una vez).
+    // Una dimensión: cada elemento es un valor.
     if (symbol->dimensions == 1) {
-
-        if (has_nested_list(list))
-            semantic_error(node,
-                           "se recibio una lista donde se esperaba un valor");
-
+        check_list_values(list, symbol, node, &wrong);
+        report_list_type(wrong, symbol, node);
         return;
     }
 
-    // Dos dimensiones: cada elemento es una fila de dim_sizes[1] valores.
+    // Dos dimensiones: si el número de filas no coincide, no se revisa cada
+    // fila (solo sus nombres).
+    if (count != symbol->dim_sizes[0]) {
+        check_list_names(list);
+        return;
+    }
+
+    // Cada elemento es una fila de dim_sizes[1] valores.
     int columns = symbol->dim_sizes[1];
     int row_number = 0;
 
@@ -697,6 +1206,8 @@ static void check_initializer_list(Symbol *symbol, ASTNode *list,
                            "la fila %d debe ser una lista de %d valores",
                            row_number,
                            columns);
+
+            check_expression(row);
         }
         else {
 
@@ -709,15 +1220,14 @@ static void check_initializer_list(Symbol *symbol, ASTNode *list,
                                values,
                                columns);
 
-            // Ningún valor de la fila es una lista (una vez por fila).
-            if (has_nested_list(row))
-                semantic_error(node,
-                               "se recibio una lista donde se esperaba un valor");
+            check_list_values(row, symbol, node, &wrong);
         }
 
         row_number++;
         row = row->next;
     }
+
+    report_list_type(wrong, symbol, node);
 }
 
 // Parámetro de la función con ese nombre, o NULL.
@@ -821,10 +1331,6 @@ static int analyze_declaration(ASTNode *node) {
         initializer->kind == AST_DIMENSIONS)
         initializer = initializer->next;
 
-    // El inicializador se verifica antes de insertar el símbolo:
-    // Vm x : int = x ;  usa el x de afuera, o es error.
-    check_expression(initializer);
-
     Symbol *symbol =
         symbol_create(identifier->text,
                       SYMBOL_VARIABLE,
@@ -836,11 +1342,18 @@ static int analyze_declaration(ASTNode *node) {
 
     fill_dimensions(symbol, dimensions, node);
 
-    // Forma de la lista de inicialización. Un inicializador que no es lista
-    // no se revisa aquí (los tipos se verifican después).
+    // El inicializador se verifica antes de insertar el símbolo:
+    // Vm x : int = x ;  usa el x de afuera, o es error.
+    // Una lista se verifica contra la forma del arreglo; cualquier otro
+    // valor, como una asignación a la variable declarada (sin mutabilidad:
+    // es su valor inicial).
     if (initializer != NULL &&
         initializer->kind == AST_INITIALIZER_LIST)
         check_initializer_list(symbol, initializer, node);
+    else if (initializer != NULL)
+        check_assignable(node,
+                         symbol_value_type(symbol),
+                         check_expression(initializer));
 
     // Un local que oculta un parámetro no se inserta.
     if (!check_not_parameter(symbol->name, node)) {
@@ -948,7 +1461,7 @@ static int analyze_block(ASTNode *block, ScopeKind kind) {
 static int analyze_conditional(ASTNode *node) {
 
     // Rama inicial  C [cond] ;
-    check_expression(find_condition(node));
+    check_condition(node);
 
     if (!analyze_block(find_child(node, AST_BLOCK), SCOPE_C))
         return 0;
@@ -961,7 +1474,7 @@ static int analyze_conditional(ASTNode *node) {
 
         if (alternative->kind == AST_ALTERNATIVE) {
 
-            check_expression(find_condition(alternative));
+            check_condition(alternative);
 
             if (!analyze_block(find_child(alternative, AST_BLOCK),
                                SCOPE_A))
@@ -984,7 +1497,7 @@ static int analyze_conditional(ASTNode *node) {
 
 // Ciclo por predicado: la condición se verifica antes de abrir el ámbito.
 static int analyze_loop_l(ASTNode *node) {
-    check_expression(find_condition(node));
+    check_condition(node);
 
     return analyze_block(find_child(node, AST_BLOCK), SCOPE_L);
 }
@@ -1015,8 +1528,10 @@ static int analyze_loop_s(ASTNode *node) {
 
     // Inicio y fin se verifican antes de abrir el ámbito del S:
     // S [ i , 0 , i , 1 ]  usa el i de afuera.
-    check_expression(start);
-    check_expression(end);
+    expect_type(start, check_expression(start), ET_INT,
+                "el limite de 'S' debe ser de tipo int");
+    expect_type(end, check_expression(end), ET_INT,
+                "el limite de 'S' debe ser de tipo int");
 
     // Si la variable de control oculta un parámetro no se crea: dentro del
     // cuerpo, el nombre se refiere al parámetro.
@@ -1070,10 +1585,7 @@ static int analyze_statement(ASTNode *statement) {
 
         // Destino (primer hijo: IDENTIFIER, CALL o INDEX) y valor (segundo).
         case AST_ASSIGNMENT:
-            check_target(statement->child);
-            check_expression(statement->child
-                                 ? statement->child->next
-                                 : NULL);
+            check_assignment(statement);
             return 1;
 
         // El CALL de la sentencia debe ser una llamada.

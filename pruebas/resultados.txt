@@ -235,6 +235,132 @@ Analisis semantico fallido: 1 error(es).
 --- tabla ---
 --- codigo de salida: 1 ---
 
+===== pruebas/e27_asignacion_tipo.cls =====
+--- stderr ---
+pruebas/e27_asignacion_tipo.cls:3:5: error semantico: no se puede asignar 'bool' a una variable 'int'
+     3 |     x = verdadero ;
+       |     ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e28_operando_relacional.cls =====
+--- stderr ---
+pruebas/e28_operando_relacional.cls:4:11: error semantico: el operador '<' no acepta operandos de tipo bool
+     4 |     c = b < verdadero ;
+       |           ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e29_aritmetica.cls =====
+--- stderr ---
+pruebas/e29_aritmetica.cls:3:11: error semantico: el operador '*' requiere operandos de tipo int
+     3 |     x = 2 * falso ;
+       |           ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e30_logico.cls =====
+--- stderr ---
+pruebas/e30_logico.cls:3:11: error semantico: el operador '&' requiere operandos de tipo bool
+     3 |     b = 1 & verdadero ;
+       |           ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e31_condicion.cls =====
+--- stderr ---
+pruebas/e31_condicion.cls:3:9: error semantico: la condicion debe ser de tipo bool
+     3 |     C [ x ] ;
+       |         ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e32_argumento_tipo.cls =====
+--- stderr ---
+pruebas/e32_argumento_tipo.cls:8:17: error semantico: argumento 1 de 'doble': se esperaba int, se recibio bool
+     8 |     r = doble [ verdadero ] ;
+       |                 ^^^^^^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e33_arreglo_tamano.cls =====
+--- stderr ---
+pruebas/e33_arreglo_tamano.cls:8:16: error semantico: argumento 1 de 'suma': se esperaba int[3], se recibio int[4]
+     8 |     r = suma [ w ] ;
+       |                ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e34_asignar_vi.cls =====
+--- stderr ---
+pruebas/e34_asignar_vi.cls:3:5: error semantico: 'limite' es inmutable y no puede modificarse
+     3 |     limite = 6 ;
+       |     ^^^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e35_elemento_vi.cls =====
+--- stderr ---
+pruebas/e35_elemento_vi.cls:3:5: error semantico: 'tabla' es inmutable; sus elementos no pueden modificarse
+     3 |     tabla [ 0 ] = 3 ;
+       |     ^^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e36_vi_a_modificable.cls =====
+--- stderr ---
+pruebas/e36_vi_a_modificable.cls:8:13: error semantico: 'datos' es inmutable; el parametro 'm' permite modificacion
+     8 |     poner [ datos ] ;
+       |             ^^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e37_indice_no_entero.cls =====
+--- stderr ---
+pruebas/e37_indice_no_entero.cls:3:9: error semantico: el indice debe ser de tipo int
+     3 |     v [ verdadero ] = 1 ;
+       |         ^^^^^^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e38_variable_s.cls =====
+--- stderr ---
+pruebas/e38_variable_s.cls:4:9: error semantico: 'i' es inmutable y no puede modificarse
+     4 |         i = 0 ;
+       |         ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e39_funcion_void_valor.cls =====
+--- stderr ---
+pruebas/e39_funcion_void_valor.cls:7:9: error semantico: la funcion 'nada' no devuelve valor
+     7 |     x = nada [ ] ;
+       |         ^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e40_copia_arreglo.cls =====
+--- stderr ---
+pruebas/e40_copia_arreglo.cls:4:5: error semantico: no se puede asignar int[5] a int[3]
+     4 |     a = b ;
+       |     ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
 ===== pruebas/p01_llamada_adelante.cls =====
 --- stderr ---
 --- tabla ---
@@ -350,6 +476,36 @@ Scope 4: FUNCTION
     r : int width=4 addr=0x0044
     w : int[3] width=12 addr=0x0038
     t : int[2][3] width=24 addr=0x0020
+
+--- codigo de salida: 0 ---
+
+===== pruebas/p06_tipos.cls =====
+--- stderr ---
+--- tabla ---
+Scope 0: GLOBAL
+    main : void (function) params=[] area=0x0020 size=32
+    total : int (function) params=[v] area=0x0010 size=16
+    es_par : bool (function) params=[n] area=0x0004 size=12
+    tope : int width=4 addr=0x0000
+
+Scope 1: FUNCTION
+    n : int width=4 addr=0x000C
+    r : bool (return) width=4 addr=0x0008
+
+Scope 2: FUNCTION
+    v : int[3] width=4 addr=0x0018
+    s : int (return) width=4 addr=0x0014
+
+Scope 3: S
+    i : int width=4 addr=0x001C
+
+Scope 4: C
+
+Scope 5: FUNCTION
+    ok : bool width=4 addr=0x003C
+    t : int width=4 addr=0x0038
+    copia : int[3] width=12 addr=0x002C
+    datos : int[3] width=12 addr=0x0020
 
 --- codigo de salida: 0 ---
 

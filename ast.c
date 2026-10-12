@@ -312,6 +312,18 @@ ASTNode *ast_rewind(char *id,
     return node;
 }
 
+// CRYPTO: la operación va en text; el único hijo es ARGUMENTS.
+ASTNode *ast_crypto(const char *operation,
+                    ASTNode *args) {
+    ASTNode *node = ast_new(AST_CRYPTO);
+
+    node->text = ast_strdup(operation);
+
+    ast_add_child(node, args);
+
+    return node;
+}
+
 // Arguments
 
 ASTNode *ast_arguments(ASTNode *arguments) {
@@ -420,6 +432,7 @@ static const char *ast_kind_name(ASTKind kind) {
 
         case AST_EMIT:             return "EMIT";
         case AST_REWIND:           return "REWIND";
+        case AST_CRYPTO:           return "CRYPTO";
 
         case AST_ARGUMENTS:        return "ARGUMENTS";
 

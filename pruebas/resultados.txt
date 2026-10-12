@@ -508,6 +508,92 @@ Analisis lexico fallido: 1 error(es).
 --- tabla ---
 --- codigo de salida: 1 ---
 
+===== pruebas/e57_crypto_k_no_literal.cls =====
+--- stderr ---
+pruebas/e57_crypto_k_no_literal.cls:3:32: error sintactico: syntax error
+     3 |     cifrar [ 4096 , 8192 , 1 , k ] ;
+       |                                ^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e58_crypto_k_rango.cls =====
+--- stderr ---
+pruebas/e58_crypto_k_rango.cls:2:32: error semantico: el argumento 'k' de 'cifrar' debe estar entre 0 y 3
+     2 |     cifrar [ 4096 , 8192 , 1 , 4 ] ;
+       |                                ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e59_crypto_w_rango.cls =====
+--- stderr ---
+pruebas/e59_crypto_w_rango.cls:2:24: error semantico: el argumento 'w' de 'cargar_llave' debe estar entre 0 y 3
+     2 |     cargar_llave [ 0 , 5 , 7 ] ;
+       |                        ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e60_crypto_faltan_argumentos.cls =====
+--- stderr ---
+pruebas/e60_crypto_faltan_argumentos.cls:2:30: error sintactico: syntax error
+     2 |     cifrar [ 4096 , 8192 , 1 ] ;
+       |                              ^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e61_crypto_tipo.cls =====
+--- stderr ---
+pruebas/e61_crypto_tipo.cls:2:18: error semantico: argumento 1 de 'autenticar': se esperaba int, se recibio bool
+     2 |     autenticar [ verdadero ] ;
+       |                  ^^^^^^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e62_crypto_alineacion.cls =====
+--- stderr ---
+pruebas/e62_crypto_alineacion.cls:2:14: error semantico: argumento 1 de 'cifrar': la direccion 4098 no es multiplo de 4
+     2 |     cifrar [ 4098 , 8192 , 1 , 0 ] ;
+       |              ^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e63_crypto_fuera_de_zona.cls =====
+--- stderr ---
+pruebas/e63_crypto_fuera_de_zona.cls:2:24: error semantico: argumento 2 de 'descifrar': la direccion 100 esta fuera de la zona de datos [4096..65535]
+     2 |     descifrar [ 4096 , 100 , 1 , 0 ] ;
+       |                        ^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e64_crypto_se_sale.cls =====
+--- stderr ---
+pruebas/e64_crypto_se_sale.cls:2:29: error semantico: argumento 3 de 'cifrar': 2 bloques desde la direccion 65528 se salen de la memoria
+     2 |     cifrar [ 65528 , 8192 , 2 , 0 ] ;
+       |                             ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e65_crypto_como_valor.cls =====
+--- stderr ---
+pruebas/e65_crypto_como_valor.cls:2:18: error sintactico: syntax error
+     2 |     Vm x : int = cifrar [ 4096 , 8192 , 1 , 0 ] ;
+       |                  ^^^^^^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e66_crypto_nombre_reservado.cls =====
+--- stderr ---
+pruebas/e66_crypto_nombre_reservado.cls:2:8: error sintactico: syntax error
+     2 |     Vm cifrar : int = 0 ;
+       |        ^^^^^^
+--- tabla ---
+--- codigo de salida: 1 ---
+
 ===== pruebas/p01_llamada_adelante.cls =====
 --- stderr ---
 --- tabla ---
@@ -694,6 +780,21 @@ Scope 0: GLOBAL
 
 Scope 1: FUNCTION
     x : int width=4 addr=0x0000
+
+--- codigo de salida: 0 ---
+
+===== pruebas/p09_crypto.cls =====
+--- stderr ---
+--- tabla ---
+Scope 0: GLOBAL
+    main : void (function) params=[] area=0x0010 size=4
+    negado : int width=4 addr=0x000C
+    vuelta : int width=4 addr=0x0008
+    cifrado : int width=4 addr=0x0004
+    origen : int width=4 addr=0x0000
+
+Scope 1: FUNCTION
+    cifrar_total : int width=4 addr=0x0010
 
 --- codigo de salida: 0 ---
 

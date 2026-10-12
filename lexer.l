@@ -109,6 +109,17 @@ static void lexical_error(int line, int col, int length,
 "bool"                return TOKEN_BOOL;
 "void"                return TOKEN_VOID;
 
+ /* CRYPTO: palabras reservadas. Van antes de ID: con igual largo gana el
+    patrón que está primero; cifrar_total sigue siendo ID por prefijo más
+    largo (libro §3.5.3). */
+"autenticar"          return TOKEN_AUTENTICAR;
+"cerrar_sesion"       return TOKEN_CERRAR_SESION;
+"cargar_llave"        return TOKEN_CARGAR_LLAVE;
+"sellar"              return TOKEN_SELLAR;
+"cambiar_ancla"       return TOKEN_CAMBIAR_ANCLA;
+"cifrar"              return TOKEN_CIFRAR;
+"descifrar"           return TOKEN_DESCIFRAR;
+
 "C"                   return TOKEN_C;
 "A"                   return TOKEN_A;
 "L"                   return TOKEN_L;

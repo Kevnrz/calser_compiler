@@ -53,6 +53,14 @@ ASTNode *root = NULL;
 %token TOKEN_TRUE
 %token TOKEN_FALSE
 
+%token TOKEN_AUTENTICAR
+%token TOKEN_CERRAR_SESION
+%token TOKEN_CARGAR_LLAVE
+%token TOKEN_SELLAR
+%token TOKEN_CAMBIAR_ANCLA
+%token TOKEN_CIFRAR
+%token TOKEN_DESCIFRAR
+
 
 /* Operators */
 
@@ -141,6 +149,7 @@ ASTNode *root = NULL;
 
 %type <node> emit
 %type <node> rewind
+%type <node> crypto
 
 %type <node> args
 %type <node> lista_arg
@@ -482,6 +491,11 @@ sentencia
       }
 
     | rewind
+      {
+          $$ = $1;
+      }
+
+    | crypto
       {
           $$ = $1;
       }
@@ -869,6 +883,145 @@ rewind
 
           // El nombre recibe su posición real antes del relleno.
           ast_set_location($$->child, @2.first_line, @2.first_column);
+
+          ast_set_location($$, @1.first_line, @1.first_column);
+      }
+    ;
+
+
+/* ============================================================
+ * CRYPTO
+ *
+ * crypto -> autenticar    [ expr ] ;
+ *         | cerrar_sesion [ ] ;
+ *         | cargar_llave  [ num , num , expr ] ;          k, w, valor
+ *         | sellar        [ ] ;
+ *         | cambiar_ancla [ expr ] ;
+ *         | cifrar        [ expr , expr , expr , num ] ;  origen, destino,
+ *         | descifrar     [ expr , expr , expr , num ] ;  bloques, k
+ *
+ * k y w son TOKEN_NUMBER directo: una variable o -1 es error sintáctico.
+ * ============================================================ */
+
+crypto
+    : TOKEN_AUTENTICAR
+      TOKEN_LBRACKET
+      expr
+      TOKEN_RBRACKET
+      TOKEN_SEMICOLON
+      {
+          $$ = ast_crypto("autenticar", ast_list(AST_ARGUMENTS, $3));
+
+          ast_set_location($$, @1.first_line, @1.first_column);
+      }
+
+    | TOKEN_CERRAR_SESION
+      TOKEN_LBRACKET
+      TOKEN_RBRACKET
+      TOKEN_SEMICOLON
+      {
+          $$ = ast_crypto("cerrar_sesion", ast_list(AST_ARGUMENTS, NULL));
+
+          ast_set_location($$, @1.first_line, @1.first_column);
+      }
+
+    | TOKEN_CARGAR_LLAVE
+      TOKEN_LBRACKET
+      TOKEN_NUMBER
+      TOKEN_COMMA
+      TOKEN_NUMBER
+      TOKEN_COMMA
+      expr
+      TOKEN_RBRACKET
+      TOKEN_SEMICOLON
+      {
+          ASTNode *k = ast_number($3);
+          ASTNode *w = ast_number($5);
+
+          ast_set_location(k, @3.first_line, @3.first_column);
+          ast_set_location(w, @5.first_line, @5.first_column);
+
+          ASTNode *arguments = ast_list(AST_ARGUMENTS, k);
+
+          ast_add_child(arguments, w);
+          ast_add_child(arguments, $7);
+
+          $$ = ast_crypto("cargar_llave", arguments);
+
+          ast_set_location($$, @1.first_line, @1.first_column);
+      }
+
+    | TOKEN_SELLAR
+      TOKEN_LBRACKET
+      TOKEN_RBRACKET
+      TOKEN_SEMICOLON
+      {
+          $$ = ast_crypto("sellar", ast_list(AST_ARGUMENTS, NULL));
+
+          ast_set_location($$, @1.first_line, @1.first_column);
+      }
+
+    | TOKEN_CAMBIAR_ANCLA
+      TOKEN_LBRACKET
+      expr
+      TOKEN_RBRACKET
+      TOKEN_SEMICOLON
+      {
+          $$ = ast_crypto("cambiar_ancla", ast_list(AST_ARGUMENTS, $3));
+
+          ast_set_location($$, @1.first_line, @1.first_column);
+      }
+
+    | TOKEN_CIFRAR
+      TOKEN_LBRACKET
+      expr
+      TOKEN_COMMA
+      expr
+      TOKEN_COMMA
+      expr
+      TOKEN_COMMA
+      TOKEN_NUMBER
+      TOKEN_RBRACKET
+      TOKEN_SEMICOLON
+      {
+          ASTNode *k = ast_number($9);
+
+          ast_set_location(k, @9.first_line, @9.first_column);
+
+          ASTNode *arguments = ast_list(AST_ARGUMENTS, $3);
+
+          ast_add_child(arguments, $5);
+          ast_add_child(arguments, $7);
+          ast_add_child(arguments, k);
+
+          $$ = ast_crypto("cifrar", arguments);
+
+          ast_set_location($$, @1.first_line, @1.first_column);
+      }
+
+    | TOKEN_DESCIFRAR
+      TOKEN_LBRACKET
+      expr
+      TOKEN_COMMA
+      expr
+      TOKEN_COMMA
+      expr
+      TOKEN_COMMA
+      TOKEN_NUMBER
+      TOKEN_RBRACKET
+      TOKEN_SEMICOLON
+      {
+          ASTNode *k = ast_number($9);
+
+          ast_set_location(k, @9.first_line, @9.first_column);
+
+          ASTNode *arguments = ast_list(AST_ARGUMENTS, $3);
+
+          ast_add_child(arguments, $5);
+          ast_add_child(arguments, $7);
+          ast_add_child(arguments, k);
+
+          $$ = ast_crypto("descifrar", arguments);
 
           ast_set_location($$, @1.first_line, @1.first_column);
       }

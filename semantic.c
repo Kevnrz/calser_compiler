@@ -1845,6 +1845,168 @@ static int analyze_loop_s(ASTNode *node) {
     return result;
 }
 
+// CRYPTO
+
+// Zona de datos de la memoria y tamaño de un bloque de cifrado, en bytes.
+#define DATA_ZONE_FIRST    4096
+#define DATA_ZONE_LAST     65535
+#define CRYPTO_BLOCK_BYTES 8
+
+// Argumento expr número position (desde 1) de una operación: debe ser int.
+// Mismo mensaje que en las llamadas. ET_ERROR no reporta nada más.
+static ExprType check_crypto_argument(ASTNode *argument, int position,
+                                      const char *operation) {
+    ExprType type = check_expression(argument);
+
+    if (type.kind != ET_ERROR &&
+        type.kind != ET_INT) {
+
+        char received_text[TYPE_TEXT_SIZE];
+
+        semantic_error(argument,
+                       "argumento %d de '%s': se esperaba int, se recibio %s",
+                       position,
+                       operation,
+                       type_text(type, received_text));
+    }
+
+    return type;
+}
+
+// k o w: un NUMBER escrito tal cual (lo garantiza la gramática), entre 0 y 3.
+static void check_crypto_selector(ASTNode *number, const char *name,
+                                  const char *operation) {
+    if (number == NULL || number->kind != AST_NUMBER)
+        return;
+
+    if (number->number < 0 || number->number > 3)
+        semantic_error(number,
+                       "el argumento '%s' de '%s' debe estar entre 0 y 3",
+                       name,
+                       operation);
+}
+
+// Dirección de origen o destino: solo se verifica si es constante. Un solo
+// error por dirección: primero la zona de datos; si pasa, la alineación.
+// Devuelve 1 si es una constante que pasó las dos verificaciones.
+static int check_crypto_address(ASTNode *argument, ExprType type,
+                                int position, const char *operation) {
+    if (type.kind != ET_INT || !type.is_const)
+        return 0;
+
+    if (type.value < DATA_ZONE_FIRST || type.value > DATA_ZONE_LAST) {
+
+        semantic_error(argument,
+                       "argumento %d de '%s': la direccion %ld esta fuera "
+                       "de la zona de datos [%d..%d]",
+                       position,
+                       operation,
+                       type.value,
+                       DATA_ZONE_FIRST,
+                       DATA_ZONE_LAST);
+
+        return 0;
+    }
+
+    if (type.value % 4 != 0) {
+
+        semantic_error(argument,
+                       "argumento %d de '%s': la direccion %ld no es "
+                       "multiplo de 4",
+                       position,
+                       operation,
+                       type.value);
+
+        return 0;
+    }
+
+    return 1;
+}
+
+// Los bloques (constantes y > 0) desde una dirección ya verificada no pueden
+// pasar del final de la memoria. Se calcula en 64 bits.
+static void check_crypto_extent(ASTNode *blocks, ExprType blocks_type,
+                                ExprType address, const char *operation) {
+    long long end =
+        (long long) address.value +
+        (long long) CRYPTO_BLOCK_BYTES * blocks_type.value;
+
+    if (end > DATA_ZONE_LAST + 1)
+        semantic_error(blocks,
+                       "argumento 3 de '%s': %ld bloques desde la direccion "
+                       "%ld se salen de la memoria",
+                       operation,
+                       blocks_type.value,
+                       address.value);
+}
+
+// Operación de CRYPTO: no usa la tabla de símbolos ni el grafo de llamadas.
+// La cantidad y la forma de los argumentos las garantiza la gramática; los
+// argumentos se verifican en orden.
+static void analyze_crypto(ASTNode *node) {
+    const char *operation = node->text;
+
+    ASTNode *arguments = find_child(node, AST_ARGUMENTS);
+    ASTNode *argument = arguments ? arguments->child : NULL;
+
+    // cerrar_sesion, sellar: sin argumentos.
+    if (argument == NULL)
+        return;
+
+    // cargar_llave [ k , w , valor ]
+    if (strcmp(operation, "cargar_llave") == 0) {
+
+        ASTNode *w = argument->next;
+
+        check_crypto_selector(argument, "k", operation);
+        check_crypto_selector(w, "w", operation);
+
+        if (w != NULL && w->next != NULL)
+            check_crypto_argument(w->next, 3, operation);
+
+        return;
+    }
+
+    // autenticar, cambiar_ancla: una sola expr.
+    if (argument->next == NULL) {
+        check_crypto_argument(argument, 1, operation);
+        return;
+    }
+
+    // cifrar, descifrar [ origen , destino , bloques , k ]
+    ASTNode *origin = argument;
+    ASTNode *destination = origin->next;
+    ASTNode *blocks = destination->next;
+
+    if (blocks == NULL)
+        return;
+
+    ExprType origin_type = check_crypto_argument(origin, 1, operation);
+    int origin_valid =
+        check_crypto_address(origin, origin_type, 1, operation);
+
+    ExprType destination_type =
+        check_crypto_argument(destination, 2, operation);
+    int destination_valid =
+        check_crypto_address(destination, destination_type, 2, operation);
+
+    ExprType blocks_type = check_crypto_argument(blocks, 3, operation);
+
+    if (blocks_type.kind == ET_INT &&
+        blocks_type.is_const &&
+        blocks_type.value > 0) {
+
+        if (origin_valid)
+            check_crypto_extent(blocks, blocks_type, origin_type, operation);
+
+        if (destination_valid)
+            check_crypto_extent(blocks, blocks_type, destination_type,
+                                operation);
+    }
+
+    check_crypto_selector(blocks->next, "k", operation);
+}
+
 // Decide qué hacer con una sentencia según su kind.
 static int analyze_statement(ASTNode *statement) {
     if (statement == NULL)
@@ -1877,6 +2039,11 @@ static int analyze_statement(ASTNode *statement) {
         // El nombre debe ser una función; se verifica cada argumento.
         case AST_REWIND:
             check_call(statement, USE_REWIND);
+            return 1;
+
+        // Operación de CRYPTO: se verifican sus argumentos.
+        case AST_CRYPTO:
+            analyze_crypto(statement);
             return 1;
 
         // EMIT: nada que verificar.

@@ -5,7 +5,7 @@ TARGET = ccom
 
 all: $(TARGET)
 
-$(TARGET): main.o ast.o parser.tab.o lex.yy.o symbol_table.o semantic.o diagnostics.o
+$(TARGET): main.o ast.o parser.tab.o lex.yy.o symbol_table.o semantic.o diagnostics.o label_table.o
 	$(CC) $(CFLAGS) -o $@ $^
 
 parser.tab.c parser.tab.h: parser.y
@@ -32,7 +32,10 @@ semantic.o: semantic.c semantic.h symbol_table.h ast.h diagnostics.h
 diagnostics.o: diagnostics.c diagnostics.h
 	$(CC) $(CFLAGS) -c diagnostics.c
 
-main.o: main.c semantic.h ast.h diagnostics.h
+label_table.o: label_table.c label_table.h
+	$(CC) $(CFLAGS) -c label_table.c
+
+main.o: main.c semantic.h ast.h diagnostics.h label_table.h
 	$(CC) $(CFLAGS) -c main.c
 
 clean:

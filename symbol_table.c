@@ -262,6 +262,8 @@ void symbol_table_print(Scope *scope) {
 
     Scope *current_scope = scope;
 
+    printf("\n===== SYMBOL TABLE =====\n");
+
     while (current_scope != NULL) {
 
         // Un ámbito sin símbolos se imprime igual, solo con su cabecera.
@@ -316,4 +318,5 @@ void symbol_table_print(Scope *scope) {
         current_scope = current_scope->next;
         scope_number++;
     }
+    printf("=======================\n");
 }

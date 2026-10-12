@@ -1,7 +1,9 @@
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "semantic.h"
 #include "diagnostics.h"
+#include "label_table.h"
 
 extern int yyparse(void);
 extern FILE *yyin;
@@ -76,6 +78,17 @@ int main(int argc, char **argv) {
         }
 
         semantic_print_symbols();
+
+        LabelTable *labels = malloc(sizeof(LabelTable));
+
+
+        label_table_init(labels);
+
+        label_table_build(labels, root);
+
+        label_table_print(labels);
+
+        label_table_destroy(labels);
 
         semantic_free();
 

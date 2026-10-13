@@ -1,7 +1,7 @@
 # Arquitectura VLIW — Grupo 6
 
-**CE 4301 Arquitectura de Computadores I**  
-Instituto Tecnológico de Costa Rica   
+**CE 4301 Arquitectura de Computadores I**
+Instituto Tecnológico de Costa Rica
 Escuela de Ingeniería en Computadores
 
 **Integrantes**
@@ -12,7 +12,10 @@ Escuela de Ingeniería en Computadores
 * Kevin Ruiz Rodríguez
 * Tatiana Chacón Mora
 
-18 de setiembre de 2026
+**Entrega 1:** 25 de setiembre de 2026
+**Revisión 1:** 6 de octubre de 2026 — aclaraciones posteriores a la Entrega 1,
+detalladas en la [§12](#12-registro-de-cambios-posteriores-a-la-entrega-1).
+Ninguna modifica la codificación de las instrucciones.
 
 ---
 
@@ -51,7 +54,10 @@ Escuela de Ingeniería en Computadores
    - [9.1 Escritura y lectura del banco de registros en flancos opuestos](#91-escritura-y-lectura-del-banco-de-registros-en-flancos-opuestos)
    - [9.2 Latencia uniforme](#92-latencia-uniforme)
    - [9.3 Semántica de lectura dentro de un bundle](#93-semántica-de-lectura-dentro-de-un-bundle)
+   - [9.4 Dependencias a través de memoria](#94-dependencias-a-través-de-memoria)
 10. [Estrategia frente a saltos](#10-estrategia-frente-a-saltos)
+11. [Sintaxis del ensamblador](#11-sintaxis-del-ensamblador)
+12. [Registro de cambios posteriores a la Entrega 1](#12-registro-de-cambios-posteriores-a-la-entrega-1)
 
 ---
 
@@ -63,7 +69,9 @@ El procesador trabaja con **paralelismo estático**: el software agrupa cuatro o
 
 ### 1.1 Modelo estático y riesgos de datos
 
-Para mantener un diseño de hardware simple y eficiente, el procesador **no implementa mecanismos automáticos de control de riesgos** (sin adelantamiento o *forwarding*, sin *scoreboarding* ni pausas del pipeline). La responsabilidad de respetar las dependencias entre datos y dejar los espacios necesarios recae completamente en el software (el compilador o el programador en ensamblador).
+Para mantener un diseño de hardware simple y eficiente, el procesador **no implementa mecanismos automáticos de control de riesgos** (sin adelantamiento o *forwarding*, sin *scoreboarding* ni pausas del pipeline por dependencias). La responsabilidad de respetar las dependencias entre datos y dejar los espacios necesarios recae completamente en el software (el compilador o el programador en ensamblador).
+
+**Única pausa: `auth`.** La autenticación calcula un hash de 12 rondas y ocupa la unidad CRYPTO 14 ciclos. Mientras tanto el hardware congela el pipeline. Es una pausa por **riesgo estructural** (un recurso ocupado), que el enunciado §4.1 permite si se documenta y justifica (§9.2). No depende de ningún dato, así que no cambia la regla de separación que el software debe respetar.
 
 ---
 
@@ -156,6 +164,11 @@ El bit 31 solo tiene significado en el slot 1, donde selecciona entre ALU1
 debe valer cero**, para dejar abierta la posibilidad de compartir otro slot más
 adelante.
 
+**Codificaciones reservadas.** Un programa no debe usar un `funct` marcado como
+«libre» ni un `sel = 1` en los slots 0, 2 o 3. El ensamblador las rechaza. Si
+aun así llegan al procesador, un `funct` libre se ejecuta como `nopi` y el bit
+`sel` de los slots 0, 2 y 3 se ignora.
+
 ### 4.2 Rangos
 
 | Campo | Bits | Con signo | Rango |
@@ -170,11 +183,23 @@ adelante.
 
 ### 4.3 Constantes de 32 bits
 
-Un literal de 32 bits no cabe en un inmediato de 18. Se construye en tres pasos:
+Un literal de 32 bits no cabe en un inmediato de 18. Se construye con una
+secuencia de instrucciones. `sll` es de formato R: la cantidad de desplazamiento
+viene de un registro, no de un inmediato, de modo que el 15 se carga primero en
+un registro temporal (aquí `t0`):
 
-1. `mov rd, altos_17` — Carga los 17 bits superiores en el registro destino.
-2. `sll rd, rd, 15` — Desplaza el valor 15 posiciones hacia la izquierda.
-3. `saddi rd, rd, bajos_15` — Suma con signo los 15 bits inferiores restantes.
+| Bundle | Slot 0 | Slot 1 | Efecto |
+|---|---|---|---|
+| 1 | `mov rd, altos_17` | `mov t0, 15` | Carga los 17 bits superiores y la cantidad de desplazamiento |
+| 2 | `nopi` | `nopi` | Separación entre dependientes (§9.1) |
+| 3 | `sll rd, rd, t0` | — | Desplaza 15 posiciones a la izquierda |
+| 4 | `nopi` | — | Separación |
+| 5 | `saddi rd, rd, bajos_15` | — | Suma con signo los 15 bits inferiores |
+
+Las dos cargas iniciales van en el mismo bundle, en las dos ALU, así que la
+secuencia ocupa los mismos bundles que si existiera un desplazamiento con
+inmediato. Los bundles de separación pueden llenarse con otras operaciones
+independientes.
 
 Como el inmediato tiene signo, solo 17 bits son útiles por paso. Dos pasos
 cubren 34 bits, suficiente para cualquier valor de 32. Se descartó incluir una
@@ -349,7 +374,8 @@ autenticación dinámica por contraseñas de un solo uso (Lamport OTP).
 | XOR de salida | 32 bits | combina el resultado de F con la mitad `rs1` en `feis` |
 | Registro de ancla OTP (`ancla_otp`) | 32 bits | almacena el token esperado de la cadena de Lamport activa |
 | Registro de estado | 3 bits útiles | `AUTH`, `KVLOCK`, `EXC` |
-| Comparador de credencial | 32 bits | compara $F(rs1, K_{\text{fija}})$ contra `ancla_otp` en `auth` |
+| Motor de hash `auth_hash32` | 320 bits de estado | calcula $H(rs1)$ con Ascon-Hash256, una ronda por ciclo (§7.2) |
+| Comparador de credencial | 32 bits | compara $H(rs1)$ contra `ancla_otp` en `auth` |
 | Lógica de control de acceso | — | habilita o bloquea las operaciones privilegiadas |
 
 **La función de ronda** implementa la referencia del enunciado:
@@ -365,12 +391,12 @@ rotación en el set: al encapsular la ronda completa dentro de la unidad, las
 rotaciones quedan internas y no requieren codificación propia ni ocupan slots
 del bundle.
 
-**Reutilización de la función F para autenticación.** La función $F$ no solo
-computa las rondas de Feistel4, sino que actúa como función unidireccional (*hash* de
-un solo sentido) para el protocolo Lamport OTP. Cuando se ejecuta `auth rs1`,
-la entrada de $F$ se alimenta con el token de 32 bits contenido en `rs1` y se
-suma con una constante fija cableada en silicio ($K_{\text{fija}} = \text{0x6A09E667}$),
-ahorrando compuertas adicionales.
+**Hash de autenticación.** El protocolo Lamport OTP (§7.2) usa una función $H$
+separada de $F$: Ascon-Hash256 (NIST SP 800-232) con entrada fija de 4 bytes y
+salida truncada a 32 bits. Se calcula con un motor secuencial de una ronda por
+ciclo que reutiliza la misma lógica de ronda 12 veces, en lugar de encadenar las
+12 rondas en una sola ruta combinacional. El detalle está en el diseño de la
+unidad (`microarchitecture.md` §3.10).
 
 **Una ronda por instrucción.** Un programa de cifrado o descifrado se construye
 encadenando cuatro invocaciones. Una instrucción que ejecutara las cuatro
@@ -396,15 +422,18 @@ cifrado y descifrado para la llave 0 (`k = 0`) se organiza de forma simétrica:
 | **2** | $R_3 \to \text{r4}$ | `feis r4, r4, r5, 0, 2` | `feis r4, r4, r5, 0, 1` | $r_4 \leftarrow L_2 \oplus F(R_2, K_{0,i})$ |
 | **3** | $R_4 \to \text{r5}$ | `feis r5, r5, r4, 0, 3` | `feis r5, r5, r4, 0, 0` | $r_5 \leftarrow L_3 \oplus F(R_3, K_{0,i})$ |
 
-Al terminar las 4 rondas, el bloque resultante queda disponible en el par (`r4` = $L_4$, `r5` = $R_4$). Para el descifrado se utiliza exactamente la misma alternancia de registros pero suministrando las subllaves en orden inverso (`3, 2, 1, 0`).
+Al terminar las 4 rondas, el bloque resultante queda disponible en el par (`r4` = $L_4$, `r5` = $R_4$).
+
+**Descifrado.** Usa la misma alternancia de registros con las subllaves en orden inverso (`3, 2, 1, 0`), pero **con las mitades intercambiadas**: se carga `r4` = $R_4$ y `r5` = $L_4$, y al terminar queda `r4` = $R_0$ y `r5` = $L_0$, que se guardan también intercambiadas. Sin el intercambio el resultado no es el texto original (verificado contra la implementación de referencia del enunciado, Fig. 1).
 
 **Aislamiento de la bóveda.** El multiplexor de subllave alimenta únicamente la
 función de ronda. No existe ningún camino desde la bóveda hacia el banco de
 registros ni hacia la interfaz de memoria, de modo que su contenido no puede
 extraerse por ninguna instrucción del set.
 
-**Latencia:** un ciclo. Todas las operaciones criptográficas caben en la etapa
-de ejecución.
+**Latencia:** un ciclo en todas las operaciones salvo `auth`, que ocupa 14
+ciclos en EX: uno de carga, doce de ronda y uno de finalización. Durante ese
+tiempo el pipeline se congela (§1.1, §9.2).
 
 ---
 
@@ -457,6 +486,13 @@ bundle completamente vacío son 128 bits en cero.
 Con operandos invertidos, `slt` cubre el mayor estricto y `sle` el mayor o
 igual, sin necesidad de instrucciones adicionales.
 
+**Precisiones.**
+- Las comparaciones `slt` y `sle` son **con signo** (complemento a dos).
+- En `sll`, `srl` y `sra`, la cantidad de desplazamiento son los **5 bits
+  bajos** de `rs2`; los demás bits se ignoran.
+- En `ifmov`, si `rs2 == 0` el registro `rd` **conserva su valor**: la
+  instrucción no escribe.
+
 **17 instrucciones. 15 códigos libres.**
 
 ### 6.2 BRU — slot 2
@@ -483,6 +519,17 @@ condicionales, `[0][funct 5][rd 4][rs1 4][reservado 14]` para `jefR`
 | `10010`–`11111` | — | Libres |
 
 Los desplazamientos y destinos se expresan en bundles, relativos al PC.
+
+**Precisiones.**
+- `PC` es el índice del bundle que contiene la instrucción de salto.
+- `blt` y `bge` comparan **con signo** (complemento a dos), igual que `slt` en
+  la ALU.
+- En `jas` y `jefR`, el enlace se escribe en el registro indicado por `rd`. Por
+  convención se usa `rl` (§8), pero cualquier registro es válido; con `rd = rz`
+  el enlace se descarta.
+- `jefR` salta al bundle indicado por los **22 bits bajos** de `rs1`, el ancho
+  del contador de programa. En uso normal `rs1` contiene un enlace guardado por
+  `jas`, cuyos bits altos valen cero.
 
 **8 instrucciones. 24 códigos libres.**
 
@@ -513,7 +560,7 @@ Formato unificado para la unidad criptográfica:
 |---|---|---|---|---|
 | `00000` | `nopi` | CRYPTO | Sin efecto | Ninguno |
 | `00001` | `feis rd, rs1, rs2, k, i` | CRYPTO | `rd = rs1 XOR F(rs2, subllave[k][i])` | `AUTH == 1` |
-| `00010` | `auth rs1` | CRYPTO | Valida token de 32 bits en `rs1`: si $F(rs1, K_{\text{fija}}) == \text{ancla}$, hace `AUTH = 1` y actualiza `ancla = rs1`. Si no, activa `EXC = 1`. `rd`, `rs2`, `k`, `i` deben valer cero | Ninguno |
+| `00010` | `auth rs1` | CRYPTO | Valida token de 32 bits en `rs1`: si $H(rs1) == \text{ancla}$, hace `AUTH = 1` y actualiza `ancla = rs1`. Si no, activa `EXC = 1`. `rd`, `rs2`, `k`, `i` deben valer cero | Ninguno |
 | `00011` | `logout` | CRYPTO | Elimina autorización (`AUTH = 0`). Todos los campos restantes en cero | Ninguno |
 | `00100` | `kv_write rs1, k, w` | CRYPTO | Escribe la palabra `w` (bits `i`) de la llave `k` desde `rs1`. `rd` y `rs2` en cero | `AUTH == 1` y `KVLOCK == 0` |
 | `00101` | `kv_lock` | CRYPTO | Sella la bóveda contra escrituras (`KVLOCK = 1`). Permanece bloqueada de forma permanente hasta un reinicio físico (`reset`). Todos los campos restantes en cero | `AUTH == 1` |
@@ -521,6 +568,23 @@ Formato unificado para la unidad criptográfica:
 | `00111`–`11111` | — | — | Libres | — |
 
 **7 instrucciones. 25 códigos libres.**
+
+**Operaciones no autorizadas.** Toda instrucción que se ejecute sin el privilegio
+requerido **no tiene efecto** (no escribe `rd`, no modifica la bóveda ni el
+ancla) y activa `EXC = 1`. Esto aplica a:
+
+| Instrucción | Condición de rechazo |
+|---|---|
+| `feis` | `AUTH == 0` |
+| `kv_write` | `AUTH == 0` o `KVLOCK == 1` |
+| `kv_lock` | `AUTH == 0` |
+| `sanc` | `AUTH == 0` |
+
+**`auth` fallido.** Si la credencial no es válida, `auth` pone `AUTH = 0`
+(cierra cualquier sesión abierta) y `EXC = 1`. El ancla no cambia.
+
+**Limpieza de `EXC`.** Solo un `auth` exitoso o el `reset` ponen `EXC = 0`. Así
+un intento rechazado queda registrado hasta la siguiente autenticación válida.
 
 **Uso de registros para credenciales de 32 bits:** Las instrucciones `auth` y `sanc` leen su token de 32 bits desde un registro general (`rs1`), eliminando la limitación de los inmediatos de 18 bits. El programador construye el valor de 32 bits utilizando la secuencia de carga de constantes descrita en la Sección 4.3 antes de invocar la instrucción.
 
@@ -628,8 +692,8 @@ reinicio físico (`reset`) del procesador.
 
 ### 7.2 Control de acceso: Protocolo Lamport OTP
 
-Para proteger la bóveda contra espías en el bus de datos o intentos de reutilizar contraseñas capturadas, el procesador usa contraseñas de un solo uso basadas en **cadenas de Lamport**.
- 
+Para impedir que una contraseña capturada se reutilice, el procesador usa contraseñas de un solo uso basadas en **cadenas de Lamport**.
+
 **Generación fuera de línea (*Offline* — Script en Python):**
 
 $$\underbrace{w_0}_{\text{Secreto}} \xrightarrow{H} w_1 \xrightarrow{H} w_2 \xrightarrow{H} \cdots \xrightarrow{H} w_{N-1} \xrightarrow{H} \underbrace{w_N}_{\text{Ancla grabada en HW}}$$
@@ -638,26 +702,30 @@ $$\underbrace{w_0}_{\text{Secreto}} \xrightarrow{H} w_1 \xrightarrow{H} w_2 \xri
 
 | Sesión | Token enviado por software (`auth rs1`) | Verificación en Hardware | Acción del Hardware |
 |:---:|:---:|:---:|:---|
-| **1** | $w_{N-1}$ | ¿$F(w_{N-1}, K_{\text{fija}}) == w_N$? | $\text{ancla} \leftarrow w_{N-1}$, activa `AUTH = 1` |
-| **2** | $w_{N-2}$ | ¿$F(w_{N-2}, K_{\text{fija}}) == w_{N-1}$? | $\text{ancla} \leftarrow w_{N-2}$, activa `AUTH = 1` |
-| **3** | $w_{N-3}$ | ¿$F(w_{N-3}, K_{\text{fija}}) == w_{N-2}$? | $\text{ancla} \leftarrow w_{N-3}$, activa `AUTH = 1` |
+| **1** | $w_{N-1}$ | ¿$H(w_{N-1}) == w_N$? | $\text{ancla} \leftarrow w_{N-1}$, activa `AUTH = 1` |
+| **2** | $w_{N-2}$ | ¿$H(w_{N-2}) == w_{N-1}$? | $\text{ancla} \leftarrow w_{N-2}$, activa `AUTH = 1` |
+| **3** | $w_{N-3}$ | ¿$H(w_{N-3}) == w_{N-2}$? | $\text{ancla} \leftarrow w_{N-3}$, activa `AUTH = 1` |
 
 #### ¿Cómo funciona?
 
-1. **Aprovechar el hardware existente:** Para no gastar área metiendo un algoritmo de hash pesado (como SHA-256), usamos la misma función de ronda $F$ de Feistel4 sumándole una constante fija ($K_{\text{fija}} = \text{0x6A09E667}$).
+1. **La función $H$:** Ascon-Hash256 (NIST SP 800-232), especializada a una entrada fija de 4 bytes (el token) y una salida truncada a 32 bits:
 
-$$H(x) = F(x, K_{\text{fija}}) = (\text{ROL32}(x, 5) + K_{\text{fija}}) \oplus \text{ROL32}(x, 13)$$
+$$H(x) = \text{Ascon-Hash256}(x)\big[31{:}0\big]$$
 
-* **¿Por qué actúa como función de un solo sentido (no invertible)?** Aunque el cifrador Feistel completo es reversible por su estructura cruzada, la función interna $F(x, k)$ **en sí misma no es invertible**. Al ser una estructura ARX (*Addition-Rotation-XOR*), combina la propagación de acarreos no lineales de la suma modular ($\text{mod } 2^{32}$) con dos rotaciones distintas (5 y 13 bits) mezcladas mediante XOR. Esta combinación destruye la linealidad de los bits: calcular el resultado hacia adelante toma solo 1 ciclo de reloj, pero despejar algebraicamente la entrada $x$ a partir del resultado es imposible en tiempo real sin una búsqueda exhaustiva.
+   El token entra en el orden `x[7:0]`, `x[15:8]`, `x[23:16]`, `x[31:24]`, con el relleno estándar. El hardware la calcula en 14 ciclos (§5.5).
 
-2. **Crear la cadena de contraseñas:** En un entorno de prueba o software del cliente (como un programa de Python) se toma una clave secreta inicial $w_0$ y se le aplica la función $H$ varias veces seguidas para crear una cadena ($w_1, w_2, \dots, w_N$). El último valor generado ($w_N$, llamado **Ancla**) es el que se le programa al procesador en su registro interno `ancla_otp` durante el encendido o reset.
+* **Alcance de esta elección.** Ascon es un hash estándar: a diferencia de la versión anterior basada en $F$, que se invertía con $2^8$ candidatos, $H$ no se invierte en la práctica. La limitación que se mantiene es el **ancho del token**: con 32 bits, una búsqueda exhaustiva de $2^{32}$ candidatos es viable con cualquier función $H$. Es inherente al ancho de palabra de la arquitectura y se declara como limitación conocida.
+
+2. **Crear la cadena de contraseñas:** En un entorno de prueba o software del cliente (como un programa de Python) se toma una clave secreta inicial $w_0$ y se le aplica la función $H$ varias veces seguidas para crear una cadena ($w_1, w_2, \dots, w_N$). El último valor generado ($w_N$, llamado **Ancla**) es el que se le programa al procesador en su registro interno `ancla_otp` durante el arranque protegido; el reset normal conserva el ancla activa.
 
 3. **Verificar cada inicio de sesión:** Las contraseñas se usan en orden inverso ($w_{N-1}, w_{N-2}, \dots$). Cuando el usuario quiere entrar, pone su token en un registro y ejecuta `auth rs1`:
-   * El hardware le aplica $F(rs1, K_{\text{fija}})$ y lo compara con el ancla que tiene guardada.
+   * El hardware calcula $H(rs1)$ y lo compara con el ancla que tiene guardada.
    * Si coincide, activa `AUTH = 1` y actualiza automáticamente su ancla interna con este nuevo valor (`ancla_otp <= rs1`).
    * Si no coincide, pone `AUTH = 0` y levanta la bandera de error `EXC = 1`.
 
-4. **Protección contra espías:** Si alguien intercepta el bus y copia la contraseña que pasó ($w_{k-1}$), no le sirve de nada: esa contraseña ya se usó y el procesador ahora exige la anterior de la cadena ($w_{k-2}$), la cual no se puede calcular a partir de la que vio debido a la no-invertibilidad de $F$.
+4. **Qué protege y qué no:**
+   * **Protege contra la reutilización directa.** Una contraseña ya consumida ($w_{k-1}$) no vuelve a servir: el ancla avanzó y el procesador ahora exige la anterior de la cadena ($w_{k-2}$).
+   * **No protege contra una búsqueda exhaustiva.** Con tokens de 32 bits, quien intercepte $w_{k-1}$ puede probar los $2^{32}$ valores posibles hasta encontrar $w_{k-2}$. El mecanismo demuestra el protocolo de Lamport en hardware, no es una garantía de seguridad para uso real.
 
 #### Cambiar de contraseña (`sanc rs1`)
 
@@ -670,9 +738,24 @@ Como la cadena de contraseñas es finita y en algún momento se agota, el usuari
 
 *(Si alguien intenta ejecutar `sanc` sin estar autenticado previamente con `AUTH == 1`, la instrucción se ignora y se activa la excepción `EXC = 1`).*
 
-#### Reinicio de fábrica (Hard Reset)
+#### Reset normal y arranque protegido
 
-Si el usuario pierde su lista de contraseñas, no existe ninguna instrucción por software que permita saltarse la seguridad. La única forma de recuperar el procesador es activando la señal física de `reset`, la cual restaura el ancla inicial de fábrica (`0xCAFEBABE`), borra las llaves de la bóveda y limpia las banderas de estado (`AUTH = 0`, `KVLOCK = 0`, `EXC = 0`).
+Un reset normal borra las llaves, limpia `AUTH`, `KVLOCK` y `EXC`, y cancela
+el hash pendiente. **Conserva el ancla activa**, incluso si fue modificada
+por `auth` o `sanc`, para que reiniciar no vuelva a habilitar tokens consumidos.
+
+La inicialización de fábrica usa `rst = 1` e `init_anchor = 1` durante al
+menos una subida de reloj; luego desactiva `init_anchor` antes de liberar
+`rst`. Esta señal procede del arranque o configuración protegida, no de
+una instrucción ni del reset normal. Carga `RESET_ANCHOR`, último eslabón de
+la cadena de fábrica: para la semilla `0xCAFEDECE` y 100 tokens,
+`RESET_ANCHOR = 0xFEFF95FF`; los primeros tokens son `0xF47BD70B` y `0xA45326BA`.
+
+Si se pierde la lista de tokens, un reset normal no restaura la cadena:
+se necesita el arranque/configuración protegida para volver al ancla de
+fábrica, o una sesión válida para ejecutar `sanc`. La conservación del
+ancla es volátil: no sobrevive a pérdida de alimentación o reconfiguración.
+Estos mecanismos no modifican la codificación de las instrucciones.
 
 ---
 
@@ -683,9 +766,17 @@ Si el usuario pierde su lista de contraseñas, no existe ninguna instrucción po
 | Registro | Codificación | Rol | Naturaleza |
 |---|---|---|---|
 | `rz` | 0 | Constante cero cableada | Hardware: las lecturas retornan cero y las escrituras se descartan |
-| `rl` | 1 | Enlace de retorno | Hardware: `jas` escribe aquí |
+| `rl` | 1 | Enlace de retorno | Convención: destino por defecto del enlace de `jas` y `jefR` (§6.2) |
 | `rg` | 3 | Puntero global | Convención: base de la zona de datos estáticos |
-| `rx`, `ra`–`rt` | 2, 4–15 | Trece temporales generales | Libres |
+| `rx` | 2 | Temporal general | Libre |
+| `t0`–`t11` | 4–15 | Doce temporales generales: `tN` es el registro `N + 4` | Libres |
+
+Los nombres son alias del ensamblador: `r0`–`r15` son válidos siempre, y
+`t0` y `r4` designan el mismo registro.
+
+| Nombre | `rz` | `rl` | `rx` | `rg` | `t0` | `t1` | `t2` | `t3` | `t4` | `t5` | `t6` | `t7` | `t8` | `t9` | `t10` | `t11` |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Número | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 |
 
 ### 8.1 Sobre la especialización de registros
 
@@ -710,7 +801,7 @@ instrucción lo nombra por número.
 |---|---|---|---|
 | 0 | `AUTH` | `auth` con token válido | Habilita las operaciones sobre la bóveda |
 | 1 | `KVLOCK` | `kv_lock` | Bloquea la bóveda contra escrituras |
-| 2 | `EXC` | Operación no autorizada o credencial inválida | Señala un error de acceso o trampa de seguridad |
+| 2 | `EXC` | Operación no autorizada o credencial inválida (§6.4) | Señala un error de acceso. Solo lo limpian un `auth` exitoso o el `reset` |
 | 3–31 | — | — | Reservados |
 
 ---
@@ -719,7 +810,7 @@ instrucción lo nombra por número.
 
 **Pipeline de cuatro etapas y flujo de datos.**
 
-![Organización general del procesador y flujo de datos](docs/images/organizacion_procesador.png)
+![Organización general del procesador y flujo de datos](img/organizacion_procesador.png)
 
 Una etapa adicional dedicada al acceso a memoria aumentaría en uno la cantidad
 de bundles de separación que el generador de código debe dejar entre
@@ -727,10 +818,12 @@ operaciones dependientes, sin beneficio funcional que lo compense.
 
 ### 9.1 Escritura y lectura del banco de registros en flancos opuestos
 
-El banco de registros se **escribe en el flanco de subida y se lee en el flanco
-de bajada** del mismo ciclo. Como dentro de un ciclo la subida precede a la
-bajada, un resultado escrito por la etapa WB queda disponible para la etapa ID
-en ese mismo ciclo, sin necesidad de lógica de adelantamiento.
+El banco de registros se **escribe en la primera mitad del ciclo y se lee en la
+segunda**: la escritura ocurre en el flanco de bajada del reloj y la lectura es
+combinacional. Como los registros de segmentación avanzan en el flanco de
+subida, el valor que la etapa WB escribe a mitad del ciclo ya está disponible
+para la etapa ID antes de que termine ese mismo ciclo, sin necesidad de lógica
+de adelantamiento.
 
 | Esquema de acceso al banco | Separación requerida entre operaciones dependientes |
 |---|---|
@@ -748,6 +841,22 @@ Todas las unidades funcionales escriben sus resultados en la etapa WB. El
 generador de código trabaja con un único valor de separación en lugar de una
 tabla de latencias por unidad.
 
+**Excepción: `auth`.** Ocupa CRYPTO 14 ciclos y el hardware congela el
+pipeline completo mientras tanto (PC, IF/ID e ID/EX se conservan; EX/WB recibe
+burbujas; los almacenamientos y saltos se aplican una sola vez al terminar). Es
+una pausa por riesgo estructural, permitida por el enunciado §4.1, y es
+transparente para el software: la separación de 1 bundle no cambia y el
+compilador no inserta nada. El bundle siguiente a `auth` ya ve el estado de
+acceso actualizado.
+
+**Por qué pausa y no latencia expuesta.** Se evaluó la alternativa de no pausar
+y que el compilador dejara 13 bundles sin operaciones CRYPTO después de cada
+`auth`. Simulando un programa completo, un error de calendarización de un solo
+bundle hacía que un `kv_write` se rechazara en silencio: el archivo se cifraba
+con una llave equivocada y el descifrado igual devolvía el original, de modo
+que una prueba de ida y vuelta no lo detectaba. La pausa cuesta 13 ciclos por
+`auth` (menos del 1 % al cifrar 1 KB) y elimina ese riesgo.
+
 ### 9.3 Semántica de lectura dentro de un bundle
 
 Los cuatro slots leen sus operandos del banco de registros durante la etapa ID,
@@ -759,7 +868,22 @@ Esta semántica permite que un mismo bundle incremente una variable de control,
 la compare contra un límite y la use como índice, con los tres slots operando
 de forma coherente sobre el valor anterior.
 
-**Dos slots del mismo bundle no deben escribir el mismo registro destino.**
+**Dos slots del mismo bundle no deben escribir el mismo registro destino.** El
+ensamblador lo rechaza; el hardware no lo verifica y el resultado queda
+indefinido.
+
+La regla aplica también a los saltos: la BRU lee sus operandos en ID como los
+demás slots, de modo que un salto condicional que compara un valor producido
+por otro slot necesita la misma separación de un bundle. Un salto **no** ve el
+resultado de una ALU de su propio bundle.
+
+### 9.4 Dependencias a través de memoria
+
+La memoria de datos se escribe al final de la etapa EX y se lee durante la etapa
+EX. Un `sw` (o `sb`) y un `lw` (o `lb`) a la misma dirección **no requieren
+separación**: si el `lw` está en el bundle inmediatamente siguiente, ya obtiene
+el valor almacenado. La separación de un bundle aplica a las dependencias entre
+**registros**, incluido el uso del registro destino de una carga.
 
 ---
 
@@ -768,6 +892,12 @@ de forma coherente sobre el valor anterior.
 **Vaciado de pipeline, sin *delay slots* explícitos.** Los saltos se resuelven
 en la etapa de decodificación, de modo que se descarta un único bundle por
 salto tomado.
+
+**Un bundle que contiene un salto se ejecuta completo.** Las operaciones de los
+demás slots de ese bundle se ejecutan siempre, se tome o no el salto; lo que se
+descarta es el bundle **siguiente**, que ya había ingresado a la etapa de
+búsqueda. El generador de código puede, y debe, colocar trabajo útil junto al
+salto.
 
 Los *delay slots* se descartaron por tres razones:
 
@@ -779,3 +909,101 @@ Los *delay slots* se descartaron por tres razones:
 3. Llenar un hueco requiere una operación independiente, que es el mismo
    recurso escaso que el generador de código emplea para llenar los demás slots
    del bundle.
+
+---
+
+## 11. Sintaxis del ensamblador
+
+El ensamblador propio traduce un programa escrito con esta sintaxis al archivo
+de inicialización de la memoria de instrucciones (formato en
+`microarchitecture.md` §1.5). Es la misma sintaxis que emite el compilador de
+CE1108, de modo que ambos producen programas intercambiables.
+
+### 11.1 Estructura
+
+- **Un bundle por línea**, entre llaves, con los **cuatro slots siempre
+  presentes**, separados por `|`, en orden: slot 0, slot 1, slot 2, slot 3.
+- **Comentarios** con `#`, hasta el final de la línea.
+- **Etiquetas** con `nombre:`, en su propia línea o antes de un bundle. Una
+  etiqueta vale el **índice del bundle** que la sigue.
+- Las líneas vacías se ignoran.
+
+```
+# Cuenta en r4 mientras r4 < r5.
+# blt lee el r4 anterior al saddi del mismo bundle (§9.3): termina con r4 = 4.
+inicio:
+  { mov r4, 0        | mov r5, 3 | nopi             | nopi }
+  { nopi             | nopi      | nopi             | nopi }   # separación
+lazo:
+  { saddi r4, r4, 1  | nopi      | blt r4, r5, lazo | nopi }
+```
+
+Salida del ensamblador para este programa (un bundle por línea, slot 3 a la
+izquierda):
+
+```
+00000000_00000000_49400003_49000000
+00000000_00000000_00000000_00000000
+00000000_0D500000_00000000_41100001
+```
+
+### 11.2 Operandos
+
+| Elemento | Forma |
+|---|---|
+| Registro | `r0` a `r15`, o los nombres de la §8: `rz`, `rl`, `rx`, `rg`, `t0`–`t11` |
+| Inmediato | Decimal con signo (`-5`) o hexadecimal (`0x1F`) |
+| Destino de salto | Una etiqueta, o un desplazamiento entero en bundles. Con etiqueta, el ensamblador calcula `etiqueta − PC` |
+| `k`, `i`, `w` | Enteros de 0 a 3 |
+
+### 11.3 Formas de cada instrucción
+
+| Slot | Unidad | Formas |
+|---|---|---|
+| 0 o 1 | ALU | `add`/`sub`/`and`/`or`/`xor`/`sll`/`srl`/`sra`/`slt`/`sle`/`seq`/`sne`/`ifmov rd, rs1, rs2` · `saddi`/`xori rd, rs1, imm` · `mov rd, imm` |
+| 1 | CRYPTO | `feis rd, rs1, rs2, k, i` · `auth rs1` · `logout` · `kv_write rs1, k, w` · `kv_lock` · `sanc rs1` |
+| 2 | BRU | `beq`/`bne`/`blt`/`bge rs1, rs2, destino` · `jef destino` · `jas rd, destino` · `jefR rd, rs1` |
+| 3 | LSU | `lw`/`lb rd, imm(rs1)` · `sw`/`sb rs2, imm(rs1)` |
+| Cualquiera | — | `nopi` |
+
+En el slot 1, el ensamblador pone `sel = 1` si la instrucción es de CRYPTO y
+`sel = 0` si es de la ALU.
+
+### 11.4 Errores que el ensamblador rechaza
+
+- Un bundle sin exactamente cuatro slots.
+- Una instrucción en un slot que no corresponde a su unidad (por ejemplo, `lw`
+  en el slot 0).
+- Un inmediato, desplazamiento o destino fuera de rango (§4.2).
+- Una etiqueta no definida o definida dos veces.
+- Dos slots del mismo bundle que escriben el mismo registro, salvo `rz` (§9.3).
+- Un mnemónico desconocido.
+
+---
+
+## 12. Registro de cambios posteriores a la Entrega 1
+
+El enunciado (§3) exige que todo cambio posterior a la Entrega 1 se justifique y
+se comunique formalmente. Ninguno de estos cambios modifica la codificación
+binaria: los vectores de la §6.5 siguen siendo válidos.
+
+| # | Sección | Cambio | Justificación |
+|---|---|---|---|
+| C-01 | 4.1 | Comportamiento de las codificaciones reservadas: `funct` libre se ejecuta como `nopi`; `sel` se ignora fuera del slot 1 | El documento no definía qué ocurre con ellas |
+| C-02 | 4.3 | La secuencia de constantes de 32 bits usaba `sll rd, rd, 15`, pero `sll` es de formato R y no admite inmediato. Se corrige cargando el 15 en un registro, en el mismo bundle que la parte alta | Error de la Entrega 1. La secuencia corregida ocupa los mismos bundles |
+| C-03 | 6.1 | `slt` y `sle` son con signo; los desplazamientos usan los 5 bits bajos de `rs2`; `ifmov` no escribe si `rs2 == 0` | Precisión de semántica ya implícita |
+| C-04 | 6.2 | `blt` y `bge` son con signo | Coherencia con `slt`; sin signo, un ciclo con límite negativo no se ejecutaría |
+| C-05 | 6.2, 8 | `jas` y `jefR` escriben el enlace en el `rd` indicado; `rl` pasa de «hardware» a «convención» | El formato J ya tenía `rd` libre; la §8 contradecía a la §6.2 |
+| C-06 | 6.2 | `jefR` usa los 22 bits bajos de `rs1` | El contador de programa tiene el ancho del sumador de destino (§5.3) |
+| C-07 | 6.4 | `feis`, `kv_write` y `kv_lock` sin privilegio no tienen efecto y activan `EXC`, igual que `sanc` | El enunciado §4.4.1 exige que toda operación no autorizada genere excepción |
+| C-08 | 6.4, 7.2 | Un `auth` fallido pone `AUTH = 0` y `EXC = 1` | La §6.4 y la §7.2 decían cosas distintas |
+| C-09 | 6.4, 8.2 | `EXC` solo se limpia con un `auth` exitoso o con `reset` | No estaba definido |
+| C-10 | 5.5, 7.2 | Se corrige la afirmación de que $F$ no es invertible y se declara el alcance real del mecanismo | La afirmación era falsa y verificable: $F$ se invierte con $2^8$ candidatos |
+| C-11 | 9.1 | La escritura del banco de registros ocurre en el flanco de bajada y la lectura es combinacional | Con los registros de segmentación en flanco de subida, escribir en subida exigiría 2 bundles de separación. La separación de 1 bundle no cambia |
+| C-12 | 9.3, 9.4, 10 | Se explicitan: el salto no ve resultados de su propio bundle; `sw`→`lw` no requiere separación; un bundle con salto se ejecuta completo | Semántica ya implícita, ahora explícita para el compilador |
+| C-13 | 11 | Se agrega la sintaxis del ensamblador | El enunciado §6.1 exige entregarla como parte del contrato con CE1108 |
+| C-14 | 8 | Los temporales 4–15 se nombran `t0`–`t11` | La Entrega 1 los nombraba «`ra`–`rt`» sin indicar qué número correspondía a cada nombre. Son alias del ensamblador; la codificación no cambia |
+| C-15 | 5.5, 6.4, 7.2 | $H$ deja de ser $F(x, K_{\text{fija}})$ y pasa a ser Ascon-Hash256 truncado a 32 bits. `RESET_ANCHOR` pasa a ser el final de una cadena con esa $H$ | $F$ se invertía con $2^8$ candidatos (C-10). Ascon corrige esa debilidad; la limitación de 32 bits del token se mantiene y se declara |
+| C-16 | 1.1, 5.5, 9.2 | `auth` ocupa 14 ciclos y congela el pipeline por riesgo estructural | El hash secuencial necesita 14 ciclos. El enunciado §4.1 permite pausas estructurales documentadas. Es transparente para el compilador |
+| C-17 | 5.5 | El descifrado carga y guarda las mitades intercambiadas | La descripción anterior («misma alternancia») no devolvía el texto original |
+| C-18 | 7.2 | El reset normal conserva el ancla; `init_anchor` la inicializa durante el arranque protegido. Ancla de demostración `0xFEFF95FF` | Evita que un reset normal habilite tokens ya consumidos; coincide con el diseño Ascon implementado por Saddy. La integración del arranque en el core queda pendiente de Luis |

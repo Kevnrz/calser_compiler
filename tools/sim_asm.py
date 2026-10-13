@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Modelo de bundles de la ISA local; CRYPTO se valida pero queda sin efecto.
+"""Modelo de bundles con Feistel4 y bóveda; autenticación de prueba (sin Ascon).
 
 Registros inicialmente cero y memoria little endian de 64 KiB. Los resultados
 no son visibles al bundle inmediatamente siguiente. Un salto tomado introduce
 un ciclo de descarte y continúa en su destino (no ejecuta el PC+1 prefetched).
-No ensambla binarios ni modela la bóveda, sus privilegios o sus excepciones.
+No ensambla binarios. Según la tarea actualizada, auth acepta todos los tokens
+salvo 999; esta regla no valida Ascon ni una cadena real de Lamport.
 """
 import argparse
 from dataclasses import dataclass
@@ -32,6 +33,15 @@ class AsmError(ValueError):
 def signed(value):
     value &= MASK
     return value if value < 0x80000000 else value - (1 << 32)
+
+
+def rotate_left(value, bits):
+    value &= MASK
+    return ((value << bits) | (value >> (32 - bits))) & MASK
+
+
+def feistel_f(value, key):
+    return ((rotate_left(value, 5) + key) & MASK) ^ rotate_left(value, 13)
 
 
 def register(token):
@@ -193,6 +203,48 @@ class Simulator:
         self.warnings = []
         self.warn = warn
         self.reason = ""
+        self.auth = False
+        self.kv_lock = False
+        self.exc = False
+        self.anchor = 0  # Solo observable desde Python, sin hash de autenticación.
+        self.vault = [[0] * 4 for _ in range(4)]
+
+    def load_data(self, data, address=0x1000):
+        """Inyecta bytes en la zona de archivos, sin truncar ni extender memoria."""
+        if not 0x1000 <= address < len(self.memory) or address + len(data) > len(self.memory):
+            raise AsmError("el archivo debe caber en la zona 0x1000–0xFFFF")
+        self.memory[address:address + len(data)] = data
+
+    def execute_crypto(self, op, snapshot):
+        """Devuelve el resultado de feis, o None cuando no escribe registro."""
+        self.crypto_count += 1
+        mn, args = op.mnemonic, op.args
+        if mn == "auth":
+            token = snapshot[args[0]]
+            self.auth = token != 999
+            self.exc = not self.auth
+            if self.auth:
+                self.anchor = token
+            # auth ocupa 14 ciclos: uno ya contado en step y 13 de pausa.
+            self.cycles += 13
+        elif mn == "logout":
+            self.auth = False
+        elif not self.auth:
+            self.exc = True
+        elif mn == "feis":
+            _, left, right, key, word = args
+            return snapshot[left] ^ feistel_f(snapshot[right], self.vault[key][word])
+        elif mn == "kv_write":
+            if self.kv_lock:
+                self.exc = True
+            else:
+                source, key, word = args
+                self.vault[key][word] = snapshot[source]
+        elif mn == "kv_lock":
+            self.kv_lock = True
+        elif mn == "sanc":
+            self.anchor = snapshot[args[0]]
+        return None
 
     def commit(self):
         for rd, value in self.pending.items():
@@ -228,10 +280,7 @@ class Simulator:
             if mn == "nopi":
                 continue
             if mn in CRYPTO:
-                self.crypto_count += 1
-                if mn == "feis":
-                    # Conserva rd, pero mantiene la dependencia para calendarización.
-                    value = self.regs[op.dest]
+                value = self.execute_crypto(op, snapshot)
             elif mn == "mov":
                 value = args[1]
             elif mn in {"saddi", "xori"}:
@@ -272,7 +321,7 @@ class Simulator:
                 target = branch_target(args[-1], self.pc, self.program.labels, 22)
                 if mn == "jas": value = self.pc + 1
             elif mn == "jefR":
-                target = snapshot[args[1]]
+                target = snapshot[args[1]] & ((1 << 22) - 1)
                 value = self.pc + 1
             if value is not None and op.dest not in (None, 0):
                 writes[op.dest] = value & MASK
@@ -283,7 +332,7 @@ class Simulator:
             # El bundle del salto se completa; el prefetched se descarta.
             self.cycles += 1
             self.commit()
-            if target == self.pc:
+            if target == self.pc and bundle.slots[2].mnemonic == "jef":
                 self.reason = "salto a sí mismo"
                 return False
             if not 0 <= target < len(self.program.bundles):
@@ -312,7 +361,9 @@ class Simulator:
         lines = [f"Fin: {self.reason}; bundles ejecutados: {self.steps}; ciclos: {self.cycles}",
                  f"Avisos de separación: {len(self.warnings)}"]
         if self.crypto_count:
-            lines.append(f"CRYPTO sin efecto: {self.crypto_count} instrucciones; bóveda no simulada")
+            lines.append(f"CRYPTO: {self.crypto_count} instrucciones; autenticación de prueba "
+                         "(sin Ascon; token 999 falla)")
+            lines.append(f"Estado: AUTH={int(self.auth)} KVLOCK={int(self.kv_lock)} EXC={int(self.exc)}")
         lines.append("Memoria 0x0000–0x00FF (palabras no nulas):")
         words = [(addr, int.from_bytes(self.memory[addr:addr + 4], 'little'))
                  for addr in range(0, 256, 4)]
@@ -324,14 +375,37 @@ class Simulator:
         return '\n'.join(lines)
 
 
+def address_argument(token):
+    try:
+        return integer(token)
+    except AsmError as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('asm', type=Path, help='archivo con etiquetas y bundles de cuatro slots')
     parser.add_argument('--max-bundles', type=int, default=100000, help='límite de bundles ejecutados')
+    parser.add_argument('--load-data', type=Path, help='archivo binario a inyectar antes de ejecutar')
+    parser.add_argument('--data-address', type=address_argument, default=0x1000,
+                        help='dirección de carga decimal o hexadecimal (por defecto 0x1000)')
+    parser.add_argument('--dump-memory', type=Path, help='guardar los 64 KiB finales como archivo binario')
     options = parser.parse_args(argv)
     try:
         simulator = Simulator(parse(options.asm.read_text()), warn=lambda message: print(message, file=sys.stderr))
+        if options.load_data:
+            simulator.load_data(options.load_data.read_bytes(), options.data_address)
+        elif options.data_address != 0x1000:
+            raise AsmError("--data-address requiere --load-data")
         simulator.run(options.max_bundles)
+        if options.dump_memory:
+            simulator_path = options.asm.resolve()
+            inputs = {simulator_path}
+            if options.load_data:
+                inputs.add(options.load_data.resolve())
+            if options.dump_memory.resolve() in inputs:
+                raise AsmError("el volcado de memoria no debe sobrescribir un archivo de entrada")
+            options.dump_memory.write_bytes(simulator.memory)
         print(simulator.report())
         return 1 if simulator.warnings or simulator.reason == "límite de bundles" else 0
     except (OSError, UnicodeError, AsmError) as error:

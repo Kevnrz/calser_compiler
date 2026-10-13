@@ -9,7 +9,7 @@ BUILD_DIR = build
 GEN_DIR = $(BUILD_DIR)/generated
 OBJ_DIR = $(BUILD_DIR)/obj
 
-SOURCES = main ast symbol_table semantic diagnostics label_table codegen generate
+SOURCES = main ast symbol_table semantic diagnostics label_table codegen generate codegen_crypto
 OBJECTS = $(addprefix $(OBJ_DIR)/,$(addsuffix .o,$(SOURCES))) \
           $(OBJ_DIR)/parser.tab.o $(OBJ_DIR)/lex.yy.o
 
@@ -50,13 +50,19 @@ $(BUILD_DIR)/emitir_arreglos: src/codegen_array.c pruebas/arreglos/emitir.c incl
 check-arrays: $(BUILD_DIR)/emitir_arreglos
 	python3 pruebas/arreglos/probar.py $<
 
-check: check-arith check-arrays
+$(BUILD_DIR)/emitir_crypto: src/codegen.c src/codegen_crypto.c pruebas/crypto/emitir.c include/codegen.h include/codegen_crypto.h include/ast.h include/symbol_table.h | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
+
+check-crypto: $(BUILD_DIR)/emitir_crypto
+	python3 pruebas/crypto/probar.py $<
+
+check: check-arith check-arrays check-crypto
 
 clean:
 	rm -f $(TARGET) $(OBJECTS) $(OBJECTS:.o=.d)
 	rm -f $(GEN_DIR)/parser.tab.c $(GEN_DIR)/parser.tab.h $(GEN_DIR)/lex.yy.c
-	rm -f $(BUILD_DIR)/emitir_aritmetica $(BUILD_DIR)/emitir_arreglos
+	rm -f $(BUILD_DIR)/emitir_aritmetica $(BUILD_DIR)/emitir_arreglos $(BUILD_DIR)/emitir_crypto
 
 -include $(OBJECTS:.o=.d)
 
-.PHONY: all clean check check-arith check-arrays
+.PHONY: all clean check check-arith check-arrays check-crypto

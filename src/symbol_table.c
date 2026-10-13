@@ -48,6 +48,7 @@ Symbol *symbol_create(const char *name,
     symbol->parameter_count = 0;
     symbol->area_base = -1;
     symbol->area_size = 0;
+    symbol->temp_base = -1;
     symbol->param_list = NULL;
     symbol->param_capacity = 0;
 
@@ -296,6 +297,7 @@ void symbol_table_print(Scope *scope) {
 
                 print_address("area", symbol->area_base);
                 printf(" size=%d", symbol->area_size);
+                print_address("temp_base", symbol->temp_base);
             }
             else {
 

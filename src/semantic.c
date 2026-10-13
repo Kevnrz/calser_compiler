@@ -278,6 +278,7 @@ static void discard_symbol(Symbol *symbol) {
 // M-2: variables de ccom en 0x0000–0x0FFF; desde 0x1000, archivos de load_file
 #define DATA_BASE  0x0000
 #define DATA_LIMIT 0x1000          // primera dirección que NO se puede usar
+#define TEMP_WORDS 12             // una casilla para cada registro t0–t11
 
 static int next_address = DATA_BASE;   // libro §6.3.4: el "offset"
 
@@ -2259,6 +2260,7 @@ static int analyze_function(ASTNode *node) {
      * +4  variable de retorno, si no es void
      * ... parámetros, en orden
      * ... locales de todos sus bloques, en el orden del recorrido
+     * ... 12 palabras para salvar temporales vivos (también en main)
      */
     function->area_base = next_address;
 
@@ -2330,7 +2332,11 @@ static int analyze_function(ASTNode *node) {
                            function->name);
     }
 
-    // El área termina donde quedó el offset.
+    // Reserva al final del área espacio para salvar t0–t11 en llamadas.
+    reserve(TEMP_WORDS * type_width(TYPE_INT), function->name, node,
+            &function->temp_base);
+
+    // El área termina donde quedó el offset, incluidos los temporales.
     function->area_size = next_address - function->area_base;
 
     // Return to global scope.

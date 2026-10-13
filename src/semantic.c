@@ -1835,8 +1835,14 @@ static int analyze_loop_s(ASTNode *node) {
         control->line = node->line;
         control->decl_node = node;
 
-        if (insert_symbol(control, node))
-            reserve(control->width, control->name, node, &control->address);
+        if (insert_symbol(control, node)) {
+            reserve(control->width,
+                    control->name,
+                    node,
+                    &control->address);
+
+            identifier->symbol = control;
+        }
     }
 
     // El cuerpo comparte el ámbito del S con su variable (no abre otro).

@@ -7,7 +7,7 @@ out="${1:-pruebas/resultados.txt}"
 : > "$out"
 
 for f in pruebas/*.cls; do
-    ./ccom "$f" > /tmp/ccom_out.txt 2> /tmp/ccom_err.txt
+    ./ccom -m "$f" > /tmp/ccom_out.txt 2> /tmp/ccom_err.txt
     code=$?
 
     {

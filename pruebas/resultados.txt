@@ -608,6 +608,12 @@ Scope 2: FUNCTION
     n : int width=4 addr=0x000C
     d : int (return) width=4 addr=0x0008
 
+=======================
+
+===== LABEL TABLE =====
+.L_func_1  | FUNCTION     | AST kind: 3 | Line: 7
+.L_func_0  | FUNCTION     | AST kind: 3 | Line: 1
+=======================
 --- codigo de salida: 0 ---
 
 ===== pruebas/p02_factorial.cls =====
@@ -630,6 +636,16 @@ Scope 4: FUNCTION
     f : int width=4 addr=0x0014
     x : int width=4 addr=0x0010
 
+=======================
+
+===== LABEL TABLE =====
+.L_func_5  | FUNCTION     | AST kind: 3 | Line: 14
+.L_while_end_4 | END          | AST kind: 19 | Line: 7
+.L_while_start_3 | START        | AST kind: 19 | Line: 7
+.L_if_end_2 | END          | AST kind: 15 | Line: 2
+.L_if_next_1 | NEXT         | AST kind: 15 | Line: 2
+.L_func_0  | FUNCTION     | AST kind: 3 | Line: 1
+=======================
 --- codigo de salida: 0 ---
 
 ===== pruebas/p03_suma.cls =====
@@ -650,6 +666,15 @@ Scope 3: FUNCTION
     r : int width=4 addr=0x0024
     datos : int[5] width=20 addr=0x0010
 
+=======================
+
+===== LABEL TABLE =====
+.L_func_4  | FUNCTION     | AST kind: 3 | Line: 10
+.L_for_end_3 | END          | AST kind: 20 | Line: 4
+.L_for_update_2 | UPDATE       | AST kind: 20 | Line: 4
+.L_for_start_1 | START        | AST kind: 20 | Line: 4
+.L_func_0  | FUNCTION     | AST kind: 3 | Line: 3
+=======================
 --- codigo de salida: 0 ---
 
 ===== pruebas/p04_memoria.cls =====
@@ -683,6 +708,19 @@ Scope 4: FUNCTION
 Scope 5: L
     paso : int width=4 addr=0x0058
 
+=======================
+
+===== LABEL TABLE =====
+.L_while_end_8 | END          | AST kind: 19 | Line: 23
+.L_while_start_7 | START        | AST kind: 19 | Line: 23
+.L_func_6  | FUNCTION     | AST kind: 3 | Line: 18
+.L_if_end_5 | END          | AST kind: 15 | Line: 10
+.L_if_next_4 | NEXT         | AST kind: 15 | Line: 10
+.L_for_end_3 | END          | AST kind: 20 | Line: 9
+.L_for_update_2 | UPDATE       | AST kind: 20 | Line: 9
+.L_for_start_1 | START        | AST kind: 20 | Line: 9
+.L_func_0  | FUNCTION     | AST kind: 3 | Line: 8
+=======================
 --- codigo de salida: 0 ---
 
 ===== pruebas/p05_arreglos_llamadas.cls =====
@@ -710,6 +748,16 @@ Scope 4: FUNCTION
     w : int[3] width=12 addr=0x0038
     t : int[2][3] width=24 addr=0x0020
 
+=======================
+
+===== LABEL TABLE =====
+.L_func_5  | FUNCTION     | AST kind: 3 | Line: 13
+.L_func_4  | FUNCTION     | AST kind: 3 | Line: 8
+.L_for_end_3 | END          | AST kind: 20 | Line: 2
+.L_for_update_2 | UPDATE       | AST kind: 20 | Line: 2
+.L_for_start_1 | START        | AST kind: 20 | Line: 2
+.L_func_0  | FUNCTION     | AST kind: 3 | Line: 1
+=======================
 --- codigo de salida: 0 ---
 
 ===== pruebas/p06_tipos.cls =====
@@ -740,6 +788,18 @@ Scope 5: FUNCTION
     copia : int[3] width=12 addr=0x002C
     datos : int[3] width=12 addr=0x0020
 
+=======================
+
+===== LABEL TABLE =====
+.L_func_7  | FUNCTION     | AST kind: 3 | Line: 17
+.L_if_end_6 | END          | AST kind: 15 | Line: 10
+.L_if_next_5 | NEXT         | AST kind: 15 | Line: 10
+.L_for_end_4 | END          | AST kind: 20 | Line: 9
+.L_for_update_3 | UPDATE       | AST kind: 20 | Line: 9
+.L_for_start_2 | START        | AST kind: 20 | Line: 9
+.L_func_1  | FUNCTION     | AST kind: 3 | Line: 8
+.L_func_0  | FUNCTION     | AST kind: 3 | Line: 3
+=======================
 --- codigo de salida: 0 ---
 
 ===== pruebas/p07_retorno_recursion.cls =====
@@ -770,6 +830,18 @@ Scope 5: FUNCTION
 Scope 6: S
     i : int width=4 addr=0x0024
 
+=======================
+
+===== LABEL TABLE =====
+.L_for_end_7 | END          | AST kind: 20 | Line: 19
+.L_for_update_6 | UPDATE       | AST kind: 20 | Line: 19
+.L_for_start_5 | START        | AST kind: 20 | Line: 19
+.L_func_4  | FUNCTION     | AST kind: 3 | Line: 15
+.L_func_3  | FUNCTION     | AST kind: 3 | Line: 10
+.L_if_end_2 | END          | AST kind: 15 | Line: 2
+.L_if_next_1 | NEXT         | AST kind: 15 | Line: 2
+.L_func_0  | FUNCTION     | AST kind: 3 | Line: 1
+=======================
 --- codigo de salida: 0 ---
 
 ===== pruebas/p08_comentarios.cls =====
@@ -781,6 +853,11 @@ Scope 0: GLOBAL
 Scope 1: FUNCTION
     x : int width=4 addr=0x0000
 
+=======================
+
+===== LABEL TABLE =====
+.L_func_0  | FUNCTION     | AST kind: 3 | Line: 2
+=======================
 --- codigo de salida: 0 ---
 
 ===== pruebas/p09_crypto.cls =====
@@ -796,5 +873,10 @@ Scope 0: GLOBAL
 Scope 1: FUNCTION
     cifrar_total : int width=4 addr=0x0010
 
+=======================
+
+===== LABEL TABLE =====
+.L_func_0  | FUNCTION     | AST kind: 3 | Line: 6
+=======================
 --- codigo de salida: 0 ---
 

@@ -42,3 +42,13 @@ clean:
 	rm -f $(TARGET) *.o parser.tab.c parser.tab.h lex.yy.c
 
 .PHONY: all clean
+
+# Pruebas de las rutinas aritmeticas de Gabriel
+build/emitir_aritmetica: codegen_arith.c codegen_arith.h pruebas/aritmetica/emitir.c
+	mkdir -p build
+	$(CC) $(CFLAGS) -std=c11 -I. codegen_arith.c pruebas/aritmetica/emitir.c -o $@
+
+check-arith: build/emitir_aritmetica
+	python3 pruebas/aritmetica/probar.py $<
+
+.PHONY: check-arith

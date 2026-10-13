@@ -1573,6 +1573,8 @@ static int analyze_declaration(ASTNode *node) {
     symbol->line = node->line;
     symbol->decl_node = node;
 
+    identifier->symbol = symbol;
+
     fill_dimensions(symbol, dimensions, node);
 
     // El inicializador se verifica antes de insertar el símbolo:
@@ -2290,6 +2292,8 @@ static int analyze_function(ASTNode *node) {
         ret->width = type_width(ret->type);   // M-1
         ret->line = return_type->line;
         ret->decl_node = return_type;
+
+        ret_id->symbol = ret;
 
         if (insert_symbol(ret, return_type))
             reserve(ret->width, ret->name, return_type, &ret->address);

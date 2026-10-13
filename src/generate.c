@@ -26,6 +26,36 @@ static int generation_errors;
 static const char *current_function_name;
 static Symbol *current_function_symbol;
 
+static int is_expression_kind(ASTKind kind) {
+    switch (kind) {
+        case AST_IDENTIFIER:
+        case AST_NUMBER:
+        case AST_BOOLEAN:
+        case AST_CALL:
+        case AST_INDEX:
+        case AST_OR:
+        case AST_AND:
+        case AST_EQUAL:
+        case AST_NOT_EQUAL:
+        case AST_LESS:
+        case AST_GREATER:
+        case AST_LESS_EQUAL:
+        case AST_GREATER_EQUAL:
+        case AST_ADD:
+        case AST_SUB:
+        case AST_MUL:
+        case AST_DIV:
+        case AST_MOD:
+        case AST_NEG:
+        case AST_NOT:
+        case AST_POWER:
+            return 1;
+
+        default:
+            return 0;
+    }
+}
+
 static int emit_arith_callback(void *user, const CGArithOp *op) {
     (void)user;
 
@@ -1179,6 +1209,86 @@ static void emit_rewind(ASTNode *node) {
           current_function_name);
 }
 
+static void emit_declaration(ASTNode *node) {
+    ASTNode *identifier = NULL;
+    ASTNode *dimensions = NULL;
+    ASTNode *initializer = NULL;
+
+    // AST_DECLARATION children are:
+    //   modifier, identifier, type, dimensions, initializer
+    // Optional children are omitted by ast_add_child(),
+    // so identify them by kind instead of position.
+    for (ASTNode *c = node->child; c != NULL; c = c->next) {
+        switch (c->kind) {
+            case AST_IDENTIFIER:
+                if (identifier == NULL)
+                    identifier = c;
+                break;
+
+            case AST_DIMENSIONS:
+                dimensions = c;
+                break;
+
+            case AST_INITIALIZER_LIST:
+                initializer = c;
+                break;
+
+            default:
+                // Types and modifiers are not initializers.
+                // Other expression kinds may be initializers.
+                if (is_expression_kind(c->kind))
+                    initializer = c;
+                break;
+        }
+    }
+
+    if (identifier == NULL) {
+        report_error(node,
+                     "declaracion sin identificador");
+        return;
+    }
+
+    // No initializer means no runtime instructions:
+    // storage has already been allocated statically.
+    if (initializer == NULL)
+        return;
+
+    Symbol *symbol = get_symbol(identifier);
+
+    if (symbol == NULL) {
+        report_error(identifier,
+                     "variable sin simbolo semantico");
+        return;
+    }
+
+    if (symbol->kind != SYMBOL_VARIABLE) {
+        report_error(identifier,
+                     "el simbolo declarado no es una variable");
+        return;
+    }
+
+    // Array initialization requires one store per element.
+    // Do not accidentally treat an initializer list as a
+    // scalar expression.
+    if (dimensions != NULL ||
+        symbol->dimensions > 0 ||
+        initializer->kind == AST_INITIALIZER_LIST) {
+
+        report_error(node,
+                     "inicializacion de arreglos aun no implementada");
+        return;
+    }
+
+    int rd = emit_expression(initializer);
+
+    if (rd < 0)
+        return;
+
+    emit_store_symbol(symbol, rd, identifier);
+
+    free_reg(rd);
+}
+
 static void emit_statement(ASTNode *node) {
     if (node == NULL)
         return;
@@ -1194,12 +1304,7 @@ static void emit_statement(ASTNode *node) {
             break;
 
         case AST_DECLARATION:
-            /*
-             * Declarations without initializers require no
-             * instructions if storage is statically allocated.
-             *
-             * Initializer handling will be added separately.
-             */
+            emit_declaration(node);
             break;
 
         case AST_CONDITIONAL:

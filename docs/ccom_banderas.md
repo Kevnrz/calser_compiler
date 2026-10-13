@@ -12,11 +12,12 @@ Los errores siempre salen por stderr, con cualquier bandera.
 
 | Bandera | Qué hace | Dónde sale | Estado |
 |---|---|---|---|
+| `--ast-json <archivo>` | Exporta el AST sintáctico a JSON para el visor gráfico | archivo JSON | ✅ Disponible |
 | `-t` | Imprime el árbol sintáctico abstracto (AST) | stdout | ✅ Disponible |
 | `-m` | Imprime la tabla de símbolos con las direcciones de memoria y la tabla de etiquetas | stdout | ✅ Disponible |
 | `-v` | Muestra el avance de cada fase (`ok` o `con errores`) | stderr | ✅ Disponible |
-| `-o <archivo>` | Nombre del binario de salida. Sin `-o`: el nombre del fuente con `.bin` (`prog.cls` → `prog.bin`) | — | Se guarda; todavía no se escribe ningún archivo |
-| `-s` | Genera además el archivo de ensamblador (`.asm`) | — | Avisa que todavía no está disponible |
+| `-o <archivo>` | Nombre del binario de salida. Sin `-o`: el nombre del fuente con `.bin` (`prog.cls` → `prog.bin`) | — | Define el nombre base de las salidas; el binario aún no está integrado |
+| `-s` | Escribe ensamblador (`.asm`) e imagen de datos (`.mem`) | archivos | ✅ Disponible |
 | `-p` | Muestra los bundles en ensamblador y en binario | — | Avisa que todavía no está disponible |
 | `-x` | Toma un `.asm` y genera el binario, sin compilar Calser | — | Error: todavía no está disponible |
 
@@ -67,10 +68,29 @@ antes del análisis semántico. Con errores léxicos o sintácticos no hay AST.
 Línea de uso que se imprime en los errores de uso:
 
 ```
-uso: ccom [-v] [-t] [-m] [-s] [-p] [-x] <archivo> [-o <salida>]
+uso: ccom [-v] [-t] [-m] [-s] [-p] [-x] [--ast-json <json>] <archivo> [-o <salida>]
 ```
 
 ## Pruebas
 
 `pruebas/correr_pruebas.sh` llama a `ccom -m`, así que `pruebas/resultados.txt`
 guarda los errores, las tablas y el código de salida de cada programa.
+
+## AST gráfico local
+
+```sh
+./ccom --ast-json build/p09_crypto.ast.json pruebas/p09_crypto.cls
+```
+
+Abrir `tools/visor_ast.html` en un navegador y seleccionar el JSON con
+**Abrir AST JSON**. También incluye un ejemplo de p09 para verlo inmediatamente.
+No requiere servidor, paquetes ni conexión. Ver [visor_ast.md](visor_ast.md).
+
+`--ast-json` solo, o junto a `-t`/`-v`, termina después del análisis sintáctico:
+no comprueba la semántica ni genera ensamblador. Su código 0 significa que el
+AST se pudo construir y exportar, no que el programa completo sea válido.
+Permite explorar construcciones cuyo generador todavía está pendiente.
+Con `-s`, `-m` o `-p`, exporta el AST y continúa el recorrido normal; puede
+conservar un JSON válido aunque las fases siguientes fallen. Si falla el
+análisis léxico o sintáctico, no escribe un JSON nuevo. Un archivo de una
+exportación anterior puede seguir existiendo; revisar siempre el código de salida.

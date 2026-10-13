@@ -12,8 +12,8 @@ python3 tools/sim_asm.py pruebas/simulador/ejemplo_r4.asm
 El ejemplo propio calcula 2 + 2: termina con `r4 = 4`, memoria `0x0000 = 4`
 y cero avisos de separación. Es un ejemplo propio. El ejemplo oficial de
 §11.1 está en `ejemplo_isa.asm`: también termina con r4 = 4. La referencia
-actualizada de este repositorio se encuentra en `docs/isalast.md`;
-`docs/isa.md` conserva la versión anterior.
+actualizada de este repositorio se encuentra en `docs/isa.md`;
+se utiliza la versión actualizada de la ISA.
 
 ## Entrada
 
@@ -71,7 +71,12 @@ bundles ni expande pseudoinstrucciones.
 - Muestra los 16 registros y las palabras no nulas entre `0x0000` y `0x00FF`.
   Los avisos incluyen bundle, línea, slot y registro.
 
-No carga automáticamente la imagen de datos del compilador ni archivos `.mem`.
+`--data-image programa.mem` carga la imagen de datos generada por `ccom -s`
+en `0x0000–0x0FFF`. El formato empieza con `@0` y contiene hasta 1024 palabras
+de ocho dígitos hexadecimales, una por línea. Las palabras se guardan en little
+endian; el resto de la zona permanece en cero. Esta imagen se carga antes de
+los bytes de `--load-data`. Desde Python se usa
+`Simulator.load_data_image(texto)`.
 `--load-data archivo.bin` inyecta bytes sin modificar su orden, por defecto en
 `0x1000`. `--data-address` permite elegir otra dirección de la zona de archivos
 `0x1000–0xFFFF`; se rechaza una carga que no quepa. Desde Python se puede usar
@@ -81,7 +86,7 @@ de esta memoria.
 
 `--dump-memory archivo.bin` guarda los 64 KiB finales, incluidos los rangos
 crypto que no aparecen en el reporte de palabras bajas. No permite sobrescribir
-el `.asm` ni el archivo de datos de entrada.
+el `.asm`, la imagen `.mem` ni el archivo de datos de entrada.
 
 Códigos de salida: `0` para ejecución sin avisos; `1` si hay avisos de
 separación o se alcanza el límite; `2` para errores de entrada o ejecución.
@@ -109,3 +114,6 @@ La suite comprueba la función de ronda con una referencia independiente, las
 y carga/volcado de archivos. Una excepción crypto no detiene el programa ni
 cambia por sí sola el código de salida: el caso sin sesión es una prueba
 intencional y el reporte expone `EXC` para comprobarlo.
+
+Para ejecutar el programa `.cls` compilado y cargar sus variables iniciales,
+consulta [la prueba de integración crypto](../crypto/README.md#programa-compilado-por-ccom).

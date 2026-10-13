@@ -1,5 +1,5 @@
 # Ejemplo oficial de la ISA actualizada, sección 11.1.
-# En la copia revisada está en docs/isalast.md.
+# En la copia revisada está en docs/isa.md.
 # El salto condicional al propio bundle debe continuar, no finalizar.
 inicio:
   { mov r4, 0 | mov r5, 3 | nopi | nopi }

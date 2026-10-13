@@ -418,6 +418,15 @@ class CryptoTests(unittest.TestCase):
         self.assertFalse(sim.auth)
         self.assertEqual(sim.warnings, [])
 
+    def test_static_data_image(self):
+        sim = Simulator(parse(END))
+        sim.load_data_image('@0\n00001000\n89ABCDEF\n')
+        self.assertEqual(sim.memory[:8], b'\x00\x10\x00\x00\xef\xcd\xab\x89')
+        for text in ['', '@1\n00000000', '@0\nZZZZZZZZ', '@0\n@1', '@0\n1',
+                     '@0\n' + '00000000\n' * 1025]:
+            with self.subTest(text=text[:30]), self.assertRaises(AsmError):
+                sim.load_data_image(text)
+
     def test_load_data_bounds(self):
         sim = Simulator(parse(END))
         sim.load_data(b'abc', 0xFFFF - 2)

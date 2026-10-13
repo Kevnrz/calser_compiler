@@ -215,6 +215,21 @@ class Simulator:
             raise AsmError("el archivo debe caber en la zona 0x1000–0xFFFF")
         self.memory[address:address + len(data)] = data
 
+    def load_data_image(self, text):
+        """Carga .mem de ccom (@0 + palabras hex) en 0x0000–0x0FFF."""
+        lines = [re.split(r"#|//", raw, maxsplit=1)[0].strip() for raw in text.splitlines()]
+        lines = [line for line in lines if line]
+        if not lines or lines[0] != '@0':
+            raise AsmError("la imagen .mem debe comenzar con @0")
+        if len(lines) - 1 > 1024:
+            raise AsmError("la imagen .mem excede 0x0FFF")
+        data = bytearray()
+        for line in lines[1:]:
+            if not re.fullmatch(r'[0-9a-fA-F]{8}', line):
+                raise AsmError(f"palabra inválida en la imagen .mem: {line}")
+            data.extend(int(line, 16).to_bytes(4, 'little'))
+        self.memory[:len(data)] = data
+
     def execute_crypto(self, op, snapshot):
         """Devuelve el resultado de feis, o None cuando no escribe registro."""
         self.crypto_count += 1
@@ -386,6 +401,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('asm', type=Path, help='archivo con etiquetas y bundles de cuatro slots')
     parser.add_argument('--max-bundles', type=int, default=100000, help='límite de bundles ejecutados')
+    parser.add_argument('--data-image', type=Path, help='imagen estática .mem de ccom, con @0')
     parser.add_argument('--load-data', type=Path, help='archivo binario a inyectar antes de ejecutar')
     parser.add_argument('--data-address', type=address_argument, default=0x1000,
                         help='dirección de carga decimal o hexadecimal (por defecto 0x1000)')
@@ -393,6 +409,8 @@ def main(argv=None):
     options = parser.parse_args(argv)
     try:
         simulator = Simulator(parse(options.asm.read_text()), warn=lambda message: print(message, file=sys.stderr))
+        if options.data_image:
+            simulator.load_data_image(options.data_image.read_text())
         if options.load_data:
             simulator.load_data(options.load_data.read_bytes(), options.data_address)
         elif options.data_address != 0x1000:
@@ -403,6 +421,8 @@ def main(argv=None):
             inputs = {simulator_path}
             if options.load_data:
                 inputs.add(options.load_data.resolve())
+            if options.data_image:
+                inputs.add(options.data_image.resolve())
             if options.dump_memory.resolve() in inputs:
                 raise AsmError("el volcado de memoria no debe sobrescribir un archivo de entrada")
             options.dump_memory.write_bytes(simulator.memory)

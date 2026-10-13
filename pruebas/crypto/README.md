@@ -1,8 +1,8 @@
 # Generación de CRYPTO
 
 El módulo `src/codegen_crypto.c` traduce las siete sentencias `AST_CRYPTO`
-con las plantillas de `docs/crypto_para_ccom.md` y la ISA actualizada que,
-en esta copia, está en `docs/isalast.md`.
+con las plantillas de `docs/crypto_para_ccom.md` y la ISA de `docs/isa.md`.
+Está conectado al recorrido del AST y al evaluador de expresiones de `ccom`.
 
 ```bash
 make check-crypto
@@ -19,7 +19,7 @@ llave 0–3; máscara de registros vivos; y opcionalmente `dynamic`. En esta
 `origen + 0`, en lugar de literales. Es salida del módulo C con un evaluador
 auxiliar, **todavía no salida de un programa `.cls` compilado por `ccom`**.
 
-## Interfaz para el generador de Kevin
+## Interfaz del generador
 
 ```c
 CGCryptoContext crypto = {
@@ -58,7 +58,10 @@ los valores originales, incluso los registros usados para argumentos.
 llamadas o spills. Su adaptador debe coordinar esta reserva con su asignador de
 registros/memoria; si no puede evaluarlo conservando `preserve_mask` y las
 casillas guardadas, debe devolver error. No asumir que sus spills actuales ya
-son compatibles. No hay todavía implementación de ese adaptador en este repo.
+son compatibles. El adaptador de `generate.c` guarda los argumentos previos en casillas libres
+del área temporal, evalúa la expresión y los recupera. Rechaza una evaluación
+si no hay casillas libres suficientes; nunca reutiliza las casillas de los
+temporales vivos guardados por el módulo.
 
 Las etiquetas usan el prefijo privado `.L_crypto_` y un contador por programa.
 Se intercambian las mitades al cargar y guardar en descifrado. Un límite de
@@ -80,9 +83,33 @@ separación. El emisor también prueba contratos inválidos y errores del
 evaluador. La autenticación usa el sustituto del simulador (todos los tokens
 salvo 999), no verifica Ascon ni cadenas reales de Lamport.
 
-## Pendiente de integración
+## Programa compilado por ccom
 
-`generate.c` sigue siendo el esqueleto de Kevin. Falta conectar el evaluador,
-el asignador de temporales y el caso `AST_CRYPTO` en su recorrido de
-sentencias. El criterio completo `p09_crypto.cls -s` y el ejercicio 3 se
-validarán después de esa conexión; este módulo no reemplaza ese trabajo.
+Comandos compatibles con Fish y Bash, desde la raíz del proyecto:
+
+```bash
+make
+./ccom -s pruebas/p09_crypto.cls -o /tmp/p09_crypto.bin
+python3 -c 'from pathlib import Path; Path("/tmp/calser-datos-crypto.bin").write_bytes(bytes(range(256)) * 4)'
+python3 tools/sim_asm.py /tmp/p09_crypto.asm --data-image /tmp/p09_crypto.mem --load-data /tmp/calser-datos-crypto.bin --dump-memory /tmp/p09_crypto_final.bin
+python3 -c 'from pathlib import Path; m = Path("/tmp/p09_crypto_final.bin").read_bytes(); original = m[0x1000:0x1400]; assert m[0x2000:0x2400] != original; assert m[0x3000:0x3400] == original; assert m[0x4000:0x4008] == original[:8]; print("OK: cifrado, descifrado y rechazo sin sesión")'
+```
+
+Con `-s`, `ccom` escribe el ensamblador `.asm` y la imagen inicial de datos
+`.mem` junto al nombre indicado por `-o`; estos comandos no producen un binario
+ensamblado. La imagen contiene las variables globales constantes. Los
+inicializadores globales dinámicos se ejecutan al entrar a main; los locales
+se inicializan al recorrer su declaración. Las variables sin inicializador
+se ponen en cero.
+
+`probar_integracion.py`, incluido en `make check-crypto`, comprueba siete
+escenarios mediante el compilador real: p09 y su ejecución por CLI, argumentos
+calculados (incluida multiplicación), cero y negativos, una variable global
+dinámica, constantes de 32 bits e inicializadores, y fallos de escritura de
+salida. En p09 deben coincidir los bytes descifrados con los originales, no
+haber avisos de separación y terminar con `AUTH=0 KVLOCK=1 EXC=1`.
+
+La prueba de p09 satisface el criterio de integración del punto 4. No demuestra
+que estén terminadas todas las construcciones del lenguaje: las llamadas en
+expresiones y los accesos a arreglos dependen de completar el generador general.
+El ejercicio 3 requiere su programa concreto para validar ese recorrido.

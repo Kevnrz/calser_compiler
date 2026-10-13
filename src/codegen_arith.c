@@ -3,20 +3,6 @@
 #include <stdio.h>
 #include <ctype.h>
 
-static const char *arith_reg_name(int reg) {
-    static const char *names[16] = {
-        "rz", "rl", "rx", "rg",
-        "t0", "t1", "t2", "t3",
-        "t4", "t5", "t6", "t7",
-        "t8", "t9", "t10", "t11"
-    };
-
-    if (reg < 0 || reg >= 16)
-        return "rz";
-
-    return names[reg];
-}
-
 static int out(CGArithContext *c, int slot, int d, int a, int b,
                const char *fmt, ...) {
     CGArithOp op;
@@ -29,17 +15,17 @@ static int out(CGArithContext *c, int slot, int d, int a, int b,
 }
 #define DO(x) do { if (!(x)) return 0; } while (0)
 static int alu(CGArithContext *c, const char *mn, int d, int a, int b) {
-    return out(c, 0, d, a, b, "%s r%d, r%d, r%d", mn, arith_reg_name(d), arith_reg_name(a), arith_reg_name(b));
+    return out(c, 0, d, a, b, "%s r%d, r%d, r%d", mn, d, a, b);
 }
 static int mov(CGArithContext *c, int d, int imm) {
-    return out(c, 0, d, -1, -1, "mov r%d, %d", arith_reg_name(d), imm);
+    return out(c, 0, d, -1, -1, "mov r%d, %d", d, imm);
 }
 static int copy(CGArithContext *c, int d, int a) {
     return alu(c, "add", d, a, 0);
 }
 static int branch(CGArithContext *c, const char *mn, int a, int b,
                   const char *label) {
-    return out(c, 2, -1, a, b, "%s r%d, r%d, %s", mn, arith_reg_name(a), arith_reg_name(b), label);
+    return out(c, 2, -1, a, b, "%s r%d, r%d, %s", mn, a, b, label);
 }
 static int jump(CGArithContext *c, const char *label) {
     return out(c, 2, -1, -1, -1, "jef %s", label);
@@ -89,9 +75,9 @@ static int divide(CGArithContext *c, int lhs, int rhs, int dst,
     DO(alu(c, "xor", tmp, rem, mask)); DO(alu(c, "xor", bit, b, mask));
     DO(branch(c, "blt", tmp, bit, skip));
     DO(alu(c, "sub", rem, rem, b));
-    DO(out(c, 0, dst, dst, -1, "saddi r%d, r%d, 1", arith_reg_name(dst), arith_reg_name(dst)));
+    DO(out(c, 0, dst, dst, -1, "saddi r%d, r%d, 1", dst, dst));
     DO(label(c, skip));
-    DO(out(c, 0, count, count, -1, "saddi r%d, r%d, -1", arith_reg_name(count), arith_reg_name(count)));
+    DO(out(c, 0, count, count, -1, "saddi r%d, r%d, -1", count, count));
     DO(branch(c, "bne", count, 0, loop));
     if (modulo) {
         DO(copy(c, dst, rem)); DO(branch(c, "bge", lhs, 0, end));

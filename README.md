@@ -15,9 +15,16 @@ El ejecutable `ccom` realiza análisis léxico, sintáctico y semántico. Constr
 el árbol sintáctico abstracto (AST), la tabla de símbolos con direcciones de
 memoria y la tabla de etiquetas. Los errores muestran archivo, línea y columna.
 
-El repositorio también incluye rutinas de generación de código aritmético y
-de acceso a arreglos, con pruebas independientes. La generación completa de
-ensamblador y binarios todavía no está integrada en `ccom`.
+`ccom -s` genera ensamblador y una imagen inicial de datos `.mem`. La
+integración CRYPTO se valida compilando y simulando `p09_crypto.cls`. También
+hay rutinas aritméticas y de acceso a arreglos con pruebas independientes.
+El generador general todavía está en desarrollo; el ensamblado a binario
+no está integrado.
+
+Para continuar el generador, consultar el [contexto para Kevin](docs/contexto_kevin_fase4.md).
+
+El AST también se puede explorar como un árbol gráfico local; consultar
+[el visor del AST](docs/visor_ast.md).
 
 ## Requisitos
 
@@ -49,15 +56,52 @@ Una entrada correcta devuelve código `0`. Los errores de análisis devuelven
 
 | Opción | Función | Estado |
 | --- | --- | --- |
-| `-t` | Mostrar el AST | Disponible |
+| `-t` | Mostrar el AST en terminal | Disponible |
+| `--ast-json <archivo>` | Exportar el AST para el visor gráfico | Disponible |
 | `-m` | Mostrar las tablas de símbolos y etiquetas | Disponible |
 | `-v` | Mostrar el avance de cada fase | Disponible |
 | `-o <archivo>` | Seleccionar el nombre del binario | Se guarda; aún no se escribe el binario |
-| `-s` | Emitir ensamblador | Pendiente; muestra un aviso |
+| `-s` | Emitir ensamblador `.asm` e imagen de datos `.mem` | Disponible |
 | `-p` | Mostrar bundles en ensamblador y binario | Pendiente; muestra un aviso |
 | `-x` | Ensamblar una entrada `.asm` | Pendiente; devuelve un error |
 
 Consulta los detalles en [Uso y banderas de ccom](docs/ccom_banderas.md).
+
+## Ver el árbol gráfico del programa
+
+Desde la raíz del repositorio, con comandos compatibles con Fish y Bash:
+
+```sh
+make
+./ccom --ast-json build/p09_crypto.ast.json pruebas/p09_crypto.cls
+xdg-open tools/visor_ast.html
+```
+
+Si `xdg-open` no está disponible, abrir `tools/visor_ast.html` con un navegador
+desde el administrador de archivos. El visor funciona sin servidor, sin
+instalar paquetes y sin conexión a internet.
+
+Al abrirlo se muestra un ejemplo de p09. Para visualizar el archivo que acabás
+de generar, pulsar **Abrir AST JSON** y seleccionar
+`build/p09_crypto.ast.json`. Para otro programa, cambiar la entrada `.cls` y
+el nombre del JSON en el comando anterior.
+
+El árbol se dibuja con nodos y ramas, desde la raíz hasta sus hojas. Las
+declaraciones y los bloques empiezan plegados; pulsar **Expandir todo** para
+mostrarlo completo.
+
+- **Rueda del mouse:** acercar o alejar.
+- **Arrastrar el fondo:** desplazarse por el árbol.
+- **Clic en un nodo:** ver tipo, texto/valor y ubicación en el código.
+- **Doble clic en un nodo:** expandir o plegar su rama.
+- **Ajustar árbol:** encuadrar los nodos visibles; **Ir a la raíz:** centrar la raíz.
+
+`--ast-json` usado solo exporta el árbol después del análisis sintáctico y
+termina allí: permite inspeccionar programas aunque su generación de código
+esté pendiente, pero no certifica que pasen el análisis semántico. Para
+exportar y continuar la compilación, combinarlo con `-s`.
+
+Más detalles y formato del JSON en [Visor del AST](docs/visor_ast.md).
 
 ## Un programa Calser
 
@@ -125,12 +169,14 @@ Para verificar las rutinas de generación de código:
 ```bash
 make check-arith
 make check-arrays
-# O ejecutar ambas:
+make check-crypto
+# O ejecutar todas:
 make check
 ```
 
-Estas pruebas usan un modelo de software de la arquitectura objetivo; no
-representan una ejecución completa del compilador ni una simulación RTL.
+Estas pruebas usan un modelo de software de la arquitectura objetivo. Las
+pruebas crypto incluyen el recorrido `.cls` → `ccom` → `.asm`/`.mem` →
+simulador; no representan una simulación RTL.
 
 Para limpiar los productos de compilación:
 

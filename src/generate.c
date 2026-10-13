@@ -2103,8 +2103,14 @@ static void emit_statement(ASTNode *node) {
             break;
 
         case AST_CALL_STATEMENT: {
-            int result = emit_function_call(node);
-            free_reg(result);
+            ASTNode *call = node->child;
+
+            if (call == NULL || call->kind != AST_CALL) {
+                report_error(node, "llamada como sentencia invalida");
+                
+            } else {
+                emit_function_call(call, 0);
+            }
             break;
         }
 

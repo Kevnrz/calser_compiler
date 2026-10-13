@@ -65,84 +65,6 @@ static int emit_arith_callback(void *user, const CGArithOp *op) {
 
     return 0;
 }
-
-static int emit_software_arithmetic(ASTNode *node, CGArithKind kind, int lhs, int rhs) {
-    int dst = alloc_reg();
-
-    if (dst < 0) {
-        report_error(
-            node,
-            "sin registros para el resultado aritmetico"
-        );
-        free_reg(lhs);
-        free_reg(rhs);
-        return -1;
-    }
-
-    int work[8];
-    int allocated = 0;
-
-    for (int i = 0; i < 8; i++) {
-        work[i] = alloc_reg();
-
-        if (work[i] < 0) {
-            report_error(
-                node,
-                "sin suficientes registros para la rutina aritmetica"
-            );
-
-            for (int j = 0; j < allocated; j++)
-                free_reg(work[j]);
-
-            free_reg(dst);
-            free_reg(lhs);
-            free_reg(rhs);
-
-            return -1;
-        }
-
-        allocated++;
-    }
-
-    const char *error_label = NULL;
-
-    if (kind == CG_ARITH_DIV ||
-        kind == CG_ARITH_MOD ||
-        kind == CG_ARITH_POWER) {
-        error_label = ARITH_ERROR_LABEL;
-    }
-
-    int success = cg_arith_emit(
-        &arithmetic_context,
-        kind,
-        lhs,
-        rhs,
-        dst,
-        work,
-        error_label
-    );
-
-    for (int i = 0; i < 8; i++)
-        free_reg(work[i]);
-
-    free_reg(lhs);
-    free_reg(rhs);
-
-    if (!success) {
-        free_reg(dst);
-
-        report_error(
-            node,
-            "fallo al generar la rutina aritmetica"
-        );
-
-        return -1;
-    }
-
-    // dst remains allocated because the caller needs
-    // its value as the expression result.
-    return dst;
-}
  
 static void report_error(ASTNode *node, const char *message) {
     if (node != NULL && node->line > 0) {
@@ -220,6 +142,84 @@ static void free_reg(int reg) {
 
         temp_used[reg - TEMP_FIRST] = 0;
     }
+}
+
+static int emit_software_arithmetic(ASTNode *node, CGArithKind kind, int lhs, int rhs) {
+    int dst = alloc_reg();
+
+    if (dst < 0) {
+        report_error(
+            node,
+            "sin registros para el resultado aritmetico"
+        );
+        free_reg(lhs);
+        free_reg(rhs);
+        return -1;
+    }
+
+    int work[8];
+    int allocated = 0;
+
+    for (int i = 0; i < 8; i++) {
+        work[i] = alloc_reg();
+
+        if (work[i] < 0) {
+            report_error(
+                node,
+                "sin suficientes registros para la rutina aritmetica"
+            );
+
+            for (int j = 0; j < allocated; j++)
+                free_reg(work[j]);
+
+            free_reg(dst);
+            free_reg(lhs);
+            free_reg(rhs);
+
+            return -1;
+        }
+
+        allocated++;
+    }
+
+    const char *error_label = NULL;
+
+    if (kind == CG_ARITH_DIV ||
+        kind == CG_ARITH_MOD ||
+        kind == CG_ARITH_POWER) {
+        error_label = ARITH_ERROR_LABEL;
+    }
+
+    int success = cg_arith_emit(
+        &arithmetic_context,
+        kind,
+        lhs,
+        rhs,
+        dst,
+        work,
+        error_label
+    );
+
+    for (int i = 0; i < 8; i++)
+        free_reg(work[i]);
+
+    free_reg(lhs);
+    free_reg(rhs);
+
+    if (!success) {
+        free_reg(dst);
+
+        report_error(
+            node,
+            "fallo al generar la rutina aritmetica"
+        );
+
+        return -1;
+    }
+
+    // dst remains allocated because the caller needs
+    // its value as the expression result.
+    return dst;
 }
 
 static int emit_mov(int rd, long immediate, ASTNode *node) {
@@ -588,9 +588,7 @@ static int emit_expression(ASTNode *node) {
         }
 
         case AST_CALL:
-            report_error(node,
-                         "llamadas en expresiones aun no implementadas");
-            return -1;
+            return emit_function_call(node);
 
         case AST_INDEX:
             report_error(node,
@@ -1217,7 +1215,7 @@ static void emit_statement(ASTNode *node) {
             break;
 
         case AST_CALL_STATEMENT:
-            return emit_function_call(node);
+            emit_function_call(node);
             break;
 
         case AST_REWIND:

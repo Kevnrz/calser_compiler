@@ -67,7 +67,7 @@ static char *default_output(const char *input) {
     return output;
 }
 
-static char *asm_path_for(const char *output) {
+static char *with_extension(const char *output, char *extension) {
     const char *slash = strrchr(output, '/');
     const char *base = slash ? slash + 1 : output;
     const char *dot = strrchr(base, '.');
@@ -76,13 +76,13 @@ static char *asm_path_for(const char *output) {
                         ? (size_t) (dot - output)
                         : strlen(output);
 
-    char *path = malloc(length + sizeof(".asm"));
+    char *path = malloc(length + sizeof(extension));
 
     if (path == NULL)
         return NULL;
 
     memcpy(path, output, length);
-    strcpy(path + length, ".asm");
+    strcpy(path + length, extension);
 
     return path;
 }
@@ -218,9 +218,24 @@ static int compile(const Options *options) {
     }
 
     if (options->emit_asm) {
-        char *asm_path = asm_path_for(options->output);
-        FILE *f = fopen(asm_path, "w");
-        if (f) { cg_write(f); fclose(f); } else perror("fopen");
+        char *asm_path = with_extension(options->output, ".asm");
+
+        if (asm_path == NULL) {
+            fprintf(stderr, "ccom: error: memoria insuficiente\n");
+        }
+        else {
+            FILE *asm_file = fopen(asm_path, "w");
+
+            if (asm_file == NULL) {
+                perror(asm_path);
+            }
+            else {
+                cg_write(asm_file);
+                fclose(asm_file);
+            }
+
+            free(asm_path);
+        }
     }
 
     if (options->print_bundles)
@@ -233,6 +248,8 @@ static int compile(const Options *options) {
     free(labels);
 
     semantic_free();
+
+    cg_free();
 
     ast_free(root);
 

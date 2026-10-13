@@ -54,7 +54,7 @@ bundles ni expande pseudoinstrucciones.
   Sin autorización, las instrucciones protegidas no tienen efecto y activan
   `EXC`; `logout` siempre puede ejecutarse. El sello permanece hasta reset.
   Una escritura rechazada por el sello también activa `EXC`.
-- `auth` acepta cualquier token salvo `999`, según `docs/fase4_saddy(1).md`.
+- `auth` acepta cualquier token salvo `999`, según `docs/fase4_saddy.md`.
   El éxito activa `AUTH`, actualiza el ancla y limpia `EXC`; el fallo quita
   autorización y activa `EXC`. Se cuentan 14 ciclos por `auth` sin agregar
   bundles; las dependencias entre registros conservan la separación habitual.

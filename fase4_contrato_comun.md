@@ -101,5 +101,5 @@ const uint32_t *cg_data(void);        /* palabras desde la dirección 0 */
 | Persona | Documento |
 |---|---|
 | Kevin | `fase4_kevin.md` |
-| Saddy | `fase4_saddy.md` |
+| Saddy | `docs/fase4_saddy.md` |
 | Gabriel | `fase4_gabriel.md` |

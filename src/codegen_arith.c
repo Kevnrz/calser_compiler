@@ -106,10 +106,12 @@ static int power(CGArithContext *c, int lhs, int rhs, int dst,
     DO(jump(c, loop)); DO(label(c, end));
     return 1;
 }
+/* [A-Za-z_.][A-Za-z0-9_.]*: la misma clase de etiquetas que acepta el
+ * ensamblador (isa.md §11.1), para admitir las de la tabla (.L_arith_error). */
 static int valid_label(const char *s) {
-    if (!s || !(isalpha((unsigned char)*s) || *s == '_')) return 0;
+    if (!s || !(isalpha((unsigned char)*s) || *s == '_' || *s == '.')) return 0;
     for (++s; *s; ++s)
-        if (!(isalnum((unsigned char)*s) || *s == '_')) return 0;
+        if (!(isalnum((unsigned char)*s) || *s == '_' || *s == '.')) return 0;
     return 1;
 }
 int cg_arith_emit(CGArithContext *c, CGArithKind kind,

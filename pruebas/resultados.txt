@@ -596,6 +596,7 @@ pruebas/e66_crypto_nombre_reservado.cls:2:8: error sintactico: syntax error
 
 ===== pruebas/p01_llamada_adelante.cls =====
 --- stderr ---
+ccom:3:9: error de generacion: llamadas en expresiones aun no implementadas
 --- tabla ---
 Scope 0: GLOBAL
     doble : int (function) params=[n] area=0x0034 size=60 temp_base=0x0040
@@ -617,10 +618,11 @@ Scope 2: FUNCTION
 .L_body_main | BODY         | AST kind: FUNCTION | Line: 1
 .L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 1
 =======================
---- codigo de salida: 0 ---
+--- codigo de salida: 1 ---
 
 ===== pruebas/p02_factorial.cls =====
 --- stderr ---
+ccom:17:9: error de generacion: llamadas en expresiones aun no implementadas
 --- tabla ---
 Scope 0: GLOBAL
     main : void (function) params=[] area=0x0040 size=56 temp_base=0x0048
@@ -652,10 +654,12 @@ Scope 4: FUNCTION
 .L_body_factorial | BODY         | AST kind: FUNCTION | Line: 1
 .L_func_factorial | FUNCTION     | AST kind: FUNCTION | Line: 1
 =======================
---- codigo de salida: 0 ---
+--- codigo de salida: 1 ---
 
 ===== pruebas/p03_suma.cls =====
 --- stderr ---
+ccom:13:9: error de generacion: llamadas en expresiones aun no implementadas
+ccom:4:5: error de generacion: ciclo S aun no implementado
 --- tabla ---
 Scope 0: GLOBAL
     main : void (function) params=[] area=0x0040 size=72 temp_base=0x0058
@@ -684,10 +688,12 @@ Scope 3: FUNCTION
 .L_body_suma | BODY         | AST kind: FUNCTION | Line: 3
 .L_func_suma | FUNCTION     | AST kind: FUNCTION | Line: 3
 =======================
---- codigo de salida: 0 ---
+--- codigo de salida: 1 ---
 
 ===== pruebas/p04_memoria.cls =====
 --- stderr ---
+ccom:22:9: error de generacion: llamadas en expresiones aun no implementadas
+ccom:9:5: error de generacion: ciclo S aun no implementado
 --- tabla ---
 Scope 0: GLOBAL
     main : void (function) params=[] area=0x0070 size=76 temp_base=0x008C
@@ -733,10 +739,15 @@ Scope 5: L
 .L_body_maximo | BODY         | AST kind: FUNCTION | Line: 8
 .L_func_maximo | FUNCTION     | AST kind: FUNCTION | Line: 8
 =======================
---- codigo de salida: 0 ---
+--- codigo de salida: 1 ---
 
 ===== pruebas/p05_arreglos_llamadas.cls =====
 --- stderr ---
+ccom:17:9: error de generacion: llamadas en expresiones aun no implementadas
+ccom:18:5: error de generacion: llamada sin identificador de funcion
+ccom:19:5: error de generacion: solo se permiten destinos escalares por ahora
+ccom:2:5: error de generacion: ciclo S aun no implementado
+ccom:9:5: error de generacion: solo se permiten destinos escalares por ahora
 --- tabla ---
 Scope 0: GLOBAL
     main : void (function) params=[] area=0x0080 size=88 temp_base=0x00A8
@@ -774,10 +785,12 @@ Scope 4: FUNCTION
 .L_body_suma_fila | BODY         | AST kind: FUNCTION | Line: 1
 .L_func_suma_fila | FUNCTION     | AST kind: FUNCTION | Line: 1
 =======================
---- codigo de salida: 0 ---
+--- codigo de salida: 1 ---
 
 ===== pruebas/p06_tipos.cls =====
 --- stderr ---
+ccom:23:9: error de generacion: llamadas en expresiones aun no implementadas
+ccom:9:5: error de generacion: ciclo S aun no implementado
 --- tabla ---
 Scope 0: GLOBAL
     main : void (function) params=[] area=0x0080 size=80 temp_base=0x00A0
@@ -822,10 +835,12 @@ Scope 5: FUNCTION
 .L_body_es_par | BODY         | AST kind: FUNCTION | Line: 3
 .L_func_es_par | FUNCTION     | AST kind: FUNCTION | Line: 3
 =======================
---- codigo de salida: 0 ---
+--- codigo de salida: 1 ---
 
 ===== pruebas/p07_retorno_recursion.cls =====
 --- stderr ---
+ccom:18:9: error de generacion: llamadas en expresiones aun no implementadas
+ccom:19:5: error de generacion: ciclo S aun no implementado
 --- tabla ---
 Scope 0: GLOBAL
     main : void (function) params=[] area=0x007C size=60 temp_base=0x0088
@@ -868,7 +883,7 @@ Scope 6: S
 .L_body_factorial | BODY         | AST kind: FUNCTION | Line: 1
 .L_func_factorial | FUNCTION     | AST kind: FUNCTION | Line: 1
 =======================
---- codigo de salida: 0 ---
+--- codigo de salida: 1 ---
 
 ===== pruebas/p08_comentarios.cls =====
 --- stderr ---
@@ -909,4 +924,142 @@ Scope 1: FUNCTION
 .L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 6
 =======================
 --- codigo de salida: 0 ---
+
+===== pruebas/p10_llamadas_anidadas.cls =====
+--- stderr ---
+ccom:12:20: error de generacion: llamadas en expresiones aun no implementadas
+ccom:12:20: error de generacion: fallo al inicializar variable
+--- tabla ---
+Scope 0: GLOBAL
+    main : void (function) params=[] area=0x007C size=52 temp_base=0x0080
+    add : int (function) params=[a, b] area=0x003C size=64 temp_base=0x004C
+    identity : int (function) params=[x] area=0x0000 size=60 temp_base=0x000C
+
+Scope 1: FUNCTION
+    x : int width=4 addr=0x0008
+    result : int (return) width=4 addr=0x0004
+
+Scope 2: FUNCTION
+    b : int width=4 addr=0x0048
+    a : int width=4 addr=0x0044
+    result : int (return) width=4 addr=0x0040
+
+Scope 3: FUNCTION
+    sum : int width=4 addr=0x007C
+
+=======================
+
+===== LABEL TABLE =====
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 11
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 11
+.L_body_add | BODY         | AST kind: FUNCTION | Line: 6
+.L_func_add | FUNCTION     | AST kind: FUNCTION | Line: 6
+.L_body_identity | BODY         | AST kind: FUNCTION | Line: 1
+.L_func_identity | FUNCTION     | AST kind: FUNCTION | Line: 1
+=======================
+--- codigo de salida: 1 ---
+
+===== pruebas/p11_ejercicio3.cls =====
+--- stderr ---
+ccom:63:5: error de generacion: llamada sin identificador de funcion
+ccom:64:10: error de generacion: llamadas en expresiones aun no implementadas
+ccom:65:10: error de generacion: llamadas en expresiones aun no implementadas
+ccom:35:5: error de generacion: ciclo S aun no implementado
+ccom:48:5: error de generacion: ciclo S aun no implementado
+--- tabla ---
+Scope 0: GLOBAL
+    main : void (function) params=[] area=0x016C size=56 temp_base=0x0174
+    descifrar_archivo : int (function) params=[desde, hacia, total, tam] area=0x011C size=80 temp_base=0x013C
+    cifrar_archivo : int (function) params=[desde, hacia, total, tam] area=0x00CC size=80 temp_base=0x00EC
+    preparar_boveda : void (function) params=[] area=0x0098 size=52 temp_base=0x009C
+    direccion : int (function) params=[base, tam, i] area=0x0054 size=68 temp_base=0x0068
+    bloques_de : int (function) params=[total, tam, i] area=0x000C size=72 temp_base=0x0024
+    vuelta : int width=4 addr=0x0008
+    cifrado : int width=4 addr=0x0004
+    origen : int width=4 addr=0x0000
+
+Scope 1: FUNCTION
+    resto : int width=4 addr=0x0020
+    i : int width=4 addr=0x001C
+    tam : int width=4 addr=0x0018
+    total : int width=4 addr=0x0014
+    b : int (return) width=4 addr=0x0010
+
+Scope 2: C
+
+Scope 3: RESIDUAL
+
+Scope 4: FUNCTION
+    i : int width=4 addr=0x0064
+    tam : int width=4 addr=0x0060
+    base : int width=4 addr=0x005C
+    d : int (return) width=4 addr=0x0058
+
+Scope 5: FUNCTION
+
+Scope 6: FUNCTION
+    tam : int width=4 addr=0x00E0
+    total : int width=4 addr=0x00DC
+    hacia : int width=4 addr=0x00D8
+    desde : int width=4 addr=0x00D4
+    n : int (return) width=4 addr=0x00D0
+
+Scope 7: S
+    b : int width=4 addr=0x00E8
+    i : int width=4 addr=0x00E4
+
+Scope 8: C
+
+Scope 9: RESIDUAL
+
+Scope 10: FUNCTION
+    tam : int width=4 addr=0x0130
+    total : int width=4 addr=0x012C
+    hacia : int width=4 addr=0x0128
+    desde : int width=4 addr=0x0124
+    n : int (return) width=4 addr=0x0120
+
+Scope 11: S
+    b : int width=4 addr=0x0138
+    i : int width=4 addr=0x0134
+
+Scope 12: C
+
+Scope 13: RESIDUAL
+
+Scope 14: FUNCTION
+    n2 : int width=4 addr=0x0170
+    n1 : int width=4 addr=0x016C
+
+=======================
+
+===== LABEL TABLE =====
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 59
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 59
+.L_if_end_11 | END          | AST kind: CONDITIONAL | Line: 50
+.L_if_next_10 | NEXT         | AST kind: CONDITIONAL | Line: 50
+.L_for_end_9 | END          | AST kind: LOOP_S | Line: 48
+.L_for_update_8 | UPDATE       | AST kind: LOOP_S | Line: 48
+.L_for_start_7 | START        | AST kind: LOOP_S | Line: 48
+.L_body_descifrar_archivo | BODY         | AST kind: FUNCTION | Line: 46
+.L_func_descifrar_archivo | FUNCTION     | AST kind: FUNCTION | Line: 46
+.L_if_end_6 | END          | AST kind: CONDITIONAL | Line: 37
+.L_if_next_5 | NEXT         | AST kind: CONDITIONAL | Line: 37
+.L_for_end_4 | END          | AST kind: LOOP_S | Line: 35
+.L_for_update_3 | UPDATE       | AST kind: LOOP_S | Line: 35
+.L_for_start_2 | START        | AST kind: LOOP_S | Line: 35
+.L_body_cifrar_archivo | BODY         | AST kind: FUNCTION | Line: 33
+.L_func_cifrar_archivo | FUNCTION     | AST kind: FUNCTION | Line: 33
+.L_body_preparar_boveda | BODY         | AST kind: FUNCTION | Line: 20
+.L_func_preparar_boveda | FUNCTION     | AST kind: FUNCTION | Line: 20
+.L_body_direccion | BODY         | AST kind: FUNCTION | Line: 15
+.L_func_direccion | FUNCTION     | AST kind: FUNCTION | Line: 15
+.L_if_end_1 | END          | AST kind: CONDITIONAL | Line: 7
+.L_if_next_0 | NEXT         | AST kind: CONDITIONAL | Line: 7
+.L_body_bloques_de | BODY         | AST kind: FUNCTION | Line: 5
+.L_func_bloques_de | FUNCTION     | AST kind: FUNCTION | Line: 5
+=======================
+--- codigo de salida: 1 ---
 

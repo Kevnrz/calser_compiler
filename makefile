@@ -9,7 +9,7 @@ BUILD_DIR = build
 GEN_DIR = $(BUILD_DIR)/generated
 OBJ_DIR = $(BUILD_DIR)/obj
 
-SOURCES = main ast symbol_table semantic diagnostics label_table codegen generate codegen_crypto codegen_arith
+SOURCES = main ast symbol_table semantic diagnostics label_table codegen generate codegen_crypto codegen_arith assembler
 OBJECTS = $(addprefix $(OBJ_DIR)/,$(addsuffix .o,$(SOURCES))) \
           $(OBJ_DIR)/parser.tab.o $(OBJ_DIR)/lex.yy.o
 
@@ -60,7 +60,10 @@ check-crypto: $(BUILD_DIR)/emitir_crypto $(TARGET)
 check-ast: $(TARGET)
 	python3 pruebas/ast/probar.py
 
-check: check-arith check-arrays check-crypto check-ast
+check-asm: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/ensamblador/probar.py
+
+check: check-arith check-arrays check-crypto check-ast check-asm
 
 clean:
 	rm -f $(TARGET) $(OBJECTS) $(OBJECTS:.o=.d)
@@ -69,4 +72,4 @@ clean:
 
 -include $(OBJECTS:.o=.d)
 
-.PHONY: all clean check check-arith check-arrays check-crypto check-ast
+.PHONY: all clean check check-arith check-arrays check-crypto check-ast check-asm

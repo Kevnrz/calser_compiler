@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +11,7 @@
 #include "label_table.h"
 #include "codegen.h"
 #include "generate.h"
+#include "assembler.h"
 
 extern int yyparse(void);
 extern FILE *yyin;
@@ -30,6 +32,9 @@ extern int lexical_errors;
  *   -s  genera además el .asm
  *   -p  muestra los bundles en ensamblador y en binario
  *   -x  la entrada es un .asm y se genera el binario, sin compilar Calser
+ *
+ * Sin errores siempre se escriben .bin, .hex y .mem con el nombre base de
+ * -o (fase4_contrato_comun.md §5).
  */
 typedef struct {
     const char *input;         /* archivo fuente (.cls) o, con -x, .asm      */
@@ -70,7 +75,7 @@ static char *default_output(const char *input) {
     return output;
 }
 
-static char *with_extension(const char *output, char *extension) {
+static char *with_extension(const char *output, const char *extension) {
     const char *slash = strrchr(output, '/');
     const char *base = slash ? slash + 1 : output;
     const char *dot = strrchr(base, '.');
@@ -79,7 +84,7 @@ static char *with_extension(const char *output, char *extension) {
                         ? (size_t) (dot - output)
                         : strlen(output);
 
-    char *path = malloc(length + sizeof(extension));
+    char *path = malloc(length + strlen(extension) + 1);
 
     if (path == NULL)
         return NULL;
@@ -94,6 +99,219 @@ static char *with_extension(const char *output, char *extension) {
 static void report_phase(const Options *options, const char *phase, int ok) {
     if (options->verbose)
         fprintf(stderr, "ccom: %s ... %s\n", phase, ok ? "ok" : "con errores");
+}
+
+// Abre <nombre base de -o><extension> para escribir; reporta si no puede.
+static FILE *open_output(const Options *options, const char *extension,
+                         const char *mode, char **path) {
+    *path = with_extension(options->output, extension);
+
+    if (*path == NULL) {
+        fprintf(stderr, "ccom: error: memoria insuficiente\n");
+        return NULL;
+    }
+
+    FILE *out = fopen(*path, mode);
+
+    if (out == NULL)
+        perror(*path);
+
+    return out;
+}
+
+// Cierra un archivo de salida y libera su nombre. Devuelve 1 si falló.
+static int close_output(FILE *out, char *path) {
+    int failed = 1;
+
+    if (out != NULL) {
+        failed = ferror(out);
+
+        if (fclose(out) != 0)
+            failed = 1;
+
+        if (failed)
+            fprintf(stderr, "ccom: error al escribir %s\n", path);
+    }
+
+    free(path);
+
+    return failed;
+}
+
+// Palabra de 32 bits little endian.
+static void write_word(FILE *out, uint32_t word) {
+    unsigned char bytes[4] = {
+        (unsigned char) (word & 0xFF),
+        (unsigned char) ((word >> 8) & 0xFF),
+        (unsigned char) ((word >> 16) & 0xFF),
+        (unsigned char) ((word >> 24) & 0xFF)
+    };
+
+    fwrite(bytes, 1, sizeof(bytes), out);
+}
+
+/* Archivos de salida (fase4_contrato_comun.md §5). data son las palabras de
+ * la imagen de datos desde la dirección 0 y data_size sus bytes.
+ * Devuelve 1 si alguno no se pudo escribir. */
+static int write_outputs(const Options *options, const AsmProgram *program,
+                         const uint32_t *data, int data_size) {
+    int failed = 0;
+    char *path;
+    FILE *out;
+
+    /* .bin: encabezado de 4 palabras (cantidad de bundles, punto de entrada
+     * 0, tamaño de datos en bytes, dirección de datos 0); cada bundle en 16
+     * bytes, slot 0 primero; y los datos. Todo little endian. */
+    out = open_output(options, ".bin", "wb", &path);
+
+    if (out != NULL) {
+        write_word(out, (uint32_t) program->count);
+        write_word(out, 0);
+        write_word(out, (uint32_t) data_size);
+        write_word(out, 0);
+
+        for (int i = 0; i < program->count; i++) {
+
+            for (int slot = 0; slot < 4; slot++)
+                write_word(out, program->bundles[i][slot]);
+        }
+
+        for (int word = 0; word < data_size / 4; word++)
+            write_word(out, data[word]);
+    }
+
+    failed |= close_output(out, path);
+
+    // .hex: un bundle por línea, slot3_slot2_slot1_slot0 (isa.md §11.1).
+    out = open_output(options, ".hex", "w", &path);
+
+    if (out != NULL) {
+
+        for (int i = 0; i < program->count; i++)
+            fprintf(out, "%08X_%08X_%08X_%08X\n",
+                    (unsigned) program->bundles[i][3],
+                    (unsigned) program->bundles[i][2],
+                    (unsigned) program->bundles[i][1],
+                    (unsigned) program->bundles[i][0]);
+    }
+
+    failed |= close_output(out, path);
+
+    // .mem: @0 y una palabra de datos por línea.
+    out = open_output(options, ".mem", "w", &path);
+
+    if (out != NULL) {
+        fprintf(out, "@0\n");
+
+        for (int word = 0; word < data_size / 4; word++)
+            fprintf(out, "%08X\n", (unsigned) data[word]);
+    }
+
+    failed |= close_output(out, path);
+
+    return failed;
+}
+
+/* Ensambla las líneas (isa.md §11), imprime los bundles con -p y escribe
+ * los archivos de salida. name es el nombre para los errores de ensamblado.
+ * Devuelve el código de salida. */
+static int assemble_and_write(const Options *options,
+                              const char *const *lines, int nlines,
+                              const char *name,
+                              const uint32_t *data, int data_size) {
+    AsmProgram program;
+
+    if (asm_assemble(lines, nlines, name, &program) != 0) {
+        report_phase(options, "ensamblado", 0);
+        return 1;
+    }
+
+    report_phase(options, "ensamblado", 1);
+
+    // -p: índice del bundle, el bundle en ensamblador y como en el .hex.
+    if (options->print_bundles) {
+
+        for (int i = 0; i < program.count; i++)
+            printf("%04d  %s  %08X_%08X_%08X_%08X\n",
+                   i,
+                   program.text[i],
+                   (unsigned) program.bundles[i][3],
+                   (unsigned) program.bundles[i][2],
+                   (unsigned) program.bundles[i][1],
+                   (unsigned) program.bundles[i][0]);
+    }
+
+    int failed = write_outputs(options, &program, data, data_size);
+
+    asm_free(&program);
+
+    return failed ? 1 : 0;
+}
+
+/* -x: ensambla options->input (un .asm) sin compilar Calser. No hay imagen
+ * de datos: el tamaño es 0 y el .mem queda solo con @0.
+ * Devuelve el código de salida. */
+static int assemble_file(const Options *options) {
+    FILE *in = fopen(options->input, "r");
+
+    if (!in) {
+        perror(options->input);
+        return 1;
+    }
+
+    char **lines = NULL;
+    int count = 0;
+    int capacity = 0;
+
+    char *buffer = NULL;
+    size_t size = 0;
+
+    int failed = 0;
+
+    while (getline(&buffer, &size, in) != -1) {
+
+        if (count == capacity) {
+            int grown_capacity = capacity == 0 ? 256 : capacity * 2;
+            char **grown =
+                realloc(lines, (size_t) grown_capacity * sizeof(char *));
+
+            if (grown == NULL) {
+                failed = 1;
+                break;
+            }
+
+            lines = grown;
+            capacity = grown_capacity;
+        }
+
+        lines[count] = strdup(buffer);
+
+        if (lines[count] == NULL) {
+            failed = 1;
+            break;
+        }
+
+        count++;
+    }
+
+    free(buffer);
+
+    fclose(in);
+
+    int code = 1;
+
+    if (failed)
+        fprintf(stderr, "ccom: error: memoria insuficiente\n");
+    else
+        code = assemble_and_write(options, (const char *const *) lines, count,
+                                  options->input, NULL, 0);
+
+    for (int i = 0; i < count; i++)
+        free(lines[i]);
+
+    free(lines);
+
+    return code;
 }
 
 // Compila options->input. Devuelve el código de salida.
@@ -246,42 +464,40 @@ static int compile(const Options *options) {
         return 1; 
     }
 
+    // -s: además el .asm (isa.md §11), tal como lo escribe cg_write. Sus
+    // líneas son las que numeran los errores de ensamblado.
     int output_failed = 0;
+
     if (options->emit_asm) {
-        char *paths[2] = {with_extension(options->output, ".asm"),
-                          with_extension(options->output, ".mem")};
-        for (int i = 0; i < 2; i++) {
-            if (paths[i] == NULL) {
-                fprintf(stderr, "ccom: error: memoria insuficiente\n");
-                output_failed = 1;
-                continue;
-            }
-            FILE *out = fopen(paths[i], "w");
-            if (out == NULL) {
-                perror(paths[i]);
-                output_failed = 1;
-            } else {
-                if (i == 0) cg_write(out);
-                else {
-                    fprintf(out, "@0\n");
-                    for (int word = 0; word < cg_data_size() / 4; word++)
-                        fprintf(out, "%08X\n", (unsigned) cg_data()[word]);
-                }
-                int failed = ferror(out);
-                if (fclose(out) != 0) failed = 1;
-                if (failed) {
-                    fprintf(stderr, "ccom: error al escribir %s\n", paths[i]);
-                    output_failed = 1;
-                }
-            }
-            free(paths[i]);
-        }
+        char *path;
+        FILE *out = open_output(options, ".asm", "w", &path);
+
+        if (out != NULL)
+            cg_write(out);
+
+        output_failed = close_output(out, path);
     }
 
-    if (options->print_bundles)
-        fprintf(stderr,
-                "ccom: aviso: -p todavia no esta disponible "
-                "(requiere la generacion de codigo)\n");
+    // El ensamblado toma las líneas del generador (contrato §1).
+    int line_count = cg_line_count();
+    const char **lines =
+        malloc((size_t) (line_count > 0 ? line_count : 1) * sizeof(char *));
+
+    if (lines == NULL) {
+        fprintf(stderr, "ccom: error: memoria insuficiente\n");
+        output_failed = 1;
+    }
+    else {
+
+        for (int i = 0; i < line_count; i++)
+            lines[i] = cg_line(i);
+
+        if (assemble_and_write(options, lines, line_count, "<generado>",
+                               cg_data(), cg_data_size()) != 0)
+            output_failed = 1;
+
+        free(lines);
+    }
 
     label_table_destroy(labels);
 
@@ -347,14 +563,6 @@ int main(int argc, char **argv) {
 
     options.input = argv[optind];
 
-    if (options.assemble_only) {
-        free(options.output);
-        fprintf(stderr,
-                "ccom: error: -x todavia no esta disponible "
-                "(requiere el ensamblado)\n");
-        return 1;
-    }
-
     if (options.output == NULL) {
         options.output = default_output(options.input);
 
@@ -364,7 +572,19 @@ int main(int argc, char **argv) {
         }
     }
 
-    int code = compile(&options);
+    int code;
+
+    if (options.assemble_only) {
+
+        // La entrada ya es el .asm: -s lo sobrescribiría.
+        if (options.emit_asm)
+            fprintf(stderr, "ccom: aviso: -s se ignora con -x\n");
+
+        code = assemble_file(&options);
+    }
+    else {
+        code = compile(&options);
+    }
 
     free(options.output);
 

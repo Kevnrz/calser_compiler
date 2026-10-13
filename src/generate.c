@@ -8,9 +8,18 @@
 #define TEMP_FIRST 4
 #define TEMP_COUNT 12
 
+// The static data image occupies offsets 0 through 0xFFF.
+// Reserve runtime memory beginning at 0x1000 for the call stack.
+// This address assumes the target's data memory extends beyond
+// the static data image and that the static data base is address 0.
+#define CALL_STACK_BASE CG_DATA_BYTES
+
 static int temp_used[TEMP_COUNT];
 static int label_counter;
 static int generation_errors;
+
+static const char *current_function_name;
+static Symbol *current_function_symbol;
  
 static void report_error(ASTNode *node, const char *message) {
     if (node != NULL && node->line > 0) {
@@ -113,6 +122,30 @@ static Symbol *get_symbol(ASTNode *node) {
     return (Symbol *)node->symbol;
 }
 
+static Symbol *get_return_symbol(Symbol *function_symbol) {
+    if (function_symbol == NULL ||
+        function_symbol->decl_node == NULL) {
+        return NULL;
+    }
+
+    ASTNode *function_node =
+        (ASTNode *)function_symbol->decl_node;
+
+    ASTNode *return_type =
+        find_child(function_node, AST_RETURN_TYPE);
+
+    if (return_type == NULL)
+        return NULL;
+
+    ASTNode *return_id =
+        find_child(return_type, AST_IDENTIFIER);
+
+    if (return_id == NULL)
+        return NULL;
+
+    return get_symbol(return_id);
+}
+
 static int emit_load_symbol(int rd, Symbol *symbol, ASTNode *node) {
     if (symbol == NULL) {
         report_error(node,
@@ -163,7 +196,26 @@ static int emit_store_symbol(Symbol *symbol, int rs, ASTNode *node) {
     return 0;
 }
 
+static void emit_stack_push(int reg) {
+    cg_op(SLOT_LSU,
+          "sw %s, 0(rx)",
+          reg_name(reg));
+
+    cg_op(SLOT_ALU0,
+          "saddi rx, rx, 4");
+}
+
+static void emit_stack_pop(int reg) {
+    cg_op(SLOT_ALU0,
+          "saddi rx, rx, -4");
+
+    cg_op(SLOT_LSU,
+          "lw %s, 0(rx)",
+          reg_name(reg));
+}
+
 static int emit_expression(ASTNode *node);
+static int emit_function_call(ASTNode *node);
 
 static int emit_binary_expression(ASTNode *node) {
     ASTNode *left = child_at(node, 0);
@@ -375,6 +427,207 @@ static int emit_expression(ASTNode *node) {
                          "nodo no valido como expresion");
             return -1;
     }
+}
+
+static int emit_function_call(ASTNode *node) {
+    if (node == NULL) {
+        report_error(NULL, "llamada a funcion invalida");
+        return -1;
+    }
+
+    // AST_CALL:
+    //   child 0: function identifier
+    //   child 1: AST_ARGUMENTS (optional)
+    ASTNode *function_id = child_at(node, 0);
+    ASTNode *args_node = child_at(node, 1);
+
+    if (function_id == NULL || function_id->text == NULL) {
+        report_error(node,
+                     "llamada sin identificador de funcion");
+        return -1;
+    }
+
+    Symbol *callee = get_symbol(function_id);
+
+    if (callee == NULL || callee->kind != SYMBOL_FUNCTION) {
+        report_error(function_id,
+                     "funcion sin simbolo semantico valido");
+        return -1;
+    }
+
+    // Locate the function's return variable.
+    if (callee->type == TYPE_VOID) {
+        report_error(node,
+                     "una funcion void no puede usarse como expresion");
+        return -1;
+    }
+
+    Symbol *return_symbol = get_return_symbol(callee);
+
+    if (return_symbol == NULL) {
+        report_error(node,
+                     "no se encontro la variable de retorno");
+        return -1;
+    }
+
+    if (return_symbol->address < 0 ||
+        return_symbol->address > 131071) {
+        report_error(node,
+                     "direccion de retorno invalida");
+        return -1;
+    }
+
+    // Unwrap the argument list.
+    ASTNode *arg = NULL;
+
+    if (args_node != NULL) {
+        if (args_node->kind == AST_ARGUMENTS) {
+            arg = args_node->child;
+        } else {
+            arg = args_node;
+        }
+    }
+
+    // Count arguments.
+    int arg_count = 0;
+
+    for (ASTNode *a = arg; a != NULL; a = a->next) {
+        arg_count++;
+    }
+
+    // Validate the argument count and parameter list.
+    if (arg_count != callee->parameter_count) {
+        report_error(node,
+                     "cantidad incorrecta de argumentos");
+        return -1;
+    }
+
+    if (arg_count > 0 && callee->param_list == NULL) {
+        report_error(node,
+                     "funcion sin lista de parametros");
+        return -1;
+    }
+
+    for (int i = 0; i < arg_count; i++) {
+        Symbol *param = callee->param_list[i];
+
+        if (param == NULL ||
+            param->address < 0 ||
+            param->address > 131071) {
+            report_error(node,
+                         "direccion de parametro invalida");
+            return -1;
+        }
+    }
+
+    // Save all currently live temporaries.
+    // The callee can overwrite t0-t11, so values already being
+    // used by the caller must be preserved across the call.
+    int saved_regs[TEMP_COUNT];
+    int saved_count = 0;
+
+    for (int i = 0; i < TEMP_COUNT; i++) {
+        if (temp_used[i]) {
+            int reg = TEMP_FIRST + i;
+
+            saved_regs[saved_count++] = reg;
+            emit_stack_push(reg);
+        }
+    }
+
+    // Evaluate arguments from left to right.
+    // Push each result to memory immediately. This preserves it
+    // across calls needed to evaluate subsequent arguments.
+    for (ASTNode *a = arg; a != NULL; a = a->next) {
+        int reg = emit_expression(a);
+
+        if (reg < 0) {
+            // Generation has failed. The final assembly must not
+            // be used, but release the compiler's register state.
+            for (int i = 0; i < saved_count; i++) {
+                free_reg(saved_regs[i]);
+            }
+
+            return -1;
+        }
+
+        emit_stack_push(reg);
+        free_reg(reg);
+    }
+
+    // Transfer arguments to the callee's statically allocated
+    // parameter locations.
+    // Pop in reverse order so the stack remains balanced.
+    for (int i = arg_count - 1; i >= 0; i--) {
+        int reg = alloc_reg();
+
+        if (reg < 0) {
+            report_error(node,
+                         "sin registros para transferir argumentos");
+
+            for (int j = 0; j < saved_count; j++) {
+                free_reg(saved_regs[j]);
+            }
+
+            return -1;
+        }
+
+        emit_stack_pop(reg);
+
+        Symbol *param = callee->param_list[i];
+
+        int store_result = emit_store_symbol(param, reg, node);
+
+        free_reg(reg);
+
+        if (store_result != 0) {
+            for (int j = 0; j < saved_count; j++) {
+                free_reg(saved_regs[j]);
+            }
+
+            return -1;
+        }
+    }
+
+    // The argument values have now been removed from the stack.
+    // Only the caller's saved temporaries remain.
+    // Save the old return link before jas overwrites rl.
+    emit_stack_push(1);  // rl
+
+    // Call the function.
+    // jas sets rl to the return address.
+    cg_op(SLOT_BRU,
+          "jas rl, .L_func_%s",
+          callee->name);
+
+    // The callee's E returns through the new rl.
+    // Restore the caller's previous rl after returning.
+    emit_stack_pop(1);
+
+    // Restore live caller temporaries in reverse order.
+    for (int i = saved_count - 1; i >= 0; i--) {
+        emit_stack_pop(saved_regs[i]);
+    }
+
+    // Allocate a new register for the result.
+    // Existing caller temporaries are still marked as occupied,
+    // so the result will not overwrite them.
+    int result_reg = alloc_reg();
+
+    if (result_reg < 0) {
+        report_error(node,
+                     "sin registros para el resultado de la llamada");
+        return -1;
+    }
+
+    // Load the result immediately after the call. A later call
+    // could overwrite this function's static return variable.
+    if (emit_load_symbol(result_reg, return_symbol, node) != 0) {
+        free_reg(result_reg);
+        return -1;
+    }
+
+    return result_reg;
 }
 
 static void make_label(char *buffer, size_t size, const char *prefix) {
@@ -601,14 +854,156 @@ static void emit_return(ASTNode *node) {
     if (inside_main) {
         cg_op(SLOT_BRU, "jef fin_main");
     } else {
-        /*
-         * jefR rz, rl:
-         * jump to the address in rl without replacing rl.
-         *
-         * Verify the return-link convention against isa.md.
-         */
+        // jefR rz, rl:
+        // jump to the address in rl without replacing rl.
+        // Verify the return-link convention against isa.md.
         cg_op(SLOT_BRU, "jefR rz, rl");
     }
+}
+
+static void emit_rewind(ASTNode *node) {
+    if (node == NULL) {
+        report_error(NULL, "sentencia R invalida");
+        return;
+    }
+
+    // AST_REWIND:
+    //   child 0: AST_IDENTIFIER (function name)
+    //   child 1: AST_ARGUMENTS (optional)
+    ASTNode *target_id = child_at(node, 0);
+    ASTNode *args_node = child_at(node, 1);
+
+    if (target_id == NULL || target_id->text == NULL) {
+        report_error(node,
+                     "sentencia R sin identificador de funcion");
+        return;
+    }
+
+    // R is restricted to the current function.
+    if (current_function_name == NULL ||
+        strcmp(target_id->text, current_function_name) != 0) {
+
+        report_error(node,
+                     "R debe referirse a la funcion actual");
+        return;
+    }
+
+    if (current_function_symbol == NULL) {
+        report_error(node,
+                     "funcion actual sin simbolo semantico");
+        return;
+    }
+
+    // Obtain the argument list.
+    // The AST_ARGUMENTS node contains the expressions as a
+    // linked list through child/next.
+    // If the function has no arguments, args_node may be NULL.
+    ASTNode *arg = NULL;
+
+    if (args_node != NULL) {
+        if (args_node->kind == AST_ARGUMENTS) {
+            arg = args_node->child;
+        } else {
+            arg = args_node;
+        }
+    }
+
+    // Count arguments.
+    int arg_count = 0;
+
+    for (ASTNode *a = arg; a != NULL; a = a->next) {
+        arg_count++;
+    }
+
+    // Validate the number of arguments.
+    int param_count = current_function_symbol->parameter_count;
+
+    if (arg_count != param_count) {
+        report_error(node,
+                     "cantidad incorrecta de argumentos en R");
+        return;
+    }
+
+    // Every argument must keep its value until all arguments have been evaluated.
+    // This implementation supports up to TEMP_COUNT arguments.
+    if (arg_count > TEMP_COUNT) {
+        report_error(node,
+                     "demasiados argumentos para R");
+        return;
+    }
+
+    // Validate the parameter list before emitting any stores.
+    // This prevents discovering a missing parameter halfway
+    // through updating the function's parameters.
+    if (param_count > 0 &&
+        current_function_symbol->param_list == NULL) {
+
+        report_error(node,
+                     "funcion sin lista de parametros");
+        return;
+    }
+
+    for (int i = 0; i < param_count; i++) {
+        Symbol *param = current_function_symbol->param_list[i];
+
+        if (param == NULL) {
+            report_error(node,
+                         "parametro invalido en la tabla de simbolos");
+            return;
+        }
+
+        if (param->address < 0 || param->address > 131071) {
+            report_error(node,
+                         "direccion de parametro invalida en R");
+            return;
+        }
+    }
+
+    // Evaluate every argument.
+    // Do not update parameters yet.
+    int arg_regs[TEMP_COUNT];
+    int evaluated = 0;
+
+    for (ASTNode *a = arg; a != NULL; a = a->next) {
+        int reg = emit_expression(a);
+
+        if (reg < 0) {
+            // Release the registers allocated for earlier arguments.
+            for (int i = 0; i < evaluated; i++) {
+                free_reg(arg_regs[i]);
+            }
+
+            return;
+        }
+
+        arg_regs[evaluated++] = reg;
+    }
+
+    // Write the new values to the parameter addresses.
+    // Arguments and parameters correspond by declaration order.
+    for (int i = 0; i < param_count; i++) {
+        Symbol *param = current_function_symbol->param_list[i];
+
+        if (emit_store_symbol(param, arg_regs[i], node) != 0) {
+            for (int j = 0; j < evaluated; j++) {
+                free_reg(arg_regs[j]);
+            }
+
+            return;
+        }
+    }
+
+    // Release the temporary registers.
+    for (int i = 0; i < evaluated; i++) {
+        free_reg(arg_regs[i]);
+    }
+
+    // Restart the current function body.
+    // Do not modify rl: R is a restart/tail-call operation,
+    // not a new function call.
+    cg_op(SLOT_BRU,
+          "jef .L_body_%s",
+          current_function_name);
 }
 
 static void emit_statement(ASTNode *node) {
@@ -647,13 +1042,11 @@ static void emit_statement(ASTNode *node) {
             break;
 
         case AST_CALL_STATEMENT:
-            report_error(node,
-                         "llamadas como sentencia aun no implementadas");
+            return emit_function_call(node);
             break;
 
         case AST_REWIND:
-            report_error(node,
-                         "R aun no implementado");
+            emit_rewind(node);
             break;
 
         case AST_LOOP_S:
@@ -674,12 +1067,16 @@ static void emit_statement(ASTNode *node) {
 }
 
 static void emit_function(ASTNode *function) {
-    const char *name = function_name(function);
+    ASTNode *id_node = find_child(function, AST_IDENTIFIER);
+    const char *name = id_node ? id_node->text : NULL;
 
     if (name == NULL) {
         report_error(function, "funcion sin identificador");
         return;
     }
+
+    current_function_name = name;
+    current_function_symbol = get_symbol(id_node);
 
     char entry_label[128];
     char body_label[128];
@@ -710,34 +1107,20 @@ static void emit_function(ASTNode *function) {
 
     emit_block(body);
 
-    /*
-     * If control reaches the end of main, terminate the program.
-     * Other functions need a well-defined fall-through policy.
-     */
+    // If control reaches the end of main, terminate the program.
+    // Other functions need a well-defined fall-through policy.
     if (inside_main) {
         cg_op(SLOT_BRU, "jef fin_main");
     } else {
-        /*
-         * This assumes falling off the end of a function
-         * should return to the caller.
-         */
+        // This assumes falling off the end of a function
+        // should return to the caller.
         cg_op(SLOT_BRU, "jefR rz, rl");
     }
 
     inside_main = 0;
-}
 
- 
-// main no tiene prólogo (no guarda rl). TODO: cuerpo (expresiones, control).
-static void emit_main(ASTNode *function) {
-    (void) function;
- 
-    cg_label(".L_func_main");
-    cg_label(".L_body_main");
- 
-    // TODO(Kevin, paso 2): generar las sentencias del cuerpo. Cada `E` de
-    // main debe saltar a fin_main; por ahora el fin va al final.
-    emit_end_of_main();
+    current_function_name = NULL;
+    current_function_symbol = NULL;
 }
  
 int generate_code(ASTNode *root) {
@@ -749,6 +1132,15 @@ int generate_code(ASTNode *root) {
     label_counter = 0;
     generation_errors = 0;
     inside_main = 0;
+
+    current_function_name = NULL;
+    current_function_symbol = NULL;
+
+    reset_registers();
+    // Initialize return-link stack pointer
+    cg_op(SLOT_ALU0,
+          "mov rx, %d",
+          CALL_STACK_BASE);
  
     ASTNode *functions = find_child(root, AST_FUNCTIONS);
     ASTNode *main_function = NULL;

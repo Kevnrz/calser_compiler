@@ -171,6 +171,7 @@ ASTNode *ast_crypto(const char *operation,
 // Expressions
 ASTNode *ast_number(long value);
 ASTNode *ast_boolean(int value);
+ASTNode *ast_arguments(ASTNode *arguments);
 ASTNode *ast_identifier(const char *name);
 
 ASTNode *ast_binary(ASTKind kind,

@@ -6,6 +6,8 @@
 #include "semantic.h"
 #include "diagnostics.h"
 #include "label_table.h"
+#include "codegen.h"
+#include "generate.h"
 
 extern int yyparse(void);
 extern FILE *yyin;
@@ -63,6 +65,26 @@ static char *default_output(const char *input) {
     strcpy(output + length, ".bin");
 
     return output;
+}
+
+static char *asm_path_for(const char *output) {
+    const char *slash = strrchr(output, '/');
+    const char *base = slash ? slash + 1 : output;
+    const char *dot = strrchr(base, '.');
+
+    size_t length = (dot != NULL && dot > base)
+                        ? (size_t) (dot - output)
+                        : strlen(output);
+
+    char *path = malloc(length + sizeof(".asm"));
+
+    if (path == NULL)
+        return NULL;
+
+    memcpy(path, output, length);
+    strcpy(path + length, ".asm");
+
+    return path;
 }
 
 // -v: una línea por fase en stderr.
@@ -180,6 +202,32 @@ static int compile(const Options *options) {
     if (options->print_memory)
         label_table_print(labels);
 
+    int gen_failed = generate_code(root);
+    report_phase(options, "fase 4: generacion de codigo", !gen_failed);
+    if (gen_failed) {
+        label_table_destroy(labels);
+
+        free(labels);
+
+        semantic_free();
+
+        ast_free(root);
+
+        diag_free();
+        return 1; 
+    }
+
+    if (options->emit_asm) {
+        char *asm_path = asm_path_for(options->output);
+        FILE *f = fopen(asm_path, "w");
+        if (f) { cg_write(f); fclose(f); } else perror("fopen");
+    }
+
+    if (options->print_bundles)
+        fprintf(stderr,
+                "ccom: aviso: -p todavia no esta disponible "
+                "(requiere la generacion de codigo)\n");
+
     label_table_destroy(labels);
 
     free(labels);
@@ -189,18 +237,6 @@ static int compile(const Options *options) {
     ast_free(root);
 
     diag_free();
-
-    // -s y -p necesitan la generación de código; solo se avisa si la
-    // compilación no tuvo errores.
-    if (options->emit_asm)
-        fprintf(stderr,
-                "ccom: aviso: -s todavia no esta disponible "
-                "(requiere la generacion de codigo)\n");
-
-    if (options->print_bundles)
-        fprintf(stderr,
-                "ccom: aviso: -p todavia no esta disponible "
-                "(requiere la generacion de codigo)\n");
 
     return 0;
 }

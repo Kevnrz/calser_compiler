@@ -52,3 +52,14 @@ check-arith: build/emitir_aritmetica
 	python3 pruebas/aritmetica/probar.py $<
 
 .PHONY: check-arith
+
+
+# K-4b: array address generation and memory operations.
+build/emitir_arreglos: codegen_array.c codegen_array.h codegen_arith.h symbol_table.h pruebas/arreglos/emitir.c
+	mkdir -p build
+	$(CC) $(CFLAGS) -std=c11 -I. codegen_array.c pruebas/arreglos/emitir.c -o $@
+
+check-arrays: build/emitir_arreglos
+	python3 pruebas/arreglos/probar.py $<
+
+.PHONY: check-arrays

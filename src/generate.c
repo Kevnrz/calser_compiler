@@ -1,11 +1,13 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
  
 #include "generate.h"
 #include "codegen.h"
 #include "symbol_table.h"
 #include "codegen_arith.h"
 #include "codegen_array.h"
+#include "codegen_crypto.h"
 
 #define TEMP_FIRST 4
 #define TEMP_COUNT 12
@@ -16,9 +18,15 @@
 // the static data image and that the static data base is address 0.
 #define CALL_STACK_BASE CG_DATA_BYTES
 
-#define ARITH_ERROR_LABEL "L_arith_error"
+#define ARITH_ERROR_LABEL ".L_arith_error"
 
 static CGArithContext arithmetic_context;
+static CGCryptoContext crypto_context;
+static ASTNode *program_globals;
+
+static int alloc_reg(void);
+static void free_reg(int reg);
+static void report_error(ASTNode *node, const char *message);
 
 static int temp_used[TEMP_COUNT];
 static int label_counter;
@@ -136,18 +144,33 @@ static void free_reg(int reg) {
 }
 
 static int emit_mov(int rd, long immediate, ASTNode *node) {
-    // 18-bit signed immediate.
-    if (immediate < -131072L || immediate > 131071L) {
-        report_error(node,
-                     "constante fuera del rango de mov");
+    /* 2147483648 aparece como hijo del menos unario de INT32_MIN. */
+    if (immediate < INT32_MIN || immediate > (long) UINT32_MAX) {
+        report_error(node, "constante fuera de 32 bits");
         return -1;
     }
-
-    cg_op(SLOT_ALU0,
-          "mov %s, %ld",
-          reg_name(rd),
-          immediate);
-
+    int64_t value = immediate;
+    if (value > INT32_MAX)
+        value -= INT64_C(4294967296);
+    if (value >= -131072 && value <= 131071) {
+        cg_op(SLOT_ALU0, "mov %s, %ld", reg_name(rd), (long) value);
+        return 0;
+    }
+    int scratch = alloc_reg();
+    if (scratch < 0) {
+        report_error(node, "sin registro para construir constante de 32 bits");
+        return -1;
+    }
+    int64_t high = value / 32768, low = value % 32768;
+    if (low < 0) { high--; low += 32768; }
+    char first[64], second[64];
+    snprintf(first, sizeof(first), "mov %s, %ld", reg_name(rd), (long) high);
+    snprintf(second, sizeof(second), "mov %s, 15", reg_name(scratch));
+    cg_bundle(first, second, NULL, NULL);
+    cg_gap();
+    cg_op(SLOT_ALU0, "sll %s, %s, %s", reg_name(rd), reg_name(rd), reg_name(scratch));
+    cg_op(SLOT_ALU0, "saddi %s, %s, %ld", reg_name(rd), reg_name(rd), (long) low);
+    free_reg(scratch);
     return 0;
 }
 
@@ -202,7 +225,7 @@ static int emit_load_symbol(int rd, Symbol *symbol, ASTNode *node) {
     }
 
     cg_op(SLOT_LSU,
-          "lw %s, %d(rg)",
+          "lw %s, %d(rz)",
           reg_name(rd),
           symbol->address);
 
@@ -225,7 +248,7 @@ static int emit_store_symbol(Symbol *symbol, int rs, ASTNode *node) {
     }
 
     cg_op(SLOT_LSU,
-          "sw %s, %d(rg)",
+          "sw %s, %d(rz)",
           reg_name(rs),
           symbol->address);
 
@@ -1143,6 +1166,139 @@ static int emit_function_call(ASTNode *node, int result_needed) {
     return result_reg;
 }
 
+static int emit_crypto_argument(void *user, ASTNode *expr, int dst,
+                                unsigned preserve_mask) {
+    CGCryptoContext *ctx = user;
+    int saved[12], slots[12], count = 0;
+    unsigned occupied = ctx->live_mask;
+    for (int reg = 4; reg < 16; reg++) {
+        if (!(preserve_mask & (1u << reg)))
+            continue;
+        int slot;
+        for (slot = 4; slot < 16; slot++)
+            if (!(occupied & (1u << slot)))
+                break;
+        if (slot == 16 || ctx->function == NULL || ctx->function->temp_base < 0) {
+            report_error(expr, "sin casillas libres para preservar argumentos crypto");
+            return 1;
+        }
+        occupied |= 1u << slot;
+        saved[count] = reg;
+        slots[count++] = ctx->function->temp_base + 4 * (slot - 4);
+    }
+    cg_gap();
+    for (int i = 0; i < count; i++)
+        cg_op(SLOT_LSU, "sw %s, %d(rz)", reg_name(saved[i]), slots[i]);
+    reset_registers();
+    int result = emit_expression(expr);
+    if (result < 0)
+        return 1;
+    if (result != dst)
+        cg_op(SLOT_ALU0, "saddi %s, %s, 0", reg_name(dst), reg_name(result));
+    for (int i = 0; i < count; i++)
+        cg_op(SLOT_LSU, "lw %s, %d(rz)", reg_name(saved[i]), slots[i]);
+    reset_registers();
+    temp_used[dst - TEMP_FIRST] = 1;
+    for (int reg = 4; reg < 16; reg++)
+        if (preserve_mask & (1u << reg))
+            temp_used[reg - TEMP_FIRST] = 1;
+    return 0;
+}
+
+static void emit_crypto_statement(ASTNode *node) {
+    int used[TEMP_COUNT];
+    memcpy(used, temp_used, sizeof(used));
+    crypto_context.live_mask = 0;
+    for (int i = 0; i < TEMP_COUNT; i++)
+        if (used[i]) crypto_context.live_mask |= 1u << (i + TEMP_FIRST);
+    crypto_context.function = current_function_symbol;
+    if (cg_crypto(&crypto_context, node) != 0)
+        report_error(node, "fallo al generar operacion crypto");
+    memcpy(temp_used, used, sizeof(used));
+}
+
+static ASTNode *declaration_initializer(ASTNode *node) {
+    ASTNode *type = find_child(node, AST_TYPE);
+    ASTNode *init = type ? type->next : NULL;
+    return init && init->kind == AST_DIMENSIONS ? init->next : init;
+}
+
+/* Constantes globales en la imagen; las expresiones dinámicas se emiten en main. */
+static int constant_value(ASTNode *node, uint32_t *out, int depth) {
+    if (!node || depth > 64) return 0;
+    uint32_t a, b;
+    if (node->kind == AST_NUMBER || node->kind == AST_BOOLEAN) {
+        *out = (uint32_t) node->number; return 1;
+    }
+    if (node->kind == AST_IDENTIFIER) {
+        Symbol *sym = get_symbol(node);
+        return sym && sym->modifier == MODIFIER_VI && sym->decl_node &&
+            constant_value(declaration_initializer(sym->decl_node), out, depth + 1);
+    }
+    if (!constant_value(node->child, &a, depth + 1)) return 0;
+    if (node->kind == AST_NEG) { *out = 0u - a; return 1; }
+    if (node->kind == AST_NOT) { *out = !a; return 1; }
+    if (!constant_value(node->child->next, &b, depth + 1)) return 0;
+    int64_t x = a <= INT32_MAX ? (int64_t) a : (int64_t) a - INT64_C(4294967296);
+    int64_t y = b <= INT32_MAX ? (int64_t) b : (int64_t) b - INT64_C(4294967296);
+    switch (node->kind) {
+        case AST_ADD: *out = a + b; break;
+        case AST_SUB: *out = a - b; break;
+        case AST_MUL: *out = a * b; break;
+        case AST_DIV: if (!b) return 0; *out = (uint32_t) (x / y); break;
+        case AST_MOD: if (!b) return 0; *out = (uint32_t) (x % y); break;
+        case AST_POWER: {
+            if (y < 0) return 0;
+            uint32_t result = 1;
+            while (b) { if (b & 1) result *= a; a *= a; b >>= 1; }
+            *out = result; break;
+        }
+        case AST_AND: *out = a != 0 && b != 0; break;
+        case AST_OR: *out = a != 0 || b != 0; break;
+        case AST_EQUAL: *out = a == b; break;
+        case AST_NOT_EQUAL: *out = a != b; break;
+        case AST_LESS: *out = x < y; break;
+        case AST_GREATER: *out = x > y; break;
+        case AST_LESS_EQUAL: *out = x <= y; break;
+        case AST_GREATER_EQUAL: *out = x >= y; break;
+        default: return 0;
+    }
+    return 1;
+}
+
+static void initialize_cells(ASTNode *init, Symbol *symbol, int *offset,
+                             int image, int dynamic_only) {
+    if (init && init->kind == AST_INITIALIZER_LIST) {
+        for (ASTNode *item = init->child; item; item = item->next)
+            initialize_cells(item, symbol, offset, image, dynamic_only);
+        return;
+    }
+    uint32_t value = 0;
+    int constant = !init || constant_value(init, &value, 0);
+    int address = symbol->address + *offset;
+    *offset += 4;
+    if (image) {
+        if (cg_data_set(address, constant ? value : 0) != 0)
+            report_error(init, "inicializador fuera de la imagen de datos");
+    } else if (!dynamic_only || !constant) {
+        int reg = init ? emit_expression(init) : alloc_reg();
+        if (reg < 0) { report_error(init, "fallo al inicializar variable"); return; }
+        if (!init && emit_mov(reg, 0, NULL) != 0) { free_reg(reg); return; }
+        cg_op(SLOT_LSU, "sw %s, %d(rz)", reg_name(reg), address);
+        free_reg(reg);
+    }
+}
+
+static void initialize_declaration(ASTNode *node, int image, int dynamic_only) {
+    Symbol *symbol = get_symbol(find_child(node, AST_IDENTIFIER));
+    if (!symbol || symbol->address < 0) { report_error(node, "declaracion sin direccion"); return; }
+    ASTNode *init = declaration_initializer(node);
+    int offset = 0;
+    if (init) initialize_cells(init, symbol, &offset, image, dynamic_only);
+    while (offset < symbol->width)
+        initialize_cells(NULL, symbol, &offset, image, dynamic_only);
+}
+
 static void make_label(char *buffer, size_t size, const char *prefix) {
     snprintf(buffer,
              size,
@@ -1931,7 +2087,7 @@ static void emit_statement(ASTNode *node) {
             break;
 
         case AST_DECLARATION:
-            emit_declaration(node);
+            initialize_declaration(node, 0, 0);
             break;
 
         case AST_CONDITIONAL:
@@ -1946,15 +2102,9 @@ static void emit_statement(ASTNode *node) {
             emit_return(node);
             break;
 
-        case AST_CALL_STATEMENT:{
-            ASTNode *call = node->child;
-
-            if (call == NULL || call->kind != AST_CALL) {
-                report_error(node, "llamada como sentencia invalida");
-                
-            } else {
-                emit_function_call(call, 0);
-            }
+        case AST_CALL_STATEMENT: {
+            int result = emit_function_call(node);
+            free_reg(result);
             break;
         }
 
@@ -1967,8 +2117,7 @@ static void emit_statement(ASTNode *node) {
             break;
 
         case AST_CRYPTO:
-            report_error(node,
-                         "operaciones criptograficas aun no implementadas");
+            emit_crypto_statement(node);
             break;
 
         default:
@@ -2016,6 +2165,9 @@ static void emit_function(ASTNode *function) {
     reset_registers();
 
     inside_main = strcmp(name, "main") == 0;
+    if (inside_main)
+        for (ASTNode *g = program_globals ? program_globals->child : NULL; g; g = g->next)
+            initialize_declaration(g, 0, 1);
 
     emit_block(body);
 
@@ -2040,6 +2192,9 @@ int generate_code(ASTNode *root) {
         return 1;
  
     cg_init();
+    crypto_context = (CGCryptoContext) {.eval = emit_crypto_argument, .next_label = 1};
+    crypto_context.user = &crypto_context;
+    program_globals = find_child(root, AST_GLOBALS);
 
     arithmetic_context.emit = emit_arith_callback;
     arithmetic_context.user = NULL;
@@ -2053,6 +2208,8 @@ int generate_code(ASTNode *root) {
     current_function_symbol = NULL;
 
     reset_registers();
+    for (ASTNode *g = program_globals ? program_globals->child : NULL; g; g = g->next)
+        initialize_declaration(g, 1, 0);
     // Initialize return-link stack pointer
     cg_op(SLOT_ALU0,
           "mov rx, %d",

@@ -519,6 +519,44 @@ void ast_print(ASTNode *root, int depth) {
     ast_print_internal(root, depth);
 }
 
+/* JSON independiente de la presentación en terminal; next son hermanos. */
+static void json_string(FILE *out, const char *text) {
+    fputc('"', out);
+    for (const unsigned char *p = (const unsigned char *) text; *p; p++) {
+        if (*p == '"' || *p == '\\') { fputc('\\', out); fputc(*p, out); }
+        else if (*p < 32) fprintf(out, "\\u%04x", *p);
+        else fputc(*p, out);
+    }
+    fputc('"', out);
+}
+
+static void json_node(FILE *out, const ASTNode *node, unsigned *next_id) {
+    fprintf(out, "{\"id\":%u,\"kind\":", (*next_id)++);
+    json_string(out, ast_kind_name(node->kind));
+    fprintf(out, ",\"line\":%d,\"column\":%d", node->line, node->column);
+    if (node->text) { fputs(",\"text\":", out); json_string(out, node->text); }
+    if (node->kind == AST_NUMBER) fprintf(out, ",\"value\":%ld", node->number);
+    if (node->kind == AST_BOOLEAN)
+        fprintf(out, ",\"value\":%s", node->number ? "true" : "false");
+    fputs(",\"children\":[", out);
+    for (const ASTNode *c = node->child; c; c = c->next) {
+        if (c != node->child) fputc(',', out);
+        json_node(out, c, next_id);
+    }
+    fputs("]}", out);
+}
+
+int ast_write_json(FILE *out, const ASTNode *node, const char *source) {
+    if (!out || !node) return 1;
+    unsigned next_id = 1;
+    fputs("{\"schema\":\"calser.ast\",\"version\":1,\"source\":", out);
+    json_string(out, source ? source : "");
+    fputs(",\"root\":", out);
+    json_node(out, node, &next_id);
+    fputs("}\n", out);
+    return ferror(out) ? 1 : 0;
+}
+
 
 void ast_free(ASTNode *node) {
     if (node == NULL)

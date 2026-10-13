@@ -12,12 +12,16 @@ typedef enum {
 
     /* Loop labels */
     LABEL_START,
-    LABEL_UPDATE
+    LABEL_UPDATE,
+
+    LABEL_BODY,
+    LABEL_SC_END,
+    LABEL_ARITH_ERROR
 
 } LabelRole;
 
 typedef struct LabelEntry {
-    ASTNode *node;
+    ASTNode *node;  /* NULL para la etiqueta global de error aritmético. */
     LabelRole role;
     char *name;
 
@@ -33,6 +37,7 @@ void label_table_init(LabelTable *table);
 
 int label_table_build(LabelTable *table, ASTNode *root);
 
+/* Para LABEL_ARITH_ERROR, consultar con node = NULL. */
 const char *label_table_get(
     const LabelTable *table,
     const ASTNode *node,

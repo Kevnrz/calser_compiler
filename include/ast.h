@@ -193,6 +193,9 @@ ASTNode *ast_index(char *name,
 void ast_print(ASTNode *node,
                int indent);
 
+/* Exporta AST sintáctico, sin punteros a símbolos. 0 = éxito. */
+int ast_write_json(FILE *out, const ASTNode *node, const char *source);
+
 void ast_free(ASTNode *node);
 
 #endif

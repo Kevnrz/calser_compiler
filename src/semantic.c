@@ -278,6 +278,7 @@ static void discard_symbol(Symbol *symbol) {
 // M-2: variables de ccom en 0x0000–0x0FFF; desde 0x1000, archivos de load_file
 #define DATA_BASE  0x0000
 #define DATA_LIMIT 0x1000          // primera dirección que NO se puede usar
+#define TEMP_WORDS 12             // una casilla para cada registro t0–t11
 
 static int next_address = DATA_BASE;   // libro §6.3.4: el "offset"
 
@@ -1608,6 +1609,7 @@ static int analyze_declaration(ASTNode *node) {
     if (!insert_symbol(symbol, node))
         return 1;
 
+    identifier->symbol = symbol;
     reserve(symbol->width, symbol->name, node, &symbol->address);
 
     return 1;
@@ -2111,6 +2113,7 @@ static int register_signature(ASTNode *node) {
     function->decl_node = node;
 
     symbol_insert(global_scope, function);
+    identifier->symbol = function;
 
     /*
      * Los parámetros solo quedan en param_list, que no es dueña: pasan a
@@ -2267,6 +2270,7 @@ static int analyze_function(ASTNode *node) {
      * +4  variable de retorno, si no es void
      * ... parámetros, en orden
      * ... locales de todos sus bloques, en el orden del recorrido
+     * ... 12 palabras para salvar temporales vivos (también en main)
      */
     function->area_base = next_address;
 
@@ -2299,10 +2303,10 @@ static int analyze_function(ASTNode *node) {
         ret->line = return_type->line;
         ret->decl_node = return_type;
 
-        ret_id->symbol = ret;
-
-        if (insert_symbol(ret, return_type))
+        if (insert_symbol(ret, return_type)) {
+            ret_id->symbol = ret;
             reserve(ret->width, ret->name, return_type, &ret->address);
+        }
     }
 
     // Los parámetros ya existen en param_list: desde aquí pertenecen al
@@ -2340,7 +2344,11 @@ static int analyze_function(ASTNode *node) {
                            function->name);
     }
 
-    // El área termina donde quedó el offset.
+    // Reserva al final del área espacio para salvar t0–t11 en llamadas.
+    reserve(TEMP_WORDS * type_width(TYPE_INT), function->name, node,
+            &function->temp_base);
+
+    // El área termina donde quedó el offset, incluidos los temporales.
     function->area_size = next_address - function->area_base;
 
     // Return to global scope.

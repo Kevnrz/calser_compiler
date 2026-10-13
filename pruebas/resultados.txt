@@ -598,21 +598,24 @@ pruebas/e66_crypto_nombre_reservado.cls:2:8: error sintactico: syntax error
 --- stderr ---
 --- tabla ---
 Scope 0: GLOBAL
-    doble : int (function) params=[n] area=0x0004 size=12
-    main : void (function) params=[] area=0x0000 size=4
+    doble : int (function) params=[n] area=0x0034 size=60 temp_base=0x0040
+    main : void (function) params=[] area=0x0000 size=52 temp_base=0x0004
 
 Scope 1: FUNCTION
     r : int width=4 addr=0x0000
 
 Scope 2: FUNCTION
-    n : int width=4 addr=0x000C
-    d : int (return) width=4 addr=0x0008
+    n : int width=4 addr=0x003C
+    d : int (return) width=4 addr=0x0038
 
 =======================
 
 ===== LABEL TABLE =====
-.L_func_1  | FUNCTION     | AST kind: 3 | Line: 7
-.L_func_0  | FUNCTION     | AST kind: 3 | Line: 1
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+.L_body_doble | BODY         | AST kind: FUNCTION | Line: 7
+.L_func_doble | FUNCTION     | AST kind: FUNCTION | Line: 7
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 1
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 1
 =======================
 --- codigo de salida: 0 ---
 
@@ -620,8 +623,8 @@ Scope 2: FUNCTION
 --- stderr ---
 --- tabla ---
 Scope 0: GLOBAL
-    main : void (function) params=[] area=0x0010 size=8
-    factorial : int (function) params=[n] area=0x0000 size=16
+    main : void (function) params=[] area=0x0040 size=56 temp_base=0x0048
+    factorial : int (function) params=[n] area=0x0000 size=64 temp_base=0x0010
 
 Scope 1: FUNCTION
     i : int width=4 addr=0x000C
@@ -633,18 +636,21 @@ Scope 2: C
 Scope 3: L
 
 Scope 4: FUNCTION
-    f : int width=4 addr=0x0014
-    x : int width=4 addr=0x0010
+    f : int width=4 addr=0x0044
+    x : int width=4 addr=0x0040
 
 =======================
 
 ===== LABEL TABLE =====
-.L_func_5  | FUNCTION     | AST kind: 3 | Line: 14
-.L_while_end_4 | END          | AST kind: 19 | Line: 7
-.L_while_start_3 | START        | AST kind: 19 | Line: 7
-.L_if_end_2 | END          | AST kind: 15 | Line: 2
-.L_if_next_1 | NEXT         | AST kind: 15 | Line: 2
-.L_func_0  | FUNCTION     | AST kind: 3 | Line: 1
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 14
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 14
+.L_while_end_3 | END          | AST kind: LOOP_L | Line: 7
+.L_while_start_2 | START        | AST kind: LOOP_L | Line: 7
+.L_if_end_1 | END          | AST kind: CONDITIONAL | Line: 2
+.L_if_next_0 | NEXT         | AST kind: CONDITIONAL | Line: 2
+.L_body_factorial | BODY         | AST kind: FUNCTION | Line: 1
+.L_func_factorial | FUNCTION     | AST kind: FUNCTION | Line: 1
 =======================
 --- codigo de salida: 0 ---
 
@@ -652,8 +658,8 @@ Scope 4: FUNCTION
 --- stderr ---
 --- tabla ---
 Scope 0: GLOBAL
-    main : void (function) params=[] area=0x0010 size=24
-    suma : int (function) params=[v] area=0x0000 size=16
+    main : void (function) params=[] area=0x0040 size=72 temp_base=0x0058
+    suma : int (function) params=[v] area=0x0000 size=64 temp_base=0x0010
 
 Scope 1: FUNCTION
     v : int[5] width=4 addr=0x0008
@@ -663,17 +669,20 @@ Scope 2: S
     i : int width=4 addr=0x000C
 
 Scope 3: FUNCTION
-    r : int width=4 addr=0x0024
-    datos : int[5] width=20 addr=0x0010
+    r : int width=4 addr=0x0054
+    datos : int[5] width=20 addr=0x0040
 
 =======================
 
 ===== LABEL TABLE =====
-.L_func_4  | FUNCTION     | AST kind: 3 | Line: 10
-.L_for_end_3 | END          | AST kind: 20 | Line: 4
-.L_for_update_2 | UPDATE       | AST kind: 20 | Line: 4
-.L_for_start_1 | START        | AST kind: 20 | Line: 4
-.L_func_0  | FUNCTION     | AST kind: 3 | Line: 3
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 10
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 10
+.L_for_end_2 | END          | AST kind: LOOP_S | Line: 4
+.L_for_update_1 | UPDATE       | AST kind: LOOP_S | Line: 4
+.L_for_start_0 | START        | AST kind: LOOP_S | Line: 4
+.L_body_suma | BODY         | AST kind: FUNCTION | Line: 3
+.L_func_suma | FUNCTION     | AST kind: FUNCTION | Line: 3
 =======================
 --- codigo de salida: 0 ---
 
@@ -681,8 +690,8 @@ Scope 3: FUNCTION
 --- stderr ---
 --- tabla ---
 Scope 0: GLOBAL
-    main : void (function) params=[] area=0x0040 size=28
-    maximo : int (function) params=[m, f, b] area=0x0024 size=28
+    main : void (function) params=[] area=0x0070 size=76 temp_base=0x008C
+    maximo : int (function) params=[m, f, b] area=0x0024 size=76 temp_base=0x0040
     tabla : int[2][3] width=24 addr=0x000C
     bandera : bool width=4 addr=0x0008
     limite : int width=4 addr=0x0004
@@ -701,25 +710,28 @@ Scope 3: C
     nuevo : int width=4 addr=0x003C
 
 Scope 4: FUNCTION
-    v : int[4] width=16 addr=0x0048
-    ok : bool width=4 addr=0x0044
-    r : int width=4 addr=0x0040
+    v : int[4] width=16 addr=0x0078
+    ok : bool width=4 addr=0x0074
+    r : int width=4 addr=0x0070
 
 Scope 5: L
-    paso : int width=4 addr=0x0058
+    paso : int width=4 addr=0x0088
 
 =======================
 
 ===== LABEL TABLE =====
-.L_while_end_8 | END          | AST kind: 19 | Line: 23
-.L_while_start_7 | START        | AST kind: 19 | Line: 23
-.L_func_6  | FUNCTION     | AST kind: 3 | Line: 18
-.L_if_end_5 | END          | AST kind: 15 | Line: 10
-.L_if_next_4 | NEXT         | AST kind: 15 | Line: 10
-.L_for_end_3 | END          | AST kind: 20 | Line: 9
-.L_for_update_2 | UPDATE       | AST kind: 20 | Line: 9
-.L_for_start_1 | START        | AST kind: 20 | Line: 9
-.L_func_0  | FUNCTION     | AST kind: 3 | Line: 8
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+.L_while_end_6 | END          | AST kind: LOOP_L | Line: 23
+.L_while_start_5 | START        | AST kind: LOOP_L | Line: 23
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 18
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 18
+.L_if_end_4 | END          | AST kind: CONDITIONAL | Line: 10
+.L_if_next_3 | NEXT         | AST kind: CONDITIONAL | Line: 10
+.L_for_end_2 | END          | AST kind: LOOP_S | Line: 9
+.L_for_update_1 | UPDATE       | AST kind: LOOP_S | Line: 9
+.L_for_start_0 | START        | AST kind: LOOP_S | Line: 9
+.L_body_maximo | BODY         | AST kind: FUNCTION | Line: 8
+.L_func_maximo | FUNCTION     | AST kind: FUNCTION | Line: 8
 =======================
 --- codigo de salida: 0 ---
 
@@ -727,9 +739,9 @@ Scope 5: L
 --- stderr ---
 --- tabla ---
 Scope 0: GLOBAL
-    main : void (function) params=[] area=0x0020 size=40
-    poner : void (function) params=[v, k] area=0x0014 size=12
-    suma_fila : int (function) params=[m, f] area=0x0000 size=20
+    main : void (function) params=[] area=0x0080 size=88 temp_base=0x00A8
+    poner : void (function) params=[v, k] area=0x0044 size=60 temp_base=0x0050
+    suma_fila : int (function) params=[m, f] area=0x0000 size=68 temp_base=0x0014
 
 Scope 1: FUNCTION
     f : int width=4 addr=0x000C
@@ -740,23 +752,27 @@ Scope 2: S
     j : int width=4 addr=0x0010
 
 Scope 3: FUNCTION
-    k : int width=4 addr=0x001C
-    v : int[3] width=4 addr=0x0018
+    k : int width=4 addr=0x004C
+    v : int[3] width=4 addr=0x0048
 
 Scope 4: FUNCTION
-    r : int width=4 addr=0x0044
-    w : int[3] width=12 addr=0x0038
-    t : int[2][3] width=24 addr=0x0020
+    r : int width=4 addr=0x00A4
+    w : int[3] width=12 addr=0x0098
+    t : int[2][3] width=24 addr=0x0080
 
 =======================
 
 ===== LABEL TABLE =====
-.L_func_5  | FUNCTION     | AST kind: 3 | Line: 13
-.L_func_4  | FUNCTION     | AST kind: 3 | Line: 8
-.L_for_end_3 | END          | AST kind: 20 | Line: 2
-.L_for_update_2 | UPDATE       | AST kind: 20 | Line: 2
-.L_for_start_1 | START        | AST kind: 20 | Line: 2
-.L_func_0  | FUNCTION     | AST kind: 3 | Line: 1
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 13
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 13
+.L_body_poner | BODY         | AST kind: FUNCTION | Line: 8
+.L_func_poner | FUNCTION     | AST kind: FUNCTION | Line: 8
+.L_for_end_2 | END          | AST kind: LOOP_S | Line: 2
+.L_for_update_1 | UPDATE       | AST kind: LOOP_S | Line: 2
+.L_for_start_0 | START        | AST kind: LOOP_S | Line: 2
+.L_body_suma_fila | BODY         | AST kind: FUNCTION | Line: 1
+.L_func_suma_fila | FUNCTION     | AST kind: FUNCTION | Line: 1
 =======================
 --- codigo de salida: 0 ---
 
@@ -764,9 +780,9 @@ Scope 4: FUNCTION
 --- stderr ---
 --- tabla ---
 Scope 0: GLOBAL
-    main : void (function) params=[] area=0x0020 size=32
-    total : int (function) params=[v] area=0x0010 size=16
-    es_par : bool (function) params=[n] area=0x0004 size=12
+    main : void (function) params=[] area=0x0080 size=80 temp_base=0x00A0
+    total : int (function) params=[v] area=0x0040 size=64 temp_base=0x0050
+    es_par : bool (function) params=[n] area=0x0004 size=60 temp_base=0x0010
     tope : int width=4 addr=0x0000
 
 Scope 1: FUNCTION
@@ -774,31 +790,37 @@ Scope 1: FUNCTION
     r : bool (return) width=4 addr=0x0008
 
 Scope 2: FUNCTION
-    v : int[3] width=4 addr=0x0018
-    s : int (return) width=4 addr=0x0014
+    v : int[3] width=4 addr=0x0048
+    s : int (return) width=4 addr=0x0044
 
 Scope 3: S
-    i : int width=4 addr=0x001C
+    i : int width=4 addr=0x004C
 
 Scope 4: C
 
 Scope 5: FUNCTION
-    ok : bool width=4 addr=0x003C
-    t : int width=4 addr=0x0038
-    copia : int[3] width=12 addr=0x002C
-    datos : int[3] width=12 addr=0x0020
+    ok : bool width=4 addr=0x009C
+    t : int width=4 addr=0x0098
+    copia : int[3] width=12 addr=0x008C
+    datos : int[3] width=12 addr=0x0080
 
 =======================
 
 ===== LABEL TABLE =====
-.L_func_7  | FUNCTION     | AST kind: 3 | Line: 17
-.L_if_end_6 | END          | AST kind: 15 | Line: 10
-.L_if_next_5 | NEXT         | AST kind: 15 | Line: 10
-.L_for_end_4 | END          | AST kind: 20 | Line: 9
-.L_for_update_3 | UPDATE       | AST kind: 20 | Line: 9
-.L_for_start_2 | START        | AST kind: 20 | Line: 9
-.L_func_1  | FUNCTION     | AST kind: 3 | Line: 8
-.L_func_0  | FUNCTION     | AST kind: 3 | Line: 3
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+.L_sc_end_6 | SC_END       | AST kind: OR | Line: 24
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 17
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 17
+.L_sc_end_5 | SC_END       | AST kind: AND | Line: 10
+.L_if_end_4 | END          | AST kind: CONDITIONAL | Line: 10
+.L_if_next_3 | NEXT         | AST kind: CONDITIONAL | Line: 10
+.L_for_end_2 | END          | AST kind: LOOP_S | Line: 9
+.L_for_update_1 | UPDATE       | AST kind: LOOP_S | Line: 9
+.L_for_start_0 | START        | AST kind: LOOP_S | Line: 9
+.L_body_total | BODY         | AST kind: FUNCTION | Line: 8
+.L_func_total | FUNCTION     | AST kind: FUNCTION | Line: 8
+.L_body_es_par | BODY         | AST kind: FUNCTION | Line: 3
+.L_func_es_par | FUNCTION     | AST kind: FUNCTION | Line: 3
 =======================
 --- codigo de salida: 0 ---
 
@@ -806,9 +828,9 @@ Scope 5: FUNCTION
 --- stderr ---
 --- tabla ---
 Scope 0: GLOBAL
-    main : void (function) params=[] area=0x001C size=12
-    doble : int (function) params=[x] area=0x0010 size=12
-    factorial : int (function) params=[n, acc] area=0x0000 size=16
+    main : void (function) params=[] area=0x007C size=60 temp_base=0x0088
+    doble : int (function) params=[x] area=0x0040 size=60 temp_base=0x004C
+    factorial : int (function) params=[n, acc] area=0x0000 size=64 temp_base=0x0010
 
 Scope 1: FUNCTION
     acc : int width=4 addr=0x000C
@@ -820,27 +842,31 @@ Scope 2: C
 Scope 3: RESIDUAL
 
 Scope 4: FUNCTION
-    x : int width=4 addr=0x0018
-    d : int (return) width=4 addr=0x0014
+    x : int width=4 addr=0x0048
+    d : int (return) width=4 addr=0x0044
 
 Scope 5: FUNCTION
-    s : int width=4 addr=0x0020
-    f : int width=4 addr=0x001C
+    s : int width=4 addr=0x0080
+    f : int width=4 addr=0x007C
 
 Scope 6: S
-    i : int width=4 addr=0x0024
+    i : int width=4 addr=0x0084
 
 =======================
 
 ===== LABEL TABLE =====
-.L_for_end_7 | END          | AST kind: 20 | Line: 19
-.L_for_update_6 | UPDATE       | AST kind: 20 | Line: 19
-.L_for_start_5 | START        | AST kind: 20 | Line: 19
-.L_func_4  | FUNCTION     | AST kind: 3 | Line: 15
-.L_func_3  | FUNCTION     | AST kind: 3 | Line: 10
-.L_if_end_2 | END          | AST kind: 15 | Line: 2
-.L_if_next_1 | NEXT         | AST kind: 15 | Line: 2
-.L_func_0  | FUNCTION     | AST kind: 3 | Line: 1
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+.L_for_end_4 | END          | AST kind: LOOP_S | Line: 19
+.L_for_update_3 | UPDATE       | AST kind: LOOP_S | Line: 19
+.L_for_start_2 | START        | AST kind: LOOP_S | Line: 19
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 15
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 15
+.L_body_doble | BODY         | AST kind: FUNCTION | Line: 10
+.L_func_doble | FUNCTION     | AST kind: FUNCTION | Line: 10
+.L_if_end_1 | END          | AST kind: CONDITIONAL | Line: 2
+.L_if_next_0 | NEXT         | AST kind: CONDITIONAL | Line: 2
+.L_body_factorial | BODY         | AST kind: FUNCTION | Line: 1
+.L_func_factorial | FUNCTION     | AST kind: FUNCTION | Line: 1
 =======================
 --- codigo de salida: 0 ---
 
@@ -848,7 +874,7 @@ Scope 6: S
 --- stderr ---
 --- tabla ---
 Scope 0: GLOBAL
-    main : void (function) params=[] area=0x0000 size=4
+    main : void (function) params=[] area=0x0000 size=52 temp_base=0x0004
 
 Scope 1: FUNCTION
     x : int width=4 addr=0x0000
@@ -856,7 +882,9 @@ Scope 1: FUNCTION
 =======================
 
 ===== LABEL TABLE =====
-.L_func_0  | FUNCTION     | AST kind: 3 | Line: 2
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 2
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 2
 =======================
 --- codigo de salida: 0 ---
 
@@ -864,7 +892,7 @@ Scope 1: FUNCTION
 --- stderr ---
 --- tabla ---
 Scope 0: GLOBAL
-    main : void (function) params=[] area=0x0010 size=4
+    main : void (function) params=[] area=0x0010 size=52 temp_base=0x0014
     negado : int width=4 addr=0x000C
     vuelta : int width=4 addr=0x0008
     cifrado : int width=4 addr=0x0004
@@ -876,7 +904,9 @@ Scope 1: FUNCTION
 =======================
 
 ===== LABEL TABLE =====
-.L_func_0  | FUNCTION     | AST kind: 3 | Line: 6
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 6
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 6
 =======================
 --- codigo de salida: 0 ---
 

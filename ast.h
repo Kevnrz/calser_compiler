@@ -34,6 +34,7 @@ typedef enum {
 
     AST_EMIT,
     AST_REWIND,
+    AST_CRYPTO,
 
     AST_ARGUMENTS,
 
@@ -161,6 +162,10 @@ ASTNode *ast_loop_s(char *variable,
 ASTNode *ast_emit(void);
 
 ASTNode *ast_rewind(char *name,
+                    ASTNode *args);
+
+// operation: nombre de la palabra reservada ("cifrar", "cargar_llave"...).
+ASTNode *ast_crypto(const char *operation,
                     ASTNode *args);
 
 // Expressions

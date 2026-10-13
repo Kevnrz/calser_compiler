@@ -1496,6 +1496,123 @@ static void emit_loop_l(ASTNode *node) {
     cg_label(end_label);
 }
 
+static void emit_loop_s(ASTNode *node) {
+    ASTNode *id_node    = child_at(node, 0);
+    ASTNode *start_node = child_at(node, 1);
+    ASTNode *end_node   = child_at(node, 2);
+    ASTNode *step_node  = child_at(node, 3);
+    ASTNode *body       = child_at(node, 4);
+
+    if (!id_node || id_node->kind != AST_IDENTIFIER ||
+        !start_node || !end_node || !step_node || !body) {
+        report_error(node, "estructura del ciclo S invalida");
+        return;
+    }
+
+    Symbol *loop_var = get_symbol(id_node);
+
+    if (!loop_var || loop_var->type != TYPE_INT ||
+        loop_var->kind == SYMBOL_FUNCTION) {
+        report_error(id_node, "variable de control debe ser int");
+        return;
+    }
+
+    int start = emit_expression(start_node);
+    if (start < 0) return;
+
+    int end = emit_expression(end_node);
+    if (end < 0) {
+        free_reg(start);
+        return;
+    }
+
+    int step = emit_expression(step_node);
+    if (step < 0) {
+        free_reg(start);
+        free_reg(end);
+        return;
+    }
+
+    int current = alloc_reg();
+    int condition = alloc_reg();
+
+    if (current < 0 || condition < 0) {
+        report_error(node, "sin registros para generar el ciclo S");
+        free_reg(start);
+        free_reg(end);
+        free_reg(step);
+        if (current >= 0) free_reg(current);
+        if (condition >= 0) free_reg(condition);
+        return;
+    }
+
+    char test_label[64];
+    char end_label[64];
+
+    make_label(test_label, sizeof(test_label), "for_test");
+    make_label(end_label, sizeof(end_label), "for_end");
+
+    // i = start
+    emit_store_symbol(loop_var, start, id_node);
+
+    cg_label(test_label);
+
+    // current = i
+    if (emit_load_symbol(current, loop_var, id_node) != 0) {
+        free_reg(start);
+        free_reg(end);
+        free_reg(step);
+        free_reg(current);
+        free_reg(condition);
+        return;
+    }
+
+    // condition = (i < end)
+    cg_op(SLOT_ALU0,
+          "slt %s, %s, %s",
+          reg_name(condition),
+          reg_name(current),
+          reg_name(end));
+
+    // Exit when i >= end.
+    cg_op(SLOT_BRU,
+          "beq %s, rz, %s",
+          reg_name(condition),
+          end_label);
+
+    // Execute the body.
+    emit_block(body);
+
+    // i = i + step
+    if (emit_load_symbol(current, loop_var, id_node) != 0) {
+        free_reg(start);
+        free_reg(end);
+        free_reg(step);
+        free_reg(current);
+        free_reg(condition);
+        return;
+    }
+
+    cg_op(SLOT_ALU0,
+          "add %s, %s, %s",
+          reg_name(current),
+          reg_name(current),
+          reg_name(step));
+
+    emit_store_symbol(loop_var, current, id_node);
+
+    // Repeat.
+    cg_op(SLOT_BRU, "jef %s", test_label);
+
+    cg_label(end_label);
+
+    free_reg(start);
+    free_reg(end);
+    free_reg(step);
+    free_reg(current);
+    free_reg(condition);
+}
+
 static int inside_main;
  
 // `E` de main termina el programa (contrato §3):
@@ -1846,8 +1963,7 @@ static void emit_statement(ASTNode *node) {
             break;
 
         case AST_LOOP_S:
-            report_error(node,
-                         "ciclo S aun no implementado");
+            emit_loop_s(node);
             break;
 
         case AST_CRYPTO:

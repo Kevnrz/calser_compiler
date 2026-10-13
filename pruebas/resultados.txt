@@ -1,0 +1,882 @@
+===== pruebas/e01_no_declarado.cls =====
+--- stderr ---
+pruebas/e01_no_declarado.cls:3:9: error semantico: 'b' no ha sido declarado
+     3 |     a = b + 1 ;
+       |         ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e02_uso_antes.cls =====
+--- stderr ---
+pruebas/e02_uso_antes.cls:2:5: error semantico: 'x' no ha sido declarado
+     2 |     x = 1 ;
+       |     ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e03_fuera_alcance.cls =====
+--- stderr ---
+pruebas/e03_fuera_alcance.cls:5:5: error semantico: 'bono' esta fuera de alcance; fue declarado en el bloque de la linea 2
+     5 |     bono = 1 ;
+       |     ^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e04_oculta_parametro.cls =====
+--- stderr ---
+pruebas/e04_oculta_parametro.cls:3:12: error semantico: 'y' ya es un parametro de esta funcion
+     3 |         Vm y : int ;
+       |            ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e05_param_duplicado.cls =====
+--- stderr ---
+pruebas/e05_param_duplicado.cls:1:19: error semantico: 'a' ya fue declarado en este ambito (linea 1)
+     1 | F f [ int a , int a ] : void ;
+       |                   ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e06_retorno_igual_param.cls =====
+--- stderr ---
+pruebas/e06_retorno_igual_param.cls:1:21: error semantico: 'r' ya fue declarado en este ambito (linea 1)
+     1 | F f [ int r ] : int r ;
+       |                     ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e07_dimension_cero.cls =====
+--- stderr ---
+pruebas/e07_dimension_cero.cls:2:8: error semantico: el tamano de un arreglo debe ser mayor que cero
+     2 |     Vm v : int [0] ;
+       |        ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e08_sin_main.cls =====
+--- stderr ---
+pruebas/e08_sin_main.cls: error semantico: el archivo principal debe declarar 'main'
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e09_main_con_params.cls =====
+--- stderr ---
+pruebas/e09_main_con_params.cls:1:3: error semantico: 'main' debe declararse como F main [] : void
+     1 | F main [ int a ] : void ;
+       |   ^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e10_dos_main.cls =====
+--- stderr ---
+pruebas/e10_dos_main.cls:5:3: error semantico: la funcion 'main' ya fue declarada (linea 1)
+     5 | F main [] : void ;
+       |   ^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e11_limite_s_no_declarado.cls =====
+--- stderr ---
+pruebas/e11_limite_s_no_declarado.cls:3:17: error semantico: 'n' no ha sido declarado
+     3 |     S [ i , 0 , n , 1 ] ;
+       |                 ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e12_datos_excedidos.cls =====
+--- stderr ---
+pruebas/e12_datos_excedidos.cls:4:8: error semantico: 'x' no cabe en la memoria de datos (limite 0x0FFF)
+     4 |     Vm x : int ;
+       |        ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e13_redeclaracion.cls =====
+--- stderr ---
+pruebas/e13_redeclaracion.cls:3:8: error semantico: 'x' ya fue declarado en este ambito (linea 2)
+     3 |     Vm x : bool ;
+       |        ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e14_fuera_alcance_s.cls =====
+--- stderr ---
+pruebas/e14_fuera_alcance_s.cls:6:9: error semantico: 'i' esta fuera de alcance; fue declarado en el bloque de la linea 3
+     6 |     t = i ;
+       |         ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e15_varios_errores.cls =====
+--- stderr ---
+pruebas/e15_varios_errores.cls:3:9: error semantico: 'b' no ha sido declarado
+     3 |     a = b ;
+       |         ^
+pruebas/e15_varios_errores.cls:4:8: error semantico: 'a' ya fue declarado en este ambito (linea 2)
+     4 |     Vm a : int ;
+       |        ^
+pruebas/e15_varios_errores.cls:5:5: error semantico: 'c' no ha sido declarado
+     5 |     c = 1 ;
+       |     ^
+Analisis semantico fallido: 3 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e16_falta_punto_coma.cls =====
+--- stderr ---
+pruebas/e16_falta_punto_coma.cls:3:5: error sintactico: syntax error
+     3 |     E ;
+       |     ^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e17_args_de_mas.cls =====
+--- stderr ---
+pruebas/e17_args_de_mas.cls:8:9: error semantico: 'doble' espera 1 argumentos, se recibieron 2
+     8 |     r = doble [ 1 , 2 ] ;
+       |         ^^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e18_no_es_arreglo.cls =====
+--- stderr ---
+pruebas/e18_no_es_arreglo.cls:3:5: error semantico: 't' no es un arreglo
+     3 |     t [ 0 ] = 1 ;
+       |     ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e19_no_es_funcion.cls =====
+--- stderr ---
+pruebas/e19_no_es_funcion.cls:3:5: error semantico: 't' no es una funcion
+     3 |     t [ 1 ] ;
+       |     ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e20_indices_de_menos.cls =====
+--- stderr ---
+pruebas/e20_indices_de_menos.cls:4:9: error semantico: 'm' tiene 2 dimensiones, se usaron 1 indices
+     4 |     x = m [ 1 ] ;
+       |         ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e21_indice_fuera_rango.cls =====
+--- stderr ---
+pruebas/e21_indice_fuera_rango.cls:3:9: error semantico: indice 5 fuera del rango [0..2]
+     3 |     v [ 5 ] = 1 ;
+       |         ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e22_lista_tamano.cls =====
+--- stderr ---
+pruebas/e22_lista_tamano.cls:2:8: error semantico: se recibieron 2 valores, se esperaban 5
+     2 |     Vm v : int [5] = [ 1 , 2 ] ;
+       |        ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e23_lista_forma.cls =====
+--- stderr ---
+pruebas/e23_lista_forma.cls:2:8: error semantico: la fila 1 tiene 2 valores, se esperaban 3
+     2 |     Vm m : int [2][3] = [ [ 1 , 2 , 3 ] , [ 4 , 5 ] ] ;
+       |        ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e24_invocar_main.cls =====
+--- stderr ---
+pruebas/e24_invocar_main.cls:2:5: error semantico: 'main' es el punto de entrada y no puede invocarse
+     2 |     main [ ] ;
+       |     ^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e25_funcion_como_valor.cls =====
+--- stderr ---
+pruebas/e25_funcion_como_valor.cls:8:9: error semantico: 'doble' es una funcion; debe invocarse con corchetes
+     8 |     r = doble ;
+       |         ^^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e26_rewind_args.cls =====
+--- stderr ---
+pruebas/e26_rewind_args.cls:3:11: error semantico: 'cuenta' espera 1 argumentos, se recibieron 2
+     3 |         R cuenta [ n - 1 , 2 ] ;
+       |           ^^^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e27_asignacion_tipo.cls =====
+--- stderr ---
+pruebas/e27_asignacion_tipo.cls:3:5: error semantico: no se puede asignar 'bool' a una variable 'int'
+     3 |     x = verdadero ;
+       |     ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e28_operando_relacional.cls =====
+--- stderr ---
+pruebas/e28_operando_relacional.cls:4:11: error semantico: el operador '<' no acepta operandos de tipo bool
+     4 |     c = b < verdadero ;
+       |           ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e29_aritmetica.cls =====
+--- stderr ---
+pruebas/e29_aritmetica.cls:3:11: error semantico: el operador '*' requiere operandos de tipo int
+     3 |     x = 2 * falso ;
+       |           ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e30_logico.cls =====
+--- stderr ---
+pruebas/e30_logico.cls:3:11: error semantico: el operador '&' requiere operandos de tipo bool
+     3 |     b = 1 & verdadero ;
+       |           ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e31_condicion.cls =====
+--- stderr ---
+pruebas/e31_condicion.cls:3:9: error semantico: la condicion debe ser de tipo bool
+     3 |     C [ x ] ;
+       |         ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e32_argumento_tipo.cls =====
+--- stderr ---
+pruebas/e32_argumento_tipo.cls:8:17: error semantico: argumento 1 de 'doble': se esperaba int, se recibio bool
+     8 |     r = doble [ verdadero ] ;
+       |                 ^^^^^^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e33_arreglo_tamano.cls =====
+--- stderr ---
+pruebas/e33_arreglo_tamano.cls:8:16: error semantico: argumento 1 de 'suma': se esperaba int[3], se recibio int[4]
+     8 |     r = suma [ w ] ;
+       |                ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e34_asignar_vi.cls =====
+--- stderr ---
+pruebas/e34_asignar_vi.cls:3:5: error semantico: 'limite' es inmutable y no puede modificarse
+     3 |     limite = 6 ;
+       |     ^^^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e35_elemento_vi.cls =====
+--- stderr ---
+pruebas/e35_elemento_vi.cls:3:5: error semantico: 'tabla' es inmutable; sus elementos no pueden modificarse
+     3 |     tabla [ 0 ] = 3 ;
+       |     ^^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e36_vi_a_modificable.cls =====
+--- stderr ---
+pruebas/e36_vi_a_modificable.cls:8:13: error semantico: 'datos' es inmutable; el parametro 'm' permite modificacion
+     8 |     poner [ datos ] ;
+       |             ^^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e37_indice_no_entero.cls =====
+--- stderr ---
+pruebas/e37_indice_no_entero.cls:3:9: error semantico: el indice debe ser de tipo int
+     3 |     v [ verdadero ] = 1 ;
+       |         ^^^^^^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e38_variable_s.cls =====
+--- stderr ---
+pruebas/e38_variable_s.cls:4:9: error semantico: 'i' es inmutable y no puede modificarse
+     4 |         i = 0 ;
+       |         ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e39_funcion_void_valor.cls =====
+--- stderr ---
+pruebas/e39_funcion_void_valor.cls:7:9: error semantico: la funcion 'nada' no devuelve valor
+     7 |     x = nada [ ] ;
+       |         ^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e40_copia_arreglo.cls =====
+--- stderr ---
+pruebas/e40_copia_arreglo.cls:4:5: error semantico: no se puede asignar int[5] a int[3]
+     4 |     a = b ;
+       |     ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e41_sin_e.cls =====
+--- stderr ---
+pruebas/e41_sin_e.cls:1:3: error semantico: la funcion 'algo' no contiene ninguna sentencia 'E'
+     1 | F algo [] : void ;
+       |   ^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e42_r_sin_e.cls =====
+--- stderr ---
+pruebas/e42_r_sin_e.cls:1:3: error semantico: la funcion 'cuenta' usa 'R' pero no contiene ningun 'E'; la recursion nunca terminaria
+     1 | F cuenta [ int n ] : void ;
+       |   ^^^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e43_r_otra.cls =====
+--- stderr ---
+pruebas/e43_r_otra.cls:7:11: error semantico: 'R' solo puede reiniciar la funcion actual
+     7 |         R otra [ 1 ] ;
+       |           ^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e44_recursion_directa.cls =====
+--- stderr ---
+pruebas/e44_recursion_directa.cls:5:17: error semantico: 'fact' se invoca a si misma; la recursion debe expresarse con 'R'
+     5 |         r = n * fact [ n - 1 ] ;
+       |                 ^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e45_recursion_indirecta.cls =====
+--- stderr ---
+pruebas/e45_recursion_indirecta.cls:7:9: error semantico: ciclo de llamadas: f -> g -> f
+     7 |     b = f [ n ] ;
+       |         ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e46_inalcanzable.cls =====
+--- stderr ---
+pruebas/e46_inalcanzable.cls:4:5: error semantico: codigo inalcanzable: la sentencia anterior transfiere el control
+     4 |     x = 1 ;
+       |     ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e47_paso_cero.cls =====
+--- stderr ---
+pruebas/e47_paso_cero.cls:3:21: error semantico: el paso de 'S' no puede ser cero
+     3 |     S [ i , 0 , 5 , 0 ] ;
+       |                     ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e48_s_nunca.cls =====
+--- stderr ---
+pruebas/e48_s_nunca.cls:3:9: error semantico: el ciclo 'S' nunca se ejecuta: inicio 0, fin 10, paso -1
+     3 |     S [ i , 0 , 10 , -1 ] ;
+       |         ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e49_division_cero.cls =====
+--- stderr ---
+pruebas/e49_division_cero.cls:3:11: error semantico: division entre cero
+     3 |     x = x / 0 ;
+       |           ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e50_desborde.cls =====
+--- stderr ---
+pruebas/e50_desborde.cls:3:20: error semantico: la expresion constante desborda el rango de int
+     3 |     x = 2147483647 + 1 ;
+       |                    ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e51_exponente_negativo.cls =====
+--- stderr ---
+pruebas/e51_exponente_negativo.cls:3:11: error semantico: exponente negativo: resultado no representable como int
+     3 |     x = 2 ^ - 1 ;
+       |           ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e52_caracter_invalido.cls =====
+--- stderr ---
+pruebas/e52_caracter_invalido.cls:3:11: error lexico: caracter no reconocido: '$'
+     3 |     x = 1 $ ;
+       |           ^
+Analisis lexico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e53_identificador_largo.cls =====
+--- stderr ---
+pruebas/e53_identificador_largo.cls:2:8: error lexico: identificador excede la longitud maxima
+     2 |     Vm abcdefghijabcdefghijabcdefghijabc : int ;
+       |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Analisis lexico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e54_constante_rango.cls =====
+--- stderr ---
+pruebas/e54_constante_rango.cls:3:9: error lexico: constante entera fuera del rango de 32 bits
+     3 |     x = 3000000000 ;
+       |         ^^^^^^^^^^
+Analisis lexico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e55_comentario_abierto.cls =====
+--- stderr ---
+pruebas/e55_comentario_abierto.cls:2:5: error lexico: comentario abierto en la linea 2 nunca se cierra
+     2 |     #[ esto nunca
+       |     ^^
+Analisis lexico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e56_lexico_y_sintactico.cls =====
+--- stderr ---
+pruebas/e56_lexico_y_sintactico.cls:3:9: error lexico: caracter no reconocido: '$'
+     3 |     x = $ ;
+       |         ^
+pruebas/e56_lexico_y_sintactico.cls:3:11: error sintactico: syntax error
+     3 |     x = $ ;
+       |           ^
+Analisis lexico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e57_crypto_k_no_literal.cls =====
+--- stderr ---
+pruebas/e57_crypto_k_no_literal.cls:3:32: error sintactico: syntax error
+     3 |     cifrar [ 4096 , 8192 , 1 , k ] ;
+       |                                ^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e58_crypto_k_rango.cls =====
+--- stderr ---
+pruebas/e58_crypto_k_rango.cls:2:32: error semantico: el argumento 'k' de 'cifrar' debe estar entre 0 y 3
+     2 |     cifrar [ 4096 , 8192 , 1 , 4 ] ;
+       |                                ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e59_crypto_w_rango.cls =====
+--- stderr ---
+pruebas/e59_crypto_w_rango.cls:2:24: error semantico: el argumento 'w' de 'cargar_llave' debe estar entre 0 y 3
+     2 |     cargar_llave [ 0 , 5 , 7 ] ;
+       |                        ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e60_crypto_faltan_argumentos.cls =====
+--- stderr ---
+pruebas/e60_crypto_faltan_argumentos.cls:2:30: error sintactico: syntax error
+     2 |     cifrar [ 4096 , 8192 , 1 ] ;
+       |                              ^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e61_crypto_tipo.cls =====
+--- stderr ---
+pruebas/e61_crypto_tipo.cls:2:18: error semantico: argumento 1 de 'autenticar': se esperaba int, se recibio bool
+     2 |     autenticar [ verdadero ] ;
+       |                  ^^^^^^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e62_crypto_alineacion.cls =====
+--- stderr ---
+pruebas/e62_crypto_alineacion.cls:2:14: error semantico: argumento 1 de 'cifrar': la direccion 4098 no es multiplo de 4
+     2 |     cifrar [ 4098 , 8192 , 1 , 0 ] ;
+       |              ^^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e63_crypto_fuera_de_zona.cls =====
+--- stderr ---
+pruebas/e63_crypto_fuera_de_zona.cls:2:24: error semantico: argumento 2 de 'descifrar': la direccion 100 esta fuera de la zona de datos [4096..65535]
+     2 |     descifrar [ 4096 , 100 , 1 , 0 ] ;
+       |                        ^^^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e64_crypto_se_sale.cls =====
+--- stderr ---
+pruebas/e64_crypto_se_sale.cls:2:29: error semantico: argumento 3 de 'cifrar': 2 bloques desde la direccion 65528 se salen de la memoria
+     2 |     cifrar [ 65528 , 8192 , 2 , 0 ] ;
+       |                             ^
+Analisis semantico fallido: 1 error(es).
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e65_crypto_como_valor.cls =====
+--- stderr ---
+pruebas/e65_crypto_como_valor.cls:2:18: error sintactico: syntax error
+     2 |     Vm x : int = cifrar [ 4096 , 8192 , 1 , 0 ] ;
+       |                  ^^^^^^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e66_crypto_nombre_reservado.cls =====
+--- stderr ---
+pruebas/e66_crypto_nombre_reservado.cls:2:8: error sintactico: syntax error
+     2 |     Vm cifrar : int = 0 ;
+       |        ^^^^^^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/p01_llamada_adelante.cls =====
+--- stderr ---
+--- tabla ---
+Scope 0: GLOBAL
+    doble : int (function) params=[n] area=0x0004 size=12
+    main : void (function) params=[] area=0x0000 size=4
+
+Scope 1: FUNCTION
+    r : int width=4 addr=0x0000
+
+Scope 2: FUNCTION
+    n : int width=4 addr=0x000C
+    d : int (return) width=4 addr=0x0008
+
+=======================
+
+===== LABEL TABLE =====
+.L_func_1  | FUNCTION     | AST kind: 3 | Line: 7
+.L_func_0  | FUNCTION     | AST kind: 3 | Line: 1
+=======================
+--- codigo de salida: 0 ---
+
+===== pruebas/p02_factorial.cls =====
+--- stderr ---
+--- tabla ---
+Scope 0: GLOBAL
+    main : void (function) params=[] area=0x0010 size=8
+    factorial : int (function) params=[n] area=0x0000 size=16
+
+Scope 1: FUNCTION
+    i : int width=4 addr=0x000C
+    n : int width=4 addr=0x0008
+    res : int (return) width=4 addr=0x0004
+
+Scope 2: C
+
+Scope 3: L
+
+Scope 4: FUNCTION
+    f : int width=4 addr=0x0014
+    x : int width=4 addr=0x0010
+
+=======================
+
+===== LABEL TABLE =====
+.L_func_5  | FUNCTION     | AST kind: 3 | Line: 14
+.L_while_end_4 | END          | AST kind: 19 | Line: 7
+.L_while_start_3 | START        | AST kind: 19 | Line: 7
+.L_if_end_2 | END          | AST kind: 15 | Line: 2
+.L_if_next_1 | NEXT         | AST kind: 15 | Line: 2
+.L_func_0  | FUNCTION     | AST kind: 3 | Line: 1
+=======================
+--- codigo de salida: 0 ---
+
+===== pruebas/p03_suma.cls =====
+--- stderr ---
+--- tabla ---
+Scope 0: GLOBAL
+    main : void (function) params=[] area=0x0010 size=24
+    suma : int (function) params=[v] area=0x0000 size=16
+
+Scope 1: FUNCTION
+    v : int[5] width=4 addr=0x0008
+    total : int (return) width=4 addr=0x0004
+
+Scope 2: S
+    i : int width=4 addr=0x000C
+
+Scope 3: FUNCTION
+    r : int width=4 addr=0x0024
+    datos : int[5] width=20 addr=0x0010
+
+=======================
+
+===== LABEL TABLE =====
+.L_func_4  | FUNCTION     | AST kind: 3 | Line: 10
+.L_for_end_3 | END          | AST kind: 20 | Line: 4
+.L_for_update_2 | UPDATE       | AST kind: 20 | Line: 4
+.L_for_start_1 | START        | AST kind: 20 | Line: 4
+.L_func_0  | FUNCTION     | AST kind: 3 | Line: 3
+=======================
+--- codigo de salida: 0 ---
+
+===== pruebas/p04_memoria.cls =====
+--- stderr ---
+--- tabla ---
+Scope 0: GLOBAL
+    main : void (function) params=[] area=0x0040 size=28
+    maximo : int (function) params=[m, f, b] area=0x0024 size=28
+    tabla : int[2][3] width=24 addr=0x000C
+    bandera : bool width=4 addr=0x0008
+    limite : int width=4 addr=0x0004
+    contador : int width=4 addr=0x0000
+
+Scope 1: FUNCTION
+    b : bool width=4 addr=0x0034
+    f : int width=4 addr=0x0030
+    m : int[2][3] width=4 addr=0x002C
+    mayor : int (return) width=4 addr=0x0028
+
+Scope 2: S
+    i : int width=4 addr=0x0038
+
+Scope 3: C
+    nuevo : int width=4 addr=0x003C
+
+Scope 4: FUNCTION
+    v : int[4] width=16 addr=0x0048
+    ok : bool width=4 addr=0x0044
+    r : int width=4 addr=0x0040
+
+Scope 5: L
+    paso : int width=4 addr=0x0058
+
+=======================
+
+===== LABEL TABLE =====
+.L_while_end_8 | END          | AST kind: 19 | Line: 23
+.L_while_start_7 | START        | AST kind: 19 | Line: 23
+.L_func_6  | FUNCTION     | AST kind: 3 | Line: 18
+.L_if_end_5 | END          | AST kind: 15 | Line: 10
+.L_if_next_4 | NEXT         | AST kind: 15 | Line: 10
+.L_for_end_3 | END          | AST kind: 20 | Line: 9
+.L_for_update_2 | UPDATE       | AST kind: 20 | Line: 9
+.L_for_start_1 | START        | AST kind: 20 | Line: 9
+.L_func_0  | FUNCTION     | AST kind: 3 | Line: 8
+=======================
+--- codigo de salida: 0 ---
+
+===== pruebas/p05_arreglos_llamadas.cls =====
+--- stderr ---
+--- tabla ---
+Scope 0: GLOBAL
+    main : void (function) params=[] area=0x0020 size=40
+    poner : void (function) params=[v, k] area=0x0014 size=12
+    suma_fila : int (function) params=[m, f] area=0x0000 size=20
+
+Scope 1: FUNCTION
+    f : int width=4 addr=0x000C
+    m : int[2][3] width=4 addr=0x0008
+    s : int (return) width=4 addr=0x0004
+
+Scope 2: S
+    j : int width=4 addr=0x0010
+
+Scope 3: FUNCTION
+    k : int width=4 addr=0x001C
+    v : int[3] width=4 addr=0x0018
+
+Scope 4: FUNCTION
+    r : int width=4 addr=0x0044
+    w : int[3] width=12 addr=0x0038
+    t : int[2][3] width=24 addr=0x0020
+
+=======================
+
+===== LABEL TABLE =====
+.L_func_5  | FUNCTION     | AST kind: 3 | Line: 13
+.L_func_4  | FUNCTION     | AST kind: 3 | Line: 8
+.L_for_end_3 | END          | AST kind: 20 | Line: 2
+.L_for_update_2 | UPDATE       | AST kind: 20 | Line: 2
+.L_for_start_1 | START        | AST kind: 20 | Line: 2
+.L_func_0  | FUNCTION     | AST kind: 3 | Line: 1
+=======================
+--- codigo de salida: 0 ---
+
+===== pruebas/p06_tipos.cls =====
+--- stderr ---
+--- tabla ---
+Scope 0: GLOBAL
+    main : void (function) params=[] area=0x0020 size=32
+    total : int (function) params=[v] area=0x0010 size=16
+    es_par : bool (function) params=[n] area=0x0004 size=12
+    tope : int width=4 addr=0x0000
+
+Scope 1: FUNCTION
+    n : int width=4 addr=0x000C
+    r : bool (return) width=4 addr=0x0008
+
+Scope 2: FUNCTION
+    v : int[3] width=4 addr=0x0018
+    s : int (return) width=4 addr=0x0014
+
+Scope 3: S
+    i : int width=4 addr=0x001C
+
+Scope 4: C
+
+Scope 5: FUNCTION
+    ok : bool width=4 addr=0x003C
+    t : int width=4 addr=0x0038
+    copia : int[3] width=12 addr=0x002C
+    datos : int[3] width=12 addr=0x0020
+
+=======================
+
+===== LABEL TABLE =====
+.L_func_7  | FUNCTION     | AST kind: 3 | Line: 17
+.L_if_end_6 | END          | AST kind: 15 | Line: 10
+.L_if_next_5 | NEXT         | AST kind: 15 | Line: 10
+.L_for_end_4 | END          | AST kind: 20 | Line: 9
+.L_for_update_3 | UPDATE       | AST kind: 20 | Line: 9
+.L_for_start_2 | START        | AST kind: 20 | Line: 9
+.L_func_1  | FUNCTION     | AST kind: 3 | Line: 8
+.L_func_0  | FUNCTION     | AST kind: 3 | Line: 3
+=======================
+--- codigo de salida: 0 ---
+
+===== pruebas/p07_retorno_recursion.cls =====
+--- stderr ---
+--- tabla ---
+Scope 0: GLOBAL
+    main : void (function) params=[] area=0x001C size=12
+    doble : int (function) params=[x] area=0x0010 size=12
+    factorial : int (function) params=[n, acc] area=0x0000 size=16
+
+Scope 1: FUNCTION
+    acc : int width=4 addr=0x000C
+    n : int width=4 addr=0x0008
+    r : int (return) width=4 addr=0x0004
+
+Scope 2: C
+
+Scope 3: RESIDUAL
+
+Scope 4: FUNCTION
+    x : int width=4 addr=0x0018
+    d : int (return) width=4 addr=0x0014
+
+Scope 5: FUNCTION
+    s : int width=4 addr=0x0020
+    f : int width=4 addr=0x001C
+
+Scope 6: S
+    i : int width=4 addr=0x0024
+
+=======================
+
+===== LABEL TABLE =====
+.L_for_end_7 | END          | AST kind: 20 | Line: 19
+.L_for_update_6 | UPDATE       | AST kind: 20 | Line: 19
+.L_for_start_5 | START        | AST kind: 20 | Line: 19
+.L_func_4  | FUNCTION     | AST kind: 3 | Line: 15
+.L_func_3  | FUNCTION     | AST kind: 3 | Line: 10
+.L_if_end_2 | END          | AST kind: 15 | Line: 2
+.L_if_next_1 | NEXT         | AST kind: 15 | Line: 2
+.L_func_0  | FUNCTION     | AST kind: 3 | Line: 1
+=======================
+--- codigo de salida: 0 ---
+
+===== pruebas/p08_comentarios.cls =====
+--- stderr ---
+--- tabla ---
+Scope 0: GLOBAL
+    main : void (function) params=[] area=0x0000 size=4
+
+Scope 1: FUNCTION
+    x : int width=4 addr=0x0000
+
+=======================
+
+===== LABEL TABLE =====
+.L_func_0  | FUNCTION     | AST kind: 3 | Line: 2
+=======================
+--- codigo de salida: 0 ---
+
+===== pruebas/p09_crypto.cls =====
+--- stderr ---
+--- tabla ---
+Scope 0: GLOBAL
+    main : void (function) params=[] area=0x0010 size=4
+    negado : int width=4 addr=0x000C
+    vuelta : int width=4 addr=0x0008
+    cifrado : int width=4 addr=0x0004
+    origen : int width=4 addr=0x0000
+
+Scope 1: FUNCTION
+    cifrar_total : int width=4 addr=0x0010
+
+=======================
+
+===== LABEL TABLE =====
+.L_func_0  | FUNCTION     | AST kind: 3 | Line: 6
+=======================
+--- codigo de salida: 0 ---
+

@@ -1,0 +1,88 @@
+{
+  "name": "calser-language",
+  "displayName": "Calser Language Support",
+  "description": "Reconocimiento y resaltado de Calser (.cls), Yacc/Bison (.y) y Lex/Flex (.l).",
+  "version": "0.3.0",
+  "publisher": "calser",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Themes"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "calser",
+        "aliases": [
+          "Calser",
+          "calser"
+        ],
+        "extensions": [
+          ".cls"
+        ],
+        "configuration": "./calser-language-configuration.json",
+        "icon": {
+          "light": "./icons/calser.png",
+          "dark": "./icons/calser.png"
+        }
+      },
+      {
+        "id": "yacc",
+        "aliases": [
+          "Yacc/Bison",
+          "yacc",
+          "bison"
+        ],
+        "extensions": [
+          ".y"
+        ],
+        "configuration": "./yacc-language-configuration.json"
+      },
+      {
+        "id": "lex",
+        "aliases": [
+          "Lex/Flex",
+          "lex",
+          "flex"
+        ],
+        "extensions": [
+          ".l"
+        ],
+        "configuration": "./lex-language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "calser",
+        "scopeName": "source.calser",
+        "path": "./syntaxes/calser.tmLanguage.json"
+      },
+      {
+        "language": "yacc",
+        "scopeName": "source.yacc",
+        "path": "./syntaxes/yacc.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.block.c": "c"
+        }
+      },
+      {
+        "language": "lex",
+        "scopeName": "source.lex",
+        "path": "./syntaxes/lex.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.block.c": "c"
+        }
+      }
+    ],
+    "iconThemes": [
+      {
+        "id": "calser-seti",
+        "label": "Calser (Seti)",
+        "path": "./icons/calser-icon-theme.json"
+      }
+    ]
+  },
+  "icon": "icons/calser.png"
+}

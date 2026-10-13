@@ -1,0 +1,59 @@
+{
+  "name": "Calser",
+  "scopeName": "source.calser",
+  "patterns": [
+    {
+      "name": "comment.block.calser",
+      "begin": "#\\[",
+      "end": "\\]#"
+    },
+    {
+      "name": "comment.line.number-sign.calser",
+      "match": "#(?!\\[).*$"
+    },
+    {
+      "name": "storage.type.calser",
+      "match": "\\b(?:int|bool|void)\\b"
+    },
+    {
+      "name": "storage.modifier.calser",
+      "match": "\\b(?:Vm|Vi)\\b"
+    },
+    {
+      "name": "keyword.control.calser",
+      "match": "\\b(?:F|C|A|L|S|E|R)\\b"
+    },
+    {
+      "name": "constant.language.boolean.calser",
+      "match": "\\b(?:verdadero|falso)\\b"
+    },
+    {
+      "name": "constant.numeric.integer.calser",
+      "match": "\\b[0-9]+\\b"
+    },
+    {
+      "name": "entity.name.function.calser",
+      "match": "\\b[a-z_][a-zA-Z0-9_]*(?=\\s*\\[)"
+    },
+    {
+      "name": "keyword.operator.calser",
+      "match": "==|!=|<=|>=|[=<>+*/%&|!^\\-]"
+    },
+    {
+      "name": "punctuation.section.brackets.calser",
+      "match": "[\\[\\]()]"
+    },
+    {
+      "name": "punctuation.terminator.calser",
+      "match": "[;.]"
+    },
+    {
+      "name": "punctuation.separator.calser",
+      "match": "[:,]"
+    },
+    {
+      "name": "variable.other.calser",
+      "match": "\\b[a-z_][a-zA-Z0-9_]*\\b"
+    }
+  ]
+}

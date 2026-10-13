@@ -1,0 +1,196 @@
+{
+  "name": "Lex/Flex",
+  "scopeName": "source.lex",
+  "patterns": [
+    {
+      "name": "meta.lexer.definitions.lex",
+      "begin": "\\A",
+      "end": "(?=^%%\\s*$)",
+      "patterns": [
+        {
+          "include": "#prologue"
+        },
+        {
+          "include": "#comments"
+        },
+        {
+          "name": "keyword.control.directive.lex",
+          "match": "%[a-zA-Z_][a-zA-Z0-9_-]*"
+        },
+        {
+          "name": "meta.lexer.definition.lex",
+          "begin": "^([a-zA-Z_][a-zA-Z0-9_]*)([ \\t]+)(?=\\S)",
+          "end": "$",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.name.constant.definition.lex"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#regex"
+            }
+          ]
+        },
+        {
+          "include": "source.c"
+        }
+      ]
+    },
+    {
+      "name": "meta.lexer.rules.lex",
+      "begin": "^%%\\s*$",
+      "end": "^%%\\s*$",
+      "beginCaptures": {
+        "0": {
+          "name": "keyword.control.section.lex"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "keyword.control.section.lex"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#prologue"
+        },
+        {
+          "name": "meta.lexer.rule.lex",
+          "begin": "^(?=[^\\s%])",
+          "end": "$",
+          "patterns": [
+            {
+              "name": "string.regexp.lex",
+              "begin": "\\G(?=\\S)",
+              "end": "(?=[ \\t]|$)",
+              "patterns": [
+                {
+                  "include": "#regex"
+                }
+              ]
+            },
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#action"
+            },
+            {
+              "include": "source.c"
+            }
+          ]
+        },
+        {
+          "include": "source.c"
+        }
+      ]
+    },
+    {
+      "include": "source.c"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.lex",
+          "begin": "/\\*",
+          "end": "\\*/"
+        },
+        {
+          "name": "comment.line.double-slash.lex",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "prologue": {
+      "name": "meta.embedded.block.c",
+      "begin": "^[ \\t]*%\\{",
+      "end": "^[ \\t]*%\\}",
+      "patterns": [
+        {
+          "include": "source.c"
+        }
+      ]
+    },
+    "regex": {
+      "patterns": [
+        {
+          "name": "entity.name.tag.start-condition.lex",
+          "match": "<(?:[a-zA-Z_][a-zA-Z0-9_]*(?:,[a-zA-Z_][a-zA-Z0-9_]*)*|\\*)>"
+        },
+        {
+          "name": "keyword.control.eof.lex",
+          "match": "<<EOF>>"
+        },
+        {
+          "name": "string.quoted.double.lex",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.lex",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "constant.character.escape.lex",
+          "match": "\\\\(?:[0-7]{1,3}|x[0-9a-fA-F]+|.)"
+        },
+        {
+          "name": "constant.other.character-class.lex",
+          "begin": "\\[\\^?",
+          "end": "\\]",
+          "patterns": [
+            {
+              "name": "constant.character.escape.lex",
+              "match": "\\\\."
+            },
+            {
+              "name": "support.constant.posix-class.lex",
+              "match": "\\[:[a-z]+:\\]"
+            },
+            {
+              "name": "keyword.operator.range.lex",
+              "match": "-"
+            }
+          ]
+        },
+        {
+          "name": "variable.other.definition.lex",
+          "match": "\\{[a-zA-Z_][a-zA-Z0-9_]*\\}"
+        },
+        {
+          "name": "keyword.operator.quantifier.lex",
+          "match": "\\{[0-9]+(?:,[0-9]*)?\\}|[?*+]"
+        },
+        {
+          "name": "keyword.operator.regexp.lex",
+          "match": "[.|^$/]"
+        },
+        {
+          "name": "punctuation.section.group.lex",
+          "match": "[()]"
+        }
+      ]
+    },
+    "action": {
+      "name": "meta.embedded.block.c",
+      "begin": "\\{",
+      "end": "\\}",
+      "patterns": [
+        {
+          "include": "#action"
+        },
+        {
+          "include": "source.c"
+        }
+      ]
+    }
+  }
+}

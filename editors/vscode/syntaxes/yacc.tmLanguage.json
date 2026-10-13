@@ -1,0 +1,136 @@
+{
+  "name": "Yacc/Bison",
+  "scopeName": "source.yacc",
+  "patterns": [
+    {
+      "name": "meta.embedded.block.c",
+      "begin": "^\\s*%\\{",
+      "end": "^\\s*%\\}",
+      "patterns": [
+        {
+          "include": "source.c"
+        }
+      ]
+    },
+    {
+      "name": "meta.grammar.rules.yacc",
+      "begin": "^\\s*%%",
+      "end": "^\\s*%%",
+      "beginCaptures": {
+        "0": {
+          "name": "keyword.control.section.yacc"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "keyword.control.section.yacc"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#action"
+        },
+        {
+          "include": "#directive"
+        },
+        {
+          "name": "entity.name.function.rule.yacc",
+          "match": "^[a-zA-Z_][a-zA-Z0-9_]*(?=\\s*$)|\\b[a-zA-Z_][a-zA-Z0-9_]*(?=\\s*:)"
+        },
+        {
+          "name": "constant.other.token.yacc",
+          "match": "\\b[A-Z][A-Z0-9_]*\\b"
+        },
+        {
+          "name": "string.quoted.single.yacc",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.yacc",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.double.yacc",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.yacc",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "punctuation.separator.yacc",
+          "match": "[:;|]"
+        },
+        {
+          "name": "variable.other.nonterminal.yacc",
+          "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    },
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#directive"
+    },
+    {
+      "include": "#action"
+    },
+    {
+      "name": "entity.name.type.semantic.yacc",
+      "match": "<[a-zA-Z_][a-zA-Z0-9_]*>"
+    },
+    {
+      "name": "constant.other.token.yacc",
+      "match": "\\b[A-Z][A-Z0-9_]*\\b"
+    },
+    {
+      "include": "source.c"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.yacc",
+          "begin": "/\\*",
+          "end": "\\*/"
+        },
+        {
+          "name": "comment.line.double-slash.yacc",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "directive": {
+      "name": "keyword.control.directive.yacc",
+      "match": "%[a-zA-Z_][a-zA-Z0-9_-]*"
+    },
+    "action": {
+      "name": "meta.embedded.block.c",
+      "begin": "\\{",
+      "end": "\\}",
+      "patterns": [
+        {
+          "include": "#action"
+        },
+        {
+          "name": "variable.language.semantic.yacc",
+          "match": "(?:\\$\\$|\\$(?:<[^>]+>)?(?:[0-9]+|[a-zA-Z_][a-zA-Z0-9_]*)|@(?:\\$|[0-9]+|[a-zA-Z_][a-zA-Z0-9_]*))"
+        },
+        {
+          "include": "source.c"
+        }
+      ]
+    }
+  }
+}

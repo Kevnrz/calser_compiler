@@ -1,65 +1,62 @@
 CC = gcc
+BISON = bison
+FLEX = flex
 CFLAGS = -Wall -Wextra -g
+CPPFLAGS += -Iinclude -Ibuild/generated
 
 TARGET = ccom
+BUILD_DIR = build
+GEN_DIR = $(BUILD_DIR)/generated
+OBJ_DIR = $(BUILD_DIR)/obj
+
+SOURCES = main ast symbol_table semantic diagnostics label_table
+OBJECTS = $(addprefix $(OBJ_DIR)/,$(addsuffix .o,$(SOURCES))) \
+          $(OBJ_DIR)/parser.tab.o $(OBJ_DIR)/lex.yy.o
 
 all: $(TARGET)
 
-$(TARGET): main.o ast.o parser.tab.o lex.yy.o symbol_table.o semantic.o diagnostics.o label_table.o
-	$(CC) $(CFLAGS) -o $@ $^
+$(TARGET): $(OBJECTS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-parser.tab.c parser.tab.h: parser.y
-	bison -d parser.y
+# Bison produces both files in one invocation (GNU Make >= 4.3).
+$(GEN_DIR)/parser.tab.c $(GEN_DIR)/parser.tab.h &: grammar/parser.y | $(GEN_DIR)
+	$(BISON) --defines=$(GEN_DIR)/parser.tab.h -o $(GEN_DIR)/parser.tab.c $<
 
-lex.yy.c: lexer.l parser.tab.h
-	flex lexer.l
+$(GEN_DIR)/lex.yy.c: grammar/lexer.l $(GEN_DIR)/parser.tab.h | $(GEN_DIR)
+	$(FLEX) -o $@ $<
 
-parser.tab.o: parser.tab.c ast.h diagnostics.h
-	$(CC) $(CFLAGS) -c parser.tab.c
+$(OBJ_DIR)/%.o: src/%.c | $(OBJ_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
-lex.yy.o: lex.yy.c parser.tab.h ast.h diagnostics.h
-	$(CC) $(CFLAGS) -c lex.yy.c
+$(OBJ_DIR)/parser.tab.o: $(GEN_DIR)/parser.tab.c | $(OBJ_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
-ast.o: ast.c ast.h
-	$(CC) $(CFLAGS) -c ast.c
+$(OBJ_DIR)/lex.yy.o: $(GEN_DIR)/lex.yy.c | $(OBJ_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
-symbol_table.o: symbol_table.c symbol_table.h
-	$(CC) $(CFLAGS) -c symbol_table.c
+$(BUILD_DIR) $(GEN_DIR) $(OBJ_DIR):
+	mkdir -p $@
 
-semantic.o: semantic.c semantic.h symbol_table.h ast.h diagnostics.h
-	$(CC) $(CFLAGS) -c semantic.c
+# Standalone arithmetic and array code-generation checks.
+$(BUILD_DIR)/emitir_aritmetica: src/codegen_arith.c pruebas/aritmetica/emitir.c include/codegen_arith.h | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
 
-diagnostics.o: diagnostics.c diagnostics.h
-	$(CC) $(CFLAGS) -c diagnostics.c
-
-label_table.o: label_table.c label_table.h
-	$(CC) $(CFLAGS) -c label_table.c
-
-main.o: main.c semantic.h ast.h diagnostics.h label_table.h
-	$(CC) $(CFLAGS) -c main.c
-
-clean:
-	rm -f $(TARGET) *.o parser.tab.c parser.tab.h lex.yy.c
-
-.PHONY: all clean
-
-# Pruebas de las rutinas aritmeticas de Gabriel
-build/emitir_aritmetica: codegen_arith.c codegen_arith.h pruebas/aritmetica/emitir.c
-	mkdir -p build
-	$(CC) $(CFLAGS) -std=c11 -I. codegen_arith.c pruebas/aritmetica/emitir.c -o $@
-
-check-arith: build/emitir_aritmetica
+check-arith: $(BUILD_DIR)/emitir_aritmetica
 	python3 pruebas/aritmetica/probar.py $<
 
-.PHONY: check-arith
+$(BUILD_DIR)/emitir_arreglos: src/codegen_array.c pruebas/arreglos/emitir.c include/codegen_array.h include/codegen_arith.h include/symbol_table.h | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
 
-
-# K-4b: array address generation and memory operations.
-build/emitir_arreglos: codegen_array.c codegen_array.h codegen_arith.h symbol_table.h pruebas/arreglos/emitir.c
-	mkdir -p build
-	$(CC) $(CFLAGS) -std=c11 -I. codegen_array.c pruebas/arreglos/emitir.c -o $@
-
-check-arrays: build/emitir_arreglos
+check-arrays: $(BUILD_DIR)/emitir_arreglos
 	python3 pruebas/arreglos/probar.py $<
 
-.PHONY: check-arrays
+check: check-arith check-arrays
+
+clean:
+	rm -f $(TARGET) $(OBJECTS) $(OBJECTS:.o=.d)
+	rm -f $(GEN_DIR)/parser.tab.c $(GEN_DIR)/parser.tab.h $(GEN_DIR)/lex.yy.c
+	rm -f $(BUILD_DIR)/emitir_aritmetica $(BUILD_DIR)/emitir_arreglos
+
+-include $(OBJECTS:.o=.d)
+
+.PHONY: all clean check check-arith check-arrays

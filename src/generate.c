@@ -4,6 +4,7 @@
 #include "generate.h"
 #include "codegen.h"
 #include "symbol_table.h"
+#include "codegen_arith.h"
 
 #define TEMP_FIRST 4
 #define TEMP_COUNT 12
@@ -14,12 +15,134 @@
 // the static data image and that the static data base is address 0.
 #define CALL_STACK_BASE CG_DATA_BYTES
 
+#define ARITH_ERROR_LABEL "L_arith_error"
+
+static CGArithContext arithmetic_context;
+
 static int temp_used[TEMP_COUNT];
 static int label_counter;
 static int generation_errors;
 
 static const char *current_function_name;
 static Symbol *current_function_symbol;
+
+static int emit_arith_callback(void *user, const CGArithOp *op) {
+    (void)user;
+
+    if (op == NULL)
+        return 0;
+
+    // Labels are represented by slot == -1.
+    if (op->slot == -1) {
+        size_t len = strlen(op->text);
+
+        if (len == 0 || op->text[len - 1] != ':')
+            return 0;
+
+        char label_name[128];
+
+        if (len >= sizeof(label_name))
+            return 0;
+
+        memcpy(label_name, op->text, len - 1);
+        label_name[len - 1] = '\0';
+
+        cg_label(label_name);
+        return 1;
+    }
+
+    // Arithmetic emitter slot 0 = ALU0.
+    if (op->slot == 0) {
+        cg_op(SLOT_ALU0, "%s", op->text);
+        return 1;
+    }
+
+    // Arithmetic emitter slot 2 = branch/jump unit.
+    if (op->slot == 2) {
+        cg_op(SLOT_BRU, "%s", op->text);
+        return 1;
+    }
+
+    return 0;
+}
+
+static int emit_software_arithmetic(ASTNode *node, CGArithKind kind, int lhs, int rhs) {
+    int dst = alloc_reg();
+
+    if (dst < 0) {
+        report_error(
+            node,
+            "sin registros para el resultado aritmetico"
+        );
+        free_reg(lhs);
+        free_reg(rhs);
+        return -1;
+    }
+
+    int work[8];
+    int allocated = 0;
+
+    for (int i = 0; i < 8; i++) {
+        work[i] = alloc_reg();
+
+        if (work[i] < 0) {
+            report_error(
+                node,
+                "sin suficientes registros para la rutina aritmetica"
+            );
+
+            for (int j = 0; j < allocated; j++)
+                free_reg(work[j]);
+
+            free_reg(dst);
+            free_reg(lhs);
+            free_reg(rhs);
+
+            return -1;
+        }
+
+        allocated++;
+    }
+
+    const char *error_label = NULL;
+
+    if (kind == CG_ARITH_DIV ||
+        kind == CG_ARITH_MOD ||
+        kind == CG_ARITH_POWER) {
+        error_label = ARITH_ERROR_LABEL;
+    }
+
+    int success = cg_arith_emit(
+        &arithmetic_context,
+        kind,
+        lhs,
+        rhs,
+        dst,
+        work,
+        error_label
+    );
+
+    for (int i = 0; i < 8; i++)
+        free_reg(work[i]);
+
+    free_reg(lhs);
+    free_reg(rhs);
+
+    if (!success) {
+        free_reg(dst);
+
+        report_error(
+            node,
+            "fallo al generar la rutina aritmetica"
+        );
+
+        return -1;
+    }
+
+    // dst remains allocated because the caller needs
+    // its value as the expression result.
+    return dst;
+}
  
 static void report_error(ASTNode *node, const char *message) {
     if (node != NULL && node->line > 0) {
@@ -407,10 +530,62 @@ static int emit_expression(ASTNode *node) {
         case AST_MUL:
         case AST_DIV:
         case AST_MOD:
-        case AST_POWER:
-            report_error(node,
-                         "operador requiere rutina de software");
-            return -1;
+        case AST_POWER: {
+            ASTNode *left = child_at(node, 0);
+            ASTNode *right = child_at(node, 1);
+
+            if (left == NULL || right == NULL) {
+                report_error(
+                    node,
+                    "expresion aritmetica incompleta"
+                );
+                return -1;
+            }
+
+            int lhs = emit_expression(left);
+
+            if (lhs < 0)
+                return -1;
+
+            int rhs = emit_expression(right);
+
+            if (rhs < 0) {
+                free_reg(lhs);
+                return -1;
+            }
+
+            CGArithKind kind;
+
+            switch (node->kind) {
+                case AST_MUL:
+                    kind = CG_ARITH_MUL;
+                    break;
+
+                case AST_DIV:
+                    kind = CG_ARITH_DIV;
+                    break;
+
+                case AST_MOD:
+                    kind = CG_ARITH_MOD;
+                    break;
+
+                case AST_POWER:
+                    kind = CG_ARITH_POWER;
+                    break;
+
+                default:
+                    free_reg(lhs);
+                    free_reg(rhs);
+                    return -1;
+            }
+
+            return emit_software_arithmetic(
+                node,
+                kind,
+                lhs,
+                rhs
+            );
+        }
 
         case AST_CALL:
             report_error(node,
@@ -1129,6 +1304,10 @@ int generate_code(ASTNode *root) {
  
     cg_init();
 
+    arithmetic_context.emit = emit_arith_callback;
+    arithmetic_context.user = NULL;
+    arithmetic_context.next_label = 0;
+
     label_counter = 0;
     generation_errors = 0;
     inside_main = 0;
@@ -1172,6 +1351,9 @@ int generate_code(ASTNode *root) {
     }
 
     emit_end_of_main();
+
+    cg_label(ARITH_ERROR_LABEL);
+    cg_op(SLOT_BRU, "jef %s", ARITH_ERROR_LABEL);
 
     return generation_errors == 0 ? 0 : 1;
 }

@@ -899,8 +899,8 @@ static ExprType check_call(ASTNode *node, UseContext context) {
         }
         else if (resolution == RESOLVED_ACCESS) {
 
-            // Índices usados: los de ARGUMENTS y, en INDEX, uno más.
-            int used = n_args + (node->kind == AST_INDEX ? 1 : 0);
+            // Todos los indices en ARGUMETNS.
+            int used = n_args;
 
             valid = used == symbol->dimensions;
 

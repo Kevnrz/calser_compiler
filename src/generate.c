@@ -800,7 +800,7 @@ static int emit_expression(ASTNode *node) {
 
         case AST_INDEX: {
             ASTNode *array_id = child_at(node, 0);
-            ASTNode *index_node = child_at(node, 1);
+            ASTNode *arguments = child_at(node, 1);
 
             if (array_id == NULL || array_id->kind != AST_IDENTIFIER) {
                 report_error(node, "identificador de arreglo invalido");
@@ -825,7 +825,7 @@ static int emit_expression(ASTNode *node) {
             int indices[MAX_DIMS] = {-1, -1};
             int count = 0;
 
-            for (ASTNode *idx = index_node;
+            for (ASTNode *idx = arguments->child;
                 idx != NULL;
                 idx = idx->next) {
 
@@ -1234,7 +1234,7 @@ static void emit_assignment(ASTNode *node) {
         int indices[MAX_DIMS] = {-1, -1};
         int count = 0;
 
-        for (ASTNode *idx = array_id->next;
+        for (ASTNode *idx = array_id->next->child;
              idx != NULL;
              idx = idx->next) {
 

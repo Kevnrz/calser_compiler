@@ -5,6 +5,7 @@
 #include "codegen.h"
 #include "symbol_table.h"
 #include "codegen_arith.h"
+#include "codegen_array.h"
 
 #define TEMP_FIRST 4
 #define TEMP_COUNT 12
@@ -54,46 +55,6 @@ static int is_expression_kind(ASTKind kind) {
         default:
             return 0;
     }
-}
-
-static int emit_arith_callback(void *user, const CGArithOp *op) {
-    (void)user;
-
-    if (op == NULL)
-        return 0;
-
-    // Labels are represented by slot == -1.
-    if (op->slot == -1) {
-        size_t len = strlen(op->text);
-
-        if (len == 0 || op->text[len - 1] != ':')
-            return 0;
-
-        char label_name[128];
-
-        if (len >= sizeof(label_name))
-            return 0;
-
-        memcpy(label_name, op->text, len - 1);
-        label_name[len - 1] = '\0';
-
-        cg_label(label_name);
-        return 1;
-    }
-
-    // Arithmetic emitter slot 0 = ALU0.
-    if (op->slot == 0) {
-        cg_op(SLOT_ALU0, "%s", op->text);
-        return 1;
-    }
-
-    // Arithmetic emitter slot 2 = branch/jump unit.
-    if (op->slot == 2) {
-        cg_op(SLOT_BRU, "%s", op->text);
-        return 1;
-    }
-
-    return 0;
 }
  
 static void report_error(ASTNode *node, const char *message) {
@@ -172,84 +133,6 @@ static void free_reg(int reg) {
 
         temp_used[reg - TEMP_FIRST] = 0;
     }
-}
-
-static int emit_software_arithmetic(ASTNode *node, CGArithKind kind, int lhs, int rhs) {
-    int dst = alloc_reg();
-
-    if (dst < 0) {
-        report_error(
-            node,
-            "sin registros para el resultado aritmetico"
-        );
-        free_reg(lhs);
-        free_reg(rhs);
-        return -1;
-    }
-
-    int work[8];
-    int allocated = 0;
-
-    for (int i = 0; i < 8; i++) {
-        work[i] = alloc_reg();
-
-        if (work[i] < 0) {
-            report_error(
-                node,
-                "sin suficientes registros para la rutina aritmetica"
-            );
-
-            for (int j = 0; j < allocated; j++)
-                free_reg(work[j]);
-
-            free_reg(dst);
-            free_reg(lhs);
-            free_reg(rhs);
-
-            return -1;
-        }
-
-        allocated++;
-    }
-
-    const char *error_label = NULL;
-
-    if (kind == CG_ARITH_DIV ||
-        kind == CG_ARITH_MOD ||
-        kind == CG_ARITH_POWER) {
-        error_label = ARITH_ERROR_LABEL;
-    }
-
-    int success = cg_arith_emit(
-        &arithmetic_context,
-        kind,
-        lhs,
-        rhs,
-        dst,
-        work,
-        error_label
-    );
-
-    for (int i = 0; i < 8; i++)
-        free_reg(work[i]);
-
-    free_reg(lhs);
-    free_reg(rhs);
-
-    if (!success) {
-        free_reg(dst);
-
-        report_error(
-            node,
-            "fallo al generar la rutina aritmetica"
-        );
-
-        return -1;
-    }
-
-    // dst remains allocated because the caller needs
-    // its value as the expression result.
-    return dst;
 }
 
 static int emit_mov(int rd, long immediate, ASTNode *node) {
@@ -368,7 +251,302 @@ static void emit_stack_pop(int reg) {
 }
 
 static int emit_expression(ASTNode *node);
-static int emit_function_call(ASTNode *node);
+static int emit_function_call(ASTNode *node, int result_needed);
+
+static int emit_arith_callback(void *user, const CGArithOp *op) {
+    (void)user;
+
+    if (op == NULL)
+        return 0;
+
+    // Labels are represented by slot == -1.
+    if (op->slot == -1) {
+        size_t len = strlen(op->text);
+
+        if (len == 0 || op->text[len - 1] != ':')
+            return 0;
+
+        char label_name[128];
+
+        if (len >= sizeof(label_name))
+            return 0;
+
+        memcpy(label_name, op->text, len - 1);
+        label_name[len - 1] = '\0';
+
+        cg_label(label_name);
+        return 1;
+    }
+
+    // Arithmetic emitter slot 0 = ALU0.
+    if (op->slot == 0) {
+        cg_op(SLOT_ALU0, "%s", op->text);
+        return 1;
+    }
+
+    // Arithmetic emitter slot 2 = branch/jump unit.
+    if (op->slot == 2) {
+        cg_op(SLOT_BRU, "%s", op->text);
+        return 1;
+    }
+
+    // Array emitter slot 3 = lsu
+    if (op->slot == 3) {
+        cg_op(SLOT_LSU, "%s", op->text);
+        return 1;
+    }
+
+    return 0;
+}
+
+static int emit_software_arithmetic(ASTNode *node, CGArithKind kind, int lhs, int rhs) {
+    int dst = alloc_reg();
+
+    if (dst < 0) {
+        report_error(
+            node,
+            "sin registros para el resultado aritmetico"
+        );
+        free_reg(lhs);
+        free_reg(rhs);
+        return -1;
+    }
+
+    int work[8];
+    int allocated = 0;
+
+    for (int i = 0; i < 8; i++) {
+        work[i] = alloc_reg();
+
+        if (work[i] < 0) {
+            report_error(
+                node,
+                "sin suficientes registros para la rutina aritmetica"
+            );
+
+            for (int j = 0; j < allocated; j++)
+                free_reg(work[j]);
+
+            free_reg(dst);
+            free_reg(lhs);
+            free_reg(rhs);
+
+            return -1;
+        }
+
+        allocated++;
+    }
+
+    const char *error_label = NULL;
+
+    if (kind == CG_ARITH_DIV ||
+        kind == CG_ARITH_MOD ||
+        kind == CG_ARITH_POWER) {
+        error_label = ARITH_ERROR_LABEL;
+    }
+
+    int success = cg_arith_emit(
+        &arithmetic_context,
+        kind,
+        lhs,
+        rhs,
+        dst,
+        work,
+        error_label
+    );
+
+    for (int i = 0; i < 8; i++)
+        free_reg(work[i]);
+
+    free_reg(lhs);
+    free_reg(rhs);
+
+    if (!success) {
+        free_reg(dst);
+
+        report_error(
+            node,
+            "fallo al generar la rutina aritmetica"
+        );
+
+        return -1;
+    }
+
+    // dst remains allocated because the caller needs
+    // its value as the expression result.
+    return dst;
+}
+
+static int emit_array_element(ASTNode *initializer, Symbol *array, int base_reg, int element_index) {
+    if (initializer == NULL || array == NULL) {
+        report_error(
+            initializer,
+            "elemento de inicializacion invalido"
+        );
+        return 0;
+    }
+
+    int total_elements = 1;
+
+    for (int i = 0; i < array->dimensions; i++) {
+        if (array->dim_sizes[i] <= 0 ||
+            total_elements > 1024 / array->dim_sizes[i]) {
+            report_error(
+                initializer,
+                "dimensiones de arreglo invalidas"
+            );
+            return 0;
+        }
+
+        total_elements *= array->dim_sizes[i];
+    }
+
+    if (element_index < 0 || element_index >= total_elements) {
+        report_error(
+            initializer,
+            "demasiados elementos en inicializador de arreglo"
+        );
+        return 0;
+    }
+
+    int offset = element_index * 4;
+
+    int value_reg = emit_expression(initializer);
+
+    if (value_reg < 0)
+        return 0;
+
+    cg_op(
+        SLOT_LSU,
+        "sw %s, %d(%s)",
+        reg_name(value_reg),
+        offset,
+        reg_name(base_reg)
+    );
+
+    free_reg(value_reg);
+
+    return 1;
+}
+
+static int emit_array_initializer_recursive(ASTNode *list, Symbol *array, int base_reg, int *element_index) {
+    if (list == NULL)
+        return 1;
+
+    if (list->kind != AST_INITIALIZER_LIST) {
+        if (!emit_array_element(
+                list,
+                array,
+                base_reg,
+                *element_index
+            )) {
+            return 0;
+        }
+
+        (*element_index)++;
+        return 1;
+    }
+
+    for (ASTNode *child = list->child;
+         child != NULL;
+         child = child->next) {
+
+        if (!emit_array_initializer_recursive(
+                child,
+                array,
+                base_reg,
+                element_index
+            )) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+static void emit_array_initializer(ASTNode *declaration, Symbol *array, ASTNode *initializer) {
+    if (array == NULL || initializer == NULL) {
+        report_error(
+            declaration,
+            "inicializador de arreglo invalido"
+        );
+        return;
+    }
+
+    if (array->dimensions < 1 || array->dimensions > 2) {
+        report_error(
+            declaration,
+            "numero de dimensiones no soportado"
+        );
+        return;
+    }
+
+    if (array->kind != SYMBOL_VARIABLE) {
+        report_error(
+            declaration,
+            "el destino no es un arreglo declarable"
+        );
+        return;
+    }
+
+    if (array->modifier == MODIFIER_VI) {
+        report_error(
+            declaration,
+            "no se puede inicializar un arreglo Vi"
+        );
+        return;
+    }
+
+    int base_reg = alloc_reg();
+
+    if (base_reg < 0) {
+        report_error(
+            declaration,
+            "sin registros para inicializar arreglo"
+        );
+        return;
+    }
+
+    if (!cg_array_base(
+            &arithmetic_context,
+            array,
+            base_reg
+        )) {
+        free_reg(base_reg);
+
+        report_error(
+            declaration,
+            "no se pudo generar la direccion base del arreglo"
+        );
+        return;
+    }
+
+    int element_index = 0;
+
+    int success = emit_array_initializer_recursive(
+        initializer,
+        array,
+        base_reg,
+        &element_index
+    );
+
+    free_reg(base_reg);
+
+    if (!success)
+        return;
+
+    int expected = 1;
+
+    for (int i = 0; i < array->dimensions; i++)
+        expected *= array->dim_sizes[i];
+
+    if (element_index != expected) {
+        report_error(
+            declaration,
+            "cantidad de elementos incorrecta en inicializador"
+        );
+    }
+}
 
 static int emit_binary_expression(ASTNode *node) {
     ASTNode *left = child_at(node, 0);
@@ -618,12 +796,137 @@ static int emit_expression(ASTNode *node) {
         }
 
         case AST_CALL:
-            return emit_function_call(node);
+            return emit_function_call(node, 1);
 
-        case AST_INDEX:
-            report_error(node,
-                         "acceso a arreglos aun no implementado");
-            return -1;
+        case AST_INDEX: {
+            ASTNode *array_id = child_at(node, 0);
+            ASTNode *index_node = child_at(node, 1);
+
+            if (array_id == NULL || array_id->kind != AST_IDENTIFIER) {
+                report_error(node, "identificador de arreglo invalido");
+                return -1;
+            }
+
+            Symbol *array = get_symbol(array_id);
+
+            if (array == NULL) {
+                report_error(array_id, "arreglo sin simbolo semantico");
+                return -1;
+            }
+
+            if (array->dimensions < 1 || array->dimensions > MAX_DIMS) {
+                report_error(node, "numero de dimensiones invalido");
+                return -1;
+            }
+
+            // Evaluate the indices.
+            // For a 1D array: indices[0] = index.
+            // For a 2D array: indices[0] = row, indices[1] = column.
+            int indices[MAX_DIMS] = {-1, -1};
+            int count = 0;
+
+            for (ASTNode *idx = index_node;
+                idx != NULL;
+                idx = idx->next) {
+
+                if (count >= array->dimensions) {
+                    report_error(node, "demasiados indices para el arreglo");
+
+                    for (int i = 0; i < count; i++)
+                        free_reg(indices[i]);
+
+                    return -1;
+                }
+
+                indices[count] = emit_expression(idx);
+
+                if (indices[count] < 0) {
+                    for (int i = 0; i < count; i++)
+                        free_reg(indices[i]);
+
+                    return -1;
+                }
+
+                count++;
+            }
+
+            if (count != array->dimensions) {
+                report_error(node, "cantidad incorrecta de indices");
+
+                for (int i = 0; i < count; i++)
+                    free_reg(indices[i]);
+
+                return -1;
+            }
+
+            // Allocate the destination address and two work registers.
+            int address = alloc_reg();
+            int work[2] = {-1, -1};
+            int value = -1;
+
+            if (address >= 0)
+                work[0] = alloc_reg();
+
+            if (work[0] >= 0)
+                work[1] = alloc_reg();
+
+            if (work[1] >= 0)
+                value = alloc_reg();
+
+            if (address < 0 || work[0] < 0 ||
+                work[1] < 0 || value < 0) {
+
+                report_error(node, "sin registros para acceder al arreglo");
+
+                if (address >= 0) free_reg(address);
+                if (work[0] >= 0) free_reg(work[0]);
+                if (work[1] >= 0) free_reg(work[1]);
+                if (value >= 0) free_reg(value);
+
+                for (int i = 0; i < count; i++)
+                    free_reg(indices[i]);
+
+                return -1;
+            }
+
+            int ok = cg_array_address(
+                &arithmetic_context,
+                array,
+                indices,
+                count,
+                address,
+                work
+            );
+
+            if (ok) {
+                ok = cg_array_load(
+                    &arithmetic_context,
+                    array,
+                    indices,
+                    count,
+                    address,
+                    value,
+                    work
+                );
+            }
+
+            // Release the index and address-calculation registers.
+            // The loaded value remains allocated for the caller.
+            for (int i = 0; i < count; i++)
+                free_reg(indices[i]);
+
+            free_reg(address);
+            free_reg(work[0]);
+            free_reg(work[1]);
+
+            if (!ok) {
+                free_reg(value);
+                report_error(node, "no se pudo generar el acceso al arreglo");
+                return -1;
+            }
+
+            return value;
+        }
 
         default:
             report_error(node,
@@ -632,7 +935,7 @@ static int emit_expression(ASTNode *node) {
     }
 }
 
-static int emit_function_call(ASTNode *node) {
+static int emit_function_call(ASTNode *node, int result_needed) {
     if (node == NULL) {
         report_error(NULL, "llamada a funcion invalida");
         return -1;
@@ -658,26 +961,30 @@ static int emit_function_call(ASTNode *node) {
         return -1;
     }
 
-    // Locate the function's return variable.
-    if (callee->type == TYPE_VOID) {
-        report_error(node,
-                     "una funcion void no puede usarse como expresion");
-        return -1;
-    }
+    Symbol *return_symbol = NULL;
 
-    Symbol *return_symbol = get_return_symbol(callee);
+    if (result_needed) {
+        // Locate the function's return variable.
+        if (callee->type == TYPE_VOID) {
+            report_error(node,
+                            "una funcion void no puede usarse como expresion");
+            return -1;
+        }
 
-    if (return_symbol == NULL) {
-        report_error(node,
-                     "no se encontro la variable de retorno");
-        return -1;
-    }
+        return_symbol = get_return_symbol(callee);
 
-    if (return_symbol->address < 0 ||
-        return_symbol->address > 131071) {
-        report_error(node,
-                     "direccion de retorno invalida");
-        return -1;
+        if (return_symbol == NULL) {
+            report_error(node,
+                        "no se encontro la variable de retorno");
+            return -1;
+        }
+
+        if (return_symbol->address < 0 ||
+            return_symbol->address > 131071) {
+            report_error(node,
+                        "direccion de retorno invalida");
+            return -1;
+        }
     }
 
     // Unwrap the argument list.
@@ -812,19 +1119,22 @@ static int emit_function_call(ASTNode *node) {
         emit_stack_pop(saved_regs[i]);
     }
 
-    // Allocate a new register for the result.
-    // Existing caller temporaries are still marked as occupied,
-    // so the result will not overwrite them.
+    // If this call is used as a statement, discard the return value.
+    if (!result_needed) {
+        return 0;
+    }
+
+    // Allocate a register for the result.
     int result_reg = alloc_reg();
 
     if (result_reg < 0) {
         report_error(node,
-                     "sin registros para el resultado de la llamada");
+                    "sin registros para el resultado de la llamada");
         return -1;
     }
 
-    // Load the result immediately after the call. A later call
-    // could overwrite this function's static return variable.
+    // Load the return value immediately after the call.
+    // Another call could overwrite the function's static return variable.
     if (emit_load_symbol(result_reg, return_symbol, node) != 0) {
         free_reg(result_reg);
         return -1;
@@ -865,20 +1175,164 @@ static void emit_assignment(ASTNode *node) {
         return;
     }
 
-    // only simple scalar assignments.
-    if (target->kind != AST_IDENTIFIER) {
-        report_error(target,
-                     "solo se permiten destinos escalares por ahora");
-        return;
-    }
-
+    // Evaluate the right-hand side first.
+    // Keep its value in a register until the assignment is complete.
     int rd = emit_expression(value);
 
     if (rd < 0)
         return;
 
-    emit_store_symbol(get_symbol(target), rd, target);
+    // Scalar assignments.
+    if (target->kind == AST_IDENTIFIER) {
+        Symbol *symbol = get_symbol(target);
 
+        if (symbol == NULL) {
+            report_error(target, "variable sin simbolo semantico");
+            free_reg(rd);
+            return;
+        }
+
+        if (emit_store_symbol(symbol, rd, target) != 0) {
+            free_reg(rd);
+            return;
+        }
+
+        free_reg(rd);
+        return;
+    }
+
+    // Array assignment
+    if (target->kind == AST_INDEX) {
+        ASTNode *array_id = child_at(target, 0);
+
+        if (array_id == NULL ||
+            array_id->kind != AST_IDENTIFIER) {
+            report_error(target, "identificador de arreglo invalido");
+            free_reg(rd);
+            return;
+        }
+
+        Symbol *array = get_symbol(array_id);
+
+        if (array == NULL) {
+            report_error(array_id, "arreglo sin simbolo semantico");
+            free_reg(rd);
+            return;
+        }
+
+        if (array->dimensions < 1 ||
+            array->dimensions > MAX_DIMS) {
+            report_error(target, "numero de dimensiones invalido");
+            free_reg(rd);
+            return;
+        }
+
+        // Extract the index expressions.
+        // This assumes the AST_INDEX children are:
+        //   child 0: array identifier
+        //   child 1 onward: index expressions
+        int indices[MAX_DIMS] = {-1, -1};
+        int count = 0;
+
+        for (ASTNode *idx = array_id->next;
+             idx != NULL;
+             idx = idx->next) {
+
+            if (count >= array->dimensions) {
+                report_error(target, "demasiados indices para el arreglo");
+
+                for (int i = 0; i < count; i++)
+                    free_reg(indices[i]);
+
+                free_reg(rd);
+                return;
+            }
+
+            indices[count] = emit_expression(idx);
+
+            if (indices[count] < 0) {
+                for (int i = 0; i < count; i++)
+                    free_reg(indices[i]);
+
+                free_reg(rd);
+                return;
+            }
+
+            count++;
+        }
+
+        if (count != array->dimensions) {
+            report_error(target, "cantidad incorrecta de indices");
+
+            for (int i = 0; i < count; i++)
+                free_reg(indices[i]);
+
+            free_reg(rd);
+            return;
+        }
+
+        // Allocate registers for the element address.
+        int address = alloc_reg();
+        int work[2] = {-1, -1};
+
+        if (address >= 0)
+            work[0] = alloc_reg();
+
+        if (work[0] >= 0)
+            work[1] = alloc_reg();
+
+        if (address < 0 || work[0] < 0 || work[1] < 0) {
+            report_error(target, "sin registros para acceder al arreglo");
+
+            if (address >= 0) free_reg(address);
+            if (work[0] >= 0) free_reg(work[0]);
+            if (work[1] >= 0) free_reg(work[1]);
+
+            for (int i = 0; i < count; i++)
+                free_reg(indices[i]);
+
+            free_reg(rd);
+            return;
+        }
+
+        // Calculate the element address and store the value.
+        int ok = cg_array_address(
+            &arithmetic_context,
+            array,
+            indices,
+            count,
+            address,
+            work
+        );
+
+        if (ok) {
+            ok = cg_array_store(
+                &arithmetic_context,
+                array,
+                indices,
+                count,
+                address,
+                rd,
+                work
+            );
+        }
+
+        // Release temporary registers.
+        for (int i = 0; i < count; i++)
+            free_reg(indices[i]);
+
+        free_reg(address);
+        free_reg(work[0]);
+        free_reg(work[1]);
+        free_reg(rd);
+
+        if (!ok)
+            report_error(target, "no se pudo generar la asignacion al arreglo");
+
+        return;
+    }
+
+    report_error(target, "destino de asignacion no valido");
     free_reg(rd);
 }
 
@@ -1248,16 +1702,67 @@ static void emit_declaration(ASTNode *node) {
         return;
     }
 
-    // No initializer means no runtime instructions:
-    // storage has already been allocated statically.
-    if (initializer == NULL)
-        return;
-
     Symbol *symbol = get_symbol(identifier);
 
     if (symbol == NULL) {
         report_error(identifier,
                      "variable sin simbolo semantico");
+        return;
+    }
+
+    int is_array = dimensions != NULL || symbol->dimensions > 0;
+
+    // Array declaration
+    if (is_array) {
+        if (initializer != NULL) {
+            if (initializer->kind != AST_INITIALIZER_LIST) {
+                report_error(
+                    initializer,
+                    "se esperaba una lista para inicializar el arreglo"
+                );
+                return;
+            }
+
+            emit_array_initializer(
+                node,
+                symbol,
+                initializer
+            );
+        } else {
+            // CALSER specifies that arrays without explicit initializers must default to zero.
+            int work[2] = { -1, -1 };
+
+            work[0] = alloc_reg();
+            work[1] = alloc_reg();
+
+            if (work[0] < 0 || work[1] < 0) {
+                free_reg(work[0]);
+                free_reg(work[1]);
+
+                report_error(
+                    node,
+                    "sin registros para inicializar arreglo"
+                );
+                return;
+            }
+
+            int success = cg_array_zero(
+                &arithmetic_context,
+                symbol,
+                work
+            );
+
+            free_reg(work[0]);
+            free_reg(work[1]);
+
+            if (!success) {
+                report_error(
+                    node,
+                    "no se pudo inicializar el arreglo con ceros"
+                );
+            }
+        }
+
         return;
     }
 
@@ -1267,22 +1772,27 @@ static void emit_declaration(ASTNode *node) {
         return;
     }
 
-    // Array initialization requires one store per element.
-    // Do not accidentally treat an initializer list as a
-    // scalar expression.
-    if (dimensions != NULL ||
-        symbol->dimensions > 0 ||
-        initializer->kind == AST_INITIALIZER_LIST) {
+    int rd;
 
-        report_error(node,
-                     "inicializacion de arreglos aun no implementada");
-        return;
+    if (initializer == NULL) {
+        // Uninitialized scalar variables default to zero.
+        rd = alloc_reg();
+
+        if (rd < 0) {
+            report_error(node,
+                        "sin registros para inicializar variable");
+            return;
+        }
+        if (emit_mov(rd, 0, node) != 0) {
+            free_reg(rd);
+            return;
+        }
+    } else {
+        rd = emit_expression(initializer);
+
+        if (rd < 0)
+            return;
     }
-
-    int rd = emit_expression(initializer);
-
-    if (rd < 0)
-        return;
 
     emit_store_symbol(symbol, rd, identifier);
 
@@ -1319,9 +1829,17 @@ static void emit_statement(ASTNode *node) {
             emit_return(node);
             break;
 
-        case AST_CALL_STATEMENT:
-            emit_function_call(node);
+        case AST_CALL_STATEMENT:{
+            ASTNode *call = node->child;
+
+            if (call == NULL || call->kind != AST_CALL) {
+                report_error(node, "llamada como sentencia invalida");
+                
+            } else {
+                emit_function_call(call, 0);
+            }
             break;
+        }
 
         case AST_REWIND:
             emit_rewind(node);

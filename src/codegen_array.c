@@ -4,6 +4,19 @@
 
 #define DO(x) do { if (!(x)) return 0; } while (0)
 static int reg(int r) { return r >= 4 && r <= 15; }
+static const char *arith_reg_name(int reg) {
+    static const char *names[16] = {
+        "rz", "rl", "rx", "rg",
+        "t0", "t1", "t2", "t3",
+        "t4", "t5", "t6", "t7",
+        "t8", "t9", "t10", "t11"
+    };
+
+    if (reg < 0 || reg >= 16)
+        return "rz";
+
+    return names[reg];
+}
 static int context(const CGArithContext *c) { return c && c->emit; }
 static int out(CGArithContext *c, int slot, int d, int a, int b,
                const char *fmt, ...) {
@@ -16,17 +29,17 @@ static int out(CGArithContext *c, int slot, int d, int a, int b,
     return n>=0 && n<(int)sizeof op.text && c->emit(c->user,&op);
 }
 static int alu(CGArithContext *c,const char *mn,int d,int a,int b) {
-    return out(c,0,d,a,b,"%s r%d, r%d, r%d",mn,d,a,b);
+    return out(c,0,d,a,b,"%s r%d, r%d, r%d",mn,arith_reg_name(d),arith_reg_name(a),arith_reg_name(b));
 }
 static int mov(CGArithContext *c,int d,int value) {
-    return out(c,0,d,-1,-1,"mov r%d, %d",d,value);
+    return out(c,0,d,-1,-1,"mov r%d, %d",d,arith_reg_name(value));
 }
 static int load(CGArithContext *c,int d,int base,int offset) {
-    return out(c,3,d,base,-1,"lw r%d, %d(r%d)",d,offset,base);
+    return out(c,3,d,base,-1,"lw r%d, %d(r%d)",arith_reg_name(d),offset,arith_reg_name(base));
 }
 static int store(CGArithContext *c,int value,int base,int offset) {
     /* LSU store metadata: rs1=address base, rs2=value; no destination. */
-    return out(c,3,-1,base,value,"sw r%d, %d(r%d)",value,offset,base);
+    return out(c,3,-1,base,value,"sw r%d, %d(r%d)",arith_reg_name(value),offset,arith_reg_name(base));
 }
 /* Valid arrays in the compiler-owned 4KB region. A parameter stores only a
  * pointer, but still carries full shape. Avoid overflowing host C arithmetic. */
@@ -119,7 +132,7 @@ static int loop_label(CGArithContext *c,char name[64]) {
     return out(c,-1,-1,-1,-1,"%s:",name);
 }
 static int repeat(CGArithContext *c,int count,const char *name) {
-    return out(c,2,-1,count,0,"bne r%d, r0, %s",count,name);
+    return out(c,2,-1,count,0,"bne r%d, rz, %s",count,name);
 }
 int cg_array_copy(CGArithContext *c,const Symbol *dst,const Symbol *src,
                   const int w[4]) {

@@ -1,6 +1,6 @@
 Ejecucion de ejercicio2 con tools/sim_asm.py
-Programa: ejercicios/ejercicio2_matriz/ejercicio2.asm (265 bundles)
-Fin: salto a sí mismo; bundles ejecutados: 567; ciclos: 583
+Programa: ejercicios/ejercicio2_matriz/ejercicio2.asm (162 bundles)
+Fin: salto a sí mismo; bundles ejecutados: 367; ciclos: 383
 Avisos de separación: 0
 
 Valores finales de las variables:

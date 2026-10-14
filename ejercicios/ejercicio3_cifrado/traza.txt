@@ -7,492 +7,492 @@
 # (__ccom_arith_*, __ccom_array_*, .L_crypto_*); sí el salto a
 # .L_arith_error. Los saltos condicionales no tomados tampoco.
 [bundle 0004 · línea 60] n1 = 0
-[bundle 0008 · línea 61] n2 = 0
-[bundle 0020 · línea 62] auth
-[bundle 0025 · línea 63] llamada → .L_func_preparar_boveda (bundle 272)
-[bundle 0282 · línea 21] kv_write k=0 w=0
-[bundle 0295 · línea 22] kv_write k=0 w=1
-[bundle 0306 · línea 23] kv_write k=0 w=2
-[bundle 0317 · línea 24] kv_write k=0 w=3
-[bundle 0328 · línea 25] kv_write k=1 w=0
-[bundle 0339 · línea 26] kv_write k=1 w=1
-[bundle 0350 · línea 27] kv_write k=1 w=2
-[bundle 0361 · línea 28] kv_write k=1 w=3
-[bundle 0362 · línea 29] kv_lock
-[bundle 0363 · línea 30] retorno → bundle 26
-[bundle 0059 · línea 64] cifrar_archivo.tam = 16
-[bundle 0065 · línea 64] cifrar_archivo.total = 128
-[bundle 0071 · línea 64] cifrar_archivo.hacia = 8192
-[bundle 0077 · línea 64] cifrar_archivo.desde = 4096
-[bundle 0083 · línea 64] llamada → .L_func_cifrar_archivo (bundle 365)
-[bundle 0365 · línea 33] cifrar_archivo.n = 0  (prólogo)
-[bundle 0435 · línea 34] cifrar_archivo.n = 8
-[bundle 0441 · línea 35] cifrar_archivo.i = 0
-[bundle 0473 · línea 36] bloques_de.i = 0
-[bundle 0479 · línea 36] bloques_de.tam = 16
-[bundle 0485 · línea 36] bloques_de.total = 128
-[bundle 0491 · línea 36] llamada → .L_func_bloques_de (bundle 158)
-[bundle 0158 · línea 5] bloques_de.b = 0  (prólogo)
-[bundle 0190 · línea 6] resto = 128
-[bundle 0198 · línea 7] beq → .L_if_next_0 (bundle 206)
-[bundle 0208 · línea 10] bloques_de.b = 16
-[bundle 0210 · línea 12] retorno → bundle 492
-[bundle 0499 · línea 36] cifrar_archivo.b = 16
-[bundle 0590 · línea 38] direccion.i = 0
-[bundle 0596 · línea 38] direccion.tam = 16
-[bundle 0602 · línea 38] base = 4096
-[bundle 0608 · línea 38] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 4096
-[bundle 0270 · línea 17] retorno → bundle 609
-[bundle 0644 · línea 38] direccion.i = 0
-[bundle 0650 · línea 38] direccion.tam = 16
-[bundle 0656 · línea 38] base = 8192
-[bundle 0662 · línea 38] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 8192
-[bundle 0270 · línea 17] retorno → bundle 663
-[bundle 0704 · línea 38] cifrar: 16 bloques de 0x1000 a 0x2000
-[bundle 0705 · línea 37] jef → .L_if_end_6 (bundle 845)
-[bundle 0849 · línea 35] cifrar_archivo.i = 1
-[bundle 0851 · línea 35] jef → .L_for_start_2 (bundle 445)
-[bundle 0473 · línea 36] bloques_de.i = 1
-[bundle 0479 · línea 36] bloques_de.tam = 16
-[bundle 0485 · línea 36] bloques_de.total = 128
-[bundle 0491 · línea 36] llamada → .L_func_bloques_de (bundle 158)
-[bundle 0158 · línea 5] bloques_de.b = 0  (prólogo)
-[bundle 0190 · línea 6] resto = 112
-[bundle 0198 · línea 7] beq → .L_if_next_0 (bundle 206)
-[bundle 0208 · línea 10] bloques_de.b = 16
-[bundle 0210 · línea 12] retorno → bundle 492
-[bundle 0499 · línea 36] cifrar_archivo.b = 16
-[bundle 0565 · línea 37] beq → .L_if_next_5 (bundle 707)
-[bundle 0730 · línea 40] direccion.i = 1
-[bundle 0736 · línea 40] direccion.tam = 16
-[bundle 0742 · línea 40] base = 4096
-[bundle 0748 · línea 40] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 4224
-[bundle 0270 · línea 17] retorno → bundle 749
-[bundle 0784 · línea 40] direccion.i = 1
-[bundle 0790 · línea 40] direccion.tam = 16
-[bundle 0796 · línea 40] base = 8192
-[bundle 0802 · línea 40] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 8320
-[bundle 0270 · línea 17] retorno → bundle 803
-[bundle 0844 · línea 40] cifrar: 16 bloques de 0x1080 a 0x2080
-[bundle 0849 · línea 35] cifrar_archivo.i = 2
-[bundle 0851 · línea 35] jef → .L_for_start_2 (bundle 445)
-[bundle 0473 · línea 36] bloques_de.i = 2
-[bundle 0479 · línea 36] bloques_de.tam = 16
-[bundle 0485 · línea 36] bloques_de.total = 128
-[bundle 0491 · línea 36] llamada → .L_func_bloques_de (bundle 158)
-[bundle 0158 · línea 5] bloques_de.b = 0  (prólogo)
-[bundle 0190 · línea 6] resto = 96
-[bundle 0198 · línea 7] beq → .L_if_next_0 (bundle 206)
-[bundle 0208 · línea 10] bloques_de.b = 16
-[bundle 0210 · línea 12] retorno → bundle 492
-[bundle 0499 · línea 36] cifrar_archivo.b = 16
-[bundle 0590 · línea 38] direccion.i = 2
-[bundle 0596 · línea 38] direccion.tam = 16
-[bundle 0602 · línea 38] base = 4096
-[bundle 0608 · línea 38] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 4352
-[bundle 0270 · línea 17] retorno → bundle 609
-[bundle 0644 · línea 38] direccion.i = 2
-[bundle 0650 · línea 38] direccion.tam = 16
-[bundle 0656 · línea 38] base = 8192
-[bundle 0662 · línea 38] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 8448
-[bundle 0270 · línea 17] retorno → bundle 663
-[bundle 0704 · línea 38] cifrar: 16 bloques de 0x1100 a 0x2100
-[bundle 0705 · línea 37] jef → .L_if_end_6 (bundle 845)
-[bundle 0849 · línea 35] cifrar_archivo.i = 3
-[bundle 0851 · línea 35] jef → .L_for_start_2 (bundle 445)
-[bundle 0473 · línea 36] bloques_de.i = 3
-[bundle 0479 · línea 36] bloques_de.tam = 16
-[bundle 0485 · línea 36] bloques_de.total = 128
-[bundle 0491 · línea 36] llamada → .L_func_bloques_de (bundle 158)
-[bundle 0158 · línea 5] bloques_de.b = 0  (prólogo)
-[bundle 0190 · línea 6] resto = 80
-[bundle 0198 · línea 7] beq → .L_if_next_0 (bundle 206)
-[bundle 0208 · línea 10] bloques_de.b = 16
-[bundle 0210 · línea 12] retorno → bundle 492
-[bundle 0499 · línea 36] cifrar_archivo.b = 16
-[bundle 0565 · línea 37] beq → .L_if_next_5 (bundle 707)
-[bundle 0730 · línea 40] direccion.i = 3
-[bundle 0736 · línea 40] direccion.tam = 16
-[bundle 0742 · línea 40] base = 4096
-[bundle 0748 · línea 40] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 4480
-[bundle 0270 · línea 17] retorno → bundle 749
-[bundle 0784 · línea 40] direccion.i = 3
-[bundle 0790 · línea 40] direccion.tam = 16
-[bundle 0796 · línea 40] base = 8192
-[bundle 0802 · línea 40] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 8576
-[bundle 0270 · línea 17] retorno → bundle 803
-[bundle 0844 · línea 40] cifrar: 16 bloques de 0x1180 a 0x2180
-[bundle 0849 · línea 35] cifrar_archivo.i = 4
-[bundle 0851 · línea 35] jef → .L_for_start_2 (bundle 445)
-[bundle 0473 · línea 36] bloques_de.i = 4
-[bundle 0479 · línea 36] bloques_de.tam = 16
-[bundle 0485 · línea 36] bloques_de.total = 128
-[bundle 0491 · línea 36] llamada → .L_func_bloques_de (bundle 158)
-[bundle 0158 · línea 5] bloques_de.b = 0  (prólogo)
-[bundle 0190 · línea 6] resto = 64
-[bundle 0198 · línea 7] beq → .L_if_next_0 (bundle 206)
-[bundle 0208 · línea 10] bloques_de.b = 16
-[bundle 0210 · línea 12] retorno → bundle 492
-[bundle 0499 · línea 36] cifrar_archivo.b = 16
-[bundle 0590 · línea 38] direccion.i = 4
-[bundle 0596 · línea 38] direccion.tam = 16
-[bundle 0602 · línea 38] base = 4096
-[bundle 0608 · línea 38] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 4608
-[bundle 0270 · línea 17] retorno → bundle 609
-[bundle 0644 · línea 38] direccion.i = 4
-[bundle 0650 · línea 38] direccion.tam = 16
-[bundle 0656 · línea 38] base = 8192
-[bundle 0662 · línea 38] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 8704
-[bundle 0270 · línea 17] retorno → bundle 663
-[bundle 0704 · línea 38] cifrar: 16 bloques de 0x1200 a 0x2200
-[bundle 0705 · línea 37] jef → .L_if_end_6 (bundle 845)
-[bundle 0849 · línea 35] cifrar_archivo.i = 5
-[bundle 0851 · línea 35] jef → .L_for_start_2 (bundle 445)
-[bundle 0473 · línea 36] bloques_de.i = 5
-[bundle 0479 · línea 36] bloques_de.tam = 16
-[bundle 0485 · línea 36] bloques_de.total = 128
-[bundle 0491 · línea 36] llamada → .L_func_bloques_de (bundle 158)
-[bundle 0158 · línea 5] bloques_de.b = 0  (prólogo)
-[bundle 0190 · línea 6] resto = 48
-[bundle 0198 · línea 7] beq → .L_if_next_0 (bundle 206)
-[bundle 0208 · línea 10] bloques_de.b = 16
-[bundle 0210 · línea 12] retorno → bundle 492
-[bundle 0499 · línea 36] cifrar_archivo.b = 16
-[bundle 0565 · línea 37] beq → .L_if_next_5 (bundle 707)
-[bundle 0730 · línea 40] direccion.i = 5
-[bundle 0736 · línea 40] direccion.tam = 16
-[bundle 0742 · línea 40] base = 4096
-[bundle 0748 · línea 40] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 4736
-[bundle 0270 · línea 17] retorno → bundle 749
-[bundle 0784 · línea 40] direccion.i = 5
-[bundle 0790 · línea 40] direccion.tam = 16
-[bundle 0796 · línea 40] base = 8192
-[bundle 0802 · línea 40] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 8832
-[bundle 0270 · línea 17] retorno → bundle 803
-[bundle 0844 · línea 40] cifrar: 16 bloques de 0x1280 a 0x2280
-[bundle 0849 · línea 35] cifrar_archivo.i = 6
-[bundle 0851 · línea 35] jef → .L_for_start_2 (bundle 445)
-[bundle 0473 · línea 36] bloques_de.i = 6
-[bundle 0479 · línea 36] bloques_de.tam = 16
-[bundle 0485 · línea 36] bloques_de.total = 128
-[bundle 0491 · línea 36] llamada → .L_func_bloques_de (bundle 158)
-[bundle 0158 · línea 5] bloques_de.b = 0  (prólogo)
-[bundle 0190 · línea 6] resto = 32
-[bundle 0198 · línea 7] beq → .L_if_next_0 (bundle 206)
-[bundle 0208 · línea 10] bloques_de.b = 16
-[bundle 0210 · línea 12] retorno → bundle 492
-[bundle 0499 · línea 36] cifrar_archivo.b = 16
-[bundle 0590 · línea 38] direccion.i = 6
-[bundle 0596 · línea 38] direccion.tam = 16
-[bundle 0602 · línea 38] base = 4096
-[bundle 0608 · línea 38] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 4864
-[bundle 0270 · línea 17] retorno → bundle 609
-[bundle 0644 · línea 38] direccion.i = 6
-[bundle 0650 · línea 38] direccion.tam = 16
-[bundle 0656 · línea 38] base = 8192
-[bundle 0662 · línea 38] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 8960
-[bundle 0270 · línea 17] retorno → bundle 663
-[bundle 0704 · línea 38] cifrar: 16 bloques de 0x1300 a 0x2300
-[bundle 0705 · línea 37] jef → .L_if_end_6 (bundle 845)
-[bundle 0849 · línea 35] cifrar_archivo.i = 7
-[bundle 0851 · línea 35] jef → .L_for_start_2 (bundle 445)
-[bundle 0473 · línea 36] bloques_de.i = 7
-[bundle 0479 · línea 36] bloques_de.tam = 16
-[bundle 0485 · línea 36] bloques_de.total = 128
-[bundle 0491 · línea 36] llamada → .L_func_bloques_de (bundle 158)
-[bundle 0158 · línea 5] bloques_de.b = 0  (prólogo)
-[bundle 0190 · línea 6] resto = 16
-[bundle 0198 · línea 7] beq → .L_if_next_0 (bundle 206)
-[bundle 0208 · línea 10] bloques_de.b = 16
-[bundle 0210 · línea 12] retorno → bundle 492
-[bundle 0499 · línea 36] cifrar_archivo.b = 16
-[bundle 0565 · línea 37] beq → .L_if_next_5 (bundle 707)
-[bundle 0730 · línea 40] direccion.i = 7
-[bundle 0736 · línea 40] direccion.tam = 16
-[bundle 0742 · línea 40] base = 4096
-[bundle 0748 · línea 40] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 4992
-[bundle 0270 · línea 17] retorno → bundle 749
-[bundle 0784 · línea 40] direccion.i = 7
-[bundle 0790 · línea 40] direccion.tam = 16
-[bundle 0796 · línea 40] base = 8192
-[bundle 0802 · línea 40] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 9088
-[bundle 0270 · línea 17] retorno → bundle 803
-[bundle 0844 · línea 40] cifrar: 16 bloques de 0x1380 a 0x2380
-[bundle 0849 · línea 35] cifrar_archivo.i = 8
-[bundle 0851 · línea 35] jef → .L_for_start_2 (bundle 445)
-[bundle 0449 · línea 35] bge → .L_for_end_4 (bundle 853)
-[bundle 0853 · línea 43] retorno → bundle 84
-[bundle 0091 · línea 64] n1 = 8
-[bundle 0121 · línea 65] descifrar_archivo.tam = 16
-[bundle 0127 · línea 65] descifrar_archivo.total = 128
-[bundle 0133 · línea 65] descifrar_archivo.hacia = 12288
-[bundle 0139 · línea 65] descifrar_archivo.desde = 8192
-[bundle 0145 · línea 65] llamada → .L_func_descifrar_archivo (bundle 855)
-[bundle 0855 · línea 46] descifrar_archivo.n = 0  (prólogo)
-[bundle 0925 · línea 47] descifrar_archivo.n = 8
-[bundle 0931 · línea 48] descifrar_archivo.i = 0
-[bundle 0963 · línea 49] bloques_de.i = 0
-[bundle 0969 · línea 49] bloques_de.tam = 16
-[bundle 0975 · línea 49] bloques_de.total = 128
-[bundle 0981 · línea 49] llamada → .L_func_bloques_de (bundle 158)
-[bundle 0158 · línea 5] bloques_de.b = 0  (prólogo)
-[bundle 0190 · línea 6] resto = 128
-[bundle 0198 · línea 7] beq → .L_if_next_0 (bundle 206)
-[bundle 0208 · línea 10] bloques_de.b = 16
-[bundle 0210 · línea 12] retorno → bundle 982
-[bundle 0989 · línea 49] descifrar_archivo.b = 16
-[bundle 1080 · línea 51] direccion.i = 0
-[bundle 1086 · línea 51] direccion.tam = 16
-[bundle 1092 · línea 51] base = 8192
-[bundle 1098 · línea 51] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 8192
-[bundle 0270 · línea 17] retorno → bundle 1099
-[bundle 1134 · línea 51] direccion.i = 0
-[bundle 1140 · línea 51] direccion.tam = 16
-[bundle 1146 · línea 51] base = 12288
-[bundle 1152 · línea 51] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 12288
-[bundle 0270 · línea 17] retorno → bundle 1153
-[bundle 1194 · línea 51] descifrar: 16 bloques de 0x2000 a 0x3000
-[bundle 1195 · línea 50] jef → .L_if_end_11 (bundle 1335)
-[bundle 1339 · línea 48] descifrar_archivo.i = 1
-[bundle 1341 · línea 48] jef → .L_for_start_7 (bundle 935)
-[bundle 0963 · línea 49] bloques_de.i = 1
-[bundle 0969 · línea 49] bloques_de.tam = 16
-[bundle 0975 · línea 49] bloques_de.total = 128
-[bundle 0981 · línea 49] llamada → .L_func_bloques_de (bundle 158)
-[bundle 0158 · línea 5] bloques_de.b = 0  (prólogo)
-[bundle 0190 · línea 6] resto = 112
-[bundle 0198 · línea 7] beq → .L_if_next_0 (bundle 206)
-[bundle 0208 · línea 10] bloques_de.b = 16
-[bundle 0210 · línea 12] retorno → bundle 982
-[bundle 0989 · línea 49] descifrar_archivo.b = 16
-[bundle 1055 · línea 50] beq → .L_if_next_10 (bundle 1197)
-[bundle 1220 · línea 53] direccion.i = 1
-[bundle 1226 · línea 53] direccion.tam = 16
-[bundle 1232 · línea 53] base = 8192
-[bundle 1238 · línea 53] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 8320
-[bundle 0270 · línea 17] retorno → bundle 1239
-[bundle 1274 · línea 53] direccion.i = 1
-[bundle 1280 · línea 53] direccion.tam = 16
-[bundle 1286 · línea 53] base = 12288
-[bundle 1292 · línea 53] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 12416
-[bundle 0270 · línea 17] retorno → bundle 1293
-[bundle 1334 · línea 53] descifrar: 16 bloques de 0x2080 a 0x3080
-[bundle 1339 · línea 48] descifrar_archivo.i = 2
-[bundle 1341 · línea 48] jef → .L_for_start_7 (bundle 935)
-[bundle 0963 · línea 49] bloques_de.i = 2
-[bundle 0969 · línea 49] bloques_de.tam = 16
-[bundle 0975 · línea 49] bloques_de.total = 128
-[bundle 0981 · línea 49] llamada → .L_func_bloques_de (bundle 158)
-[bundle 0158 · línea 5] bloques_de.b = 0  (prólogo)
-[bundle 0190 · línea 6] resto = 96
-[bundle 0198 · línea 7] beq → .L_if_next_0 (bundle 206)
-[bundle 0208 · línea 10] bloques_de.b = 16
-[bundle 0210 · línea 12] retorno → bundle 982
-[bundle 0989 · línea 49] descifrar_archivo.b = 16
-[bundle 1080 · línea 51] direccion.i = 2
-[bundle 1086 · línea 51] direccion.tam = 16
-[bundle 1092 · línea 51] base = 8192
-[bundle 1098 · línea 51] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 8448
-[bundle 0270 · línea 17] retorno → bundle 1099
-[bundle 1134 · línea 51] direccion.i = 2
-[bundle 1140 · línea 51] direccion.tam = 16
-[bundle 1146 · línea 51] base = 12288
-[bundle 1152 · línea 51] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 12544
-[bundle 0270 · línea 17] retorno → bundle 1153
-[bundle 1194 · línea 51] descifrar: 16 bloques de 0x2100 a 0x3100
-[bundle 1195 · línea 50] jef → .L_if_end_11 (bundle 1335)
-[bundle 1339 · línea 48] descifrar_archivo.i = 3
-[bundle 1341 · línea 48] jef → .L_for_start_7 (bundle 935)
-[bundle 0963 · línea 49] bloques_de.i = 3
-[bundle 0969 · línea 49] bloques_de.tam = 16
-[bundle 0975 · línea 49] bloques_de.total = 128
-[bundle 0981 · línea 49] llamada → .L_func_bloques_de (bundle 158)
-[bundle 0158 · línea 5] bloques_de.b = 0  (prólogo)
-[bundle 0190 · línea 6] resto = 80
-[bundle 0198 · línea 7] beq → .L_if_next_0 (bundle 206)
-[bundle 0208 · línea 10] bloques_de.b = 16
-[bundle 0210 · línea 12] retorno → bundle 982
-[bundle 0989 · línea 49] descifrar_archivo.b = 16
-[bundle 1055 · línea 50] beq → .L_if_next_10 (bundle 1197)
-[bundle 1220 · línea 53] direccion.i = 3
-[bundle 1226 · línea 53] direccion.tam = 16
-[bundle 1232 · línea 53] base = 8192
-[bundle 1238 · línea 53] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 8576
-[bundle 0270 · línea 17] retorno → bundle 1239
-[bundle 1274 · línea 53] direccion.i = 3
-[bundle 1280 · línea 53] direccion.tam = 16
-[bundle 1286 · línea 53] base = 12288
-[bundle 1292 · línea 53] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 12672
-[bundle 0270 · línea 17] retorno → bundle 1293
-[bundle 1334 · línea 53] descifrar: 16 bloques de 0x2180 a 0x3180
-[bundle 1339 · línea 48] descifrar_archivo.i = 4
-[bundle 1341 · línea 48] jef → .L_for_start_7 (bundle 935)
-[bundle 0963 · línea 49] bloques_de.i = 4
-[bundle 0969 · línea 49] bloques_de.tam = 16
-[bundle 0975 · línea 49] bloques_de.total = 128
-[bundle 0981 · línea 49] llamada → .L_func_bloques_de (bundle 158)
-[bundle 0158 · línea 5] bloques_de.b = 0  (prólogo)
-[bundle 0190 · línea 6] resto = 64
-[bundle 0198 · línea 7] beq → .L_if_next_0 (bundle 206)
-[bundle 0208 · línea 10] bloques_de.b = 16
-[bundle 0210 · línea 12] retorno → bundle 982
-[bundle 0989 · línea 49] descifrar_archivo.b = 16
-[bundle 1080 · línea 51] direccion.i = 4
-[bundle 1086 · línea 51] direccion.tam = 16
-[bundle 1092 · línea 51] base = 8192
-[bundle 1098 · línea 51] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 8704
-[bundle 0270 · línea 17] retorno → bundle 1099
-[bundle 1134 · línea 51] direccion.i = 4
-[bundle 1140 · línea 51] direccion.tam = 16
-[bundle 1146 · línea 51] base = 12288
-[bundle 1152 · línea 51] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 12800
-[bundle 0270 · línea 17] retorno → bundle 1153
-[bundle 1194 · línea 51] descifrar: 16 bloques de 0x2200 a 0x3200
-[bundle 1195 · línea 50] jef → .L_if_end_11 (bundle 1335)
-[bundle 1339 · línea 48] descifrar_archivo.i = 5
-[bundle 1341 · línea 48] jef → .L_for_start_7 (bundle 935)
-[bundle 0963 · línea 49] bloques_de.i = 5
-[bundle 0969 · línea 49] bloques_de.tam = 16
-[bundle 0975 · línea 49] bloques_de.total = 128
-[bundle 0981 · línea 49] llamada → .L_func_bloques_de (bundle 158)
-[bundle 0158 · línea 5] bloques_de.b = 0  (prólogo)
-[bundle 0190 · línea 6] resto = 48
-[bundle 0198 · línea 7] beq → .L_if_next_0 (bundle 206)
-[bundle 0208 · línea 10] bloques_de.b = 16
-[bundle 0210 · línea 12] retorno → bundle 982
-[bundle 0989 · línea 49] descifrar_archivo.b = 16
-[bundle 1055 · línea 50] beq → .L_if_next_10 (bundle 1197)
-[bundle 1220 · línea 53] direccion.i = 5
-[bundle 1226 · línea 53] direccion.tam = 16
-[bundle 1232 · línea 53] base = 8192
-[bundle 1238 · línea 53] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 8832
-[bundle 0270 · línea 17] retorno → bundle 1239
-[bundle 1274 · línea 53] direccion.i = 5
-[bundle 1280 · línea 53] direccion.tam = 16
-[bundle 1286 · línea 53] base = 12288
-[bundle 1292 · línea 53] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 12928
-[bundle 0270 · línea 17] retorno → bundle 1293
-[bundle 1334 · línea 53] descifrar: 16 bloques de 0x2280 a 0x3280
-[bundle 1339 · línea 48] descifrar_archivo.i = 6
-[bundle 1341 · línea 48] jef → .L_for_start_7 (bundle 935)
-[bundle 0963 · línea 49] bloques_de.i = 6
-[bundle 0969 · línea 49] bloques_de.tam = 16
-[bundle 0975 · línea 49] bloques_de.total = 128
-[bundle 0981 · línea 49] llamada → .L_func_bloques_de (bundle 158)
-[bundle 0158 · línea 5] bloques_de.b = 0  (prólogo)
-[bundle 0190 · línea 6] resto = 32
-[bundle 0198 · línea 7] beq → .L_if_next_0 (bundle 206)
-[bundle 0208 · línea 10] bloques_de.b = 16
-[bundle 0210 · línea 12] retorno → bundle 982
-[bundle 0989 · línea 49] descifrar_archivo.b = 16
-[bundle 1080 · línea 51] direccion.i = 6
-[bundle 1086 · línea 51] direccion.tam = 16
-[bundle 1092 · línea 51] base = 8192
-[bundle 1098 · línea 51] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 8960
-[bundle 0270 · línea 17] retorno → bundle 1099
-[bundle 1134 · línea 51] direccion.i = 6
-[bundle 1140 · línea 51] direccion.tam = 16
-[bundle 1146 · línea 51] base = 12288
-[bundle 1152 · línea 51] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 13056
-[bundle 0270 · línea 17] retorno → bundle 1153
-[bundle 1194 · línea 51] descifrar: 16 bloques de 0x2300 a 0x3300
-[bundle 1195 · línea 50] jef → .L_if_end_11 (bundle 1335)
-[bundle 1339 · línea 48] descifrar_archivo.i = 7
-[bundle 1341 · línea 48] jef → .L_for_start_7 (bundle 935)
-[bundle 0963 · línea 49] bloques_de.i = 7
-[bundle 0969 · línea 49] bloques_de.tam = 16
-[bundle 0975 · línea 49] bloques_de.total = 128
-[bundle 0981 · línea 49] llamada → .L_func_bloques_de (bundle 158)
-[bundle 0158 · línea 5] bloques_de.b = 0  (prólogo)
-[bundle 0190 · línea 6] resto = 16
-[bundle 0198 · línea 7] beq → .L_if_next_0 (bundle 206)
-[bundle 0208 · línea 10] bloques_de.b = 16
-[bundle 0210 · línea 12] retorno → bundle 982
-[bundle 0989 · línea 49] descifrar_archivo.b = 16
-[bundle 1055 · línea 50] beq → .L_if_next_10 (bundle 1197)
-[bundle 1220 · línea 53] direccion.i = 7
-[bundle 1226 · línea 53] direccion.tam = 16
-[bundle 1232 · línea 53] base = 8192
-[bundle 1238 · línea 53] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 9088
-[bundle 0270 · línea 17] retorno → bundle 1239
-[bundle 1274 · línea 53] direccion.i = 7
-[bundle 1280 · línea 53] direccion.tam = 16
-[bundle 1286 · línea 53] base = 12288
-[bundle 1292 · línea 53] llamada → .L_func_direccion (bundle 212)
-[bundle 0212 · línea 15] d = 0  (prólogo)
-[bundle 0268 · línea 16] d = 13184
-[bundle 0270 · línea 17] retorno → bundle 1293
-[bundle 1334 · línea 53] descifrar: 16 bloques de 0x2380 a 0x3380
-[bundle 1339 · línea 48] descifrar_archivo.i = 8
-[bundle 1341 · línea 48] jef → .L_for_start_7 (bundle 935)
-[bundle 0939 · línea 48] bge → .L_for_end_9 (bundle 1343)
-[bundle 1343 · línea 56] retorno → bundle 146
-[bundle 0153 · línea 65] n2 = 8
-[bundle 0155 · línea 66] logout
-[bundle 0156 · línea 67] jef → fin_main (bundle 1345)
-[bundle 1345] jef → fin_main (bundle 1345)
+[bundle 0007 · línea 61] n2 = 0
+[bundle 0019 · línea 62] auth
+[bundle 0021 · línea 63] llamada → .L_func_preparar_boveda (bundle 178)
+[bundle 0188 · línea 21] kv_write k=0 w=0
+[bundle 0201 · línea 22] kv_write k=0 w=1
+[bundle 0212 · línea 23] kv_write k=0 w=2
+[bundle 0223 · línea 24] kv_write k=0 w=3
+[bundle 0234 · línea 25] kv_write k=1 w=0
+[bundle 0245 · línea 26] kv_write k=1 w=1
+[bundle 0256 · línea 27] kv_write k=1 w=2
+[bundle 0267 · línea 28] kv_write k=1 w=3
+[bundle 0268 · línea 29] kv_lock
+[bundle 0269 · línea 30] retorno → bundle 22
+[bundle 0044 · línea 64] cifrar_archivo.tam = 16
+[bundle 0047 · línea 64] cifrar_archivo.total = 128
+[bundle 0050 · línea 64] cifrar_archivo.hacia = 8192
+[bundle 0053 · línea 64] cifrar_archivo.desde = 4096
+[bundle 0055 · línea 64] llamada → .L_func_cifrar_archivo (bundle 271)
+[bundle 0271 · línea 33] cifrar_archivo.n = 0  (prólogo)
+[bundle 0319 · línea 34] cifrar_archivo.n = 8
+[bundle 0321 · línea 35] cifrar_archivo.i = 0
+[bundle 0344 · línea 36] bloques_de.i = 0
+[bundle 0347 · línea 36] bloques_de.tam = 16
+[bundle 0350 · línea 36] bloques_de.total = 128
+[bundle 0352 · línea 36] llamada → .L_func_bloques_de (bundle 104)
+[bundle 0104 · línea 5] bloques_de.b = 0  (prólogo)
+[bundle 0124 · línea 6] resto = 128
+[bundle 0130 · línea 7] beq → .L_if_next_0 (bundle 136)
+[bundle 0138 · línea 10] bloques_de.b = 16
+[bundle 0140 · línea 12] retorno → bundle 353
+[bundle 0359 · línea 36] cifrar_archivo.b = 16
+[bundle 0417 · línea 38] direccion.i = 0
+[bundle 0420 · línea 38] direccion.tam = 16
+[bundle 0423 · línea 38] base = 4096
+[bundle 0425 · línea 38] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 4096
+[bundle 0176 · línea 17] retorno → bundle 426
+[bundle 0452 · línea 38] direccion.i = 0
+[bundle 0455 · línea 38] direccion.tam = 16
+[bundle 0458 · línea 38] base = 8192
+[bundle 0460 · línea 38] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 8192
+[bundle 0176 · línea 17] retorno → bundle 461
+[bundle 0493 · línea 38] cifrar: 16 bloques de 0x1000 a 0x2000
+[bundle 0494 · línea 37] jef → .L_if_end_6 (bundle 589)
+[bundle 0593 · línea 35] cifrar_archivo.i = 1
+[bundle 0593 · línea 35] jef → .L_for_start_2 (bundle 324)
+[bundle 0344 · línea 36] bloques_de.i = 1
+[bundle 0347 · línea 36] bloques_de.tam = 16
+[bundle 0350 · línea 36] bloques_de.total = 128
+[bundle 0352 · línea 36] llamada → .L_func_bloques_de (bundle 104)
+[bundle 0104 · línea 5] bloques_de.b = 0  (prólogo)
+[bundle 0124 · línea 6] resto = 112
+[bundle 0130 · línea 7] beq → .L_if_next_0 (bundle 136)
+[bundle 0138 · línea 10] bloques_de.b = 16
+[bundle 0140 · línea 12] retorno → bundle 353
+[bundle 0359 · línea 36] cifrar_archivo.b = 16
+[bundle 0399 · línea 37] beq → .L_if_next_5 (bundle 496)
+[bundle 0512 · línea 40] direccion.i = 1
+[bundle 0515 · línea 40] direccion.tam = 16
+[bundle 0518 · línea 40] base = 4096
+[bundle 0520 · línea 40] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 4224
+[bundle 0176 · línea 17] retorno → bundle 521
+[bundle 0547 · línea 40] direccion.i = 1
+[bundle 0550 · línea 40] direccion.tam = 16
+[bundle 0553 · línea 40] base = 8192
+[bundle 0555 · línea 40] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 8320
+[bundle 0176 · línea 17] retorno → bundle 556
+[bundle 0588 · línea 40] cifrar: 16 bloques de 0x1080 a 0x2080
+[bundle 0593 · línea 35] cifrar_archivo.i = 2
+[bundle 0593 · línea 35] jef → .L_for_start_2 (bundle 324)
+[bundle 0344 · línea 36] bloques_de.i = 2
+[bundle 0347 · línea 36] bloques_de.tam = 16
+[bundle 0350 · línea 36] bloques_de.total = 128
+[bundle 0352 · línea 36] llamada → .L_func_bloques_de (bundle 104)
+[bundle 0104 · línea 5] bloques_de.b = 0  (prólogo)
+[bundle 0124 · línea 6] resto = 96
+[bundle 0130 · línea 7] beq → .L_if_next_0 (bundle 136)
+[bundle 0138 · línea 10] bloques_de.b = 16
+[bundle 0140 · línea 12] retorno → bundle 353
+[bundle 0359 · línea 36] cifrar_archivo.b = 16
+[bundle 0417 · línea 38] direccion.i = 2
+[bundle 0420 · línea 38] direccion.tam = 16
+[bundle 0423 · línea 38] base = 4096
+[bundle 0425 · línea 38] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 4352
+[bundle 0176 · línea 17] retorno → bundle 426
+[bundle 0452 · línea 38] direccion.i = 2
+[bundle 0455 · línea 38] direccion.tam = 16
+[bundle 0458 · línea 38] base = 8192
+[bundle 0460 · línea 38] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 8448
+[bundle 0176 · línea 17] retorno → bundle 461
+[bundle 0493 · línea 38] cifrar: 16 bloques de 0x1100 a 0x2100
+[bundle 0494 · línea 37] jef → .L_if_end_6 (bundle 589)
+[bundle 0593 · línea 35] cifrar_archivo.i = 3
+[bundle 0593 · línea 35] jef → .L_for_start_2 (bundle 324)
+[bundle 0344 · línea 36] bloques_de.i = 3
+[bundle 0347 · línea 36] bloques_de.tam = 16
+[bundle 0350 · línea 36] bloques_de.total = 128
+[bundle 0352 · línea 36] llamada → .L_func_bloques_de (bundle 104)
+[bundle 0104 · línea 5] bloques_de.b = 0  (prólogo)
+[bundle 0124 · línea 6] resto = 80
+[bundle 0130 · línea 7] beq → .L_if_next_0 (bundle 136)
+[bundle 0138 · línea 10] bloques_de.b = 16
+[bundle 0140 · línea 12] retorno → bundle 353
+[bundle 0359 · línea 36] cifrar_archivo.b = 16
+[bundle 0399 · línea 37] beq → .L_if_next_5 (bundle 496)
+[bundle 0512 · línea 40] direccion.i = 3
+[bundle 0515 · línea 40] direccion.tam = 16
+[bundle 0518 · línea 40] base = 4096
+[bundle 0520 · línea 40] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 4480
+[bundle 0176 · línea 17] retorno → bundle 521
+[bundle 0547 · línea 40] direccion.i = 3
+[bundle 0550 · línea 40] direccion.tam = 16
+[bundle 0553 · línea 40] base = 8192
+[bundle 0555 · línea 40] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 8576
+[bundle 0176 · línea 17] retorno → bundle 556
+[bundle 0588 · línea 40] cifrar: 16 bloques de 0x1180 a 0x2180
+[bundle 0593 · línea 35] cifrar_archivo.i = 4
+[bundle 0593 · línea 35] jef → .L_for_start_2 (bundle 324)
+[bundle 0344 · línea 36] bloques_de.i = 4
+[bundle 0347 · línea 36] bloques_de.tam = 16
+[bundle 0350 · línea 36] bloques_de.total = 128
+[bundle 0352 · línea 36] llamada → .L_func_bloques_de (bundle 104)
+[bundle 0104 · línea 5] bloques_de.b = 0  (prólogo)
+[bundle 0124 · línea 6] resto = 64
+[bundle 0130 · línea 7] beq → .L_if_next_0 (bundle 136)
+[bundle 0138 · línea 10] bloques_de.b = 16
+[bundle 0140 · línea 12] retorno → bundle 353
+[bundle 0359 · línea 36] cifrar_archivo.b = 16
+[bundle 0417 · línea 38] direccion.i = 4
+[bundle 0420 · línea 38] direccion.tam = 16
+[bundle 0423 · línea 38] base = 4096
+[bundle 0425 · línea 38] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 4608
+[bundle 0176 · línea 17] retorno → bundle 426
+[bundle 0452 · línea 38] direccion.i = 4
+[bundle 0455 · línea 38] direccion.tam = 16
+[bundle 0458 · línea 38] base = 8192
+[bundle 0460 · línea 38] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 8704
+[bundle 0176 · línea 17] retorno → bundle 461
+[bundle 0493 · línea 38] cifrar: 16 bloques de 0x1200 a 0x2200
+[bundle 0494 · línea 37] jef → .L_if_end_6 (bundle 589)
+[bundle 0593 · línea 35] cifrar_archivo.i = 5
+[bundle 0593 · línea 35] jef → .L_for_start_2 (bundle 324)
+[bundle 0344 · línea 36] bloques_de.i = 5
+[bundle 0347 · línea 36] bloques_de.tam = 16
+[bundle 0350 · línea 36] bloques_de.total = 128
+[bundle 0352 · línea 36] llamada → .L_func_bloques_de (bundle 104)
+[bundle 0104 · línea 5] bloques_de.b = 0  (prólogo)
+[bundle 0124 · línea 6] resto = 48
+[bundle 0130 · línea 7] beq → .L_if_next_0 (bundle 136)
+[bundle 0138 · línea 10] bloques_de.b = 16
+[bundle 0140 · línea 12] retorno → bundle 353
+[bundle 0359 · línea 36] cifrar_archivo.b = 16
+[bundle 0399 · línea 37] beq → .L_if_next_5 (bundle 496)
+[bundle 0512 · línea 40] direccion.i = 5
+[bundle 0515 · línea 40] direccion.tam = 16
+[bundle 0518 · línea 40] base = 4096
+[bundle 0520 · línea 40] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 4736
+[bundle 0176 · línea 17] retorno → bundle 521
+[bundle 0547 · línea 40] direccion.i = 5
+[bundle 0550 · línea 40] direccion.tam = 16
+[bundle 0553 · línea 40] base = 8192
+[bundle 0555 · línea 40] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 8832
+[bundle 0176 · línea 17] retorno → bundle 556
+[bundle 0588 · línea 40] cifrar: 16 bloques de 0x1280 a 0x2280
+[bundle 0593 · línea 35] cifrar_archivo.i = 6
+[bundle 0593 · línea 35] jef → .L_for_start_2 (bundle 324)
+[bundle 0344 · línea 36] bloques_de.i = 6
+[bundle 0347 · línea 36] bloques_de.tam = 16
+[bundle 0350 · línea 36] bloques_de.total = 128
+[bundle 0352 · línea 36] llamada → .L_func_bloques_de (bundle 104)
+[bundle 0104 · línea 5] bloques_de.b = 0  (prólogo)
+[bundle 0124 · línea 6] resto = 32
+[bundle 0130 · línea 7] beq → .L_if_next_0 (bundle 136)
+[bundle 0138 · línea 10] bloques_de.b = 16
+[bundle 0140 · línea 12] retorno → bundle 353
+[bundle 0359 · línea 36] cifrar_archivo.b = 16
+[bundle 0417 · línea 38] direccion.i = 6
+[bundle 0420 · línea 38] direccion.tam = 16
+[bundle 0423 · línea 38] base = 4096
+[bundle 0425 · línea 38] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 4864
+[bundle 0176 · línea 17] retorno → bundle 426
+[bundle 0452 · línea 38] direccion.i = 6
+[bundle 0455 · línea 38] direccion.tam = 16
+[bundle 0458 · línea 38] base = 8192
+[bundle 0460 · línea 38] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 8960
+[bundle 0176 · línea 17] retorno → bundle 461
+[bundle 0493 · línea 38] cifrar: 16 bloques de 0x1300 a 0x2300
+[bundle 0494 · línea 37] jef → .L_if_end_6 (bundle 589)
+[bundle 0593 · línea 35] cifrar_archivo.i = 7
+[bundle 0593 · línea 35] jef → .L_for_start_2 (bundle 324)
+[bundle 0344 · línea 36] bloques_de.i = 7
+[bundle 0347 · línea 36] bloques_de.tam = 16
+[bundle 0350 · línea 36] bloques_de.total = 128
+[bundle 0352 · línea 36] llamada → .L_func_bloques_de (bundle 104)
+[bundle 0104 · línea 5] bloques_de.b = 0  (prólogo)
+[bundle 0124 · línea 6] resto = 16
+[bundle 0130 · línea 7] beq → .L_if_next_0 (bundle 136)
+[bundle 0138 · línea 10] bloques_de.b = 16
+[bundle 0140 · línea 12] retorno → bundle 353
+[bundle 0359 · línea 36] cifrar_archivo.b = 16
+[bundle 0399 · línea 37] beq → .L_if_next_5 (bundle 496)
+[bundle 0512 · línea 40] direccion.i = 7
+[bundle 0515 · línea 40] direccion.tam = 16
+[bundle 0518 · línea 40] base = 4096
+[bundle 0520 · línea 40] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 4992
+[bundle 0176 · línea 17] retorno → bundle 521
+[bundle 0547 · línea 40] direccion.i = 7
+[bundle 0550 · línea 40] direccion.tam = 16
+[bundle 0553 · línea 40] base = 8192
+[bundle 0555 · línea 40] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 9088
+[bundle 0176 · línea 17] retorno → bundle 556
+[bundle 0588 · línea 40] cifrar: 16 bloques de 0x1380 a 0x2380
+[bundle 0593 · línea 35] cifrar_archivo.i = 8
+[bundle 0593 · línea 35] jef → .L_for_start_2 (bundle 324)
+[bundle 0327 · línea 35] bge → .L_for_end_4 (bundle 595)
+[bundle 0595 · línea 43] retorno → bundle 56
+[bundle 0062 · línea 64] n1 = 8
+[bundle 0081 · línea 65] descifrar_archivo.tam = 16
+[bundle 0084 · línea 65] descifrar_archivo.total = 128
+[bundle 0087 · línea 65] descifrar_archivo.hacia = 12288
+[bundle 0090 · línea 65] descifrar_archivo.desde = 8192
+[bundle 0092 · línea 65] llamada → .L_func_descifrar_archivo (bundle 597)
+[bundle 0597 · línea 46] descifrar_archivo.n = 0  (prólogo)
+[bundle 0645 · línea 47] descifrar_archivo.n = 8
+[bundle 0647 · línea 48] descifrar_archivo.i = 0
+[bundle 0670 · línea 49] bloques_de.i = 0
+[bundle 0673 · línea 49] bloques_de.tam = 16
+[bundle 0676 · línea 49] bloques_de.total = 128
+[bundle 0678 · línea 49] llamada → .L_func_bloques_de (bundle 104)
+[bundle 0104 · línea 5] bloques_de.b = 0  (prólogo)
+[bundle 0124 · línea 6] resto = 128
+[bundle 0130 · línea 7] beq → .L_if_next_0 (bundle 136)
+[bundle 0138 · línea 10] bloques_de.b = 16
+[bundle 0140 · línea 12] retorno → bundle 679
+[bundle 0685 · línea 49] descifrar_archivo.b = 16
+[bundle 0743 · línea 51] direccion.i = 0
+[bundle 0746 · línea 51] direccion.tam = 16
+[bundle 0749 · línea 51] base = 8192
+[bundle 0751 · línea 51] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 8192
+[bundle 0176 · línea 17] retorno → bundle 752
+[bundle 0778 · línea 51] direccion.i = 0
+[bundle 0781 · línea 51] direccion.tam = 16
+[bundle 0784 · línea 51] base = 12288
+[bundle 0786 · línea 51] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 12288
+[bundle 0176 · línea 17] retorno → bundle 787
+[bundle 0819 · línea 51] descifrar: 16 bloques de 0x2000 a 0x3000
+[bundle 0820 · línea 50] jef → .L_if_end_11 (bundle 915)
+[bundle 0919 · línea 48] descifrar_archivo.i = 1
+[bundle 0919 · línea 48] jef → .L_for_start_7 (bundle 650)
+[bundle 0670 · línea 49] bloques_de.i = 1
+[bundle 0673 · línea 49] bloques_de.tam = 16
+[bundle 0676 · línea 49] bloques_de.total = 128
+[bundle 0678 · línea 49] llamada → .L_func_bloques_de (bundle 104)
+[bundle 0104 · línea 5] bloques_de.b = 0  (prólogo)
+[bundle 0124 · línea 6] resto = 112
+[bundle 0130 · línea 7] beq → .L_if_next_0 (bundle 136)
+[bundle 0138 · línea 10] bloques_de.b = 16
+[bundle 0140 · línea 12] retorno → bundle 679
+[bundle 0685 · línea 49] descifrar_archivo.b = 16
+[bundle 0725 · línea 50] beq → .L_if_next_10 (bundle 822)
+[bundle 0838 · línea 53] direccion.i = 1
+[bundle 0841 · línea 53] direccion.tam = 16
+[bundle 0844 · línea 53] base = 8192
+[bundle 0846 · línea 53] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 8320
+[bundle 0176 · línea 17] retorno → bundle 847
+[bundle 0873 · línea 53] direccion.i = 1
+[bundle 0876 · línea 53] direccion.tam = 16
+[bundle 0879 · línea 53] base = 12288
+[bundle 0881 · línea 53] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 12416
+[bundle 0176 · línea 17] retorno → bundle 882
+[bundle 0914 · línea 53] descifrar: 16 bloques de 0x2080 a 0x3080
+[bundle 0919 · línea 48] descifrar_archivo.i = 2
+[bundle 0919 · línea 48] jef → .L_for_start_7 (bundle 650)
+[bundle 0670 · línea 49] bloques_de.i = 2
+[bundle 0673 · línea 49] bloques_de.tam = 16
+[bundle 0676 · línea 49] bloques_de.total = 128
+[bundle 0678 · línea 49] llamada → .L_func_bloques_de (bundle 104)
+[bundle 0104 · línea 5] bloques_de.b = 0  (prólogo)
+[bundle 0124 · línea 6] resto = 96
+[bundle 0130 · línea 7] beq → .L_if_next_0 (bundle 136)
+[bundle 0138 · línea 10] bloques_de.b = 16
+[bundle 0140 · línea 12] retorno → bundle 679
+[bundle 0685 · línea 49] descifrar_archivo.b = 16
+[bundle 0743 · línea 51] direccion.i = 2
+[bundle 0746 · línea 51] direccion.tam = 16
+[bundle 0749 · línea 51] base = 8192
+[bundle 0751 · línea 51] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 8448
+[bundle 0176 · línea 17] retorno → bundle 752
+[bundle 0778 · línea 51] direccion.i = 2
+[bundle 0781 · línea 51] direccion.tam = 16
+[bundle 0784 · línea 51] base = 12288
+[bundle 0786 · línea 51] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 12544
+[bundle 0176 · línea 17] retorno → bundle 787
+[bundle 0819 · línea 51] descifrar: 16 bloques de 0x2100 a 0x3100
+[bundle 0820 · línea 50] jef → .L_if_end_11 (bundle 915)
+[bundle 0919 · línea 48] descifrar_archivo.i = 3
+[bundle 0919 · línea 48] jef → .L_for_start_7 (bundle 650)
+[bundle 0670 · línea 49] bloques_de.i = 3
+[bundle 0673 · línea 49] bloques_de.tam = 16
+[bundle 0676 · línea 49] bloques_de.total = 128
+[bundle 0678 · línea 49] llamada → .L_func_bloques_de (bundle 104)
+[bundle 0104 · línea 5] bloques_de.b = 0  (prólogo)
+[bundle 0124 · línea 6] resto = 80
+[bundle 0130 · línea 7] beq → .L_if_next_0 (bundle 136)
+[bundle 0138 · línea 10] bloques_de.b = 16
+[bundle 0140 · línea 12] retorno → bundle 679
+[bundle 0685 · línea 49] descifrar_archivo.b = 16
+[bundle 0725 · línea 50] beq → .L_if_next_10 (bundle 822)
+[bundle 0838 · línea 53] direccion.i = 3
+[bundle 0841 · línea 53] direccion.tam = 16
+[bundle 0844 · línea 53] base = 8192
+[bundle 0846 · línea 53] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 8576
+[bundle 0176 · línea 17] retorno → bundle 847
+[bundle 0873 · línea 53] direccion.i = 3
+[bundle 0876 · línea 53] direccion.tam = 16
+[bundle 0879 · línea 53] base = 12288
+[bundle 0881 · línea 53] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 12672
+[bundle 0176 · línea 17] retorno → bundle 882
+[bundle 0914 · línea 53] descifrar: 16 bloques de 0x2180 a 0x3180
+[bundle 0919 · línea 48] descifrar_archivo.i = 4
+[bundle 0919 · línea 48] jef → .L_for_start_7 (bundle 650)
+[bundle 0670 · línea 49] bloques_de.i = 4
+[bundle 0673 · línea 49] bloques_de.tam = 16
+[bundle 0676 · línea 49] bloques_de.total = 128
+[bundle 0678 · línea 49] llamada → .L_func_bloques_de (bundle 104)
+[bundle 0104 · línea 5] bloques_de.b = 0  (prólogo)
+[bundle 0124 · línea 6] resto = 64
+[bundle 0130 · línea 7] beq → .L_if_next_0 (bundle 136)
+[bundle 0138 · línea 10] bloques_de.b = 16
+[bundle 0140 · línea 12] retorno → bundle 679
+[bundle 0685 · línea 49] descifrar_archivo.b = 16
+[bundle 0743 · línea 51] direccion.i = 4
+[bundle 0746 · línea 51] direccion.tam = 16
+[bundle 0749 · línea 51] base = 8192
+[bundle 0751 · línea 51] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 8704
+[bundle 0176 · línea 17] retorno → bundle 752
+[bundle 0778 · línea 51] direccion.i = 4
+[bundle 0781 · línea 51] direccion.tam = 16
+[bundle 0784 · línea 51] base = 12288
+[bundle 0786 · línea 51] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 12800
+[bundle 0176 · línea 17] retorno → bundle 787
+[bundle 0819 · línea 51] descifrar: 16 bloques de 0x2200 a 0x3200
+[bundle 0820 · línea 50] jef → .L_if_end_11 (bundle 915)
+[bundle 0919 · línea 48] descifrar_archivo.i = 5
+[bundle 0919 · línea 48] jef → .L_for_start_7 (bundle 650)
+[bundle 0670 · línea 49] bloques_de.i = 5
+[bundle 0673 · línea 49] bloques_de.tam = 16
+[bundle 0676 · línea 49] bloques_de.total = 128
+[bundle 0678 · línea 49] llamada → .L_func_bloques_de (bundle 104)
+[bundle 0104 · línea 5] bloques_de.b = 0  (prólogo)
+[bundle 0124 · línea 6] resto = 48
+[bundle 0130 · línea 7] beq → .L_if_next_0 (bundle 136)
+[bundle 0138 · línea 10] bloques_de.b = 16
+[bundle 0140 · línea 12] retorno → bundle 679
+[bundle 0685 · línea 49] descifrar_archivo.b = 16
+[bundle 0725 · línea 50] beq → .L_if_next_10 (bundle 822)
+[bundle 0838 · línea 53] direccion.i = 5
+[bundle 0841 · línea 53] direccion.tam = 16
+[bundle 0844 · línea 53] base = 8192
+[bundle 0846 · línea 53] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 8832
+[bundle 0176 · línea 17] retorno → bundle 847
+[bundle 0873 · línea 53] direccion.i = 5
+[bundle 0876 · línea 53] direccion.tam = 16
+[bundle 0879 · línea 53] base = 12288
+[bundle 0881 · línea 53] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 12928
+[bundle 0176 · línea 17] retorno → bundle 882
+[bundle 0914 · línea 53] descifrar: 16 bloques de 0x2280 a 0x3280
+[bundle 0919 · línea 48] descifrar_archivo.i = 6
+[bundle 0919 · línea 48] jef → .L_for_start_7 (bundle 650)
+[bundle 0670 · línea 49] bloques_de.i = 6
+[bundle 0673 · línea 49] bloques_de.tam = 16
+[bundle 0676 · línea 49] bloques_de.total = 128
+[bundle 0678 · línea 49] llamada → .L_func_bloques_de (bundle 104)
+[bundle 0104 · línea 5] bloques_de.b = 0  (prólogo)
+[bundle 0124 · línea 6] resto = 32
+[bundle 0130 · línea 7] beq → .L_if_next_0 (bundle 136)
+[bundle 0138 · línea 10] bloques_de.b = 16
+[bundle 0140 · línea 12] retorno → bundle 679
+[bundle 0685 · línea 49] descifrar_archivo.b = 16
+[bundle 0743 · línea 51] direccion.i = 6
+[bundle 0746 · línea 51] direccion.tam = 16
+[bundle 0749 · línea 51] base = 8192
+[bundle 0751 · línea 51] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 8960
+[bundle 0176 · línea 17] retorno → bundle 752
+[bundle 0778 · línea 51] direccion.i = 6
+[bundle 0781 · línea 51] direccion.tam = 16
+[bundle 0784 · línea 51] base = 12288
+[bundle 0786 · línea 51] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 13056
+[bundle 0176 · línea 17] retorno → bundle 787
+[bundle 0819 · línea 51] descifrar: 16 bloques de 0x2300 a 0x3300
+[bundle 0820 · línea 50] jef → .L_if_end_11 (bundle 915)
+[bundle 0919 · línea 48] descifrar_archivo.i = 7
+[bundle 0919 · línea 48] jef → .L_for_start_7 (bundle 650)
+[bundle 0670 · línea 49] bloques_de.i = 7
+[bundle 0673 · línea 49] bloques_de.tam = 16
+[bundle 0676 · línea 49] bloques_de.total = 128
+[bundle 0678 · línea 49] llamada → .L_func_bloques_de (bundle 104)
+[bundle 0104 · línea 5] bloques_de.b = 0  (prólogo)
+[bundle 0124 · línea 6] resto = 16
+[bundle 0130 · línea 7] beq → .L_if_next_0 (bundle 136)
+[bundle 0138 · línea 10] bloques_de.b = 16
+[bundle 0140 · línea 12] retorno → bundle 679
+[bundle 0685 · línea 49] descifrar_archivo.b = 16
+[bundle 0725 · línea 50] beq → .L_if_next_10 (bundle 822)
+[bundle 0838 · línea 53] direccion.i = 7
+[bundle 0841 · línea 53] direccion.tam = 16
+[bundle 0844 · línea 53] base = 8192
+[bundle 0846 · línea 53] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 9088
+[bundle 0176 · línea 17] retorno → bundle 847
+[bundle 0873 · línea 53] direccion.i = 7
+[bundle 0876 · línea 53] direccion.tam = 16
+[bundle 0879 · línea 53] base = 12288
+[bundle 0881 · línea 53] llamada → .L_func_direccion (bundle 142)
+[bundle 0142 · línea 15] d = 0  (prólogo)
+[bundle 0176 · línea 16] d = 13184
+[bundle 0176 · línea 17] retorno → bundle 882
+[bundle 0914 · línea 53] descifrar: 16 bloques de 0x2380 a 0x3380
+[bundle 0919 · línea 48] descifrar_archivo.i = 8
+[bundle 0919 · línea 48] jef → .L_for_start_7 (bundle 650)
+[bundle 0653 · línea 48] bge → .L_for_end_9 (bundle 921)
+[bundle 0921 · línea 56] retorno → bundle 93
+[bundle 0099 · línea 65] n2 = 8
+[bundle 0101 · línea 66] logout
+[bundle 0102 · línea 67] jef → fin_main (bundle 923)
+[bundle 0923] jef → fin_main (bundle 923)
 
 Estado final de las variables:
   origen = 4096

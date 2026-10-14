@@ -7,43 +7,43 @@
 # (__ccom_arith_*, __ccom_array_*, .L_crypto_*); sí el salto a
 # .L_arith_error. Los saltos condicionales no tomados tampoco.
 [bundle 0004 · línea 22] p[0] = 0
-[bundle 0008 · línea 22] p[1] = 0
-[bundle 0012 · línea 23] ok = falso
-[bundle 0022 · línea 24] pos = @0x0084
-[bundle 0028 · línea 24] x = 42
-[bundle 0032 · línea 24] mat = @0x0000
-[bundle 0038 · línea 24] llamada → .L_func_buscar (bundle 50)
-[bundle 0050 · línea 5] hallado = falso  (prólogo)
-[bundle 0078 · línea 6] p[0] = -1
-[bundle 0106 · línea 7] p[1] = -1
-[bundle 0112 · línea 8] i = 0
-[bundle 0126 · línea 9] j = 0
-[bundle 0182 · línea 10] beq → .L_if_next_6 (bundle 244)
-[bundle 0248 · línea 9] j = 1
-[bundle 0250 · línea 9] jef → .L_for_start_3 (bundle 130)
-[bundle 0182 · línea 10] beq → .L_if_next_6 (bundle 244)
-[bundle 0248 · línea 9] j = 2
-[bundle 0250 · línea 9] jef → .L_for_start_3 (bundle 130)
-[bundle 0182 · línea 10] beq → .L_if_next_6 (bundle 244)
-[bundle 0248 · línea 9] j = 3
-[bundle 0250 · línea 9] jef → .L_for_start_3 (bundle 130)
-[bundle 0182 · línea 10] beq → .L_if_next_6 (bundle 244)
-[bundle 0248 · línea 9] j = 4
-[bundle 0250 · línea 9] jef → .L_for_start_3 (bundle 130)
-[bundle 0134 · línea 9] bge → .L_for_end_5 (bundle 252)
-[bundle 0256 · línea 8] i = 1
-[bundle 0258 · línea 8] jef → .L_for_start_0 (bundle 116)
-[bundle 0126 · línea 9] j = 0
-[bundle 0182 · línea 10] beq → .L_if_next_6 (bundle 244)
-[bundle 0248 · línea 9] j = 1
-[bundle 0250 · línea 9] jef → .L_for_start_3 (bundle 130)
-[bundle 0208 · línea 11] p[0] = 1
-[bundle 0234 · línea 12] p[1] = 1
-[bundle 0238 · línea 13] hallado = verdadero
-[bundle 0240 · línea 14] retorno → bundle 39
-[bundle 0046 · línea 24] ok = verdadero
-[bundle 0048 · línea 25] jef → fin_main (bundle 262)
-[bundle 0262] jef → fin_main (bundle 262)
+[bundle 0007 · línea 22] p[1] = 0
+[bundle 0010 · línea 23] ok = falso
+[bundle 0016 · línea 24] pos = @0x0084
+[bundle 0020 · línea 24] x = 42
+[bundle 0023 · línea 24] mat = @0x0000
+[bundle 0025 · línea 24] llamada → .L_func_buscar (bundle 34)
+[bundle 0034 · línea 5] hallado = falso  (prólogo)
+[bundle 0049 · línea 6] p[0] = -1
+[bundle 0061 · línea 7] p[1] = -1
+[bundle 0064 · línea 8] i = 0
+[bundle 0074 · línea 9] j = 0
+[bundle 0112 · línea 10] beq → .L_if_next_6 (bundle 146)
+[bundle 0150 · línea 9] j = 1
+[bundle 0150 · línea 9] jef → .L_for_start_3 (bundle 77)
+[bundle 0112 · línea 10] beq → .L_if_next_6 (bundle 146)
+[bundle 0150 · línea 9] j = 2
+[bundle 0150 · línea 9] jef → .L_for_start_3 (bundle 77)
+[bundle 0112 · línea 10] beq → .L_if_next_6 (bundle 146)
+[bundle 0150 · línea 9] j = 3
+[bundle 0150 · línea 9] jef → .L_for_start_3 (bundle 77)
+[bundle 0112 · línea 10] beq → .L_if_next_6 (bundle 146)
+[bundle 0150 · línea 9] j = 4
+[bundle 0150 · línea 9] jef → .L_for_start_3 (bundle 77)
+[bundle 0080 · línea 9] bge → .L_for_end_5 (bundle 152)
+[bundle 0156 · línea 8] i = 1
+[bundle 0156 · línea 8] jef → .L_for_start_0 (bundle 67)
+[bundle 0074 · línea 9] j = 0
+[bundle 0112 · línea 10] beq → .L_if_next_6 (bundle 146)
+[bundle 0150 · línea 9] j = 1
+[bundle 0150 · línea 9] jef → .L_for_start_3 (bundle 77)
+[bundle 0127 · línea 11] p[0] = 1
+[bundle 0139 · línea 12] p[1] = 1
+[bundle 0142 · línea 13] hallado = verdadero
+[bundle 0142 · línea 14] retorno → bundle 26
+[bundle 0032 · línea 24] ok = verdadero
+[bundle 0032 · línea 25] jef → fin_main (bundle 160)
+[bundle 0160] jef → fin_main (bundle 160)
 
 Estado final de las variables:
   m = [4, 8, 15, 16, 23, 42, 7, 1, 9, 3, 5, 2]

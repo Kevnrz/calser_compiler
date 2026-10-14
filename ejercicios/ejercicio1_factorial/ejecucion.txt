@@ -1,6 +1,6 @@
 Ejecucion de ejercicio1 con tools/sim_asm.py
-Programa: ejercicios/ejercicio1_factorial/ejercicio1.asm (111 bundles)
-Fin: salto a sí mismo; bundles ejecutados: 309; ciclos: 337
+Programa: ejercicios/ejercicio1_factorial/ejercicio1.asm (80 bundles)
+Fin: salto a sí mismo; bundles ejecutados: 203; ciclos: 231
 Avisos de separación: 0
 
 Valores finales de las variables:

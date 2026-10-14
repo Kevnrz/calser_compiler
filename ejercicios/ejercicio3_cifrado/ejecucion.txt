@@ -1,6 +1,6 @@
 Ejecucion de ejercicio3 con tools/sim_asm.py
-Programa: ejercicios/ejercicio3_cifrado/ejercicio3.asm (1348 bundles)
-Fin: salto a sí mismo; bundles ejecutados: 22960; ciclos: 25273
+Programa: ejercicios/ejercicio3_cifrado/ejercicio3.asm (925 bundles)
+Fin: salto a sí mismo; bundles ejecutados: 14770; ciclos: 17083
 Avisos de separación: 0
 CRYPTO: 1035 instrucciones; autenticación de prueba (sin Ascon; token 999 falla)
 Estado: AUTH=0 KVLOCK=1 EXC=0

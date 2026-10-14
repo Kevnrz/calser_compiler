@@ -7,30 +7,30 @@
 # (__ccom_arith_*, __ccom_array_*, .L_crypto_*); sí el salto a
 # .L_arith_error. Los saltos condicionales no tomados tampoco.
 [bundle 0004 · línea 15] x = 5
-[bundle 0008 · línea 16] f = 0
-[bundle 0020 · línea 17] n = 5
-[bundle 0026 · línea 17] llamada → .L_func_factorial (bundle 38)
-[bundle 0038 · línea 1] res = 0  (prólogo)
-[bundle 0046 · línea 2] beq → .L_if_next_0 (bundle 52)
-[bundle 0054 · línea 5] res = 1
-[bundle 0058 · línea 6] i = 2
-[bundle 0094 · línea 8] res = 2
-[bundle 0102 · línea 9] i = 3
-[bundle 0104 · línea 7] jef → .L_while_start_2 (bundle 60)
-[bundle 0094 · línea 8] res = 6
-[bundle 0102 · línea 9] i = 4
-[bundle 0104 · línea 7] jef → .L_while_start_2 (bundle 60)
-[bundle 0094 · línea 8] res = 24
-[bundle 0102 · línea 9] i = 5
-[bundle 0104 · línea 7] jef → .L_while_start_2 (bundle 60)
-[bundle 0094 · línea 8] res = 120
-[bundle 0102 · línea 9] i = 6
-[bundle 0104 · línea 7] jef → .L_while_start_2 (bundle 60)
-[bundle 0066 · línea 7] beq → .L_while_end_3 (bundle 106)
-[bundle 0106 · línea 11] retorno → bundle 27
-[bundle 0034 · línea 17] f = 120
-[bundle 0036 · línea 18] jef → fin_main (bundle 108)
-[bundle 0108] jef → fin_main (bundle 108)
+[bundle 0007 · línea 16] f = 0
+[bundle 0017 · línea 17] n = 5
+[bundle 0019 · línea 17] llamada → .L_func_factorial (bundle 28)
+[bundle 0028 · línea 1] res = 0  (prólogo)
+[bundle 0034 · línea 2] beq → .L_if_next_0 (bundle 40)
+[bundle 0042 · línea 5] res = 1
+[bundle 0045 · línea 6] i = 2
+[bundle 0069 · línea 8] res = 2
+[bundle 0074 · línea 9] i = 3
+[bundle 0074 · línea 7] jef → .L_while_start_2 (bundle 47)
+[bundle 0069 · línea 8] res = 6
+[bundle 0074 · línea 9] i = 4
+[bundle 0074 · línea 7] jef → .L_while_start_2 (bundle 47)
+[bundle 0069 · línea 8] res = 24
+[bundle 0074 · línea 9] i = 5
+[bundle 0074 · línea 7] jef → .L_while_start_2 (bundle 47)
+[bundle 0069 · línea 8] res = 120
+[bundle 0074 · línea 9] i = 6
+[bundle 0074 · línea 7] jef → .L_while_start_2 (bundle 47)
+[bundle 0052 · línea 7] beq → .L_while_end_3 (bundle 76)
+[bundle 0076 · línea 11] retorno → bundle 20
+[bundle 0026 · línea 17] f = 120
+[bundle 0026 · línea 18] jef → fin_main (bundle 78)
+[bundle 0078] jef → fin_main (bundle 78)
 
 Estado final de las variables:
   res = 120

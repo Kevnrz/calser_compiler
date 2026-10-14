@@ -1043,3 +1043,49 @@ Scope 14: FUNCTION
 =======================
 --- codigo de salida: 1 ---
 
+===== pruebas/p12_ejercicio2.cls =====
+--- stderr ---
+ccom:10:17: error de generacion: sin registros para acceder al arreglo
+--- tabla ---
+Scope 0: GLOBAL
+    main : void (function) params=[] area=0x007C size=60 temp_base=0x0088
+    buscar : bool (function) params=[mat, x, pos] area=0x0030 size=76 temp_base=0x004C
+    m : int[3][4] width=48 addr=0x0000
+
+Scope 1: FUNCTION
+    pos : int[2] width=4 addr=0x0040
+    x : int width=4 addr=0x003C
+    mat : int[3][4] width=4 addr=0x0038
+    hallado : bool (return) width=4 addr=0x0034
+
+Scope 2: S
+    i : int width=4 addr=0x0044
+
+Scope 3: S
+    j : int width=4 addr=0x0048
+
+Scope 4: C
+
+Scope 5: FUNCTION
+    ok : bool width=4 addr=0x0084
+    p : int[2] width=8 addr=0x007C
+
+=======================
+
+===== LABEL TABLE =====
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 21
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 21
+.L_if_end_7 | END          | AST kind: CONDITIONAL | Line: 10
+.L_if_next_6 | NEXT         | AST kind: CONDITIONAL | Line: 10
+.L_for_end_5 | END          | AST kind: LOOP_S | Line: 9
+.L_for_update_4 | UPDATE       | AST kind: LOOP_S | Line: 9
+.L_for_start_3 | START        | AST kind: LOOP_S | Line: 9
+.L_for_end_2 | END          | AST kind: LOOP_S | Line: 8
+.L_for_update_1 | UPDATE       | AST kind: LOOP_S | Line: 8
+.L_for_start_0 | START        | AST kind: LOOP_S | Line: 8
+.L_body_buscar | BODY         | AST kind: FUNCTION | Line: 5
+.L_func_buscar | FUNCTION     | AST kind: FUNCTION | Line: 5
+=======================
+--- codigo de salida: 1 ---
+

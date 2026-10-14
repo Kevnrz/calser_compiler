@@ -893,7 +893,17 @@ static int emit_function_call(ASTNode *node, int result_needed) {
     // Evaluate arguments from left to right.
     // Push each result to memory immediately. This preserves it
     // across calls needed to evaluate subsequent arguments.
-    for (ASTNode *a = arg; a != NULL; a = a->next) {
+    //
+    // Un argumento arreglo no se evalúa ni pasa por la pila: se pasa su
+    // dirección (libro §1.6.6, paso por referencia) más abajo, al escribir
+    // las casillas de los parámetros.
+    int position = 0;
+
+    for (ASTNode *a = arg; a != NULL; a = a->next, position++) {
+
+        if (callee->param_list[position]->dimensions > 0)
+            continue;
+
         int reg = emit_expression(a);
 
         if (reg < 0) {
@@ -927,11 +937,37 @@ static int emit_function_call(ASTNode *node, int result_needed) {
             return -1;
         }
 
-        emit_stack_pop(reg);
-
         Symbol *param = callee->param_list[i];
 
-        int store_result = emit_store_symbol(param, reg, node);
+        int store_result;
+
+        if (param->dimensions > 0) {
+            // Parámetro arreglo: su casilla recibe la dirección del arreglo
+            // (o la que guarda el parámetro arreglo que se reenvía). Se
+            // escribe aquí, con los escalares, para que una llamada anidada
+            // en otro argumento no la pise. La dirección no cambia entre la
+            // evaluación y este punto, así que no hace falta apilarla.
+            ASTNode *array_arg = child_at(args_node, i);
+            Symbol *source =
+                array_arg != NULL && array_arg->kind == AST_IDENTIFIER
+                    ? get_symbol(array_arg)
+                    : NULL;
+
+            store_result =
+                source != NULL &&
+                cg_array_pass(&arithmetic_context, source, param, reg)
+                    ? 0
+                    : -1;
+
+            if (store_result != 0)
+                report_error(array_arg != NULL ? array_arg : node,
+                             "no se pudo pasar el arreglo como argumento");
+        }
+        else {
+            emit_stack_pop(reg);
+
+            store_result = emit_store_symbol(param, reg, node);
+        }
 
         free_reg(reg);
 
@@ -1150,6 +1186,35 @@ static void emit_assignment(ASTNode *node) {
     if (target == NULL || value == NULL) {
         report_error(node,
                      "asignacion incompleta");
+        return;
+    }
+
+    // Asignación de un arreglo completo (destino = nombre de arreglo sin
+    // índices): se copian todas sus palabras. El semántico ya exigió que el
+    // origen sea un arreglo de la misma forma; cualquiera de los dos puede
+    // ser un parámetro arreglo (cg_array_copy usa la dirección que guarda).
+    Symbol *whole =
+        target->kind == AST_IDENTIFIER ? get_symbol(target) : NULL;
+
+    if (whole != NULL && whole->dimensions > 0) {
+        Symbol *source =
+            value->kind == AST_IDENTIFIER ? get_symbol(value) : NULL;
+
+        int work[4];
+        int allocated = 0;
+
+        while (allocated < 4 && (work[allocated] = alloc_reg()) >= 0)
+            allocated++;
+
+        if (allocated < 4)
+            report_error(node, "sin registros para copiar el arreglo");
+        else if (source == NULL ||
+                 !cg_array_copy(&arithmetic_context, whole, source, work))
+            report_error(node, "no se pudo copiar el arreglo");
+
+        for (int i = 0; i < allocated; i++)
+            free_reg(work[i]);
+
         return;
     }
 

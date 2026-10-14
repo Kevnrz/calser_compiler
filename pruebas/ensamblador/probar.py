@@ -188,8 +188,12 @@ def test_syntax(directory):
 
 
 def test_round_trip(directory):
-    programs = [('p08', (ROOT / 'pruebas/p08_comentarios.cls').read_text()),
-                ('p09', (ROOT / 'pruebas/p09_crypto.cls').read_text())]
+    programs = [(name, (ROOT / 'pruebas' / source).read_text())
+                for name, source in [('p02', 'p02_factorial.cls'),
+                                     ('p08', 'p08_comentarios.cls'),
+                                     ('p09', 'p09_crypto.cls'),
+                                     ('p11', 'p11_ejercicio3.cls'),
+                                     ('p12', 'p12_ejercicio2.cls')]]
     programs += [(name, 'F main [] : void ;\n    %s\n    E ;\n.\n' % body)
                  for name, body in ARITHMETIC]
     for name, text in programs:
@@ -204,7 +208,16 @@ def test_round_trip(directory):
         assert count > 0 and len(lines) == count, (name, count, len(lines))
         header, bundles, data = read_bin(base)
         assert header[0] == count and bundles == lines, name
-        # Ensamblar el .asm con -x da los mismos bundles que el compilador.
+        # El .asm de -s va anotado (enunciado CE1108 §6.2), todo en
+        # comentarios: dirección de cada bundle, tabla de etiquetas con su
+        # dirección y variables.
+        asm = base.with_suffix('.asm').read_text()
+        assert asm.startswith('# ccom: '), name
+        assert '# 0000' in asm, name
+        assert '# Tabla de etiquetas (direccion = indice de bundle)' in asm, name
+        assert '# Variables (direccion de datos)' in asm, name
+        # Ensamblar el .asm anotado con -x da los mismos bundles que el
+        # compilador.
         again = directory / (name + '_x')
         result = run('-x', base.with_suffix('.asm'), '-o', again.with_suffix('.bin'))
         assert result.returncode == 0, (name, result.stderr)
@@ -220,8 +233,8 @@ def test_round_trip(directory):
     assert result.returncode == 0 and result.stdout == '' and result.stderr == '', result
     assert not base.with_suffix('.asm').exists()
     assert all(base.with_suffix(suffix).exists() for suffix in ('.bin', '.hex', '.mem'))
-    print('PASS ida y vuelta: %d programas; .hex = bundles del .asm; datos de p09 en el .bin'
-          % len(programs))
+    print('PASS ida y vuelta: %d programas; .asm anotado; -x da el mismo .hex; '
+          'datos de p09 en el .bin' % len(programs))
 
 
 def main():

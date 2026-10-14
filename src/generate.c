@@ -1528,6 +1528,9 @@ static void emit_conditional(ASTNode *node) {
 
     emit_block(body);
 
+    // El salto al final del C es del C, no de la última sentencia del cuerpo.
+    cg_set_line(node->line);
+
     cg_op(SLOT_BRU,
           "jef %s",
           end_label);
@@ -1559,6 +1562,8 @@ static void emit_conditional(ASTNode *node) {
                             "siguiente rama del A"))
                 continue;
 
+            cg_set_line(alt->line);
+
             rc = emit_expression(alt_condition);
 
             if (rc < 0)
@@ -1572,6 +1577,8 @@ static void emit_conditional(ASTNode *node) {
             free_reg(rc);
 
             emit_block(alt_body);
+
+            cg_set_line(alt->line);
 
             cg_op(SLOT_BRU,
                   "jef %s",
@@ -1625,6 +1632,8 @@ static void emit_loop_l(ASTNode *node) {
     free_reg(rc);
 
     emit_block(body);
+
+    cg_set_line(node->line);
 
     cg_op(SLOT_BRU,
           "jef %s",
@@ -1750,7 +1759,8 @@ static void emit_loop_s(ASTNode *node) {
 
     emit_block(body);
 
-    // Inicio del incremento (rol UPDATE de la tabla).
+    // Inicio del incremento (rol UPDATE de la tabla). Es del S.
+    cg_set_line(node->line);
     cg_label(update_label);
 
     // var = var + paso. El paso va como inmediato si cabe en 18 bits con
@@ -1978,6 +1988,9 @@ static void emit_statement(ASTNode *node) {
     if (node == NULL)
         return;
 
+    // .asm anotado: los bundles de esta sentencia llevan su línea.
+    cg_set_line(node->line);
+
     switch (node->kind) {
 
         case AST_BLOCK:
@@ -2056,6 +2069,7 @@ static void emit_function(ASTNode *function) {
                     LABEL_BODY, "cuerpo de la funcion"))
         return;
 
+    cg_set_line(function->line);
     cg_label(entry_label);
 
     // Prólogo (fase4_contrato_comun.md §3): el retorno empieza en 0 en cada
@@ -2079,8 +2093,10 @@ static void emit_function(ASTNode *function) {
 
     inside_main = strcmp(name, "main") == 0;
     if (inside_main)
-        for (ASTNode *g = program_globals ? program_globals->child : NULL; g; g = g->next)
+        for (ASTNode *g = program_globals ? program_globals->child : NULL; g; g = g->next) {
+            cg_set_line(g->line);
             initialize_declaration(g, 0, 1);
+        }
 
     emit_block(body);
 
@@ -2093,6 +2109,9 @@ static void emit_function(ASTNode *function) {
         last = last->next;
 
     if (last == NULL || last->kind != AST_EMIT) {
+
+        // El salto final no corresponde a ninguna sentencia.
+        cg_set_line(0);
 
         if (inside_main) {
             cg_op(SLOT_BRU, "jef %s", program_end_label);
@@ -2176,6 +2195,7 @@ int generate_code(ASTNode *root, const LabelTable *labels) {
         emit_function(f);
     }
 
+    cg_set_line(0);
     emit_end_of_main();
 
     cg_label(arith_error_label);

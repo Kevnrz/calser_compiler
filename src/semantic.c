@@ -2580,6 +2580,10 @@ void semantic_print_symbols(void) {
     symbol_table_print(scope_list_head);
 }
 
+void semantic_fprint_symbols(FILE *out, const char *prefix) {
+    symbol_table_fprint(out, scope_list_head, prefix);
+}
+
 void semantic_free(void)
 {
     Scope *scope = scope_list_head;

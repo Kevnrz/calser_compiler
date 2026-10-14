@@ -49,7 +49,46 @@ de `-o` (o el del fuente): `prog.cls` produce `prog.bin`, `prog.hex` y
 | `.bin` | Encabezado de 4 palabras de 32 bits *little endian*: cantidad de bundles, punto de entrada (0), tamaño de datos en bytes y dirección de datos (0). Luego cada bundle en 16 bytes (slot 0 primero, cada palabra *little endian*) y al final los datos |
 | `.hex` | Un bundle por línea: `slot3_slot2_slot1_slot0`, cada slot en 8 dígitos hexadecimales en mayúscula |
 | `.mem` | `@0` y luego una palabra de datos por línea, en hexadecimal |
-| `.asm` | Solo con `-s`: el ensamblador generado, en la sintaxis de `isa.md` §11 |
+| `.asm` | Solo con `-s`: el ensamblador generado, en la sintaxis de `isa.md` §11, anotado (ver abajo) |
+
+**`.asm` anotado (`-s`).** Además de las instrucciones, el archivo muestra lo
+que pide el enunciado CE1108 §6.2: la dirección de cada bundle (su índice, que
+es lo que cuenta el PC), la línea del `.cls` que lo generó (solo cuando
+cambia; los bundles vacíos de separación no la llevan), la tabla de etiquetas
+con su dirección y la tabla de variables con su dirección de datos. Todo eso va
+en comentarios con `#` (`isa.md` §11.1), así que `ccom -x` sobre ese mismo
+archivo da exactamente los mismos bundles. Las etiquetas internas de las
+rutinas aritméticas, de arreglos y de cifrado se marcan `(interna)`: no son de
+la tabla de etiquetas de la Fase 3.
+
+```
+# ccom: pruebas/p02_factorial.cls
+  { mov rx, 120 | nopi | nopi | nopi }                      # 0000
+  { nopi | nopi | nopi | nopi }                             # 0001
+.L_func_main:                                               # bundle 2
+.L_body_main:                                               # bundle 2
+  { mov t0, 5 | nopi | nopi | nopi }                        # 0002  linea 15
+  { nopi | nopi | nopi | nopi }                             # 0003
+  { nopi | nopi | nopi | sw t0, 64(rz) }                    # 0004
+...
+# Tabla de etiquetas (direccion = indice de bundle)
+#   .L_func_main                     2
+#   .L_body_main                     2
+#   .L_func_factorial               38
+#   __ccom_arith_0_mul              80  (interna)
+#   fin_main                       108
+#   .L_arith_error                 109
+
+# Variables (direccion de datos)
+#   ===== SYMBOL TABLE =====
+#   Scope 0: GLOBAL
+#       main : void (function) params=[] area=0x0040 size=56 temp_base=0x0048
+...
+```
+
+La primera línea del `.asm` es el comentario `# ccom: <fuente>`. Los errores
+de ensamblado del código generado (`<generado>:<línea>`) usan la numeración de
+este archivo.
 
 **`-x archivo.asm`** ensambla el archivo sin compilar Calser y escribe los
 mismos tres archivos. No hay imagen de datos: el tamaño de datos es 0 y el

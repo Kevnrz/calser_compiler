@@ -251,75 +251,101 @@ static const char *scope_kind_string(ScopeKind kind) {
 }
 
 // Imprime una dirección en hexadecimal; ---- si todavía no se asignó (-1).
-static void print_address(const char *label, int address) {
+static void print_address(FILE *out, const char *label, int address) {
     if (address < 0)
-        printf(" %s=----", label);
+        fprintf(out, " %s=----", label);
     else
-        printf(" %s=0x%04X", label, (unsigned int) address);
+        fprintf(out, " %s=0x%04X", label, (unsigned int) address);
 }
 
+// Comienzo de una línea: el prefijo (sin espacios finales si la línea queda
+// vacía).
+static void line_start(FILE *out, const char *prefix, int empty) {
+    if (!empty) {
+        fputs(prefix, out);
+        return;
+    }
+
+    size_t length = strlen(prefix);
+
+    while (length > 0 && prefix[length - 1] == ' ')
+        length--;
+
+    fwrite(prefix, 1, length, out);
+}
 
 void symbol_table_print(Scope *scope) {
+    symbol_table_fprint(stdout, scope, "");
+}
+
+void symbol_table_fprint(FILE *out, Scope *scope, const char *prefix) {
     int scope_number = 0;
 
     Scope *current_scope = scope;
 
-    printf("\n===== SYMBOL TABLE =====\n");
+    line_start(out, prefix, 1);
+    fprintf(out, "\n");
+    line_start(out, prefix, 0);
+    fprintf(out, "===== SYMBOL TABLE =====\n");
 
     while (current_scope != NULL) {
 
         // Un ámbito sin símbolos se imprime igual, solo con su cabecera.
-        printf("Scope %d: %s\n",
-               scope_number,
-               scope_kind_string(current_scope->kind));
+        line_start(out, prefix, 0);
+        fprintf(out, "Scope %d: %s\n",
+                scope_number,
+                scope_kind_string(current_scope->kind));
 
         Symbol *symbol = current_scope->symbols;
 
         while (symbol != NULL) {
 
-            printf("    %s : %s",
-                   symbol->name,
-                   symbol_type_string(symbol->type));
+            line_start(out, prefix, 0);
+            fprintf(out, "    %s : %s",
+                    symbol->name,
+                    symbol_type_string(symbol->type));
 
             if (symbol->kind == SYMBOL_FUNCTION) {
 
                 // Funciones: lista ordenada de parámetros y área estática,
                 // sin width.
-                printf(" (%s) params=[",
-                       symbol_kind_string(symbol->kind));
+                fprintf(out, " (%s) params=[",
+                        symbol_kind_string(symbol->kind));
 
                 for (int i = 0; i < symbol->parameter_count; i++) {
-                    printf("%s%s",
-                           i > 0 ? ", " : "",
-                           symbol->param_list[i]->name);
+                    fprintf(out, "%s%s",
+                            i > 0 ? ", " : "",
+                            symbol->param_list[i]->name);
                 }
 
-                printf("]");
+                fprintf(out, "]");
 
-                print_address("area", symbol->area_base);
-                printf(" size=%d", symbol->area_size);
-                print_address("temp_base", symbol->temp_base);
+                print_address(out, "area", symbol->area_base);
+                fprintf(out, " size=%d", symbol->area_size);
+                print_address(out, "temp_base", symbol->temp_base);
             }
             else {
 
                 // Tamaño de cada dimensión, pegado al tipo.
                 for (int i = 0; i < symbol->dimensions; i++)
-                    printf("[%d]", symbol->dim_sizes[i]);
+                    fprintf(out, "[%d]", symbol->dim_sizes[i]);
 
                 if (symbol->kind == SYMBOL_RETURN) {
-                    printf(" (%s)",
-                           symbol_kind_string(symbol->kind));
+                    fprintf(out, " (%s)",
+                            symbol_kind_string(symbol->kind));
                 }
 
-                printf(" width=%d", symbol->width);
-                print_address("addr", symbol->address);
+                fprintf(out, " width=%d", symbol->width);
+                print_address(out, "addr", symbol->address);
             }
-            printf("\n");
+            fprintf(out, "\n");
             symbol = symbol->next;
         }
-        printf("\n");
+        line_start(out, prefix, 1);
+        fprintf(out, "\n");
         current_scope = current_scope->next;
         scope_number++;
     }
-    printf("=======================\n");
+    line_start(out, prefix, 0);
+    fprintf(out, "=======================\n");
 }

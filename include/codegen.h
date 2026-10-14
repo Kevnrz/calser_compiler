@@ -31,6 +31,16 @@ void cg_gap(void);
  
 /* Escribe todo en formato isa.md §11 (un bundle por línea, 4 slots). */
 void cg_write(FILE *out);
+
+/* Línea del fuente vigente: cada bundle que se emita desde ahora la guarda,
+   para el .asm anotado. 0 = sin línea. */
+void cg_set_line(int line);
+
+/* Como cg_write, pero anotado (enunciado CE1108 §6.2): la dirección (índice
+   de bundle) y la línea del fuente de cada bundle, y al final la tabla de
+   etiquetas con su dirección. Todo lo agregado va en comentarios con #
+   (isa.md §11.1): el archivo da los mismos bundles con ccom -x. */
+void cg_write_listing(FILE *out);
  
 /* Acceso para el ensamblado: cantidad de líneas y cada línea ya en texto.
    Las etiquetas aparecen como líneas "nombre:" (no son bundles); un bundle

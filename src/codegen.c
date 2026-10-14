@@ -11,6 +11,12 @@ static int line_count = 0;
 static int line_capacity = 0;
 static int bundles = 0;
 
+/* Para el .asm anotado, por cada línea: la línea del fuente que la generó
+   (0 = ninguna) y su dirección (el bundle; en una etiqueta, el que la sigue). */
+static int *source_lines = NULL;
+static int *addresses = NULL;
+static int current_source_line = 0;
+
 /* Imagen de datos y bytes usados (mayor dirección escrita + 4). */
 static uint32_t data[CG_DATA_BYTES / 4];
 static int data_used = 0;
@@ -25,14 +31,22 @@ static void push_line(char *text) {
     if (line_count == line_capacity) {
         int capacity = line_capacity == 0 ? 256 : line_capacity * 2;
         char **grown = realloc(lines, (size_t) capacity * sizeof(char *));
+        int *grown_sources =
+            realloc(source_lines, (size_t) capacity * sizeof(int));
+        int *grown_addresses =
+            realloc(addresses, (size_t) capacity * sizeof(int));
 
-        if (grown == NULL)
+        if (grown == NULL || grown_sources == NULL || grown_addresses == NULL)
             out_of_memory();
 
         lines = grown;
+        source_lines = grown_sources;
+        addresses = grown_addresses;
         line_capacity = capacity;
     }
 
+    source_lines[line_count] = current_source_line;
+    addresses[line_count] = bundles;
     lines[line_count++] = text;
 }
 
@@ -47,8 +61,13 @@ void cg_free(void) {
         free(lines[i]);
 
     free(lines);
+    free(source_lines);
+    free(addresses);
 
     lines = NULL;
+    source_lines = NULL;
+    addresses = NULL;
+    current_source_line = 0;
     line_count = 0;
     line_capacity = 0;
     bundles = 0;
@@ -125,6 +144,104 @@ void cg_write(FILE *out) {
             fprintf(out, "  %s\n", lines[i]);
         else
             fprintf(out, "%s\n", lines[i]);
+    }
+}
+
+void cg_set_line(int line) {
+    current_source_line = line > 0 ? line : 0;
+}
+
+// Etiquetas internas de una expansión (no son de la tabla de la Fase 3).
+static int internal_label(const char *name) {
+    return strncmp(name, "__ccom_arith_", 13) == 0 ||
+           strncmp(name, "__ccom_array_", 13) == 0 ||
+           strncmp(name, ".L_crypto_", 10) == 0;
+}
+
+// Escribe text y rellena con espacios hasta width columnas.
+static void write_padded(FILE *out, const char *text, int width) {
+    int length = (int) strlen(text);
+
+    fputs(text, out);
+
+    for (int i = length; i < width; i++)
+        fputc(' ', out);
+}
+
+void cg_write_listing(FILE *out) {
+    static const char *const EMPTY = "{ nopi | nopi | nopi | nopi }";
+
+    // Columna de los comentarios: el texto más largo, con un mínimo.
+    int width = 44;
+
+    for (int i = 0; i < line_count; i++) {
+        int length = (int) strlen(lines[i]) + (lines[i][0] == '{' ? 2 : 0);
+
+        if (length + 2 > width)
+            width = length + 2;
+    }
+
+    // La línea del fuente solo se muestra cuando cambia. Los bundles vacíos
+    // de separación no la llevan.
+    int shown_line = 0;
+    char text[512];
+
+    for (int i = 0; i < line_count; i++) {
+
+        if (lines[i][0] != '{') {
+            write_padded(out, lines[i], width);
+            fprintf(out, "# bundle %d\n", addresses[i]);
+            continue;
+        }
+
+        snprintf(text, sizeof(text), "  %s", lines[i]);
+        write_padded(out, text, width);
+        fprintf(out, "# %04d", addresses[i]);
+
+        if (source_lines[i] > 0 &&
+            source_lines[i] != shown_line &&
+            strcmp(lines[i], EMPTY) != 0) {
+
+            fprintf(out, "  linea %d", source_lines[i]);
+            shown_line = source_lines[i];
+        }
+
+        fputc('\n', out);
+    }
+
+    // Tabla de etiquetas en orden de dirección; en el empate, el de emisión.
+    fprintf(out, "\n# Tabla de etiquetas (direccion = indice de bundle)\n");
+
+    int previous = -1;
+
+    for (;;) {
+        int next = -1;
+
+        for (int i = 0; i < line_count; i++) {
+
+            if (lines[i][0] != '{' && addresses[i] > previous &&
+                (next < 0 || addresses[i] < next))
+                next = addresses[i];
+        }
+
+        if (next < 0)
+            break;
+
+        for (int i = 0; i < line_count; i++) {
+
+            if (lines[i][0] == '{' || addresses[i] != next)
+                continue;
+
+            // La etiqueta sin los dos puntos.
+            size_t length = strlen(lines[i]);
+            snprintf(text, sizeof(text), "%.*s",
+                     (int) (length > 0 ? length - 1 : 0), lines[i]);
+
+            fprintf(out, "#   %-28s %5d%s\n", text, next,
+                    internal_label(text) ? "  (interna)" : "");
+        }
+
+        previous = next;
     }
 }
 

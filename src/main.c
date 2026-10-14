@@ -464,24 +464,50 @@ static int compile(const Options *options) {
         return 1; 
     }
 
-    // -s: además el .asm (isa.md §11), tal como lo escribe cg_write. Sus
-    // líneas son las que numeran los errores de ensamblado.
+    // Primera línea del .asm: un comentario con el fuente. El ensamblado
+    // recibe la misma línea, así los errores de <generado> citan la línea
+    // del .asm que escribe -s.
+    size_t header_size = strlen(options->input) + sizeof("# ccom: ");
+    char *header = malloc(header_size);
+
+    if (header == NULL) {
+        fprintf(stderr, "ccom: error: memoria insuficiente\n");
+        label_table_destroy(labels);
+        free(labels);
+        semantic_free();
+        cg_free();
+        ast_free(root);
+        diag_free();
+        return 1;
+    }
+
+    snprintf(header, header_size, "# ccom: %s", options->input);
+
+    // -s: además el .asm (isa.md §11), anotado (enunciado CE1108 §6.2): la
+    // dirección y la línea del fuente de cada bundle, la tabla de etiquetas
+    // con sus direcciones y la de variables con sus direcciones de datos.
+    // Todo lo agregado va en comentarios con # (isa.md §11.1): ccom -x da
+    // los mismos bundles.
     int output_failed = 0;
 
     if (options->emit_asm) {
         char *path;
         FILE *out = open_output(options, ".asm", "w", &path);
 
-        if (out != NULL)
-            cg_write(out);
+        if (out != NULL) {
+            fprintf(out, "%s\n", header);
+            cg_write_listing(out);
+            fprintf(out, "\n# Variables (direccion de datos)\n");
+            semantic_fprint_symbols(out, "#   ");
+        }
 
         output_failed = close_output(out, path);
     }
 
-    // El ensamblado toma las líneas del generador (contrato §1).
-    int line_count = cg_line_count();
-    const char **lines =
-        malloc((size_t) (line_count > 0 ? line_count : 1) * sizeof(char *));
+    // El ensamblado toma las líneas del generador (contrato §1), después de
+    // la cabecera.
+    int line_count = cg_line_count() + 1;
+    const char **lines = malloc((size_t) line_count * sizeof(char *));
 
     if (lines == NULL) {
         fprintf(stderr, "ccom: error: memoria insuficiente\n");
@@ -489,8 +515,10 @@ static int compile(const Options *options) {
     }
     else {
 
-        for (int i = 0; i < line_count; i++)
-            lines[i] = cg_line(i);
+        lines[0] = header;
+
+        for (int i = 1; i < line_count; i++)
+            lines[i] = cg_line(i - 1);
 
         if (assemble_and_write(options, lines, line_count, "<generado>",
                                cg_data(), cg_data_size()) != 0)
@@ -498,6 +526,8 @@ static int compile(const Options *options) {
 
         free(lines);
     }
+
+    free(header);
 
     label_table_destroy(labels);
 

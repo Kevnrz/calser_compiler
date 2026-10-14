@@ -1,6 +1,8 @@
 #ifndef SYMBOL_TABLE_H
 #define SYMBOL_TABLE_H
 
+#include <stdio.h>
+
 typedef enum {
     SYMBOL_VARIABLE,
     SYMBOL_FUNCTION,
@@ -98,5 +100,9 @@ Scope *scope_create(Scope *parent, ScopeKind kind);
 void scope_free(Scope *scope);
 
 void symbol_table_print(Scope *scope);
+
+// Igual que symbol_table_print, en out y con prefix al inicio de cada línea
+// (el .asm anotado la escribe como comentarios con "#").
+void symbol_table_fprint(FILE *out, Scope *scope, const char *prefix);
 
 #endif

@@ -24,6 +24,9 @@ def inspect(base, output, directory, suffix):
     text = base.with_suffix('.asm').read_text()
     program = parse(text)
     count = len(program.bundles)
+    terminal = program.bundles[-1].slots[2]
+    assert terminal.mnemonic == 'jef' and terminal.args[-1] == '.L_arith_error'
+    assert program.labels['.L_arith_error'] == count-1,(base,'bundle vacío después del final terminal')
     indices = [int(m[1]) for line in text.splitlines()
                if (m := re.match(r'^\s*\{.*\}\s*#\s*(\d+)\b',line))]
     assert indices == list(range(count)), (base,'direcciones de bundles',indices)

@@ -570,3 +570,35 @@ python3 tools/sim_asm.py build/validacion_bundles/factorial_escalar.asm --data-i
 Los reportes y artefactos en `build/` son generados y están ignorados por Git;
 lo que se versiona es el script, las pruebas y esta documentación. La aceptación
 es reproducible con `make validar-bundles` y también se ejecuta en `make check`.
+
+
+## Corrección del bundle vacío terminal — 14 de octubre
+
+El último bundle vacío provenía del salto a sí mismo de `.L_arith_error`:
+`cg_op()` agregaba su separación automática y el organizador conservaba una
+separación de frontera. No había consumidor ni continuación después de ese
+salto terminal, por lo que ese bundle era innecesario.
+
+`src/generate.c` ahora emite el manejador como bundle completo con `cg_bundle()`,
+igual que el final de main. No se eliminaron separaciones internas ni se cambió
+el orden del resto del programa. `probar_salidas.py` verifica en ambos modos
+que el último bundle sea el salto terminal y no un bundle vacío.
+
+`make check` completo pasó y regeneró los reportes. Las mediciones anteriores
+en este documento describen la versión previa a esta corrección. La comparación
+actual del mismo factorial de 5 es:
+
+| Medición | Escalar actual | Organizado actual |
+|---|---:|---:|
+| Bundles generados | 110 | 80 |
+| Bundles vacíos | 54 | 33 |
+| Bundles con varias instrucciones | 0 | 7 |
+| Bundles con ambas ALU | 0 | 2 |
+| Ocupación de slots | 12,73 % | 17,50 % |
+| Ciclos | 337 | 231 |
+| Resultado | 120 | 120 |
+| Avisos | 0 | 0 |
+
+Los ciclos no cambian: ese último bundle no se ejecutaba. La mejora consiste
+en no incluir una palabra de paquete completa (16 bytes) inútil al final del
+código. Las direcciones de las etiquetas existentes tampoco cambian.

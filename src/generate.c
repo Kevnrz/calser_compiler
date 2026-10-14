@@ -2198,8 +2198,12 @@ int generate_code(ASTNode *root, const LabelTable *labels) {
     cg_set_line(0);
     emit_end_of_main();
 
+    /* Manejador terminal: no hay consumidor ni camino de continuación.
+     * Emitir su salto a sí mismo sin la separación automática de cg_op. */
+    char terminal_jump[128];
+    snprintf(terminal_jump, sizeof terminal_jump, "jef %s", arith_error_label);
     cg_label(arith_error_label);
-    cg_op(SLOT_BRU, "jef %s", arith_error_label);
+    cg_bundle(NULL, NULL, terminal_jump, NULL);
 
     return generation_errors == 0 ? 0 : 1;
 }

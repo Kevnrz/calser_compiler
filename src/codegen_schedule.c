@@ -1,12 +1,51 @@
+/*
+ * codegen_schedule.c — Fase 4: planificación de operaciones en bundles.
+ *
+ * Construye dependencias y selecciona operaciones listas para cada slot.
+ * Verifica el calendario completo antes de entregarlo al callback.
+ *
+ * Usa: codegen.h y codegen_verify.c.
+ * Lo usa: codegen.c y pruebas del organizador.
+ * Referencias: isa.md §3, §9; docs/organizacion_bundles.md.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include "codegen_schedule.h"
 
+/* ==========================================================================
+ * DEPENDENCIAS
+ * ======================================================================= */
+
+
+/*
+ * memory — consulta si una instrucción tiene efecto en memoria.
+ *
+ * Entrada:
+ *   op  instrucción no NULL.
+ * Salida:
+ *   1 si lee/escribe memoria; 0 en otro caso.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static int memory(const CGInstruction *op) {
     return (op->effects & (CG_EFFECT_MEMORY_READ | CG_EFFECT_MEMORY_WRITE)) != 0;
 }
 
-/* Arista de a hacia b: 0 = no hay dependencia; d+1 = distancia mínima d. */
+/*
+ * dependency — calcula distancia de dependencia entre dos operaciones.
+ *
+ * Entrada:
+ *   a  operación anterior no NULL.
+ *   b  operación posterior no NULL.
+ * Salida:
+ *   0 sin arista; distancia mínima + 1 si hay dependencia.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   lectura tras escritura usa result_distance; WAR/WAW/memoria requieren
+ *   distancia 1.
+ */
 static unsigned char dependency(const CGInstruction *a, const CGInstruction *b) {
     int distance = -1;
     if (a->writes & b->reads) distance = (int) a->result_distance;
@@ -16,6 +55,12 @@ static unsigned char dependency(const CGInstruction *a, const CGInstruction *b) 
     return (unsigned char) (distance + 1);
 }
 
+/* ==========================================================================
+ * PLANIFICACIÓN Y VERIFICACIÓN
+ * ======================================================================= */
+
+
+/* cg_schedule_block — véase el contrato en codegen_schedule.h. */
 int cg_schedule_block(const CGInstruction *const *ops, int count,
                       uint16_t previous_writes, CGScheduleEmit emit, void *user) {
     if (!emit || count < 0 || count > CG_SCHEDULE_MAX_OPERATIONS || (count && !ops))

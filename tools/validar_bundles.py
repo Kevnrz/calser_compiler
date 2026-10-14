@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""Demostración reproducible de factorial escalar frente a bundles organizados.
+"""validar_bundles.py — Herramienta de aceptación: comparación del factorial por bundles.
 
-Uso: make validar-bundles. Conserva artefactos y reporte en build/validacion_bundles.
-Código 1 si falla un criterio; las entradas auxiliares se prueban en un temporal.
+Mide emisión conservadora y organizada en el simulador. Comprueba
+resultado, ausencia de avisos y uso de dos ALU con menos ciclos y bundles.
+
+Usa: ccom, sim_asm.py y pruebas/p02_factorial.cls.
+Lo usa: make validar-bundles y make check.
+Referencias: isa.md §3, §9; docs/organizacion_bundles.md.
 """
 import argparse
 from collections import Counter
@@ -27,17 +31,64 @@ class AcceptanceError(Exception):
 
 class MeasuredSimulator(Simulator):
     def __init__(self, program):
+        """__init__ — inicializa simulador y contador de visitas.
+
+        Entrada:
+            self  instancia nueva.
+            program  Program decodificado.
+        Salida:
+            None. Efectos: inicializa estado de Simulator y visits.
+        Restricciones:
+            ninguna.
+        """
         super().__init__(program)
         self.visits = Counter()
     def step(self):
+        """step — cuenta visitas y ejecuta un bundle.
+
+        Entrada:
+            self  instancia del simulador.
+        Salida:
+            bool devuelto por Simulator.step. Efectos: incrementa visits y modifica estado del simulador.
+        Restricciones:
+            PC válido; propaga AsmError.
+        """
         self.visits[self.pc] += 1
         return super().step()
 
+# ===========================================================================
+# CRITERIOS Y MEDICIONES
+# ===========================================================================
+
 def require(condition, message):
+    """require — exige un criterio de aceptación.
+
+    Entrada:
+        condition  condición booleana.
+        message  mensaje de fallo.
+    Salida:
+        None si cumple. Efectos: ninguno.
+    Restricciones:
+        lanza AcceptanceError si condition es falsa.
+    """
     if not condition:
         raise AcceptanceError(message)
 
 def run_mode(source, output, mode, expected, artifacts=False):
+    """run_mode — compila y mide factorial en un modo.
+
+    Entrada:
+        source  ruta del fuente.
+        output  carpeta de salida existente.
+        mode  escalar para --no-schedule, otro valor organiza.
+        expected  resultado entero esperado.
+        artifacts  True para guardar evidencia textual.
+    Salida:
+        diccionario de métricas. Efectos: ejecuta ccom, crea salidas y simula; escribe evidencias si artifacts.
+    Restricciones:
+        ccom construido; exige fin terminal, cero avisos y main.f esperado;
+        AcceptanceError si falla.
+    """
     base = output/('factorial_'+mode)
     try:
         source_arg = str(source.relative_to(ROOT))
@@ -89,7 +140,21 @@ def run_mode(source, output, mode, expected, artifacts=False):
     }
     return metrics
 
+# ===========================================================================
+# ACEPTACIÓN Y REPORTE
+# ===========================================================================
+
 def validate(output):
+    """validate — compara factorial conservador y organizado.
+
+    Entrada:
+        output  carpeta de artefactos.
+    Salida:
+        diccionario de reporte si todos los criterios cumplen. Efectos: crea salidas, sustituye reportes previos y prueba entradas en temporal; imprime PASS.
+    Restricciones:
+        exige fuente con inicializador esperado, dos ALU ejecutadas y
+        reducción de ciclos/bundles; puede lanzar AcceptanceError.
+    """
     output.mkdir(parents=True, exist_ok=True)
     # Invalidar reportes anteriores antes de iniciar una nueva aceptación.
     json_path = output/'reporte.json'
@@ -153,6 +218,15 @@ def validate(output):
     return report
 
 def main(argv=None):
+    """main — ejecuta la aceptación desde la línea de comandos.
+
+    Entrada:
+        argv  argumentos o None para sys.argv.
+    Salida:
+        0 si valida; 1 por AcceptanceError, OSError o ValueError. Efectos: crea artefactos de validación y escribe mensajes.
+    Restricciones:
+        argparse puede terminar por uso incorrecto.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output',type=Path,default=ROOT/'build/validacion_bundles')
     options = parser.parse_args(argv)

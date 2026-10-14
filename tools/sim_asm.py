@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Modelo de bundles con Feistel4 y bóveda; autenticación de prueba (sin Ascon).
+"""sim_asm.py — Herramienta de ejecución: modelo de bundles y trazas de la ISA.
 
-Registros inicialmente cero y memoria little endian de 64 KiB. Los resultados
-no son visibles al bundle inmediatamente siguiente. Un salto tomado introduce
-un ciclo de descarte y continúa en su destino (no ejecuta el PC+1 prefetched).
-No ensambla binarios. Según la tarea actualizada, auth acepta todos los tokens
-salvo 999; esta regla no valida Ascon ni una cadena real de Lamport.
+Decodifica ensamblador y modela registros, memoria y separación RAW.
+Simula Feistel y bóveda con autenticación de prueba: el token 999 falla;
+no valida Ascon ni una cadena real de Lamport.
+
+Usa: biblioteca estándar de Python; listado .asm e imagen .mem.
+Lo usa: ejercicios.py, validar_bundles.py, pruebas y línea de comandos.
+Referencias: isa.md §3, §5, §6, §9, §10, §11; enunciado §8.4.
 """
 import argparse
 from dataclasses import dataclass
@@ -33,21 +35,63 @@ class AsmError(ValueError):
     """Entrada inválida o ejecución fuera del modelo de memoria."""
 
 
+# ===========================================================================
+# PALABRAS Y OPERANDOS
+# ===========================================================================
+
 def signed(value):
+    """signed — interpreta una palabra como entero de 32 bits con signo.
+
+    Entrada:
+        value  entero.
+    Salida:
+        entero entre -2147483648 y 2147483647. Efectos: ninguno.
+    Restricciones:
+        ninguna.
+    """
     value &= MASK
     return value if value < 0x80000000 else value - (1 << 32)
 
 
 def rotate_left(value, bits):
+    """rotate_left — rota una palabra de 32 bits a la izquierda.
+
+    Entrada:
+        value  entero.
+        bits  cantidad de bits.
+    Salida:
+        palabra de 32 bits. Efectos: ninguno.
+    Restricciones:
+        bits entre 0 y 32; aquí se usa 5 o 13.
+    """
     value &= MASK
     return ((value << bits) | (value >> (32 - bits))) & MASK
 
 
 def feistel_f(value, key):
+    """feistel_f — calcula la función de ronda Feistel del modelo.
+
+    Entrada:
+        value  palabra de datos.
+        key  palabra de subllave.
+    Salida:
+        palabra de 32 bits. Efectos: ninguno.
+    Restricciones:
+        ninguna.
+    """
     return ((rotate_left(value, 5) + key) & MASK) ^ rotate_left(value, 13)
 
 
 def register(token):
+    """register — decodifica un registro o alias.
+
+    Entrada:
+        token  cadena del operando.
+    Salida:
+        número ISA 0–15. Efectos: ninguno.
+    Restricciones:
+        AsmError si no reconoce token.
+    """
     if token in ALIASES:
         return ALIASES[token]
     if re.fullmatch(r"r(?:[0-9]|1[0-5])", token):
@@ -56,6 +100,16 @@ def register(token):
 
 
 def integer(token, bits=None):
+    """integer — convierte un entero y verifica ancho opcional.
+
+    Entrada:
+        token  cadena decimal o hexadecimal.
+        bits  ancho con signo o None.
+    Salida:
+        entero. Efectos: ninguno.
+    Restricciones:
+        AsmError por formato/rango; bits positivo si se especifica.
+    """
     try:
         value = int(token, 16) if re.fullmatch(r"[+-]?0[xX][0-9a-fA-F]+", token) else int(token, 10)
     except ValueError as error:
@@ -85,7 +139,21 @@ class Program:
     labels: dict
 
 
+# ===========================================================================
+# DECODIFICACIÓN DE ENSAMBLADOR
+# ===========================================================================
+
 def parse_instruction(text, slot):
+    """parse_instruction — decodifica un slot de ensamblador.
+
+    Entrada:
+        text  texto de instrucción.
+        slot  slot 0–3.
+    Salida:
+        Instruction con operandos, lecturas y destino. Efectos: ninguno.
+    Restricciones:
+        AsmError por formato, unidad o rango; etiquetas se resuelven después.
+    """
     fields = text.strip().split(None, 1)
     if not fields:
         raise AsmError("slot vacío; use nopi")
@@ -149,6 +217,18 @@ def parse_instruction(text, slot):
 
 
 def branch_target(token, pc, labels, bits):
+    """branch_target — resuelve un destino simbólico o relativo.
+
+    Entrada:
+        token  etiqueta o desplazamiento.
+        pc  índice de bundle actual.
+        labels  diccionario de etiquetas.
+        bits  ancho con signo, 18 o 22.
+    Salida:
+        índice de bundle destino. Efectos: ninguno.
+    Restricciones:
+        AsmError por rango/formato; no comprueba aquí límites del programa.
+    """
     if token in labels:
         target = labels[token]
         integer(str(target - pc), bits)
@@ -157,6 +237,16 @@ def branch_target(token, pc, labels, bits):
 
 
 def parse(text):
+    """parse — lee etiquetas y bundles de un programa ensamblador.
+
+    Entrada:
+        text  texto completo del .asm.
+    Salida:
+        Program con bundles y etiquetas. Efectos: ninguno.
+    Restricciones:
+        AsmError por formato, duplicados o destinos; necesita al menos un
+        bundle.
+    """
     labels, bundles = {}, []
     for line_number, raw in enumerate(text.splitlines(), 1):
         line = re.split(r"#|;|//", raw, maxsplit=1)[0].strip()
@@ -196,10 +286,15 @@ def parse(text):
     return Program(bundles, labels)
 
 
+# ===========================================================================
+# ANOTACIONES DEL LISTADO
+# ===========================================================================
+
 class Annotations:
     """Lo que el .asm anotado de ccom -s dice en sus comentarios (enunciado
     CE1108 §6.2): la línea del .cls de cada bundle y las variables con su
-    dirección de datos. Un .asm sin anotaciones da listas vacías."""
+    dirección de datos. Sin anotaciones, las posiciones quedan en cero y la
+    lista de variables queda vacía."""
 
     SCOPE = re.compile(r"^#   Scope (\d+): (\w+)(?: (\S+))?$")
     VARIABLE = re.compile(
@@ -209,6 +304,18 @@ class Annotations:
     def __init__(self, text, bundle_count):
         # Línea del fuente de cada bundle. El listado la muestra solo cuando
         # cambia, así que cada bundle hereda la última que se mostró.
+        """__init__ — lee posiciones y variables del listado anotado.
+
+        Entrada:
+            self  instancia nueva.
+            text  texto del .asm.
+            bundle_count  cantidad de bundles.
+        Salida:
+            None. Efectos: inicializa líneas, líneas por slot y variables; califica nombres.
+        Restricciones:
+            cantidad no negativa; anotaciones ausentes dejan posiciones cero
+            y variables vacías.
+        """
         self.lines = [0] * bundle_count
         self.slot_lines = [[0] * 4 for _ in range(bundle_count)]
         shown = 0
@@ -247,9 +354,15 @@ class Annotations:
         self._qualify()
 
     def _qualify(self):
-        """Nombre con el que se muestra cada variable: el simple, o
-        función.nombre si se repite en el programa, o además @línea si
-        todavía se repite dentro de la misma función."""
+        """_qualify — desambigua nombres mostrados de variables.
+
+        Entrada:
+            self  instancia con variables.
+        Salida:
+            None. Efectos: agrega shown a cada variable.
+        Restricciones:
+            usa dueño y línea cuando se repiten nombres.
+        """
         by_name, by_owner = {}, {}
         for v in self.variables:
             by_name[v["name"]] = by_name.get(v["name"], 0) + 1
@@ -264,18 +377,37 @@ class Annotations:
             v["shown"] = shown
 
     def locate(self, address):
-        """(variable, índice de palabra) de la variable que contiene la
-        dirección, o None si no es una variable (pila, casillas ocultas del
-        S, temporales de llamadas)."""
+        """locate — localiza la variable que contiene una dirección.
+
+        Entrada:
+            self  instancia con variables.
+            address  dirección de byte.
+        Salida:
+            tupla (variable, índice de palabra) o None. Efectos: ninguno.
+        Restricciones:
+            ninguna.
+        """
         for v in self.variables:
             if v["address"] <= address < v["address"] + v["width"]:
                 return v, (address - v["address"]) // 4
         return None
 
 
+# ===========================================================================
+# PRESENTACIÓN DE VARIABLES
+# ===========================================================================
+
 def format_value(variable, value):
-    """Un valor de variable: verdadero/falso si es bool; si no, el número con
-    signo. Un parámetro arreglo guarda la dirección del arreglo."""
+    """format_value — representa una palabra según el tipo de variable.
+
+    Entrada:
+        variable  diccionario de variable del listado.
+        value  palabra de 32 bits.
+    Salida:
+        cadena bool, entero con signo o dirección de parámetro arreglo. Efectos: ninguno.
+    Restricciones:
+        ninguna.
+    """
     if variable["kind"] == "parameter" and variable["dims"]:
         return f"@0x{value & MASK:04X}"
     if variable["type"] == "bool":
@@ -284,7 +416,17 @@ def format_value(variable, value):
 
 
 def element_name(variable, index):
-    """Nombre de un elemento: v[1] o m[1][2] (row-major)."""
+    """element_name — nombra un elemento de arreglo por filas.
+
+    Entrada:
+        variable  diccionario con dims/kind/shown.
+        index  índice lineal desde 0.
+    Salida:
+        nombre mostrado o nombre con índices. Efectos: ninguno.
+    Restricciones:
+        dimensiones positivas para arreglos; parámetros muestran su nombre
+        sin índices.
+    """
     dims = variable["dims"]
     if not dims or (variable["kind"] == "parameter"):
         return variable["shown"]
@@ -292,6 +434,10 @@ def element_name(variable, index):
         return f"{variable['shown']}[{index}]"
     return f"{variable['shown']}[{index // dims[1]}][{index % dims[1]}]"
 
+
+# ===========================================================================
+# TRAZA DE EJECUCIÓN
+# ===========================================================================
 
 class Tracer:
     """Traza de ejecución (enunciado CE1108 §8.4): valores de variables y
@@ -321,6 +467,18 @@ class Tracer:
     CRYPTO_FIELD = re.compile(r"^\.L_crypto_(fin_)?(cifra|descifra)_(\d+)$")
 
     def __init__(self, annotations, labels, limit):
+        """__init__ — inicializa la traza y localiza plantillas de cifrado.
+
+        Entrada:
+            self  instancia nueva.
+            annotations  Annotations.
+            labels  diccionario de etiquetas.
+            limit  máximo de eventos.
+        Salida:
+            None. Efectos: inicializa eventos, prólogos y mapas de cifrado.
+        Restricciones:
+            limit positivo lo exige la interfaz de comandos.
+        """
         self.notes = annotations
         self.labels = labels
         self.limit = limit
@@ -343,6 +501,17 @@ class Tracer:
         self.cipher_args = {}
 
     def _prefix(self, pc, slot=None):
+        """_prefix — construye posición de un evento.
+
+        Entrada:
+            self  instancia de traza.
+            pc  índice de bundle.
+            slot  slot opcional 0–3.
+        Salida:
+            cadena con bundle y línea disponible. Efectos: ninguno.
+        Restricciones:
+            pc no negativo.
+        """
         line = self.notes.lines[pc] if pc < len(self.notes.lines) else 0
         if slot is not None and pc < len(self.notes.slot_lines):
             line = self.notes.slot_lines[pc][slot]
@@ -351,12 +520,35 @@ class Tracer:
         return f"[bundle {pc:04d}]"
 
     def _emit(self, pc, text, slot=None):
+        """_emit — agrega un evento sujeto al límite de traza.
+
+        Entrada:
+            self  instancia de traza.
+            pc  índice de bundle.
+            text  texto del evento.
+            slot  slot opcional 0–3.
+        Salida:
+            None. Efectos: agrega evento o incrementa dropped si llegó al límite.
+        Restricciones:
+            ninguna.
+        """
         if len(self.events) >= self.limit:
             self.dropped += 1
             return
         self.events.append(f"{self._prefix(pc, slot)} {text}")
 
     def visit(self, pc, snapshot):
+        """visit — observa entrada y salida de una plantilla de cifrado.
+
+        Entrada:
+            self  instancia de traza.
+            pc  índice de bundle.
+            snapshot  16 registros antes de ejecutar.
+        Salida:
+            None. Efectos: guarda argumentos y agrega resumen al llegar al fin del cifrado.
+        Restricciones:
+            t2/t3/t5 contienen origen/destino/bloques.
+        """
         key = self.cipher_start.get(pc)
         if key:
             # origen = t2 (r6), destino = t3 (r7), bloques = t5 (r9)
@@ -371,6 +563,19 @@ class Tracer:
                            f"a 0x{destination:04X}")
 
     def store(self, pc, address, value, size):
+        """store — registra una escritura a una variable del listado.
+
+        Entrada:
+            self  instancia de traza.
+            pc  índice de bundle.
+            address  dirección de byte.
+            value  valor escrito.
+            size  tamaño de escritura, no utilizado.
+        Salida:
+            None. Efectos: agrega evento si address pertenece a una variable.
+        Restricciones:
+            no muestra pila, temporales ni casillas ocultas sin símbolo.
+        """
         found = self.notes.locate(address)
         if found is None:
             return
@@ -380,6 +585,18 @@ class Tracer:
                        f"{format_value(variable, value)}{suffix}", slot=3)
 
     def jump(self, pc, op, target):
+        """jump — registra un salto tomado o retorno.
+
+        Entrada:
+            self  instancia de traza.
+            pc  índice de bundle.
+            op  Instruction BRU.
+            target  destino absoluto.
+        Salida:
+            None. Efectos: agrega evento de flujo salvo etiqueta interna de expansión.
+        Restricciones:
+            solo se invoca para saltos tomados.
+        """
         mn = op.mnemonic
         if mn == "jefR":
             self._emit(pc, f"retorno → bundle {target}", slot=2)
@@ -391,6 +608,17 @@ class Tracer:
         self._emit(pc, f"{'llamada' if mn == 'jas' else mn} → {where}", slot=2)
 
     def crypto(self, pc, op):
+        """crypto — registra una operación de estado CRYPTO.
+
+        Entrada:
+            self  instancia de traza.
+            pc  índice de bundle.
+            op  Instruction de cifrado.
+        Salida:
+            None. Efectos: agrega evento de operación o de selector kv_write.
+        Restricciones:
+            feis no se registra individualmente desde Simulator.step.
+        """
         if op.mnemonic == "kv_write":
             _, key, word = op.args
             self._emit(pc, f"kv_write k={key} w={word}", slot=1)
@@ -398,8 +626,16 @@ class Tracer:
             self._emit(pc, op.mnemonic, slot=1)
 
     def values(self, simulator):
-        """Valor final de cada variable del listado, por dirección creciente:
-        [(variable, palabras)], con las palabras leídas de la memoria."""
+        """values — lee los valores finales de variables por dirección.
+
+        Entrada:
+            self  instancia de traza.
+            simulator  simulador con memoria.
+        Salida:
+            lista de pares (variable, palabras). Efectos: ninguno.
+        Restricciones:
+            palabras little endian de las direcciones del listado.
+        """
         result = []
         for v in sorted(self.notes.variables, key=lambda v: v["address"]):
             words = [int.from_bytes(simulator.memory[v["address"] + 4 * i:v["address"] + 4 * i + 4],
@@ -408,7 +644,16 @@ class Tracer:
         return result
 
     def final_state(self, simulator):
-        """Las líneas del estado final de las variables."""
+        """final_state — formatea el estado final de variables.
+
+        Entrada:
+            self  instancia de traza.
+            simulator  simulador ejecutado.
+        Salida:
+            lista de líneas de estado. Efectos: ninguno.
+        Restricciones:
+            ninguna.
+        """
         lines = []
         for v, words in self.values(simulator):
             if v["dims"] and v["kind"] != "parameter":
@@ -421,6 +666,16 @@ class Tracer:
         return lines
 
     def text(self, simulator):
+        """text — construye la traza completa y estado final.
+
+        Entrada:
+            self  instancia de traza.
+            simulator  simulador ejecutado.
+        Salida:
+            cadena con salto final y aviso si se truncó. Efectos: ninguno.
+        Restricciones:
+            ninguna.
+        """
         out = list(self.HEADER) + self.events
         if self.dropped:
             out.append(f"… traza truncada en {self.limit} eventos")
@@ -430,8 +685,23 @@ class Tracer:
         return "\n".join(out) + "\n"
 
 
+# ===========================================================================
+# MODELO DEL PIPELINE
+# ===========================================================================
+
 class Simulator:
     def __init__(self, program, warn=None):
+        """__init__ — inicializa registros, memoria y estado del modelo.
+
+        Entrada:
+            self  instancia nueva.
+            program  Program decodificado.
+            warn  callback opcional para avisos.
+        Salida:
+            None. Efectos: inicializa 16 registros, memoria de 64 KiB y estado CRYPTO.
+        Restricciones:
+            no carga imagen de datos automáticamente.
+        """
         self.program = program
         self.regs = [0] * 16
         self.memory = bytearray(MEMORY_SIZE)
@@ -448,13 +718,32 @@ class Simulator:
         self.tracer = None  # Tracer opcional: no cambia la ejecución.
 
     def load_data(self, data, address=0x1000):
-        """Inyecta bytes en la zona de archivos, sin truncar ni extender memoria."""
+        """load_data — carga bytes en la zona de archivos.
+
+        Entrada:
+            self  instancia del simulador.
+            data  bytes a cargar.
+            address  dirección, 0x1000 por defecto.
+        Salida:
+            None. Efectos: escribe memoria sin extenderla.
+        Restricciones:
+            debe caber entre 0x1000 y 0xFFFF; AsmError si no cabe.
+        """
         if not 0x1000 <= address < len(self.memory) or address + len(data) > len(self.memory):
             raise AsmError("el archivo debe caber en la zona 0x1000–0xFFFF")
         self.memory[address:address + len(data)] = data
 
     def load_data_image(self, text):
-        """Carga .mem de ccom (@0 + palabras hex) en 0x0000–0x0FFF."""
+        """load_data_image — carga la imagen estática .mem.
+
+        Entrada:
+            self  instancia del simulador.
+            text  texto @0 y palabras hexadecimales.
+        Salida:
+            None. Efectos: escribe palabras little endian desde dirección cero.
+        Restricciones:
+            máximo 1024 palabras; AsmError por formato/rango.
+        """
         lines = [re.split(r"#|//", raw, maxsplit=1)[0].strip() for raw in text.splitlines()]
         lines = [line for line in lines if line]
         if not lines or lines[0] != '@0':
@@ -469,7 +758,18 @@ class Simulator:
         self.memory[:len(data)] = data
 
     def execute_crypto(self, op, snapshot):
-        """Devuelve el resultado de feis, o None cuando no escribe registro."""
+        """execute_crypto — ejecuta una operación del modelo CRYPTO.
+
+        Entrada:
+            self  instancia del simulador.
+            op  Instruction CRYPTO.
+            snapshot  instantánea de 16 registros.
+        Salida:
+            palabra de feis si autentica; None si no escribe registro. Efectos: modifica contador, bóveda, banderas, ancla y ciclos.
+        Restricciones:
+            autenticación de prueba: token 999 falla; no implementa
+            Ascon/Lamport real.
+        """
         self.crypto_count += 1
         mn, args = op.mnemonic, op.args
         if mn == "auth":
@@ -500,6 +800,15 @@ class Simulator:
         return None
 
     def commit(self):
+        """commit — hace visibles escrituras de registros pendientes.
+
+        Entrada:
+            self  instancia del simulador.
+        Salida:
+            None. Efectos: actualiza registros, mantiene rz=0 y vacía pending.
+        Restricciones:
+            ninguna.
+        """
         for rd, value in self.pending.items():
             if rd != 0:
                 self.regs[rd] = value & MASK
@@ -507,6 +816,19 @@ class Simulator:
         self.pending = {}
 
     def address(self, base, offset, size):
+        """address — calcula la dirección efectiva de un acceso.
+
+        Entrada:
+            self  instancia del simulador.
+            base  valor del registro base.
+            offset  desplazamiento con signo.
+            size  tamaño de acceso, 1 o 4.
+        Salida:
+            dirección efectiva dentro de memoria. Efectos: ninguno.
+        Restricciones:
+            lw/sw ignoran bits bajos de dirección; AsmError si acceso sale de
+            memoria.
+        """
         address = (base + offset) & MASK
         if size == 4:
             address &= ~3  # El hardware ignora addr[1:0] para lw/sw (§5.4).
@@ -515,6 +837,16 @@ class Simulator:
         return address
 
     def step(self):
+        """step — ejecuta un bundle con la lectura del pipeline.
+
+        Entrada:
+            self  instancia del simulador.
+        Salida:
+            True si continúa; False ante jef a sí mismo. Efectos: actualiza registros pendientes, memoria, PC, ciclos, avisos, CRYPTO y traza.
+        Restricciones:
+            PC dentro del programa; lee antes de commit; AsmError por
+            destino/acceso fuera de rango.
+        """
         bundle = self.program.bundles[self.pc]
         # Leer antes de hacer visibles los resultados del bundle anterior.
         snapshot = self.regs.copy()
@@ -607,6 +939,16 @@ class Simulator:
         return True
 
     def run(self, max_bundles=100000):
+        """run — ejecuta hasta detenerse o alcanzar el límite.
+
+        Entrada:
+            self  instancia del simulador.
+            max_bundles  máximo de bundles ejecutados, 100000 por defecto.
+        Salida:
+            la misma instancia. Efectos: ejecuta pasos, fija reason y drena escrituras pendientes.
+        Restricciones:
+            límite positivo; AsmError añade contexto del bundle.
+        """
         if max_bundles <= 0:
             raise AsmError("el límite de bundles debe ser positivo")
         while self.steps < max_bundles and self.pc < len(self.program.bundles):
@@ -622,6 +964,15 @@ class Simulator:
         return self
 
     def report(self):
+        """report — representa el estado final del modelo.
+
+        Entrada:
+            self  instancia del simulador.
+        Salida:
+            cadena con contadores, CRYPTO, registros y primeras 256 posiciones de memoria. Efectos: ninguno.
+        Restricciones:
+            ninguna.
+        """
         lines = [f"Fin: {self.reason}; bundles ejecutados: {self.steps}; ciclos: {self.cycles}",
                  f"Avisos de separación: {len(self.warnings)}"]
         if self.crypto_count:
@@ -639,7 +990,20 @@ class Simulator:
         return '\n'.join(lines)
 
 
+# ===========================================================================
+# LÍNEA DE COMANDOS
+# ===========================================================================
+
 def address_argument(token):
+    """address_argument — convierte una dirección de línea de comandos.
+
+    Entrada:
+        token  cadena decimal o hexadecimal.
+    Salida:
+        entero. Efectos: ninguno.
+    Restricciones:
+        transforma AsmError en argparse.ArgumentTypeError.
+    """
     try:
         return integer(token)
     except AsmError as error:
@@ -647,6 +1011,16 @@ def address_argument(token):
 
 
 def main(argv=None):
+    """main — ejecuta el simulador con archivos y opciones.
+
+    Entrada:
+        argv  argumentos de comandos o None para sys.argv.
+    Salida:
+        0 si termina sin avisos; 1 por avisos/límite; 2 por errores capturados. Efectos: lee .asm/.mem/datos; escribe traza/volcado opcional y reporte.
+    Restricciones:
+        argparse puede terminar el proceso por uso incorrecto; no sobrescribe
+        entradas con traza/volcado.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('asm', type=Path, help='archivo con etiquetas y bundles de cuatro slots')
     parser.add_argument('--max-bundles', type=int, default=100000, help='límite de bundles ejecutados')

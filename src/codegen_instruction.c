@@ -1,3 +1,14 @@
+/*
+ * codegen_instruction.c — Fase 4: descripción de instrucciones para dependencias.
+ *
+ * Obtiene unidades, slots, lecturas, escrituras y efectos de cada instrucción.
+ * Las formas desconocidas se conservan como barreras del organizador.
+ *
+ * Usa: codegen.h; biblioteca C.
+ * Lo usa: codegen.c y pruebas de dependencias.
+ * Referencias: isa.md §3, §4.2, §6, §9.
+ */
+
 #include <ctype.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -36,6 +47,22 @@ static const Description descriptions[] = {
     {"nopi", CG_UNIT_NONE, NONE, 0}
 };
 
+/* ==========================================================================
+ * LECTURA DE OPERANDOS
+ * ======================================================================= */
+
+
+/*
+ * trim — recorta espacios en una cadena.
+ *
+ * Entrada:
+ *   p  cadena modificable no NULL.
+ * Salida:
+ *   puntero prestado al texto útil.
+ *   Efectos: escribe NUL al final.
+ * Restricciones:
+ *   ninguna.
+ */
 static char *trim(char *p) {
     while (isspace((unsigned char) *p)) p++;
     char *end = p + strlen(p);
@@ -44,6 +71,18 @@ static char *trim(char *p) {
     return p;
 }
 
+/*
+ * integer — convierte un operando decimal o hexadecimal.
+ *
+ * Entrada:
+ *   text  texto no NULL.
+ *   out  puntero no NULL para valor.
+ * Salida:
+ *   1 si convierte todo sin error; 0 si falla.
+ *   Efectos: escribe *out al intentar strtol.
+ * Restricciones:
+ *   rango de long del anfitrión.
+ */
 static int integer(const char *text, long *out) {
     const char *p = text;
     if (*p == '-' || *p == '+') p++;
@@ -56,6 +95,17 @@ static int integer(const char *text, long *out) {
     return errno == 0 && *end == '\0';
 }
 
+/*
+ * reg — reconoce registros ISA y alias.
+ *
+ * Entrada:
+ *   text  texto no NULL.
+ * Salida:
+ *   número 0–15 o -1 si es inválido.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static int reg(const char *text) {
     static const char *const aliases[] = {"rz", "rl", "rx", "rg"};
     for (int i = 0; i < 4; i++) if (strcmp(text, aliases[i]) == 0) return i;
@@ -68,16 +118,72 @@ static int reg(const char *text) {
     return errno == 0 && *end == '\0' && n >= 0 && n <= limit
         ? (int) n + (text[0] == 't' ? 4 : 0) : -1;
 }
+/*
+ * bit — obtiene el bit de un registro ISA.
+ *
+ * Entrada:
+ *   r  registro 0–15.
+ * Salida:
+ *   máscara uint16_t con un bit.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   r ya validado.
+ */
 static uint16_t bit(int r) { return (uint16_t) (1u << r); }
+/*
+ * written — obtiene la máscara de un destino que puede escribirse.
+ *
+ * Entrada:
+ *   r  registro 0–15.
+ * Salida:
+ *   cero para rz; bit de r para otros.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   r ya validado.
+ */
 static uint16_t written(int r) { return r == 0 ? 0 : bit(r); }
+/*
+ * immediate — comprueba el rango de un inmediato.
+ *
+ * Entrada:
+ *   p  texto no NULL.
+ * Salida:
+ *   1 si entero entre -131072 y 131071; 0 en otro caso.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static int immediate(const char *p) {
     long n;
     return integer(p, &n) && n >= -131072 && n <= 131071;
 }
+/*
+ * selector — comprueba un selector de dos bits.
+ *
+ * Entrada:
+ *   p  texto no NULL.
+ * Salida:
+ *   1 si entero entre 0 y 3; 0 en otro caso.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static int selector(const char *p) {
     long n;
     return integer(p, &n) && n >= 0 && n <= 3;
 }
+/*
+ * target — describe un destino simbólico o relativo al PC.
+ *
+ * Entrada:
+ *   p  texto no NULL.
+ *   effects  puntero a efectos no NULL.
+ * Salida:
+ *   1 si entero o etiqueta válida; 0 si inválido.
+ *   Efectos: agrega CG_EFFECT_PC_RELATIVE para enteros.
+ * Restricciones:
+ *   no resuelve etiquetas ni comprueba rango del destino numérico.
+ */
 static int target(const char *p, unsigned *effects) {
     long n;
     if (integer(p, &n)) { *effects |= CG_EFFECT_PC_RELATIVE; return 1; }
@@ -86,6 +192,17 @@ static int target(const char *p, unsigned *effects) {
         if (!(isalnum((unsigned char) *p) || *p == '_' || *p == '.')) return 0;
     return 1;
 }
+/*
+ * address — extrae el registro base de un operando de memoria.
+ *
+ * Entrada:
+ *   p  operando modificable no NULL.
+ * Salida:
+ *   registro base 0–15 o -1 si inválido.
+ *   Efectos: separa paréntesis con NUL.
+ * Restricciones:
+ *   inmediato de 18 bits con signo.
+ */
 static int address(char *p) {
     char *open = strchr(p, '('), *close = strchr(p, ')');
     if (!open || !close || close < open || *trim(close + 1) != '\0') return -1;
@@ -94,6 +211,12 @@ static int address(char *p) {
     return reg(trim(open + 1));
 }
 
+/* ==========================================================================
+ * DESCRIPCIÓN DE INSTRUCCIONES
+ * ======================================================================= */
+
+
+/* cg_describe_instruction — véase el contrato en codegen.h. */
 int cg_describe_instruction(const char *text, Slot slot, int source_line,
                             CGInstruction *out) {
     if (!out) return 1;

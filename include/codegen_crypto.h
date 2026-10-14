@@ -1,3 +1,14 @@
+/*
+ * codegen_crypto.h — Fase 4: interfaz de expansión de operaciones de cifrado.
+ *
+ * Expone evaluador de argumentos, contexto y expansión de cifrado.
+ * Los contratos indican entradas, resultados, efectos y límites de uso.
+ *
+ * Usa: ast.h, symbol_table.h.
+ * Lo usa: codegen_crypto.c; generate.c y pruebas/crypto.
+ * Referencias: isa.md §5.5, §6.4, §7, §9.3; docs/crypto_para_ccom.md.
+ */
+
 #ifndef CODEGEN_CRYPTO_H
 #define CODEGEN_CRYPTO_H
 
@@ -22,15 +33,18 @@ typedef struct {
     unsigned next_label; /* Inicializar una vez por programa; compartir entre funciones. */
 } CGCryptoContext;
 
-/* Expande un AST_CRYPTO validado semánticamente. 0 = éxito, 1 = error.
- * Guarda los temporales vivos ANTES de evaluar argumentos y los restaura
- * al terminar. Casilla de rN: function->temp_base + 4*(N-4).
- * Origen/destino/bloques se evalúan en r6/r7/r9, preservando los argumentos
- * anteriores. Los selectores k/w son AST_NUMBER, nunca registros.
- * Emite bundles calendarizados con cg_bundle. No altera rl, rx o rg.
- * Un error del evaluador puede dejar emisión parcial: abortar la generación.
- * Con live_mask=0 no se requiere function; con valores vivos requiere un área
- * válida de 48 bytes. El contexto solo puede modificarse entre expansiones.
+/*
+ * cg_crypto — expande una operación CRYPTO del AST.
+ *
+ * Entrada:
+ *   ctx  contexto de evaluación y vivos.
+ *   node  nodo AST_CRYPTO validado.
+ * Salida:
+ *   0 si emite; 1 por contrato o evaluación inválidos.
+ *   Efectos: emite plantilla, guarda/restaura vivos e incrementa next_label al cifrar.
+ * Restricciones:
+ *   selectores NUMBER 0–3; área válida si hay vivos; descartar emisión
+ *   parcial; direcciones/bloques ya verificados por el semántico.
  */
 int cg_crypto(CGCryptoContext *ctx, ASTNode *node);
 

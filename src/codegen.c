@@ -1,3 +1,14 @@
+/*
+ * codegen.c — Fase 4: emisión del IR, bundles e imagen de datos.
+ *
+ * Registra operaciones con separaciones conservadoras y bundles fijos.
+ * Organiza regiones del IR y reconstruye líneas y direcciones finales.
+ *
+ * Usa: codegen_instruction.c, codegen_schedule.c y codegen_verify.c.
+ * Lo usa: generate.c, codegen_crypto.c y main.c.
+ * Referencias: isa.md §3, §9, §11; fase4_contrato_comun.md §1, §4, §5.
+ */
+
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,11 +41,37 @@ static int ir_capacity = 0;
 static uint32_t data[CG_DATA_BYTES / 4];
 static int data_used = 0;
 
+/* ==========================================================================
+ * MEMORIA Y REGISTROS DEL IR
+ * ======================================================================= */
+
+
+/*
+ * out_of_memory — termina la emisión por falta de memoria.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   no retorna.
+ *   Efectos: escribe stderr y termina el proceso.
+ * Restricciones:
+ *   ninguna.
+ */
 static void out_of_memory(void) {
     fprintf(stderr, "ccom: error interno: memoria insuficiente (codegen)\n");
     exit(EXIT_FAILURE);
 }
 
+/*
+ * copy_text — duplica el texto de una instrucción.
+ *
+ * Entrada:
+ *   text  cadena no NULL.
+ * Salida:
+ *   cadena nueva que debe liberarse.
+ *   Efectos: reserva memoria o termina el proceso.
+ * Restricciones:
+ *   ninguna.
+ */
 static char *copy_text(const char *text) {
     char *copy = malloc(strlen(text) + 1);
     if (!copy) out_of_memory();
@@ -42,12 +79,35 @@ static char *copy_text(const char *text) {
     return copy;
 }
 
+/*
+ * describe_copy — copia y describe una instrucción para el IR.
+ *
+ * Entrada:
+ *   text  texto no NULL.
+ *   slot  slot ISA 0–3.
+ * Salida:
+ *   descripción con texto propio.
+ *   Efectos: reserva texto y conserva la línea actual.
+ * Restricciones:
+ *   texto desconocido queda como barrera.
+ */
 static CGInstruction describe_copy(const char *text, Slot slot) {
     CGInstruction instruction;
     cg_describe_instruction(copy_text(text), slot, current_source_line, &instruction);
     return instruction;
 }
 
+/*
+ * push_ir — agrega un registro al flujo del IR.
+ *
+ * Entrada:
+ *   record  registro con sus textos ya reservados.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: amplía IR y registra línea/dirección actuales.
+ * Restricciones:
+ *   no emitir después de cg_schedule; termina el proceso si finalized.
+ */
 static void push_ir(CGIRRecord record) {
     if (finalized) {
         fprintf(stderr, "ccom: error interno: emision despues de organizar bundles\n");
@@ -65,7 +125,17 @@ static void push_ir(CGIRRecord record) {
     ir[ir_count++] = record;
 }
 
-// Agrega una línea (toma posesión de text).
+/*
+ * push_line — agrega una línea y toma su propiedad.
+ *
+ * Entrada:
+ *   text  cadena dinámica no NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: amplía líneas y metadatos; toma posesión de text.
+ * Restricciones:
+ *   ninguna.
+ */
 static void push_line(char *text) {
     if (line_count == line_capacity) {
         int capacity = line_capacity == 0 ? 256 : line_capacity * 2;
@@ -93,6 +163,16 @@ static void push_line(char *text) {
     lines[line_count++] = text;
 }
 
+/*
+ * clear_output — libera las líneas de salida actuales.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: libera textos/metadatos y reinicia cantidad de bundles.
+ * Restricciones:
+ *   conserva el IR y la imagen de datos.
+ */
 static void clear_output(void) {
     for (int i = 0; i < line_count; i++) free(lines[i]);
     free(lines); free(source_lines); free(addresses); free(slot_source_lines);
@@ -100,12 +180,19 @@ static void clear_output(void) {
     line_count = line_capacity = bundles = 0;
 }
 
+/* ==========================================================================
+ * CICLO DE VIDA DEL EMISOR
+ * ======================================================================= */
+
+
+/* cg_init — véase el contrato en codegen.h. */
 void cg_init(void) {
     cg_free();
     memset(data, 0, sizeof(data));
     data_used = 0;
 }
 
+/* cg_free — véase el contrato en codegen.h. */
 void cg_free(void) {
     for (int i = 0; i < ir_count; i++) {
         if (ir[i].kind == CG_IR_LABEL) free((void *) ir[i].data.label);
@@ -123,7 +210,12 @@ void cg_free(void) {
     finalized = 0;
 }
 
-// isa.md §11.1: una etiqueta vale el índice del bundle que la sigue.
+/* ==========================================================================
+ * ETIQUETAS Y EMISIÓN CONSERVADORA
+ * ======================================================================= */
+
+
+/* cg_label — véase el contrato en codegen.h. */
 void cg_label(const char *name) {
     CGIRRecord record = {.kind = CG_IR_LABEL};
     record.data.label = copy_text(name);
@@ -138,7 +230,20 @@ void cg_label(const char *name) {
     push_line(text);
 }
 
-// isa.md §11.1: cuatro slots siempre presentes, slot 0 a slot 3.
+/*
+ * emit_bundle — agrega un bundle textual de cuatro slots.
+ *
+ * Entrada:
+ *   s0  texto de slot 0 o NULL.
+ *   s1  texto de slot 1 o NULL.
+ *   s2  texto de slot 2 o NULL.
+ *   s3  texto de slot 3 o NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: copia textos en una línea, guarda posiciones e incrementa bundles.
+ * Restricciones:
+ *   NULL se reemplaza por nopi; no agrega registro al IR.
+ */
 static void emit_bundle(const char *s0, const char *s1, const char *s2, const char *s3) {
     const char *slot[4] = {
         s0 ? s0 : "nopi",
@@ -166,6 +271,7 @@ static void emit_bundle(const char *s0, const char *s1, const char *s2, const ch
     bundles++;
 }
 
+/* cg_bundle — véase el contrato en codegen.h. */
 void cg_bundle(const char *s0, const char *s1, const char *s2, const char *s3) {
     const char *text[4] = {s0, s1, s2, s3};
     CGIRRecord record = {.kind = CG_IR_FIXED_BUNDLE};
@@ -175,6 +281,17 @@ void cg_bundle(const char *s0, const char *s1, const char *s2, const char *s3) {
     emit_bundle(s0, s1, s2, s3);
 }
 
+/*
+ * emit_gap — registra y emite una separación.
+ *
+ * Entrada:
+ *   reason  motivo automático o explícito.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: agrega IR de separación y bundle vacío.
+ * Restricciones:
+ *   antes de cg_schedule.
+ */
 static void emit_gap(CGGapReason reason) {
     CGIRRecord record = {.kind = CG_IR_GAP};
     record.data.gap_reason = reason;
@@ -182,11 +299,12 @@ static void emit_gap(CGGapReason reason) {
     emit_bundle(NULL, NULL, NULL, NULL);
 }
 
+/* cg_gap — véase el contrato en codegen.h. */
 void cg_gap(void) {
     emit_gap(CG_GAP_EXPLICIT);
 }
 
-// Versión segura (isa.md §9.1): la operación, y un bundle vacío después.
+/* cg_op — véase el contrato en codegen.h. */
 void cg_op(Slot slot, const char *fmt, ...) {
     char op[256];
     va_list args;
@@ -218,6 +336,23 @@ void cg_op(Slot slot, const char *fmt, ...) {
 
 typedef struct { uint16_t previous_writes; } ScheduleOutput;
 
+/* ==========================================================================
+ * REGIONES Y ORGANIZACIÓN
+ * ======================================================================= */
+
+
+/*
+ * scheduled_bundle — reconstruye un bundle organizado y sus posiciones.
+ *
+ * Entrada:
+ *   user  estado ScheduleOutput no NULL.
+ *   bundle  bundle con punteros prestados a instrucciones.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: emite línea y actualiza previous_writes y posiciones por slot.
+ * Restricciones:
+ *   no agrega IR; los textos de entrada siguen vivos.
+ */
 static void scheduled_bundle(void *user, const CGScheduledBundle *bundle) {
     ScheduleOutput *state = user;
     const char *text[4] = {NULL, NULL, NULL, NULL};
@@ -233,6 +368,19 @@ static void scheduled_bundle(void *user, const CGScheduledBundle *bundle) {
         slot_source_lines[line_count - 1][slot] = bundle->slots[slot] ? bundle->slots[slot]->source_line : -1;
 }
 
+/*
+ * flush_region — organiza la región y agrega separación de frontera.
+ *
+ * Entrada:
+ *   operations  arreglo de operaciones.
+ *   count  cantidad por referencia.
+ *   state  estado de salida no NULL.
+ * Salida:
+ *   0 si emite o está vacía; 1 si falla.
+ *   Efectos: emite región y hueco, pone *count a cero en éxito.
+ * Restricciones:
+ *   hasta CG_SCHEDULE_MAX_OPERATIONS; operaciones sin barreras.
+ */
 static int flush_region(const CGInstruction **operations, int *count, ScheduleOutput *state) {
     if (!*count) return 0;
     if (cg_schedule_block(operations, *count, state->previous_writes, scheduled_bundle, state)) return 1;
@@ -243,6 +391,7 @@ static int flush_region(const CGInstruction **operations, int *count, ScheduleOu
     return 0;
 }
 
+/* cg_schedule — véase el contrato en codegen.h. */
 int cg_schedule(void) {
     if (finalized) return 0;
     /* Sin resolución de destinos numéricos o efectos desconocidos, conservar
@@ -305,6 +454,12 @@ int cg_schedule(void) {
     return 0;
 }
 
+/* ==========================================================================
+ * LISTADOS Y DIRECCIONES
+ * ======================================================================= */
+
+
+/* cg_write — véase el contrato en codegen.h. */
 void cg_write(FILE *out) {
     for (int i = 0; i < line_count; i++) {
         // Las etiquetas van pegadas al margen; los bundles con sangría.
@@ -315,10 +470,12 @@ void cg_write(FILE *out) {
     }
 }
 
+/* cg_set_line — véase el contrato en codegen.h. */
 void cg_set_line(int line) {
     current_source_line = line > 0 ? line : 0;
 }
 
+/* cg_label_address — véase el contrato en codegen.h. */
 int cg_label_address(const char *name) {
     size_t length = strlen(name);
 
@@ -334,14 +491,36 @@ int cg_label_address(const char *name) {
     return -1;
 }
 
-// Etiquetas internas de una expansión (no son de la tabla de la Fase 3).
+/*
+ * internal_label — reconoce etiquetas internas de expansiones.
+ *
+ * Entrada:
+ *   name  nombre no NULL.
+ * Salida:
+ *   1 para prefijos aritmético, arreglo o CRYPTO; 0 en otro caso.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static int internal_label(const char *name) {
     return strncmp(name, "__ccom_arith_", 13) == 0 ||
            strncmp(name, "__ccom_array_", 13) == 0 ||
            strncmp(name, ".L_crypto_", 10) == 0;
 }
 
-// Escribe text y rellena con espacios hasta width columnas.
+/*
+ * write_padded — escribe texto y completa una columna con espacios.
+ *
+ * Entrada:
+ *   out  flujo no NULL.
+ *   text  texto no NULL.
+ *   width  ancho mínimo en caracteres.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe en out.
+ * Restricciones:
+ *   no trunca texto más ancho que width.
+ */
 static void write_padded(FILE *out, const char *text, int width) {
     int length = (int) strlen(text);
 
@@ -351,6 +530,7 @@ static void write_padded(FILE *out, const char *text, int width) {
         fputc(' ', out);
 }
 
+/* cg_write_listing — véase el contrato en codegen.h. */
 void cg_write_listing(FILE *out) {
     static const char *const EMPTY = "{ nopi | nopi | nopi | nopi }";
 
@@ -440,26 +620,42 @@ void cg_write_listing(FILE *out) {
     }
 }
 
+/* ==========================================================================
+ * CONSULTAS DEL IR Y SALIDA
+ * ======================================================================= */
+
+
+/* cg_ir_count — véase el contrato en codegen.h. */
 int cg_ir_count(void) {
     return ir_count;
 }
 
+/* cg_ir_record — véase el contrato en codegen.h. */
 const CGIRRecord *cg_ir_record(int index) {
     return index >= 0 && index < ir_count ? &ir[index] : NULL;
 }
 
+/* cg_line_count — véase el contrato en codegen.h. */
 int cg_line_count(void) {
     return line_count;
 }
 
+/* cg_line — véase el contrato en codegen.h. */
 const char *cg_line(int i) {
     return (i >= 0 && i < line_count) ? lines[i] : NULL;
 }
 
+/* cg_bundle_count — véase el contrato en codegen.h. */
 int cg_bundle_count(void) {
     return bundles;
 }
 
+/* ==========================================================================
+ * IMAGEN DE DATOS
+ * ======================================================================= */
+
+
+/* cg_data_set — véase el contrato en codegen.h. */
 int cg_data_set(int addr, uint32_t value) {
     if (addr < 0 || addr + 4 > CG_DATA_BYTES || addr % 4 != 0)
         return -1;
@@ -472,10 +668,12 @@ int cg_data_set(int addr, uint32_t value) {
     return 0;
 }
 
+/* cg_data_size — véase el contrato en codegen.h. */
 int cg_data_size(void) {
     return data_used;
 }
 
+/* cg_data — véase el contrato en codegen.h. */
 const uint32_t *cg_data(void) {
     return data;
 }

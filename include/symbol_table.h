@@ -1,3 +1,14 @@
+/*
+ * symbol_table.h — Fase 3: interfaz de símbolos y ámbitos con búsqueda estática.
+ *
+ * Expone símbolos, tipos, ámbitos, búsqueda e impresión de sus direcciones.
+ * Los contratos indican entradas, resultados, efectos y límites de uso.
+ *
+ * Usa: tipos de la biblioteca C y declaraciones propias.
+ * Lo usa: symbol_table.c; semantic.c, generate.c y codegen_array.c/codegen_crypto.c.
+ * Referencias: libro §2.7, §6.3.4, §7.1.1.
+ */
+
 #ifndef SYMBOL_TABLE_H
 #define SYMBOL_TABLE_H
 
@@ -85,26 +96,144 @@ typedef struct Scope {
     struct Scope *next;
 } Scope;
 
+/* ==========================================================================
+ * SÍMBOLOS Y BÚSQUEDA
+ * ======================================================================= */
+
+/*
+ * symbol_create — crea un símbolo sin dirección ni ámbito.
+ *
+ * Entrada:
+ *   name  nombre o NULL.
+ *   kind  clase del símbolo.
+ *   type  tipo declarado.
+ * Salida:
+ *   símbolo nuevo.
+ *   Efectos: reserva nombre y símbolo; inicializa direcciones a -1.
+ * Restricciones:
+ *   el llamador asigna ámbito/forma; sin memoria termina el proceso.
+ */
 Symbol *symbol_create(const char *name, SymbolKind kind, SymbolType type);
 
+/*
+ * symbol_insert — inserta un símbolo sin duplicar nombres del ámbito.
+ *
+ * Entrada:
+ *   scope  ámbito o NULL.
+ *   symbol  símbolo o NULL.
+ * Salida:
+ *   1 si inserta; 0 si inválido o duplicado.
+ *   Efectos: enlaza símbolo al inicio de scope->symbols en éxito.
+ * Restricciones:
+ *   transfiere propiedad solo al insertar; name válido para búsquedas.
+ */
 int symbol_insert(Scope *scope, Symbol *symbol);
 
+/*
+ * symbol_add_param — agrega un parámetro a la lista ordenada de función.
+ *
+ * Entrada:
+ *   function  símbolo de función o NULL.
+ *   param  parámetro o NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: amplía param_list y parameter_count.
+ * Restricciones:
+ *   la lista presta punteros; el ámbito de función es dueño de parámetros.
+ */
 void symbol_add_param(Symbol *function, Symbol *param);
 
+/*
+ * symbol_lookup_current — busca un nombre solo en el ámbito dado.
+ *
+ * Entrada:
+ *   scope  ámbito o NULL.
+ *   name  nombre o NULL.
+ * Salida:
+ *   símbolo prestado o NULL.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 Symbol *symbol_lookup_current(Scope *scope, const char *name);
 
+/*
+ * symbol_lookup — busca desde el ámbito hasta sus padres.
+ *
+ * Entrada:
+ *   scope  ámbito inicial o NULL.
+ *   name  nombre o NULL.
+ * Salida:
+ *   símbolo más cercano o NULL.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   enlaces parent sin ciclos.
+ */
 Symbol *symbol_lookup(Scope *scope, const char *name);
 
+/* ==========================================================================
+ * ÁMBITOS
+ * ======================================================================= */
+
+/*
+ * scope_create — crea un ámbito sin símbolos.
+ *
+ * Entrada:
+ *   parent  ámbito padre o NULL.
+ *   kind  clase de ámbito.
+ * Salida:
+ *   ámbito nuevo.
+ *   Efectos: reserva memoria e inicializa enlaces.
+ * Restricciones:
+ *   sin memoria termina el proceso; el llamador enlaza la lista de
+ *   ámbitos.
+ */
 Scope *scope_create(Scope *parent, ScopeKind kind);
 
+/*
+ * scope_free — libera un ámbito y sus símbolos.
+ *
+ * Entrada:
+ *   scope  ámbito o NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: libera símbolos y ámbito.
+ * Restricciones:
+ *   no libera parent ni next; llamador recorre la lista.
+ */
 void scope_free(Scope *scope);
 
+/* ==========================================================================
+ * IMPRESIÓN
+ * ======================================================================= */
+
+/*
+ * symbol_table_print — imprime ámbitos y símbolos en stdout.
+ *
+ * Entrada:
+ *   scope  primer ámbito o NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe la tabla sin detalle adicional.
+ * Restricciones:
+ *   ninguna.
+ */
 void symbol_table_print(Scope *scope);
 
-// Igual que symbol_table_print, en out y con prefix al inicio de cada línea
-// (el .asm anotado la escribe como comentarios con "#"). Con detailed agrega
-// lo que necesita la traza del simulador: la función dueña de cada ámbito,
-// los parámetros marcados y la línea de declaración de cada variable.
+/*
+ * symbol_table_fprint — imprime la tabla de símbolos con prefijo y detalle.
+ *
+ * Entrada:
+ *   out  flujo no NULL.
+ *   scope  primer ámbito o NULL.
+ *   prefix  prefijo no NULL por línea.
+ *   detailed  no cero para dueño, parámetros y líneas.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe ámbitos, tipos, formas y direcciones.
+ * Restricciones:
+ *   recorre next; símbolos vivos; llamador comprueba errores del flujo.
+ */
 void symbol_table_fprint(FILE *out, Scope *scope, const char *prefix,
                          int detailed);
 

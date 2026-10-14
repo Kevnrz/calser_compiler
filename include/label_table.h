@@ -1,3 +1,14 @@
+/*
+ * label_table.h — Fase 3: interfaz de construcción y resolución de la tabla de etiquetas.
+ *
+ * Expone roles, entradas, construcción, consulta y resolución de etiquetas.
+ * Los contratos indican entradas, resultados, efectos y límites de uso.
+ *
+ * Usa: ast.h.
+ * Lo usa: label_table.c; main.c y generate.c.
+ * Referencias: libro §6.7 (backpatching); enunciado §2.3–§2.5.
+ */
+
 #ifndef LABEL_TABLE_H
 #define LABEL_TABLE_H
 
@@ -18,11 +29,11 @@
 typedef enum {
     LABEL_FUNCTION,
 
-    /* Conditional labels */
+    /* Etiquetas de condicional */
     LABEL_NEXT,
     LABEL_END,
 
-    /* Loop labels */
+    /* Etiquetas de ciclo */
     LABEL_START,
     LABEL_UPDATE,
 
@@ -61,23 +72,96 @@ typedef struct {
     unsigned int next_id;
 } LabelTable;
 
+/* ==========================================================================
+ * CONSTRUCCIÓN, CONSULTA Y RESOLUCIÓN
+ * ======================================================================= */
+
+/*
+ * label_table_init — inicializa una tabla vacía de etiquetas.
+ *
+ * Entrada:
+ *   table  tabla o NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: pone entries a NULL y next_id a cero.
+ * Restricciones:
+ *   liberar tabla anterior antes de reinicializar.
+ */
 void label_table_init(LabelTable *table);
 
+/*
+ * label_table_build — construye las etiquetas de control y globales.
+ *
+ * Entrada:
+ *   table  tabla inicializada vacía.
+ *   root  raíz AST o NULL.
+ * Salida:
+ *   0 si completa; -1 si entrada o reserva falla.
+ *   Efectos: registra etiquetas y reinicia next_id.
+ * Restricciones:
+ *   una sola construcción por tabla vacía; fallo puede dejar entradas que
+ *   se liberan con destroy.
+ */
 int label_table_build(LabelTable *table, ASTNode *root);
 
-/* Para LABEL_ARITH_ERROR y LABEL_PROGRAM_END, consultar con node = NULL. */
+/*
+ * label_table_get — consulta una etiqueta por nodo y rol.
+ *
+ * Entrada:
+ *   table  tabla o NULL.
+ *   node  nodo o NULL para etiqueta global.
+ *   role  rol buscado.
+ * Salida:
+ *   nombre interno o NULL si no existe.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   no liberar el nombre; válido hasta label_table_destroy.
+ */
 const char *label_table_get(
     const LabelTable *table,
     const ASTNode *node,
     LabelRole role
 );
 
-/* Completa el campo address de cada entrada con lookup(nombre): el índice del
- * bundle donde está definida la etiqueta, o -1 si no lo está. */
+/*
+ * label_table_resolve — completa direcciones por consulta de nombre.
+ *
+ * Entrada:
+ *   table  tabla o NULL.
+ *   lookup  callback de dirección o NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: actualiza address de cada entrada.
+ * Restricciones:
+ *   lookup devuelve índice de bundle o -1; usar calendario final antes de
+ *   resolver.
+ */
 void label_table_resolve(LabelTable *table, int (*lookup)(const char *name));
 
+/*
+ * label_table_print — imprime nombres, nodos y direcciones de etiquetas.
+ *
+ * Entrada:
+ *   table  tabla o NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe en stdout; muestra - para direcciones negativas.
+ * Restricciones:
+ *   nodos prestados todavía vivos.
+ */
 void label_table_print(const LabelTable *table);
 
+/*
+ * label_table_destroy — libera todas las entradas de la tabla.
+ *
+ * Entrada:
+ *   table  tabla o NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: libera nombres/entradas y reinicia contador.
+ * Restricciones:
+ *   no libera nodos del AST prestados.
+ */
 void label_table_destroy(LabelTable *table);
 
 #endif

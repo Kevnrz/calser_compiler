@@ -1,3 +1,14 @@
+/*
+ * assembler.c — Fase 5: ensamblado de etiquetas y bundles en dos pasadas.
+ *
+ * Separa etiquetas y bundles, asigna direcciones y codifica cada slot.
+ * Resuelve destinos simbólicos como desplazamientos relativos al PC.
+ *
+ * Usa: assembler.h; biblioteca C.
+ * Lo usa: main.c, con líneas generadas o entrada -x.
+ * Referencias: libro §1.1, §8.1.2; isa.md §3, §4, §6, §11.
+ */
+
 #include <ctype.h>
 #include <errno.h>
 #include <stdarg.h>
@@ -21,7 +32,7 @@
  *             etiqueta − PC (isa.md §6.2, §11.2).
  */
 
-/* ---- Unidades y formas de las instrucciones (isa.md §6, §11.3) ---------- */
+/* ---- UNIDADES Y FORMAS DE LAS INSTRUCCIONES (ISA.MD §6, §11.3) -------- */
 
 typedef enum { UNIT_ALU, UNIT_CRYPTO, UNIT_BRU, UNIT_LSU } Unit;
 
@@ -97,7 +108,7 @@ static const Instruction INSTRUCTIONS[] = {
 
 #define MAX_OPERANDS 5
 
-/* ---- Estado de un ensamblado -------------------------------------------- */
+/* ---- ESTADO DE UN ENSAMBLADO ------------------------------------------ */
 
 typedef struct {
     char *name;
@@ -122,11 +133,38 @@ typedef struct {
     int raw_capacity;
 } Assembler;
 
+/* ==========================================================================
+ * ERRORES Y LECTURA
+ * ======================================================================= */
+
+
+/*
+ * out_of_memory — termina el ensamblado por falta de memoria.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   no retorna.
+ *   Efectos: escribe en stderr y termina el proceso con EXIT_FAILURE.
+ * Restricciones:
+ *   ninguna.
+ */
 static void out_of_memory(void) {
     fprintf(stderr, "ccom: error interno: memoria insuficiente (ensamblado)\n");
     exit(EXIT_FAILURE);
 }
 
+/*
+ * copy_text — copia un fragmento de texto y lo termina con NUL.
+ *
+ * Entrada:
+ *   text  texto legible.
+ *   length  cantidad de bytes a copiar.
+ * Salida:
+ *   cadena nueva; el receptor debe liberarla.
+ *   Efectos: reserva memoria; termina el proceso si no hay memoria.
+ * Restricciones:
+ *   text contiene al menos length bytes.
+ */
 static char *copy_text(const char *text, size_t length) {
     char *copy = malloc(length + 1);
 
@@ -139,7 +177,20 @@ static char *copy_text(const char *text, size_t length) {
     return copy;
 }
 
-// Único punto de salida de los errores de ensamblado.
+/*
+ * asm_error — reporta un error de ensamblado.
+ *
+ * Entrada:
+ *   as  estado de ensamblado no NULL.
+ *   line  línea del .asm desde 1.
+ *   fmt  formato printf no NULL.
+ *   ...  argumentos del formato.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe en stderr e incrementa as->errors.
+ * Restricciones:
+ *   ninguna.
+ */
 static void asm_error(Assembler *as, int line, const char *fmt, ...) {
     va_list args;
 
@@ -154,7 +205,17 @@ static void asm_error(Assembler *as, int line, const char *fmt, ...) {
     as->errors++;
 }
 
-// Quita los espacios de los extremos (modifica text) y devuelve el inicio.
+/*
+ * trim — quita espacios de los extremos.
+ *
+ * Entrada:
+ *   text  cadena modificable no NULL.
+ * Salida:
+ *   puntero prestado al primer carácter restante.
+ *   Efectos: escribe NUL al final del texto útil.
+ * Restricciones:
+ *   ninguna.
+ */
 static char *trim(char *text) {
     while (isspace((unsigned char) *text))
         text++;
@@ -169,7 +230,18 @@ static char *trim(char *text) {
     return text;
 }
 
-// Etiqueta: [A-Za-z_.][A-Za-z0-9_.]*
+/*
+ * valid_label — verifica la sintaxis de una etiqueta.
+ *
+ * Entrada:
+ *   text  cadena terminada en NUL no NULL.
+ * Salida:
+ *   1 si acepta el nombre; 0 en otro caso.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   acepta letras, dígitos, punto y guion bajo; el primer carácter no
+ *   puede ser un dígito.
+ */
 static int valid_label(const char *text) {
     if (!(isalpha((unsigned char) *text) || *text == '_' || *text == '.'))
         return 0;
@@ -183,6 +255,18 @@ static int valid_label(const char *text) {
     return 1;
 }
 
+/*
+ * find_label — busca una etiqueta de la primera pasada.
+ *
+ * Entrada:
+ *   as  estado no NULL.
+ *   name  nombre no NULL.
+ * Salida:
+ *   entrada interna o NULL si no existe.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   el puntero puede invalidarse al agregar etiquetas.
+ */
 static Label *find_label(Assembler *as, const char *name) {
     for (int i = 0; i < as->label_count; i++) {
 
@@ -193,8 +277,26 @@ static Label *find_label(Assembler *as, const char *name) {
     return NULL;
 }
 
-/* ---- Pasada 1 ----------------------------------------------------------- */
+/* ---- PASADA 1 --------------------------------------------------------- */
 
+/* ==========================================================================
+ * PASADA 1: ETIQUETAS Y BUNDLES
+ * ======================================================================= */
+
+
+/*
+ * add_label — registra la dirección simbólica de una etiqueta.
+ *
+ * Entrada:
+ *   as  estado no NULL.
+ *   name  nombre no NULL.
+ *   line  línea para el diagnóstico.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: copia el nombre y actualiza la tabla; reporta duplicados.
+ * Restricciones:
+ *   la dirección es as->raw_count, índice del próximo bundle.
+ */
 static void add_label(Assembler *as, const char *name, int line) {
     // isa.md §11.4: una etiqueta definida dos veces es un error.
     if (find_label(as, name) != NULL) {
@@ -219,6 +321,20 @@ static void add_label(Assembler *as, const char *name, int line) {
     as->label_count++;
 }
 
+/*
+ * add_bundle — guarda un bundle para la segunda pasada.
+ *
+ * Entrada:
+ *   as  estado no NULL.
+ *   body  texto entre llaves.
+ *   length  cantidad de bytes del texto.
+ *   line  línea del .asm.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: copia body e incrementa as->raw_count.
+ * Restricciones:
+ *   body contiene al menos length bytes.
+ */
 static void add_bundle(Assembler *as, const char *body, size_t length,
                        int line) {
     if (as->raw_count == as->raw_capacity) {
@@ -238,7 +354,19 @@ static void add_bundle(Assembler *as, const char *body, size_t length,
     as->raw_count++;
 }
 
-// Una línea: comentario fuera, y luego  etiqueta:*  [ { bundle } ]
+/*
+ * scan_line — separa comentarios, etiquetas y un bundle.
+ *
+ * Entrada:
+ *   as  estado no NULL.
+ *   source  línea terminada en NUL.
+ *   line  línea del .asm desde 1.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: agrega etiquetas y bundles; reporta errores de estructura.
+ * Restricciones:
+ *   comentarios con #; solo admite etiquetas antes del bundle.
+ */
 static void scan_line(Assembler *as, const char *source, int line) {
     char *copy = copy_text(source, strlen(source));
 
@@ -294,9 +422,24 @@ static void scan_line(Assembler *as, const char *source, int line) {
     free(copy);
 }
 
-/* ---- Pasada 2: operandos ------------------------------------------------ */
+/* ---- PASADA 2: OPERANDOS ---------------------------------------------- */
 
-// isa.md §8 y §11.2: r0–r15, o los alias rz, rl, rx, rg, t0–t11.
+/* ==========================================================================
+ * PASADA 2: OPERANDOS
+ * ======================================================================= */
+
+
+/*
+ * parse_register — reconoce un registro o su alias.
+ *
+ * Entrada:
+ *   text  operando no NULL.
+ * Salida:
+ *   número ISA 0–15 o -1 si es inválido.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   no admite ceros iniciales; t0–t11 equivalen a r4–r15.
+ */
 static int parse_register(const char *text) {
     static const char *const ALIASES[] = { "rz", "rl", "rx", "rg" };
 
@@ -326,7 +469,18 @@ static int parse_register(const char *text) {
     return number <= 11 ? (int) number + 4 : -1;
 }
 
-// isa.md §11.2: decimal con signo (-5) o hexadecimal (0x1F).
+/*
+ * parse_integer — lee un entero decimal o hexadecimal.
+ *
+ * Entrada:
+ *   text  operando no NULL.
+ *   value  puntero no NULL para el valor.
+ * Salida:
+ *   1 si convierte todo el operando sin error; 0 si falla.
+ *   Efectos: escribe *value al intentar strtol.
+ * Restricciones:
+ *   usa el rango de long del anfitrión.
+ */
 static int parse_integer(const char *text, long *value) {
     const char *digits = text;
 
@@ -347,13 +501,38 @@ static int parse_integer(const char *text, long *value) {
     return errno == 0 && *end == '\0';
 }
 
+/*
+ * fits_signed — comprueba un rango con signo.
+ *
+ * Entrada:
+ *   value  entero a verificar.
+ *   bits  ancho del campo en bits.
+ * Salida:
+ *   1 si value cabe; 0 si no cabe.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   bits positivo y menor que el ancho de long; aquí se usan 18 y 22.
+ */
 static int fits_signed(long value, int bits) {
     long limit = 1L << (bits - 1);
 
     return value >= -limit && value < limit;
 }
 
-// Registro en un operando; reporta y devuelve 0 si no lo es.
+/*
+ * get_register — valida un registro y obtiene su campo ISA.
+ *
+ * Entrada:
+ *   as  estado no NULL.
+ *   line  línea del diagnóstico.
+ *   text  operando no NULL.
+ *   reg  puntero no NULL para el registro.
+ * Salida:
+ *   1 si acepta; 0 si reporta error.
+ *   Efectos: escribe *reg al aceptar; reporta errores en as.
+ * Restricciones:
+ *   ninguna.
+ */
 static int get_register(Assembler *as, int line, const char *text,
                         unsigned *reg) {
     int number = parse_register(text);
@@ -368,7 +547,20 @@ static int get_register(Assembler *as, int line, const char *text,
     return 1;
 }
 
-// Inmediato de 18 bits con signo (isa.md §4.2).
+/*
+ * get_immediate — valida un inmediato de 18 bits con signo.
+ *
+ * Entrada:
+ *   as  estado no NULL.
+ *   line  línea del diagnóstico.
+ *   text  operando no NULL.
+ *   field  puntero no NULL para el campo.
+ * Salida:
+ *   1 si acepta; 0 si reporta error.
+ *   Efectos: escribe *field al aceptar; reporta errores en as.
+ * Restricciones:
+ *   rango -131072–131071.
+ */
 static int get_immediate(Assembler *as, int line, const char *text,
                          unsigned *field) {
     long value;
@@ -390,7 +582,21 @@ static int get_immediate(Assembler *as, int line, const char *text,
     return 1;
 }
 
-// k, i o w: entero de 0 a 3 (isa.md §4.2, §11.2).
+/*
+ * get_selector — valida un selector de cifrado.
+ *
+ * Entrada:
+ *   as  estado no NULL.
+ *   line  línea del diagnóstico.
+ *   what  nombre k, i o w para el mensaje.
+ *   text  operando no NULL.
+ *   field  puntero no NULL para el campo.
+ * Salida:
+ *   1 si acepta; 0 si reporta error.
+ *   Efectos: escribe *field al aceptar; reporta errores en as.
+ * Restricciones:
+ *   valor entre 0 y 3.
+ */
 static int get_selector(Assembler *as, int line, const char *what,
                         const char *text, unsigned *field) {
     long value;
@@ -406,8 +612,23 @@ static int get_selector(Assembler *as, int line, const char *what,
     return 1;
 }
 
-// Destino de salto: una etiqueta (etiqueta − PC) o un desplazamiento entero
-// en bundles (isa.md §11.2). PC es el índice del bundle del salto (§6.2).
+/*
+ * get_destination — resuelve un destino como desplazamiento relativo al PC.
+ *
+ * Entrada:
+ *   as  estado con tabla de etiquetas.
+ *   line  línea del diagnóstico.
+ *   text  entero o nombre de etiqueta.
+ *   pc  índice del bundle de salto.
+ *   bits  ancho con signo, 18 o 22.
+ *   field  puntero no NULL para el campo.
+ * Salida:
+ *   1 si resuelve y cabe; 0 si reporta error.
+ *   Efectos: escribe *field al aceptar; reporta errores en as.
+ * Restricciones:
+ *   la primera pasada ya registró todas las etiquetas.
+ * Referencia: isa.md §6.2, §11.2.
+ */
 static int get_destination(Assembler *as, int line, const char *text,
                            int pc, int bits, unsigned *field) {
     long offset;
@@ -442,7 +663,21 @@ static int get_destination(Assembler *as, int line, const char *text,
     return 1;
 }
 
-// Operando de memoria  imm(rs1)  (isa.md §11.3).
+/*
+ * get_memory — descompone un operando imm(registro).
+ *
+ * Entrada:
+ *   as  estado no NULL.
+ *   line  línea del diagnóstico.
+ *   text  operando modificable no NULL.
+ *   imm  puntero no NULL para el inmediato.
+ *   base  puntero no NULL para el registro base.
+ * Salida:
+ *   1 si ambos campos son válidos; 0 si falla.
+ *   Efectos: separa text con NUL; escribe campos y reporta errores.
+ * Restricciones:
+ *   inmediato de 18 bits con signo.
+ */
 static int get_memory(Assembler *as, int line, char *text,
                       unsigned *imm, unsigned *base) {
     char *open = strchr(text, '(');
@@ -460,8 +695,19 @@ static int get_memory(Assembler *as, int line, char *text,
            get_register(as, line, trim(open + 1), base);
 }
 
-/* ---- Pasada 2: codificación --------------------------------------------- */
+/* ---- PASADA 2: CODIFICACIÓN ------------------------------------------- */
 
+/*
+ * unit_name — nombra una unidad y sus slots.
+ *
+ * Entrada:
+ *   unit  unidad de la instrucción.
+ * Salida:
+ *   cadena literal; no liberar.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static const char *unit_name(Unit unit) {
     switch (unit) {
         case UNIT_ALU:    return "la ALU (slot 0 o 1)";
@@ -471,7 +717,18 @@ static const char *unit_name(Unit unit) {
     }
 }
 
-// isa.md §3.1: slot 0 ALU0, slot 1 ALU1 o CRYPTO, slot 2 BRU, slot 3 LSU.
+/*
+ * unit_fits — verifica la unidad admitida en un slot.
+ *
+ * Entrada:
+ *   unit  unidad de la instrucción.
+ *   slot  índice de slot 0–3.
+ * Salida:
+ *   1 si es compatible; 0 si no lo es.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static int unit_fits(Unit unit, int slot) {
     switch (unit) {
         case UNIT_ALU:    return slot == 0 || slot == 1;
@@ -481,6 +738,17 @@ static int unit_fits(Unit unit, int slot) {
     }
 }
 
+/*
+ * operand_count — obtiene la cantidad de operandos de una forma.
+ *
+ * Entrada:
+ *   form  forma de instrucción.
+ * Salida:
+ *   cantidad esperada, entre 0 y 5.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static int operand_count(Form form) {
     switch (form) {
         case FORM_R3:       return 3;
@@ -509,8 +777,28 @@ static int operand_count(Form form) {
 #define FIELD_K(x)     ((uint32_t) (x) << 12)
 #define FIELD_I(x)     ((uint32_t) (x) << 10)
 
-/* Codifica un slot. text se modifica. Devuelve 1 si ok y deja la palabra en
- * *word y en *written el registro que escribe (-1 si ninguno). */
+/* ==========================================================================
+ * PASADA 2: CODIFICACIÓN
+ * ======================================================================= */
+
+
+/*
+ * encode_slot — codifica una instrucción en su slot.
+ *
+ * Entrada:
+ *   as  estado con etiquetas resueltas.
+ *   line  línea del .asm.
+ *   text  texto modificable no NULL.
+ *   slot  slot 0–3.
+ *   pc  índice del bundle actual.
+ *   word  puntero no NULL para la palabra.
+ *   written  puntero no NULL para el destino escrito.
+ * Salida:
+ *   1 si codifica; 0 si reporta error.
+ *   Efectos: modifica text, *word y *written; acumula errores.
+ * Restricciones:
+ *   *written empieza en -1; nopi y slot vacío se codifican como cero.
+ */
 static int encode_slot(Assembler *as, int line, char *text, int slot, int pc,
                        uint32_t *word, int *written) {
     *word = 0;
@@ -721,7 +1009,22 @@ static int encode_slot(Assembler *as, int line, char *text, int slot, int pc,
     return 1;
 }
 
-// Un bundle: exactamente 4 slots separados por | (isa.md §11.1).
+/*
+ * encode_bundle — codifica cuatro slots y verifica destinos repetidos.
+ *
+ * Entrada:
+ *   as  estado con etiquetas registradas.
+ *   raw  bundle leído en la pasada 1.
+ *   pc  índice del bundle.
+ *   word  arreglo de cuatro palabras escribibles.
+ *   text  puntero escribible para texto normalizado.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe word y reserva *text si hay cuatro slots; reporta errores.
+ * Restricciones:
+ *   el llamador inicializa *text a NULL; no comprueba dependencias entre
+ *   bundles.
+ */
 static void encode_bundle(Assembler *as, const RawBundle *raw, int pc,
                           uint32_t word[4], char **text) {
     char *body = copy_text(raw->body, strlen(raw->body));
@@ -801,8 +1104,14 @@ static void encode_bundle(Assembler *as, const RawBundle *raw, int pc,
     free(body);
 }
 
-/* ---- Interfaz ----------------------------------------------------------- */
+/* ---- INTERFAZ --------------------------------------------------------- */
 
+/* ==========================================================================
+ * INTERFAZ DEL ENSAMBLADOR
+ * ======================================================================= */
+
+
+/* asm_free — véase el contrato en assembler.h. */
 void asm_free(AsmProgram *program) {
     if (program == NULL)
         return;
@@ -821,6 +1130,7 @@ void asm_free(AsmProgram *program) {
     program->count = 0;
 }
 
+/* asm_assemble — véase el contrato en assembler.h. */
 int asm_assemble(const char *const *lines, int nlines, const char *name,
                  AsmProgram *out) {
     Assembler as = { 0 };

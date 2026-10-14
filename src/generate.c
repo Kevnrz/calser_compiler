@@ -1,3 +1,15 @@
+/*
+ * generate.c — Fase 4: generación de ensamblador desde el AST anotado.
+ *
+ * Recorre expresiones, control de flujo y funciones con doce temporales.
+ * Emite operaciones conservadoras y plantillas fijas; cg_schedule organiza
+ * las regiones antes del ensamblado salvo la opción --no-schedule.
+ *
+ * Usa: tabla de símbolos, tabla de etiquetas y módulos codegen_*.
+ * Lo usa: main.c después del análisis semántico.
+ * Referencias: libro §6.4, §6.6, §6.7, §7.2; isa.md §6, §9.
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
@@ -61,6 +73,23 @@ static int generation_errors;
 static const char *current_function_name;
 static Symbol *current_function_symbol;
 
+/* ==========================================================================
+ * DIAGNÓSTICOS Y CONSULTAS DEL AST
+ * ======================================================================= */
+
+
+/*
+ * report_error — reporta un error de generación.
+ *
+ * Entrada:
+ *   node  nodo para posición o NULL.
+ *   message  mensaje no NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe en stderr e incrementa generation_errors.
+ * Restricciones:
+ *   ninguna.
+ */
 static void report_error(ASTNode *node, const char *message) {
     if (node != NULL && node->line > 0) {
         fprintf(stderr,
@@ -77,6 +106,18 @@ static void report_error(ASTNode *node, const char *message) {
     generation_errors++;
 }
  
+/*
+ * find_child — busca el primer hijo de una clase.
+ *
+ * Entrada:
+ *   node  nodo o NULL.
+ *   kind  clase buscada.
+ * Salida:
+ *   hijo prestado o NULL.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static ASTNode *find_child(ASTNode *node, ASTKind kind) {
     for (ASTNode *c = node ? node->child : NULL; c != NULL; c = c->next)
         if (c->kind == kind)
@@ -85,12 +126,35 @@ static ASTNode *find_child(ASTNode *node, ASTKind kind) {
     return NULL;
 }
  
+/*
+ * function_name — consulta el nombre de una función del AST.
+ *
+ * Entrada:
+ *   function  nodo de función o NULL.
+ * Salida:
+ *   texto prestado del identificador o NULL.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static const char *function_name(ASTNode *function) {
     ASTNode *id = find_child(function, AST_IDENTIFIER);
  
     return id ? id->text : NULL;
 }
 
+/*
+ * child_at — consulta un hijo por posición.
+ *
+ * Entrada:
+ *   node  nodo o NULL.
+ *   index  posición desde 0.
+ * Salida:
+ *   hijo prestado o NULL.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   index no negativo; los hijos opcionales NULL no ocupan posición.
+ */
 static ASTNode *child_at(ASTNode *node, int index) {
     ASTNode *child = node ? node->child : NULL;
 
@@ -102,6 +166,22 @@ static ASTNode *child_at(ASTNode *node, int index) {
     return child;
 }
 
+/* ==========================================================================
+ * REGISTROS TEMPORALES
+ * ======================================================================= */
+
+
+/*
+ * reg_name — obtiene el alias de un registro ISA.
+ *
+ * Entrada:
+ *   reg  número ISA.
+ * Salida:
+ *   cadena literal; rz si reg está fuera de 0–15.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static const char *reg_name(int reg) {
     static const char *names[16] = {
         "rz", "rl", "rx", "rg",
@@ -116,10 +196,30 @@ static const char *reg_name(int reg) {
     return names[reg];
 }
 
+/*
+ * reset_registers — libera las reservas de temporales del generador.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: pone temp_used a cero.
+ * Restricciones:
+ *   usar cuando no se necesitan las reservas anteriores.
+ */
 static void reset_registers(void) {
     memset(temp_used, 0, sizeof(temp_used));
 }
 
+/*
+ * alloc_reg — reserva el primer temporal libre.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   registro ISA 4–15; -1 si no hay disponibles.
+ *   Efectos: marca el temporal en temp_used.
+ * Restricciones:
+ *   solo dispone de t0–t11.
+ */
 static int alloc_reg(void) {
     for (int i = 0; i < TEMP_COUNT; i++) {
         if (!temp_used[i]) {
@@ -131,6 +231,17 @@ static int alloc_reg(void) {
     return -1;
 }
 
+/*
+ * free_reg — libera la reserva de un temporal.
+ *
+ * Entrada:
+ *   reg  registro ISA a liberar.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: desmarca temp_used si reg está entre 4 y 15.
+ * Restricciones:
+ *   ninguna.
+ */
 static void free_reg(int reg) {
     if (reg >= TEMP_FIRST &&
         reg < TEMP_FIRST + TEMP_COUNT) {
@@ -139,6 +250,20 @@ static void free_reg(int reg) {
     }
 }
 
+/*
+ * emit_mov — construye una constante de hasta 32 bits.
+ *
+ * Entrada:
+ *   rd  registro destino ISA reservado.
+ *   immediate  constante entre INT32_MIN y UINT32_MAX.
+ *   node  nodo para diagnósticos o NULL.
+ * Salida:
+ *   0 si emite; -1 si reporta error.
+ *   Efectos: emite instrucciones y reserva/libera un temporal auxiliar si hace falta.
+ * Restricciones:
+ *   fuera del inmediato de 18 bits necesita un temporal libre; rd debe
+ *   seguir reservado.
+ */
 static int emit_mov(int rd, long immediate, ASTNode *node) {
     /* 2147483648 aparece como hijo del menos unario de INT32_MIN. */
     if (immediate < INT32_MIN || immediate > (long) UINT32_MAX) {
@@ -170,6 +295,22 @@ static int emit_mov(int rd, long immediate, ASTNode *node) {
     return 0;
 }
 
+/* ==========================================================================
+ * VARIABLES Y MEMORIA
+ * ======================================================================= */
+
+
+/*
+ * get_symbol — consulta la anotación semántica de un nodo.
+ *
+ * Entrada:
+ *   node  nodo o NULL.
+ * Salida:
+ *   símbolo prestado o NULL.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   semantic_free no se ha llamado.
+ */
 static Symbol *get_symbol(ASTNode *node) {
     if (node == NULL || node->symbol == NULL)
         return NULL;
@@ -177,6 +318,17 @@ static Symbol *get_symbol(ASTNode *node) {
     return (Symbol *)node->symbol;
 }
 
+/*
+ * get_return_symbol — busca la variable de retorno de una función.
+ *
+ * Entrada:
+ *   function_symbol  símbolo de función o NULL.
+ * Salida:
+ *   símbolo prestado de retorno o NULL.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   decl_node sigue vivo; void no tiene variable de retorno.
+ */
 static Symbol *get_return_symbol(Symbol *function_symbol) {
     if (function_symbol == NULL ||
         function_symbol->decl_node == NULL) {
@@ -201,6 +353,20 @@ static Symbol *get_return_symbol(Symbol *function_symbol) {
     return get_symbol(return_id);
 }
 
+/*
+ * emit_load_symbol — carga una casilla estática en un registro.
+ *
+ * Entrada:
+ *   rd  registro destino ISA.
+ *   symbol  símbolo a cargar.
+ *   node  nodo para diagnósticos o NULL.
+ * Salida:
+ *   0 si emite; -1 si reporta error.
+ *   Efectos: emite lw en LSU; reporta direcciones inválidas.
+ * Restricciones:
+ *   dirección asignada entre 0 y 131071; el semántico garantiza
+ *   alineación.
+ */
 static int emit_load_symbol(int rd, Symbol *symbol, ASTNode *node) {
     if (symbol == NULL) {
         report_error(node,
@@ -228,6 +394,20 @@ static int emit_load_symbol(int rd, Symbol *symbol, ASTNode *node) {
     return 0;
 }
 
+/*
+ * emit_store_symbol — guarda un registro en una casilla estática.
+ *
+ * Entrada:
+ *   symbol  símbolo destino.
+ *   rs  registro fuente ISA.
+ *   node  nodo para diagnósticos o NULL.
+ * Salida:
+ *   0 si emite; -1 si reporta error.
+ *   Efectos: emite sw en LSU; reporta direcciones inválidas.
+ * Restricciones:
+ *   dirección asignada entre 0 y 131071; mutabilidad ya verificada por el
+ *   semántico.
+ */
 static int emit_store_symbol(Symbol *symbol, int rs, ASTNode *node) {
     if (symbol == NULL) {
         report_error(node,
@@ -251,6 +431,23 @@ static int emit_store_symbol(Symbol *symbol, int rs, ASTNode *node) {
     return 0;
 }
 
+/* ==========================================================================
+ * PILA DE LLAMADAS
+ * ======================================================================= */
+
+
+/*
+ * emit_stack_push — apila una palabra en rx.
+ *
+ * Entrada:
+ *   reg  registro ISA cuyo valor se conserva.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: emite sw y avance de rx en cuatro bytes.
+ * Restricciones:
+ *   rx apunta a la primera casilla libre; no verifica desborde en
+ *   ejecución.
+ */
 static void emit_stack_push(int reg) {
     cg_op(SLOT_LSU,
           "sw %s, 0(rx)",
@@ -260,6 +457,17 @@ static void emit_stack_push(int reg) {
           "saddi rx, rx, 4");
 }
 
+/*
+ * emit_stack_pop — desapila una palabra desde rx.
+ *
+ * Entrada:
+ *   reg  registro ISA que recibe la palabra.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: emite retroceso de rx y lw.
+ * Restricciones:
+ *   debe existir una palabra apilada; no verifica subdesborde.
+ */
 static void emit_stack_pop(int reg) {
     cg_op(SLOT_ALU0,
           "saddi rx, rx, -4");
@@ -272,13 +480,31 @@ static void emit_stack_pop(int reg) {
 static int emit_expression(ASTNode *node);
 static int emit_function_call(ASTNode *node, int result_needed);
 
+/* ==========================================================================
+ * EXPRESIONES Y EXPANSIONES
+ * ======================================================================= */
+
+
+/*
+ * emit_arith_callback — adapta operaciones aritméticas y de arreglos al emisor.
+ *
+ * Entrada:
+ *   user  dato del callback, no utilizado.
+ *   op  operación o NULL.
+ * Salida:
+ *   1 si emite; 0 si el formato o slot no es aceptado.
+ *   Efectos: agrega etiquetas u operaciones a codegen.
+ * Restricciones:
+ *   slots -1, 0, 2 y 3; la etiqueta debe terminar en dos puntos y caber en
+ *   128 bytes.
+ */
 static int emit_arith_callback(void *user, const CGArithOp *op) {
     (void)user;
 
     if (op == NULL)
         return 0;
 
-    // Labels are represented by slot == -1.
+    // Las etiquetas se representan con slot == -1.
     if (op->slot == -1) {
         size_t len = strlen(op->text);
 
@@ -297,19 +523,19 @@ static int emit_arith_callback(void *user, const CGArithOp *op) {
         return 1;
     }
 
-    // Arithmetic emitter slot 0 = ALU0.
+    // Slot 0 del emisor aritmético = ALU0.
     if (op->slot == 0) {
         cg_op(SLOT_ALU0, "%s", op->text);
         return 1;
     }
 
-    // Arithmetic emitter slot 2 = branch/jump unit.
+    // Slot 2 del emisor aritmético = unidad de saltos BRU.
     if (op->slot == 2) {
         cg_op(SLOT_BRU, "%s", op->text);
         return 1;
     }
 
-    // Array emitter slot 3 = lsu
+    // Slot 3 del emisor de arreglos = LSU.
     if (op->slot == 3) {
         cg_op(SLOT_LSU, "%s", op->text);
         return 1;
@@ -318,6 +544,21 @@ static int emit_arith_callback(void *user, const CGArithOp *op) {
     return 0;
 }
 
+/*
+ * emit_software_arithmetic — expande multiplicación, división, módulo o potencia.
+ *
+ * Entrada:
+ *   node  nodo para diagnósticos.
+ *   kind  operación aritmética.
+ *   lhs  temporal reservado del operando izquierdo.
+ *   rhs  temporal reservado del operando derecho.
+ * Salida:
+ *   temporal reservado del resultado; -1 si falla.
+ *   Efectos: emite rutina, reserva auxiliares y libera lhs/rhs; reporta errores.
+ * Restricciones:
+ *   necesita un destino y ocho temporales libres; /, % y ^ usan
+ *   arith_error_label.
+ */
 static int emit_software_arithmetic(ASTNode *node, CGArithKind kind, int lhs, int rhs) {
     int dst = alloc_reg();
 
@@ -391,8 +632,8 @@ static int emit_software_arithmetic(ASTNode *node, CGArithKind kind, int lhs, in
         return -1;
     }
 
-    // dst remains allocated because the caller needs
-    // its value as the expression result.
+    // dst conserva su reserva porque el llamador necesita
+    // su valor como resultado de la expresión.
     return dst;
 }
 
@@ -400,16 +641,19 @@ static int node_label(char *buffer, size_t size, ASTNode *node,
                       LabelRole role, const char *what);
 
 /*
- * & y | en corto circuito (libro §6.6.2, Short-Circuit Code; G-11 de
- * ccom_pendientes.md): el lado derecho solo se evalúa si hace falta.
+ * emit_short_circuit — evalúa & o | con corto circuito.
  *
- *   a & b:  r = a ; beq r, rz, fin ; r = b ; fin:
- *   a | b:  r = a ; bne r, rz, fin ; r = b ; fin:
- *
- * El resultado queda en r como 0 o 1, porque los bool ya valen 0 o 1. En
- * los dos caminos (el que salta y el que no) queda ocupado solo r: el
- * registro de b se libera antes de la etiqueta. cg_op deja el bundle de
- * separación después de escribir r y después del salto (isa.md §9.3).
+ * Entrada:
+ *   node  nodo AST_AND o AST_OR.
+ *   left  expresión izquierda.
+ *   right  expresión derecha.
+ * Salida:
+ *   temporal reservado del resultado; -1 si falla.
+ *   Efectos: emite salto y etiqueta; libera el temporal derecho.
+ * Restricciones:
+ *   operandos bool normalizados a 0 o 1; etiqueta LABEL_SC_END ya
+ *   registrada.
+ * Referencia: libro §6.6.2; isa.md §9.3.
  */
 static int emit_short_circuit(ASTNode *node, ASTNode *left, ASTNode *right) {
     int result = emit_expression(left);
@@ -450,6 +694,17 @@ static int emit_short_circuit(ASTNode *node, ASTNode *left, ASTNode *right) {
     return result;
 }
 
+/*
+ * emit_binary_expression — evalúa un operador binario de la ALU o lógico.
+ *
+ * Entrada:
+ *   node  nodo binario con dos operandos.
+ * Salida:
+ *   temporal reservado del resultado; -1 si falla.
+ *   Efectos: emite instrucciones, administra temporales y reporta errores.
+ * Restricciones:
+ *   tipos ya verificados; *, /, % y ^ se despachan en emit_expression.
+ */
 static int emit_binary_expression(ASTNode *node) {
     ASTNode *left = child_at(node, 0);
     ASTNode *right = child_at(node, 1);
@@ -497,7 +752,7 @@ static int emit_binary_expression(ASTNode *node) {
             op = "sle";
             break;
         case AST_GREATER:
-            // a > b is equivalent to b < a.
+            // a > b equivale a b < a.
             op = "slt";
             {
                 int tmp = rd_left;
@@ -507,7 +762,7 @@ static int emit_binary_expression(ASTNode *node) {
             break;
 
         case AST_GREATER_EQUAL:
-            // a >= b is equivalent to NOT(a < b).
+            // a >= b equivale a negar a < b.
             cg_op(SLOT_ALU0,
                   "slt %s, %s, %s",
                   reg_name(rd_left),
@@ -529,7 +784,7 @@ static int emit_binary_expression(ASTNode *node) {
             free_reg(rd_right);
             return -1;
     }
-    // left register for the result.
+    // Reutiliza el registro izquierdo como resultado.
     cg_op(SLOT_ALU0,
           "%s %s, %s, %s",
           op,
@@ -542,6 +797,18 @@ static int emit_binary_expression(ASTNode *node) {
     return rd_left;
 }
 
+/*
+ * emit_expression — evalúa una expresión del AST anotado.
+ *
+ * Entrada:
+ *   node  nodo de expresión validado semánticamente.
+ * Salida:
+ *   temporal ISA 4–15 reservado con el valor; -1 si falla.
+ *   Efectos: emite instrucciones, administra temporales y reporta errores.
+ * Restricciones:
+ *   el llamador libera el resultado; índices dinámicos deben estar dentro
+ *   del arreglo; AST_ARGUMENTS presente en accesos.
+ */
 static int emit_expression(ASTNode *node) {
     if (node == NULL) {
         report_error(NULL, "expresion nula");
@@ -727,9 +994,9 @@ static int emit_expression(ASTNode *node) {
                 return -1;
             }
 
-            // Evaluate the indices.
-            // For a 1D array: indices[0] = index.
-            // For a 2D array: indices[0] = row, indices[1] = column.
+            // Evalúa los índices.
+            // Arreglo 1D: indices[0] = índice.
+            // Arreglo 2D: indices[0] = fila, indices[1] = columna.
             int indices[MAX_DIMS] = {-1, -1};
             int count = 0;
 
@@ -767,7 +1034,7 @@ static int emit_expression(ASTNode *node) {
                 return -1;
             }
 
-            // Allocate the destination address and two work registers.
+            // Reserva dirección destino y dos registros auxiliares.
             int address = alloc_reg();
             int work[2] = {-1, -1};
             int value = -1;
@@ -818,8 +1085,8 @@ static int emit_expression(ASTNode *node) {
                 );
             }
 
-            // Release the index and address-calculation registers.
-            // The loaded value remains allocated for the caller.
+            // Libera registros de índices y del cálculo de dirección.
+            // El valor cargado conserva su reserva para el llamador.
             for (int i = 0; i < count; i++)
                 free_reg(indices[i]);
 
@@ -843,6 +1110,25 @@ static int emit_expression(ASTNode *node) {
     }
 }
 
+/* ==========================================================================
+ * FUNCIONES Y LLAMADAS
+ * ======================================================================= */
+
+
+/*
+ * emit_function_call — genera una llamada y preserva los temporales vivos.
+ *
+ * Entrada:
+ *   node  nodo AST_CALL de una función.
+ *   result_needed  1 si se necesita el resultado, 0 para sentencia.
+ * Salida:
+ *   registro reservado de retorno si se pidió; 0 si se descarta; -1 si falla.
+ *   Efectos: emite argumentos, pila de rx, jas y restauración de rl y temporales.
+ * Restricciones:
+ *   análisis semántico exitoso y símbolos vivos; lee el retorno estático
+ *   antes de otra llamada; falla puede dejar emisión parcial.
+ * Referencia: libro §7.2; isa.md §6.2.
+ */
 static int emit_function_call(ASTNode *node, int result_needed) {
     if (node == NULL) {
         report_error(NULL, "llamada a funcion invalida");
@@ -850,8 +1136,8 @@ static int emit_function_call(ASTNode *node, int result_needed) {
     }
 
     // AST_CALL:
-    //   child 0: function identifier
-    //   child 1: AST_ARGUMENTS (optional)
+    //   hijo 0: identificador de función
+    //   hijo 1: AST_ARGUMENTS (opcional)
     ASTNode *function_id = child_at(node, 0);
     ASTNode *args_node = child_at(node, 1);
 
@@ -872,7 +1158,7 @@ static int emit_function_call(ASTNode *node, int result_needed) {
     Symbol *return_symbol = NULL;
 
     if (result_needed) {
-        // Locate the function's return variable.
+        // Localiza la variable de retorno de la función.
         if (callee->type == TYPE_VOID) {
             report_error(node,
                             "una funcion void no puede usarse como expresion");
@@ -895,7 +1181,7 @@ static int emit_function_call(ASTNode *node, int result_needed) {
         }
     }
 
-    // Unwrap the argument list.
+    // Obtiene la lista de argumentos del contenedor.
     ASTNode *arg = NULL;
 
     if (args_node != NULL) {
@@ -906,14 +1192,14 @@ static int emit_function_call(ASTNode *node, int result_needed) {
         }
     }
 
-    // Count arguments.
+    // Cuenta argumentos.
     int arg_count = 0;
 
     for (ASTNode *a = arg; a != NULL; a = a->next) {
         arg_count++;
     }
 
-    // Validate the argument count and parameter list.
+    // Verifica cantidad de argumentos y lista de parámetros.
     if (arg_count != callee->parameter_count) {
         report_error(node,
                      "cantidad incorrecta de argumentos");
@@ -938,9 +1224,9 @@ static int emit_function_call(ASTNode *node, int result_needed) {
         }
     }
 
-    // Save all currently live temporaries.
-    // The callee can overwrite t0-t11, so values already being
-    // used by the caller must be preserved across the call.
+    // Guarda todos los temporales vivos actuales.
+    // La función llamada puede sobrescribir t0–t11; los valores que usa
+    // el llamador se deben conservar a través de la llamada.
     int saved_regs[TEMP_COUNT];
     int saved_count = 0;
 
@@ -953,9 +1239,9 @@ static int emit_function_call(ASTNode *node, int result_needed) {
         }
     }
 
-    // Evaluate arguments from left to right.
-    // Push each result to memory immediately. This preserves it
-    // across calls needed to evaluate subsequent arguments.
+    // Evalúa argumentos de izquierda a derecha.
+    // Apila cada resultado de inmediato para conservarlo
+    // durante las llamadas de los argumentos siguientes.
     //
     // Un argumento arreglo no se evalúa ni pasa por la pila: se pasa su
     // dirección (libro §1.6.6, paso por referencia) más abajo, al escribir
@@ -970,8 +1256,8 @@ static int emit_function_call(ASTNode *node, int result_needed) {
         int reg = emit_expression(a);
 
         if (reg < 0) {
-            // Generation has failed. The final assembly must not
-            // be used, but release the compiler's register state.
+            // La generación falló. Se debe descartar el ensamblador final
+            // y liberar las reservas de registros del compilador.
             for (int i = 0; i < saved_count; i++) {
                 free_reg(saved_regs[i]);
             }
@@ -983,9 +1269,9 @@ static int emit_function_call(ASTNode *node, int result_needed) {
         free_reg(reg);
     }
 
-    // Transfer arguments to the callee's statically allocated
-    // parameter locations.
-    // Pop in reverse order so the stack remains balanced.
+    // Transfiere argumentos a las casillas estáticas de parámetros
+    // de la función llamada.
+    // Desapila en orden inverso para mantener la pila equilibrada.
     for (int i = arg_count - 1; i >= 0; i--) {
         int reg = alloc_reg();
 
@@ -1057,30 +1343,30 @@ static int emit_function_call(ASTNode *node, int result_needed) {
         return -1;
     }
 
-    // The argument values have now been removed from the stack.
-    // Only the caller's saved temporaries remain.
-    // Save the old return link before jas overwrites rl.
+    // Los valores de argumentos ya salieron de la pila.
+    // Solo quedan los temporales vivos guardados del llamador.
+    // Guarda el enlace de retorno anterior antes de que jas escriba rl.
     emit_stack_push(1);  // rl
 
-    // Call the function.
-    // jas sets rl to the return address.
+    // Invoca la función.
+    // jas escribe la dirección de retorno en rl.
     cg_op(SLOT_BRU, "jas rl, %s", callee_label);
 
-    // The callee's E returns through the new rl.
-    // Restore the caller's previous rl after returning.
+    // El E de la función llamada vuelve mediante el nuevo rl.
+    // Restaura el rl anterior del llamador al volver.
     emit_stack_pop(1);
 
-    // Restore live caller temporaries in reverse order.
+    // Restaura los temporales vivos del llamador en orden inverso.
     for (int i = saved_count - 1; i >= 0; i--) {
         emit_stack_pop(saved_regs[i]);
     }
 
-    // If this call is used as a statement, discard the return value.
+    // Si la llamada es una sentencia, descarta el valor de retorno.
     if (!result_needed) {
         return 0;
     }
 
-    // Allocate a register for the result.
+    // Reserva un registro para el resultado.
     int result_reg = alloc_reg();
 
     if (result_reg < 0) {
@@ -1089,8 +1375,8 @@ static int emit_function_call(ASTNode *node, int result_needed) {
         return -1;
     }
 
-    // Load the return value immediately after the call.
-    // Another call could overwrite the function's static return variable.
+    // Lee el valor de retorno inmediatamente después de llamar.
+    // Otra llamada puede sobrescribir la variable estática de retorno.
     if (emit_load_symbol(result_reg, return_symbol, node) != 0) {
         free_reg(result_reg);
         return -1;
@@ -1099,6 +1385,26 @@ static int emit_function_call(ASTNode *node, int result_needed) {
     return result_reg;
 }
 
+/* ==========================================================================
+ * OPERACIONES DE CIFRADO
+ * ======================================================================= */
+
+
+/*
+ * emit_crypto_argument — evalúa un argumento preservando argumentos de cifrado previos.
+ *
+ * Entrada:
+ *   user  contexto CGCryptoContext no NULL.
+ *   expr  expresión validada.
+ *   dst  destino ISA 4–15.
+ *   preserve_mask  bits ISA de argumentos que deben conservarse.
+ * Salida:
+ *   0 si evalúa; 1 si falla.
+ *   Efectos: emite guardado/restauración en temp_base y cambia temp_used.
+ * Restricciones:
+ *   casillas usadas por live_mask no se reutilizan; requiere área válida
+ *   para preserve_mask no vacío.
+ */
 static int emit_crypto_argument(void *user, ASTNode *expr, int dst,
                                 unsigned preserve_mask) {
     CGCryptoContext *ctx = user;
@@ -1138,6 +1444,17 @@ static int emit_crypto_argument(void *user, ASTNode *expr, int dst,
     return 0;
 }
 
+/*
+ * emit_crypto_statement — expande una sentencia de cifrado con sus valores vivos.
+ *
+ * Entrada:
+ *   node  nodo AST_CRYPTO validado.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: configura crypto_context, emite expansión y reporta errores; restaura temp_used.
+ * Restricciones:
+ *   se descarta toda la generación si la expansión falla.
+ */
 static void emit_crypto_statement(ASTNode *node) {
     int used[TEMP_COUNT];
     memcpy(used, temp_used, sizeof(used));
@@ -1150,13 +1467,42 @@ static void emit_crypto_statement(ASTNode *node) {
     memcpy(temp_used, used, sizeof(used));
 }
 
+/* ==========================================================================
+ * CONSTANTES E INICIALIZACIÓN
+ * ======================================================================= */
+
+
+/*
+ * declaration_initializer — localiza el inicializador de una declaración.
+ *
+ * Entrada:
+ *   node  nodo AST_DECLARATION.
+ * Salida:
+ *   nodo prestado de inicializador o NULL.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static ASTNode *declaration_initializer(ASTNode *node) {
     ASTNode *type = find_child(node, AST_TYPE);
     ASTNode *init = type ? type->next : NULL;
     return init && init->kind == AST_DIMENSIONS ? init->next : init;
 }
 
-/* Constantes globales en la imagen; las expresiones dinámicas se emiten en main. */
+/*
+ * constant_value — evalúa una constante para la imagen de datos.
+ *
+ * Entrada:
+ *   node  expresión o NULL.
+ *   out  puntero no NULL para la palabra.
+ *   depth  profundidad de evaluación, inicialmente 0.
+ * Salida:
+ *   1 si conoce el valor; 0 si no puede evaluarlo.
+ *   Efectos: escribe *out al obtener un valor.
+ * Restricciones:
+ *   profundidad máxima 64; solo sigue identificadores Vi con decl_node; no
+ *   evalúa llamadas.
+ */
 static int constant_value(ASTNode *node, uint32_t *out, int depth) {
     if (!node || depth > 64) return 0;
     uint32_t a, b;
@@ -1199,6 +1545,22 @@ static int constant_value(ASTNode *node, uint32_t *out, int depth) {
     return 1;
 }
 
+/*
+ * initialize_cells — inicializa casillas escalares o una lista por filas.
+ *
+ * Entrada:
+ *   init  inicializador o NULL para cero.
+ *   symbol  símbolo con dirección.
+ *   offset  desplazamiento en bytes no NULL.
+ *   image  1 para imagen estática, 0 para instrucciones.
+ *   dynamic_only  1 para emitir solo valores no constantes.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: avanza *offset de cuatro en cuatro; escribe imagen o emite sw; reporta errores.
+ * Restricciones:
+ *   forma y tipo de la lista ya verificados; no comprueba aquí el ancho
+ *   del símbolo.
+ */
 static void initialize_cells(ASTNode *init, Symbol *symbol, int *offset,
                              int image, int dynamic_only) {
     if (init && init->kind == AST_INITIALIZER_LIST) {
@@ -1222,6 +1584,19 @@ static void initialize_cells(ASTNode *init, Symbol *symbol, int *offset,
     }
 }
 
+/*
+ * initialize_declaration — inicializa todas las casillas de una declaración.
+ *
+ * Entrada:
+ *   node  nodo AST_DECLARATION.
+ *   image  1 para imagen estática, 0 para instrucciones.
+ *   dynamic_only  1 para emitir solo valores dinámicos.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe imagen o emite instrucciones; rellena casillas restantes con cero.
+ * Restricciones:
+ *   símbolo y ancho asignados por el semántico.
+ */
 static void initialize_declaration(ASTNode *node, int image, int dynamic_only) {
     Symbol *symbol = get_symbol(find_child(node, AST_IDENTIFIER));
     if (!symbol || symbol->address < 0) { report_error(node, "declaracion sin direccion"); return; }
@@ -1232,8 +1607,26 @@ static void initialize_declaration(ASTNode *node, int image, int dynamic_only) {
         initialize_cells(NULL, symbol, &offset, image, dynamic_only);
 }
 
-// Copia en buffer la etiqueta de la tabla para ese nodo y rol. Si no está,
-// reporta un error interno (no se inventa una) y devuelve 0.
+/* ==========================================================================
+ * ETIQUETAS, BLOQUES Y ASIGNACIONES
+ * ======================================================================= */
+
+
+/*
+ * node_label — copia una etiqueta de control de la tabla.
+ *
+ * Entrada:
+ *   buffer  buffer escribible.
+ *   size  capacidad del buffer en bytes.
+ *   node  nodo del AST o NULL para etiquetas globales.
+ *   role  rol de la etiqueta.
+ *   what  descripción no NULL para el diagnóstico.
+ * Salida:
+ *   1 si copia; 0 si falta o no cabe.
+ *   Efectos: escribe buffer o reporta error.
+ * Restricciones:
+ *   tabla de Fase 3 vigente; no crea etiquetas nuevas.
+ */
 static int node_label(char *buffer, size_t size, ASTNode *node,
                       LabelRole role, const char *what) {
     const char *name = label_table_get(label_table, node, role);
@@ -1256,6 +1649,17 @@ static int node_label(char *buffer, size_t size, ASTNode *node,
 
 static void emit_statement(ASTNode *node);
 
+/*
+ * emit_block — genera las sentencias de un bloque en orden.
+ *
+ * Entrada:
+ *   block  nodo AST_BLOCK o NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: emite las sentencias y sus diagnósticos.
+ * Restricciones:
+ *   contexto de función configurado; NULL representa bloque ausente.
+ */
 static void emit_block(ASTNode *block) {
     if (block == NULL)
         return;
@@ -1268,6 +1672,18 @@ static void emit_block(ASTNode *block) {
     }
 }
 
+/*
+ * emit_assignment — genera asignación escalar, de elemento o de arreglo completo.
+ *
+ * Entrada:
+ *   node  nodo AST_ASSIGNMENT validado.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: emite escrituras/copia, administra temporales y reporta errores.
+ * Restricciones:
+ *   destino mutable; arreglos completos de igual forma; índices dinámicos
+ *   válidos.
+ */
 static void emit_assignment(ASTNode *node) {
     ASTNode *target = child_at(node, 0);
     ASTNode *value = child_at(node, 1);
@@ -1307,14 +1723,14 @@ static void emit_assignment(ASTNode *node) {
         return;
     }
 
-    // Evaluate the right-hand side first.
-    // Keep its value in a register until the assignment is complete.
+    // Evalúa primero el lado derecho.
+    // Conserva su valor en un registro hasta completar la asignación.
     int rd = emit_expression(value);
 
     if (rd < 0)
         return;
 
-    // Scalar assignments.
+    // Asignaciones escalares.
     if (target->kind == AST_IDENTIFIER) {
         Symbol *symbol = get_symbol(target);
 
@@ -1333,7 +1749,7 @@ static void emit_assignment(ASTNode *node) {
         return;
     }
 
-    // Array assignment
+    // Asignación de elemento de arreglo.
     if (target->kind == AST_INDEX) {
         ASTNode *array_id = child_at(target, 0);
 
@@ -1359,10 +1775,10 @@ static void emit_assignment(ASTNode *node) {
             return;
         }
 
-        // Extract the index expressions.
-        // This assumes the AST_INDEX children are:
-        //   child 0: array identifier
-        //   child 1 onward: index expressions
+        // Extrae los índices del contenedor AST_ARGUMENTS.
+        // Los hijos de AST_INDEX son:
+        //   hijo 0: identificador del arreglo
+        //   hijo 1: AST_ARGUMENTS, con los índices en child/next
         int indices[MAX_DIMS] = {-1, -1};
         int count = 0;
 
@@ -1403,7 +1819,7 @@ static void emit_assignment(ASTNode *node) {
             return;
         }
 
-        // Allocate registers for the element address.
+        // Reserva registros para la dirección del elemento.
         int address = alloc_reg();
         int work[2] = {-1, -1};
 
@@ -1427,7 +1843,7 @@ static void emit_assignment(ASTNode *node) {
             return;
         }
 
-        // Calculate the element address and store the value.
+        // Calcula la dirección del elemento y guarda el valor.
         int ok = cg_array_address(
             &arithmetic_context,
             array,
@@ -1449,7 +1865,7 @@ static void emit_assignment(ASTNode *node) {
             );
         }
 
-        // Release temporary registers.
+        // Libera registros temporales.
         for (int i = 0; i < count; i++)
             free_reg(indices[i]);
 
@@ -1468,15 +1884,31 @@ static void emit_assignment(ASTNode *node) {
     free_reg(rd);
 }
 
+/* ==========================================================================
+ * CONTROL DE FLUJO
+ * ======================================================================= */
+
+
+/*
+ * emit_conditional — genera C, sus alternativas A y la rama residual.
+ *
+ * Entrada:
+ *   node  nodo AST_CONDITIONAL validado.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: emite condiciones, cuerpos, saltos y etiquetas; actualiza línea de emisión.
+ * Restricciones:
+ *   etiquetas LABEL_NEXT y LABEL_END registradas; condiciones bool.
+ */
 static void emit_conditional(ASTNode *node) {
     ASTNode *condition = NULL;
     ASTNode *body = NULL;
     ASTNode *alternatives = NULL;
     ASTNode *residual = NULL;
 
-    // Find the condition and body by kind-independent position.
-    // The constructors omit NULL children, so optional nodes
-    // must be identified by their kinds.
+    // Busca condición y cuerpo sin suponer posiciones fijas.
+    // Los constructores omiten hijos NULL: los opcionales se reconocen
+    // por su clase.
     for (ASTNode *c = node->child;
          c != NULL;
          c = c->next) {
@@ -1537,7 +1969,7 @@ static void emit_conditional(ASTNode *node) {
 
     cg_label(next_label);
 
-    // Each A [condition] alternative is checked in order.
+    // Verifica cada alternativa A [condición] en orden.
     if (alternatives != NULL) {
 
         for (ASTNode *alt = alternatives->child;
@@ -1588,7 +2020,7 @@ static void emit_conditional(ASTNode *node) {
         }
     }
 
-    // The residual branch executes if no preceding condition matched.
+    // La rama residual se ejecuta si ninguna condición anterior se cumplió.
     if (residual != NULL) {
         ASTNode *residual_body = child_at(residual, 0);
 
@@ -1599,6 +2031,17 @@ static void emit_conditional(ASTNode *node) {
     cg_label(end_label);
 }
 
+/*
+ * emit_loop_l — genera un ciclo por predicado L.
+ *
+ * Entrada:
+ *   node  nodo AST_LOOP_L validado.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: emite condición, cuerpo, salto de retorno y etiquetas.
+ * Restricciones:
+ *   condición bool y etiquetas START/END registradas.
+ */
 static void emit_loop_l(ASTNode *node) {
     ASTNode *condition = child_at(node, 0);
     ASTNode *body = child_at(node, 1);
@@ -1643,19 +2086,16 @@ static void emit_loop_l(ASTNode *node) {
 }
 
 /*
- * Ciclo S [ var , inicio , fin , paso ] (calser_diseno.md §5.8.2):
- *   - inicio y fin se evalúan una sola vez, al entrar;
- *   - fin es exclusivo;
- *   - paso es un literal distinto de cero (lo garantizan la gramática y el
- *     semántico): con paso positivo se sigue mientras var < fin, y con paso
- *     negativo mientras var > fin.
+ * emit_loop_s — genera un ciclo acotado S con límite exclusivo.
  *
- * Los valores viven en memoria entre sentencias y los registros solo se
- * usan dentro de cada una (libro §8.6): var está en su casilla, fin en la
- * casilla oculta que reservó el semántico (limit_address) y el paso va como
- * inmediato. Así ningún registro queda ocupado durante el cuerpo, y los S
- * anidados o las rutinas aritméticas dentro de un S tienen los 12
- * temporales disponibles.
+ * Entrada:
+ *   node  nodo AST_LOOP_S con cinco hijos.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: emite inicialización, prueba, cuerpo e incremento; administra temporales.
+ * Restricciones:
+ *   paso AST_NUMBER no cero; control int y limit_address asignados; inicio
+ *   y fin se evalúan una vez.
  */
 static void emit_loop_s(ASTNode *node) {
     ASTNode *id_node    = child_at(node, 0);
@@ -1810,8 +2250,21 @@ static void emit_loop_s(ASTNode *node) {
 
 static int inside_main;
  
-// `E` de main termina el programa (contrato §3):
-//   fin_main: { nopi | nopi | jef fin_main | nopi }
+/* ==========================================================================
+ * RETORNO Y REINICIO
+ * ======================================================================= */
+
+
+/*
+ * emit_end_of_main — define el destino terminal del programa.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: emite program_end_label y un bundle con salto a sí mismo.
+ * Restricciones:
+ *   etiqueta global consultada al iniciar; llamar una vez por programa.
+ */
 static void emit_end_of_main(void) {
     char jump[96];
 
@@ -1821,19 +2274,43 @@ static void emit_end_of_main(void) {
     cg_bundle(NULL, NULL, jump, NULL);
 }
 
+/*
+ * emit_return — genera la transferencia de control de E.
+ *
+ * Entrada:
+ *   node  nodo E, no utilizado.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: emite jef a fin_main o jefR rz, rl.
+ * Restricciones:
+ *   inside_main refleja la función actual; rl contiene el enlace de
+ *   retorno fuera de main.
+ */
 static void emit_return(ASTNode *node) {
     (void)node;
 
     if (inside_main) {
         cg_op(SLOT_BRU, "jef %s", program_end_label);
     } else {
-        // jefR rz, rl:
-        // jump to the address in rl without replacing rl.
-        // Verify the return-link convention against isa.md.
+        // jefR rz, rl salta a la dirección de rl. El nuevo enlace se escribe
+        // en rz y se descarta (isa.md §6.2 y §8).
         cg_op(SLOT_BRU, "jefR rz, rl");
     }
 }
 
+/*
+ * emit_rewind — reinicia el cuerpo de la función actual con nuevos parámetros.
+ *
+ * Entrada:
+ *   node  nodo AST_REWIND validado.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: evalúa argumentos antes de escribir parámetros; emite salto a LABEL_BODY.
+ * Restricciones:
+ *   hasta 12 argumentos, con suficientes temporales para evaluarlos; R no
+ *   crea otro enlace rl; (por confirmar) paso de arreglos en R: no usa
+ *   cg_array_pass.
+ */
 static void emit_rewind(ASTNode *node) {
     if (node == NULL) {
         report_error(NULL, "sentencia R invalida");
@@ -1841,8 +2318,8 @@ static void emit_rewind(ASTNode *node) {
     }
 
     // AST_REWIND:
-    //   child 0: AST_IDENTIFIER (function name)
-    //   child 1: AST_ARGUMENTS (optional)
+    //   hijo 0: AST_IDENTIFIER (nombre de función)
+    //   hijo 1: AST_ARGUMENTS (opcional)
     ASTNode *target_id = child_at(node, 0);
     ASTNode *args_node = child_at(node, 1);
 
@@ -1852,7 +2329,7 @@ static void emit_rewind(ASTNode *node) {
         return;
     }
 
-    // R is restricted to the current function.
+    // R se restringe a la función actual.
     if (current_function_name == NULL ||
         strcmp(target_id->text, current_function_name) != 0) {
 
@@ -1867,10 +2344,10 @@ static void emit_rewind(ASTNode *node) {
         return;
     }
 
-    // Obtain the argument list.
-    // The AST_ARGUMENTS node contains the expressions as a
-    // linked list through child/next.
-    // If the function has no arguments, args_node may be NULL.
+    // Obtiene la lista de argumentos.
+    // AST_ARGUMENTS contiene las expresiones en una
+    // lista enlazada mediante child/next.
+    // Sin argumentos, args_node puede ser NULL.
     ASTNode *arg = NULL;
 
     if (args_node != NULL) {
@@ -1881,14 +2358,14 @@ static void emit_rewind(ASTNode *node) {
         }
     }
 
-    // Count arguments.
+    // Cuenta argumentos.
     int arg_count = 0;
 
     for (ASTNode *a = arg; a != NULL; a = a->next) {
         arg_count++;
     }
 
-    // Validate the number of arguments.
+    // Verifica la cantidad de argumentos.
     int param_count = current_function_symbol->parameter_count;
 
     if (arg_count != param_count) {
@@ -1897,17 +2374,17 @@ static void emit_rewind(ASTNode *node) {
         return;
     }
 
-    // Every argument must keep its value until all arguments have been evaluated.
-    // This implementation supports up to TEMP_COUNT arguments.
+    // Cada argumento conserva su valor hasta evaluar todos los argumentos.
+    // Esta implementación admite hasta TEMP_COUNT argumentos.
     if (arg_count > TEMP_COUNT) {
         report_error(node,
                      "demasiados argumentos para R");
         return;
     }
 
-    // Validate the parameter list before emitting any stores.
-    // This prevents discovering a missing parameter halfway
-    // through updating the function's parameters.
+    // Verifica la lista de parámetros antes de emitir escrituras.
+    // Evita encontrar un parámetro ausente después de empezar
+    // a actualizar los parámetros de la función.
     if (param_count > 0 &&
         current_function_symbol->param_list == NULL) {
 
@@ -1932,8 +2409,8 @@ static void emit_rewind(ASTNode *node) {
         }
     }
 
-    // Evaluate every argument.
-    // Do not update parameters yet.
+    // Evalúa todos los argumentos.
+    // Todavía no actualiza parámetros.
     int arg_regs[TEMP_COUNT];
     int evaluated = 0;
 
@@ -1941,7 +2418,7 @@ static void emit_rewind(ASTNode *node) {
         int reg = emit_expression(a);
 
         if (reg < 0) {
-            // Release the registers allocated for earlier arguments.
+            // Libera los registros reservados para argumentos anteriores.
             for (int i = 0; i < evaluated; i++) {
                 free_reg(arg_regs[i]);
             }
@@ -1952,8 +2429,8 @@ static void emit_rewind(ASTNode *node) {
         arg_regs[evaluated++] = reg;
     }
 
-    // Write the new values to the parameter addresses.
-    // Arguments and parameters correspond by declaration order.
+    // Escribe los valores nuevos en las direcciones de parámetros.
+    // Argumentos y parámetros se corresponden por orden de declaración.
     for (int i = 0; i < param_count; i++) {
         Symbol *param = current_function_symbol->param_list[i];
 
@@ -1966,14 +2443,14 @@ static void emit_rewind(ASTNode *node) {
         }
     }
 
-    // Release the temporary registers.
+    // Libera los registros temporales.
     for (int i = 0; i < evaluated; i++) {
         free_reg(arg_regs[i]);
     }
 
-    // Restart the current function body.
-    // Do not modify rl: R is a restart/tail-call operation,
-    // not a new function call.
+    // Reinicia el cuerpo de la función actual.
+    // Conserva rl: R reinicia el cuerpo de la función,
+    // sin crear otro enlace de llamada.
     char body_label[128];
 
     if (!node_label(body_label, sizeof(body_label),
@@ -1984,6 +2461,22 @@ static void emit_rewind(ASTNode *node) {
     cg_op(SLOT_BRU, "jef %s", body_label);
 }
 
+/* ==========================================================================
+ * SENTENCIAS, FUNCIONES Y PROGRAMA
+ * ======================================================================= */
+
+
+/*
+ * emit_statement — despacha una sentencia por su clase.
+ *
+ * Entrada:
+ *   node  nodo de sentencia o NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: actualiza línea de emisión; emite código y reporta clases no soportadas.
+ * Restricciones:
+ *   contexto de función configurado y análisis semántico exitoso.
+ */
 static void emit_statement(ASTNode *node) {
     if (node == NULL)
         return;
@@ -2048,6 +2541,18 @@ static void emit_statement(ASTNode *node) {
     }
 }
 
+/*
+ * emit_function — genera prólogo, cuerpo y transferencia final.
+ *
+ * Entrada:
+ *   function  nodo AST_FUNCTION validado.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: configura función actual, emite etiquetas/cuerpo y luego limpia el contexto.
+ * Restricciones:
+ *   tabla de etiquetas y símbolos vivos; R salta después de inicializar el
+ *   retorno.
+ */
 static void emit_function(ASTNode *function) {
     ASTNode *id_node = find_child(function, AST_IDENTIFIER);
     const char *name = id_node ? id_node->text : NULL;
@@ -2126,6 +2631,7 @@ static void emit_function(ASTNode *function) {
     current_function_symbol = NULL;
 }
  
+/* generate_code — véase el contrato en generate.h. */
 int generate_code(ASTNode *root, const LabelTable *labels) {
     if (root == NULL || root->kind != AST_PROGRAM)
         return 1;

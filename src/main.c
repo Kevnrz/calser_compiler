@@ -1,3 +1,14 @@
+/*
+ * main.c — Fases 1–5: coordinación del compilador y sus salidas.
+ *
+ * Interpreta banderas y encadena análisis, tablas, generación y ensamblado.
+ * Permite ensamblar directamente con -x y exportar el AST como JSON.
+ *
+ * Usa: lexer/parser, semantic, diagnostics, label_table, generate, codegen y assembler.
+ * Lo usa: línea de comandos ccom y scripts de pruebas/herramientas.
+ * Referencias: enunciado §2.3–§2.5, §5.1; fase4_contrato_comun.md §5.
+ */
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -53,9 +64,22 @@ typedef struct {
 
 #define USAGE "uso: ccom [-v] [-t] [-m] [-s] [-p] [-x] [--ast-json <json>] [--no-schedule] <archivo> [-o <salida>]"
 
-// Nombre por defecto del binario: el fuente sin extensión + ".bin". La
-// extensión es lo que sigue al último '.' del nombre del archivo (no de los
-// directorios). Devuelve memoria dinámica.
+/* ==========================================================================
+ * NOMBRES Y ARCHIVOS DE SALIDA
+ * ======================================================================= */
+
+
+/*
+ * default_output — construye el nombre binario por defecto.
+ *
+ * Entrada:
+ *   input  ruta de entrada no NULL.
+ * Salida:
+ *   cadena nueva con .bin; NULL sin memoria.
+ *   Efectos: reserva cadena; el llamador la libera.
+ * Restricciones:
+ *   solo reemplaza extensión del nombre, no de directorios.
+ */
 static char *default_output(const char *input) {
     const char *slash = strrchr(input, '/');
     const char *base = slash ? slash + 1 : input;
@@ -76,6 +100,18 @@ static char *default_output(const char *input) {
     return output;
 }
 
+/*
+ * with_extension — construye una salida con otra extensión.
+ *
+ * Entrada:
+ *   output  ruta base no NULL.
+ *   extension  extensión no NULL, incluido el punto.
+ * Salida:
+ *   cadena nueva o NULL sin memoria.
+ *   Efectos: reserva cadena; el llamador la libera.
+ * Restricciones:
+ *   ninguna.
+ */
 static char *with_extension(const char *output, const char *extension) {
     const char *slash = strrchr(output, '/');
     const char *base = slash ? slash + 1 : output;
@@ -96,13 +132,38 @@ static char *with_extension(const char *output, const char *extension) {
     return path;
 }
 
-// -v: una línea por fase en stderr.
+/*
+ * report_phase — informa el resultado de una fase con -v.
+ *
+ * Entrada:
+ *   options  opciones no NULL.
+ *   phase  nombre de fase.
+ *   ok  valor no cero si tuvo éxito.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe en stderr cuando verbose está activo.
+ * Restricciones:
+ *   ninguna.
+ */
 static void report_phase(const Options *options, const char *phase, int ok) {
     if (options->verbose)
         fprintf(stderr, "ccom: %s ... %s\n", phase, ok ? "ok" : "con errores");
 }
 
-// Abre <nombre base de -o><extension> para escribir; reporta si no puede.
+/*
+ * open_output — abre un archivo con el nombre base de -o.
+ *
+ * Entrada:
+ *   options  opciones con output.
+ *   extension  extensión con punto.
+ *   mode  modo para fopen.
+ *   path  puntero escribible para ruta.
+ * Salida:
+ *   flujo abierto o NULL si falla.
+ *   Efectos: reserva *path, abre/trunca archivo y reporta errores.
+ * Restricciones:
+ *   liberar *path aun si fopen falla; usar close_output.
+ */
 static FILE *open_output(const Options *options, const char *extension,
                          const char *mode, char **path) {
     *path = with_extension(options->output, extension);
@@ -120,7 +181,18 @@ static FILE *open_output(const Options *options, const char *extension,
     return out;
 }
 
-// Cierra un archivo de salida y libera su nombre. Devuelve 1 si falló.
+/*
+ * close_output — cierra una salida y libera su ruta.
+ *
+ * Entrada:
+ *   out  flujo abierto o NULL.
+ *   path  ruta dinámica o NULL.
+ * Salida:
+ *   0 si cierra sin error; 1 si falla o no hay flujo.
+ *   Efectos: cierra out, reporta fallo y libera path.
+ * Restricciones:
+ *   ninguna.
+ */
 static int close_output(FILE *out, char *path) {
     int failed = 1;
 
@@ -139,7 +211,18 @@ static int close_output(FILE *out, char *path) {
     return failed;
 }
 
-// Palabra de 32 bits little endian.
+/*
+ * write_word — escribe una palabra little endian.
+ *
+ * Entrada:
+ *   out  flujo no NULL.
+ *   word  palabra de 32 bits.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe cuatro bytes.
+ * Restricciones:
+ *   errores del flujo se comprueban al cerrar.
+ */
 static void write_word(FILE *out, uint32_t word) {
     unsigned char bytes[4] = {
         (unsigned char) (word & 0xFF),
@@ -151,9 +234,25 @@ static void write_word(FILE *out, uint32_t word) {
     fwrite(bytes, 1, sizeof(bytes), out);
 }
 
-/* Archivos de salida (fase4_contrato_comun.md §5). data son las palabras de
- * la imagen de datos desde la dirección 0 y data_size sus bytes.
- * Devuelve 1 si alguno no se pudo escribir. */
+/* ==========================================================================
+ * ENSAMBLADO Y SALIDAS
+ * ======================================================================= */
+
+
+/*
+ * write_outputs — escribe las imágenes binaria, hexadecimal y de datos.
+ *
+ * Entrada:
+ *   options  opciones con ruta output.
+ *   program  programa ensamblado.
+ *   data  palabras de imagen o NULL si vacía.
+ *   data_size  cantidad de bytes de datos.
+ * Salida:
+ *   0 si escribe todo; 1 si alguna salida falla.
+ *   Efectos: crea/trunca .bin, .hex y .mem; reporta errores.
+ * Restricciones:
+ *   data_size múltiplo de cuatro; data contiene data_size/4 palabras.
+ */
 static int write_outputs(const Options *options, const AsmProgram *program,
                          const uint32_t *data, int data_size) {
     int failed = 0;
@@ -213,9 +312,22 @@ static int write_outputs(const Options *options, const AsmProgram *program,
     return failed;
 }
 
-/* Ensambla las líneas (isa.md §11), imprime los bundles con -p y escribe
- * los archivos de salida. name es el nombre para los errores de ensamblado.
- * Devuelve el código de salida. */
+/*
+ * assemble_and_write — ensambla líneas y escribe las salidas seleccionadas.
+ *
+ * Entrada:
+ *   options  opciones.
+ *   lines  arreglo de líneas.
+ *   nlines  cantidad de líneas.
+ *   name  nombre de entrada para diagnóstico.
+ *   data  imagen de datos o NULL si vacía.
+ *   data_size  tamaño de datos en bytes.
+ * Salida:
+ *   0 si ensambla y escribe; 1 si falla.
+ *   Efectos: ensambla, muestra bundles con -p, escribe archivos y libera AsmProgram.
+ * Restricciones:
+ *   datos cumplen write_outputs; líneas cumplen asm_assemble.
+ */
 static int assemble_and_write(const Options *options,
                               const char *const *lines, int nlines,
                               const char *name,
@@ -249,9 +361,17 @@ static int assemble_and_write(const Options *options,
     return failed ? 1 : 0;
 }
 
-/* -x: ensambla options->input (un .asm) sin compilar Calser. No hay imagen
- * de datos: el tamaño es 0 y el .mem queda solo con @0.
- * Devuelve el código de salida. */
+/*
+ * assemble_file — procesa una entrada ensamblador con -x.
+ *
+ * Entrada:
+ *   options  opciones con input/output.
+ * Salida:
+ *   0 si ensambla y escribe; 1 si falla.
+ *   Efectos: lee .asm, escribe salidas y reporta errores.
+ * Restricciones:
+ *   sin imagen de datos: .mem contiene solo @0.
+ */
 static int assemble_file(const Options *options) {
     FILE *in = fopen(options->input, "r");
 
@@ -315,7 +435,23 @@ static int assemble_file(const Options *options) {
     return code;
 }
 
-// Compila options->input. Devuelve el código de salida.
+/* ==========================================================================
+ * FASES 1–4 Y RESOLUCIÓN DE ETIQUETAS
+ * ======================================================================= */
+
+
+/*
+ * compile — coordina las fases de compilación y las salidas.
+ *
+ * Entrada:
+ *   options  opciones con rutas y banderas.
+ * Salida:
+ *   0 si completa; 1 si falla alguna fase o salida.
+ *   Efectos: lee fuente, crea/libera AST/tablas/IR; escribe archivos y diagnósticos.
+ * Restricciones:
+ *   --ast-json solo puede terminar antes del semántico; símbolos deben
+ *   vivir hasta terminar generación.
+ */
 static int compile(const Options *options) {
     yyin = fopen(options->input, "r");
 
@@ -570,6 +706,23 @@ static int compile(const Options *options) {
     return output_failed ? 1 : 0;
 }
 
+/* ==========================================================================
+ * BANDERAS Y PUNTO DE ENTRADA
+ * ======================================================================= */
+
+
+/*
+ * main — interpreta banderas y ejecuta compilación o ensamblado.
+ *
+ * Entrada:
+ *   argc  cantidad de argumentos.
+ *   argv  arreglo de argumentos del proceso.
+ * Salida:
+ *   0 si completa; 1 si falla; 2 por uso incorrecto.
+ *   Efectos: getopt_long puede reordenar argv; lee/escribe archivos y mensajes.
+ * Restricciones:
+ *   exactamente una entrada; -s se ignora con -x.
+ */
 int main(int argc, char **argv) {
     Options options = { 0 };
     int option;

@@ -1,19 +1,75 @@
+/*
+ * codegen_verify.c — Fase 4: verificación independiente del calendario.
+ *
+ * Reconstruye posiciones sin consultar el grafo del organizador. Comprueba
+ * slots, destinos, dependencias de registros, memoria y control.
+ *
+ * Usa: codegen_schedule.h.
+ * Lo usa: codegen_schedule.c y pruebas de bundles.
+ * Referencias: isa.md §3, §9.
+ */
+
 #include "codegen_schedule.h"
 
-/* Este verificador no consulta las aristas ni los tiempos internos del
- * organizador: reconstruye posiciones desde el calendario que va a emitirse. */
+/* ==========================================================================
+ * PROBLEMAS Y BÚSQUEDA DE OPERACIONES
+ * ======================================================================= */
+
+
+/*
+ * fail — registra el primer problema del calendario.
+ *
+ * Entrada:
+ *   out  salida opcional.
+ *   kind  clase del problema.
+ *   operation  índice de operación o -1.
+ *   related  índice relacionado o -1.
+ *   bundle  índice de bundle o -1.
+ *   slot  slot o -1.
+ *   registers  máscara de registros afectados.
+ * Salida:
+ *   1 para indicar fallo.
+ *   Efectos: escribe *out si no es NULL.
+ * Restricciones:
+ *   ninguna.
+ */
 static int fail(CGScheduleIssue *out, CGVerifyKind kind, int operation,
                  int related, int bundle, int slot, uint16_t registers) {
     if (out) *out = (CGScheduleIssue) {kind, operation, related, bundle, slot, registers};
     return 1;
 }
+/*
+ * index_of — busca una operación por identidad de puntero.
+ *
+ * Entrada:
+ *   ops  arreglo de count operaciones.
+ *   count  cantidad no negativa.
+ *   op  operación buscada.
+ * Salida:
+ *   índice desde 0 o -1.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static int index_of(const CGInstruction *const *ops, int count, const CGInstruction *op) {
     for (int i = 0; i < count; i++) if (ops[i] == op) return i;
     return -1;
 }
+/*
+ * memory — consulta efectos de memoria de una operación.
+ *
+ * Entrada:
+ *   op  operación no NULL.
+ * Salida:
+ *   1 si lee/escribe memoria; 0 en otro caso.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static int memory(const CGInstruction *op) {
     return (op->effects & (CG_EFFECT_MEMORY_READ | CG_EFFECT_MEMORY_WRITE)) != 0;
 }
+/* cg_verify_kind_name — véase el contrato en codegen_schedule.h. */
 const char *cg_verify_kind_name(CGVerifyKind kind) {
     switch (kind) {
         case CG_VERIFY_OK: return "valido";
@@ -31,6 +87,12 @@ const char *cg_verify_kind_name(CGVerifyKind kind) {
     }
     return "error desconocido";
 }
+/* ==========================================================================
+ * VERIFICACIÓN DEL CALENDARIO
+ * ======================================================================= */
+
+
+/* cg_verify_schedule — véase el contrato en codegen_schedule.h. */
 int cg_verify_schedule(const CGInstruction *const *ops, int count,
                         const CGScheduledBundle *bundles, int bundle_count,
                         uint16_t previous_writes, CGScheduleIssue *issue) {

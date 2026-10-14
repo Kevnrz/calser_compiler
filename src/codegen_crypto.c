@@ -1,3 +1,14 @@
+/*
+ * codegen_crypto.c — Fase 4: expansión de operaciones de cifrado.
+ *
+ * Preserva temporales vivos antes de evaluar argumentos. Emite plantillas
+ * de bundles fijos para bóveda, autenticación y cuatro rondas Feistel.
+ *
+ * Usa: codegen.h, AST anotado y evaluador del llamador.
+ * Lo usa: generate.c y pruebas/crypto.
+ * Referencias: isa.md §5.5, §6.4, §7, §9.3; docs/crypto_para_ccom.md.
+ */
+
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -8,11 +19,39 @@
 
 #define TEMP_MASK 0xFFF0u
 
+/* ==========================================================================
+ * VALIDACIÓN Y VALORES VIVOS
+ * ======================================================================= */
+
+
+/*
+ * selector — comprueba un selector literal de cifrado.
+ *
+ * Entrada:
+ *   node  nodo o NULL.
+ * Salida:
+ *   1 si AST_NUMBER entre 0 y 3; 0 en otro caso.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static int selector(const ASTNode *node) {
     return node != NULL && node->kind == AST_NUMBER &&
            node->number >= 0 && node->number <= 3;
 }
 
+/*
+ * valid_area — comprueba las casillas de temporales vivos.
+ *
+ * Entrada:
+ *   ctx  contexto no NULL.
+ * Salida:
+ *   1 si área válida o no hay vivos; 0 en otro caso.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   48 bytes alineados dentro del área y de CG_DATA_BYTES cuando live_mask
+ *   no es cero.
+ */
 static int valid_area(const CGCryptoContext *ctx) {
     if (ctx->live_mask == 0)
         return 1;
@@ -24,6 +63,17 @@ static int valid_area(const CGCryptoContext *ctx) {
     return (int64_t) f->temp_base + 48 <= end && end <= CG_DATA_BYTES;
 }
 
+/*
+ * save_live — guarda temporales vivos antes de evaluar argumentos.
+ *
+ * Entrada:
+ *   ctx  contexto validado.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: emite separación y sw en casillas de temp_base.
+ * Restricciones:
+ *   live_mask solo bits ISA 4–15; área comprobada.
+ */
 static void save_live(const CGCryptoContext *ctx) {
     if (ctx->live_mask == 0)
         return;
@@ -33,12 +83,37 @@ static void save_live(const CGCryptoContext *ctx) {
             cg_op(SLOT_LSU, "sw r%d, %d(rz)", r, ctx->function->temp_base + 4 * (r - 4));
 }
 
+/*
+ * restore_live — restaura temporales vivos después de la expansión.
+ *
+ * Entrada:
+ *   ctx  contexto validado.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: emite lw desde casillas de temp_base.
+ * Restricciones:
+ *   las casillas guardadas no fueron sobrescritas por el evaluador.
+ */
 static void restore_live(const CGCryptoContext *ctx) {
     for (int r = 4; r < 16; r++)
         if (ctx->live_mask & (1u << r))
             cg_op(SLOT_LSU, "lw r%d, %d(rz)", r, ctx->function->temp_base + 4 * (r - 4));
 }
 
+/*
+ * evaluate — evalúa un argumento y separa su resultado.
+ *
+ * Entrada:
+ *   ctx  contexto con eval.
+ *   node  expresión.
+ *   dst  destino ISA 4–15.
+ *   preserve_mask  máscara de registros a preservar.
+ * Salida:
+ *   0 si evalúa; 1 si callback falla.
+ *   Efectos: invoca eval y emite cg_gap al aceptar.
+ * Restricciones:
+ *   evaluador no pisa casillas de live_mask; preservar argumentos previos.
+ */
 static int evaluate(CGCryptoContext *ctx, ASTNode *node, int dst,
                     unsigned preserve_mask) {
     if (ctx->eval(ctx->user, node, dst, preserve_mask) != 0)
@@ -47,6 +122,26 @@ static int evaluate(CGCryptoContext *ctx, ASTNode *node, int dst,
     return 0;
 }
 
+/* ==========================================================================
+ * PLANTILLAS DE CIFRADO
+ * ======================================================================= */
+
+
+/*
+ * emit_loop — emite la plantilla de cuatro rondas Feistel por bloque.
+ *
+ * Entrada:
+ *   start  etiqueta de inicio.
+ *   end  etiqueta de fin.
+ *   key  selector de llave 0–3.
+ *   decrypt  1 para descifrar, 0 para cifrar.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: emite bundles fijos, separaciones y etiquetas.
+ * Restricciones:
+ *   t2/t3 contienen origen/destino, t5 cantidad; usa t0/t1/t4; bloques de
+ *   ocho bytes.
+ */
 static void emit_loop(const char *start, const char *end, int key, int decrypt) {
     char branch[128], round[128];
     int lo = decrypt ? 4 : 0;
@@ -87,6 +182,7 @@ static void emit_loop(const char *start, const char *end, int key, int decrypt) 
     cg_gap(); /* Separar t3 de la siguiente sentencia cuando el salto no se toma. */
 }
 
+/* cg_crypto — véase el contrato en codegen_crypto.h. */
 int cg_crypto(CGCryptoContext *ctx, ASTNode *node) {
     if (ctx == NULL || node == NULL || node->kind != AST_CRYPTO || node->text == NULL ||
         (ctx->live_mask & ~TEMP_MASK) != 0 || !valid_area(ctx))

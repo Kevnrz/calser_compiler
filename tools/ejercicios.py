@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""Genera los entregables de los tres ejercicios (enunciado CE1108 §10.4 y
-§10.5): para cada uno, el fuente, el ensamblador y el binario, la salida de
-la compilación, la traza de ejecución (§8.4) y el resumen de la ejecución
-contra los valores esperados; más la evidencia de `make check`.
+"""ejercicios.py — Herramienta de entrega: compilación y ejecución de ejercicios.
 
-Uso: `make ejercicios` (desde la raíz del repositorio).
+Genera fuentes, ensamblador, binarios, trazas y resultados esperados.
+Recoge make check; los entregables no incluyen fechas ni rutas absolutas.
 
-Es determinista: no escribe fechas ni rutas absolutas, así que correrlo dos
-veces seguidas no cambia ningún archivo. Termina con código 1 si algún valor
-esperado no se cumple. Sin dependencias externas.
+Usa: ccom, sim_asm.py, fuentes de pruebas y Make.
+Lo usa: make ejercicios.
+Referencias: enunciado §10.4, §10.5, §8.4.
 """
 from pathlib import Path
 import os
@@ -38,17 +36,41 @@ EXERCISES = [
      [('n1', 8), ('n2', 8)]),
 ]
 
-# Zona de los archivos de load_file (isa.md §7): el texto se carga en 0x1000.
+# Zona de los archivos de load_file: el texto se carga en 0x1000.
 DATA_ADDRESS = 0x1000
 DATA_SIZE = 1024
 
 
+# ===========================================================================
+# RUTAS Y PRESENTACIÓN
+# ===========================================================================
+
 def relative(path):
+    """relative — obtiene una ruta relativa al repositorio.
+
+    Entrada:
+        path  ruta Path dentro de ROOT.
+    Salida:
+        cadena POSIX relativa. Efectos: ninguno.
+    Restricciones:
+        path debe estar dentro de ROOT; de lo contrario ValueError.
+    """
     return path.relative_to(ROOT).as_posix()
 
 
 def hexdump(memory, address, count=64):
-    """Los bytes como hexadecimal y como texto (lo no imprimible, como '.')."""
+    """hexdump — representa bytes en hexadecimal y texto.
+
+    Entrada:
+        memory  secuencia de bytes.
+        address  dirección inicial.
+        count  cantidad de bytes solicitados, 64 por defecto.
+    Salida:
+        lista de líneas. Efectos: ninguno.
+    Restricciones:
+        lee en filas de 16 bytes; puede mostrar una fila completa más allá de
+        count si no es múltiplo de 16.
+    """
     rows = []
     for offset in range(0, count, 16):
         chunk = memory[address + offset:address + offset + 16]
@@ -58,9 +80,22 @@ def hexdump(memory, address, count=64):
     return rows
 
 
+# ===========================================================================
+# COMPILACIÓN Y EJECUCIÓN
+# ===========================================================================
+
 def compile_exercise(folder, name, source):
-    """Copia el fuente y lo compila con -v -m -s -p. Devuelve (código, líneas
-    de compilacion.txt)."""
+    """compile_exercise — copia y compila el fuente de un ejercicio.
+
+    Entrada:
+        folder  carpeta existente dentro de ROOT.
+        name  nombre base.
+        source  fuente relativo a ROOT.
+    Salida:
+        tupla (código de ccom, líneas de compilación). Efectos: copia .cls y ejecuta ccom, que escribe .asm/.bin/.hex/.mem.
+    Restricciones:
+        ccom compilado; paths válidos dentro de ROOT.
+    """
     cls = folder / (name + '.cls')
     shutil.copyfile(ROOT / source, cls)
     command = ['./ccom', '-v', '-m', '-s', '-p', relative(cls),
@@ -76,8 +111,18 @@ def compile_exercise(folder, name, source):
 
 
 def check_value(tracer, simulator, name, expected):
-    """Compara una variable con lo esperado. Devuelve (esperado, obtenido,
-    cumple), los dos primeros como texto (verdadero/falso en un bool)."""
+    """check_value — compara una variable de la traza con lo esperado.
+
+    Entrada:
+        tracer  Tracer con variables.
+        simulator  Simulator ya ejecutado.
+        name  nombre mostrado.
+        expected  entero o lista de enteros esperados.
+    Salida:
+        tupla (texto esperado, texto obtenido, coincide). Efectos: ninguno.
+    Restricciones:
+        bool esperado usa 0 o 1; busca por nombre mostrado.
+    """
     for variable, words in tracer.values(simulator):
         if variable['shown'] != name:
             continue
@@ -91,8 +136,18 @@ def check_value(tracer, simulator, name, expected):
 
 
 def run_exercise(folder, name, expected):
-    """Simula el .asm. Devuelve (simulador, tracer, líneas de ejecucion.txt,
-    cumple)."""
+    """run_exercise — simula y comprueba un ejercicio compilado.
+
+    Entrada:
+        folder  carpeta dentro de ROOT.
+        name  nombre base.
+        expected  lista de pares (variable, valor esperado).
+    Salida:
+        tupla (simulador, tracer, líneas de reporte, cumple). Efectos: lee .asm/.mem y datos.txt opcional; ejecuta simulador.
+    Restricciones:
+        datos.txt debe tener 1024 bytes; hasta MAX_BUNDLES; puede lanzar
+        errores de lectura/modelo.
+    """
     asm = folder / (name + '.asm')
     text = asm.read_text()
     program = sim_asm.parse(text)
@@ -151,8 +206,19 @@ def run_exercise(folder, name, expected):
     return simulator, tracer, lines, ok
 
 
+# ===========================================================================
+# EVIDENCIA Y ENTREGABLES
+# ===========================================================================
+
 def run_make_check():
-    """La evidencia de `make check` (enunciado CE1108 §10.5)."""
+    """run_make_check — recoge evidencia de make check.
+
+    Entrada: ninguna
+    Salida:
+        tupla (éxito, líneas de salida). Efectos: ejecuta make check con entorno sin banderas heredadas de Make.
+    Restricciones:
+        herramientas de compilación disponibles.
+    """
     environment = {key: value for key, value in os.environ.items()
                    if key not in ('MAKEFLAGS', 'MFLAGS', 'MAKELEVEL', 'MAKEOVERRIDES')}
     result = subprocess.run(['make', '-s', 'check'], cwd=ROOT, env=environment,
@@ -163,10 +229,28 @@ def run_make_check():
 
 
 def write(path, lines):
+    """write — escribe líneas de un entregable UTF-8.
+
+    Entrada:
+        path  ruta de salida.
+        lines  lista de líneas sin salto final.
+    Salida:
+        None. Efectos: escribe/trunca path.
+    Restricciones:
+        carpeta padre existente; errores de escritura se propagan.
+    """
     path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
 
 
 def main():
+    """main — genera entregables y evidencia de los tres ejercicios.
+
+    Entrada: ninguna
+    Salida:
+        0 si todas las comprobaciones cumplen; 1 si alguna falla. Efectos: crea carpetas/archivos de ejercicios y ejecuta make check; escribe mensajes.
+    Restricciones:
+        ccom debe existir; otras excepciones de lectura/modelo se propagan.
+    """
     if not CCOM.exists():
         raise SystemExit('falta compilar ccom (make)')
 

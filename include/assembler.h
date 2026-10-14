@@ -1,3 +1,14 @@
+/*
+ * assembler.h — Fase 5: interfaz de ensamblado de etiquetas y bundles en dos pasadas.
+ *
+ * Expone AsmProgram y ensamblado/liberación de líneas con cuatro slots.
+ * Los contratos indican entradas, resultados, efectos y límites de uso.
+ *
+ * Usa: tipos de la biblioteca C y declaraciones propias.
+ * Lo usa: assembler.c; main.c.
+ * Referencias: libro §1.1, §8.1.2; isa.md §3, §4, §6, §11.
+ */
+
 #ifndef ASSEMBLER_H
 #define ASSEMBLER_H
 
@@ -17,15 +28,39 @@ typedef struct {
     char **text;               /* [i]: el bundle normalizado, para -p       */
 } AsmProgram;
 
-/* Ensambla nlines líneas. name es el nombre para los mensajes de error (el
- * archivo .asm o "<generado>"); las líneas se numeran desde 1.
- * Devuelve 0 si no hubo errores y deja el programa en *out (liberar con
- * asm_free). Si hubo errores los reporta todos por stderr con el formato
- *   ccom: <nombre>:<linea>: error de ensamblado: <mensaje>
- * devuelve 1 y deja *out vacío. */
+/* ==========================================================================
+ * ENSAMBLADO Y LIBERACIÓN
+ * ======================================================================= */
+
+/*
+ * asm_assemble — ensambla un programa en dos pasadas.
+ *
+ * Entrada:
+ *   lines  arreglo de nlines cadenas no NULL.
+ *   nlines  cantidad de líneas no negativa.
+ *   name  nombre no NULL para diagnósticos.
+ *   out  programa de salida no NULL.
+ * Salida:
+ *   0 si ensambla; 1 si hubo errores.
+ *   Efectos: inicializa *out y reserva bundles/text; reporta errores en stderr.
+ * Restricciones:
+ *   liberar con asm_free; ante errores deja out vacío; falta de memoria
+ *   termina el proceso.
+ */
 int asm_assemble(const char *const *lines, int nlines, const char *name,
                  AsmProgram *out);
 
+/*
+ * asm_free — libera el programa ensamblado.
+ *
+ * Entrada:
+ *   program  programa inicializado o NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: libera palabras y textos; deja el programa vacío.
+ * Restricciones:
+ *   ninguna.
+ */
 void asm_free(AsmProgram *program);
 
 #endif

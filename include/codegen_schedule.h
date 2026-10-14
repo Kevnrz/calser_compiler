@@ -1,3 +1,14 @@
+/*
+ * codegen_schedule.h — Fase 4: interfaz de planificación de operaciones en bundles.
+ *
+ * Expone bundles planificados, problemas, organizador y verificador.
+ * Los contratos indican entradas, resultados, efectos y límites de uso.
+ *
+ * Usa: codegen.h.
+ * Lo usa: codegen_schedule.c; codegen.c, codegen_schedule.c, codegen_verify.c y pruebas/bundles.
+ * Referencias: isa.md §3, §9; docs/organizacion_bundles.md.
+ */
+
 #ifndef CODEGEN_SCHEDULE_H
 #define CODEGEN_SCHEDULE_H
 #include "codegen.h"
@@ -22,23 +33,59 @@ typedef struct {
     uint16_t registers;
 } CGScheduleIssue;
 
-/* Comprueba el calendario contra el orden y efectos originales del IR,
- * independientemente del grafo usado por el organizador. Solo regiones sin
- * etiquetas/plantillas/barreras. Distancia RAW=2, WAR/WAW/memoria=1.
- * 0 = válido; 1 = inválido, con detalle en issue si no es NULL. */
+/* ==========================================================================
+ * VERIFICACIÓN Y PLANIFICACIÓN
+ * ======================================================================= */
+
+/*
+ * cg_verify_schedule — verifica calendario contra orden y efectos originales.
+ *
+ * Entrada:
+ *   operations  operaciones originales.
+ *   count  cantidad 0–256.
+ *   bundles  bundles planificados.
+ *   bundle_count  cantidad hasta CG_SCHEDULE_MAX_BUNDLES.
+ *   previous_writes  escrituras del bundle anterior.
+ *   issue  detalle opcional del fallo.
+ * Salida:
+ *   0 si válido; 1 si falla.
+ *   Efectos: escribe issue si está presente.
+ * Restricciones:
+ *   sin barreras ni destinos relativos numéricos; RAW=2,
+ *   WAR/WAW/memoria=1; operación única y salto solo al final.
+ */
 int cg_verify_schedule(const CGInstruction *const *operations, int count,
                         const CGScheduledBundle *bundles, int bundle_count,
                         uint16_t previous_writes, CGScheduleIssue *issue);
+/*
+ * cg_verify_kind_name — nombra una clase de problema del calendario.
+ *
+ * Entrada:
+ *   kind  clase de verificación.
+ * Salida:
+ *   cadena literal; error desconocido si no reconoce kind.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 const char *cg_verify_kind_name(CGVerifyKind kind);
 
-/* Lista de operaciones de una región, sin etiquetas/plantillas/barreras.
- * Un salto solo puede aparecer al final. previous_writes son los registros
- * potencialmente escritos por el bundle físico inmediatamente anterior.
- * Callback sin propiedad: los punteros pertenecen a las operaciones de entrada.
- * Construye y verifica el calendario entero antes de emitir el primer bundle.
- * 0 = éxito, 1 = entrada/calendario inválido o memoria insuficiente.
- * No añade la separación de frontera:
- * el emisor del programa la mantiene al cerrar la región. */
+/*
+ * cg_schedule_block — planifica y verifica una región de operaciones.
+ *
+ * Entrada:
+ *   operations  arreglo de count instrucciones.
+ *   count  cantidad 0–256.
+ *   previous_writes  máscara de escrituras del bundle anterior.
+ *   emit  callback no NULL que recibe bundles.
+ *   user  dato opaco para callback.
+ * Salida:
+ *   0 si emite calendario válido; 1 por entrada, memoria o verificación inválida.
+ *   Efectos: reserva grafo/calendario, reporta fallos y llama emit después de verificar.
+ * Restricciones:
+ *   sin etiquetas, barreras ni destinos numéricos; salto solo al final; no
+ *   añade hueco de frontera.
+ */
 int cg_schedule_block(const CGInstruction *const *operations, int count,
                       uint16_t previous_writes, CGScheduleEmit emit, void *user);
 #endif

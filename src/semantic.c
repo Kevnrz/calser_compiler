@@ -1,3 +1,15 @@
+/*
+ * semantic.c — Fase 3: análisis de ámbitos, tipos y direcciones estáticas.
+ *
+ * Registra firmas antes de analizar cuerpos para admitir llamadas adelantadas.
+ * Anota los usos con símbolos, verifica tipos, constantes y ciclos de llamadas,
+ * y deja espacio mínimo para la pila de generación.
+ *
+ * Usa: AST, symbol_table.c y diagnostics.c.
+ * Lo usa: main.c; generate.c consulta semantic_data_end.
+ * Referencias: libro §1.6.3, §2.7, §6.3.4, §6.5, §7.1.1.
+ */
+
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,15 +23,30 @@
 static Scope *global_scope = NULL;
 static Scope *current_scope = NULL;
 
-//List of all scopes.
+//Lista de todos los ámbitos.
 static Scope *scope_list_head = NULL;
 static Scope *scope_list_tail = NULL;
 
 // Función que se está analizando; NULL fuera de las funciones (globales).
 static Symbol *current_function = NULL;
 
-// Scope management
+/* ==========================================================================
+ * ÁMBITOS
+ * ======================================================================= */
 
+
+/*
+ * create_scope — crea y abre un ámbito anidado.
+ *
+ * Entrada:
+ *   kind  clase de ámbito.
+ *   line  línea de apertura.
+ * Salida:
+ *   ámbito creado; NULL si scope_create devolviera NULL.
+ *   Efectos: actualiza current_scope y la lista de ámbitos; enlaza la función dueña.
+ * Restricciones:
+ *   ninguna.
+ */
 static Scope *create_scope(ScopeKind kind, int line) {
     Scope *scope = scope_create(current_scope, kind);
 
@@ -30,7 +57,7 @@ static Scope *create_scope(ScopeKind kind, int line) {
     scope->line = line;
     scope->owner = current_function;
 
-    // Add scope to the list of all scopes.
+    // Agrega el ámbito a la lista de ámbitos.
     if (scope_list_head == NULL) {
         scope_list_head = scope;
         scope_list_tail = scope;
@@ -45,6 +72,16 @@ static Scope *create_scope(ScopeKind kind, int line) {
     return scope;
 }
 
+/*
+ * enter_global_scope — crea el ámbito global del análisis.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: reinicia punteros de ámbitos y reserva el ámbito global.
+ * Restricciones:
+ *   liberar un análisis anterior con semantic_free antes de comenzar otro.
+ */
 static void enter_global_scope(void) {
     current_scope = NULL;
 
@@ -61,17 +98,53 @@ static void enter_global_scope(void) {
     current_scope = global_scope;
 }
 
+/*
+ * enter_scope — abre un ámbito del tipo indicado.
+ *
+ * Entrada:
+ *   kind  clase de ámbito.
+ *   line  línea de apertura.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: crea un ámbito y actualiza current_scope y la lista.
+ * Restricciones:
+ *   ninguna.
+ */
 static void enter_scope(ScopeKind kind, int line) {
     create_scope(kind, line);
 }
 
+/*
+ * exit_scope — regresa al ámbito padre.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: actualiza current_scope; conserva el ámbito cerrado en la lista.
+ * Restricciones:
+ *   ninguna.
+ */
 static void exit_scope(void) {
     if (current_scope != NULL)
         current_scope = current_scope->parent;
 }
 
-// Type conversion
+/* ==========================================================================
+ * TIPOS DECLARADOS Y CONSULTAS DEL AST
+ * ======================================================================= */
 
+
+/*
+ * get_type — convierte un nodo de tipo en tipo de símbolo.
+ *
+ * Entrada:
+ *   node  nodo AST_TYPE o NULL.
+ * Salida:
+ *   TYPE_INT, TYPE_BOOL o TYPE_VOID; usa VOID ante ausencia o texto desconocido.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static SymbolType get_type(ASTNode *node) {
     if (node == NULL)
         return TYPE_VOID;
@@ -95,8 +168,17 @@ static SymbolType get_type(ASTNode *node) {
 }
 
 
-// Modifier conversion
-
+/*
+ * get_modifier — convierte un modificador del AST.
+ *
+ * Entrada:
+ *   node  nodo AST_MODIFIER o NULL.
+ * Salida:
+ *   MODIFIER_VM, MODIFIER_VI o MODIFIER_NONE.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static SymbolModifier get_modifier(ASTNode *node) {
     if (node == NULL)
         return MODIFIER_NONE;
@@ -116,10 +198,18 @@ static SymbolModifier get_modifier(ASTNode *node) {
     return MODIFIER_NONE;
 }
 
-// AST helpers
-
-// Primer hijo de node con el kind dado. Los hijos se identifican por kind,
-// nunca por posición: los opcionales NULL no se agregan y corren las posiciones.
+/*
+ * find_child — busca el primer hijo de una clase.
+ *
+ * Entrada:
+ *   node  nodo o NULL.
+ *   kind  clase buscada.
+ * Salida:
+ *   hijo prestado o NULL.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static ASTNode *find_child(ASTNode *node, ASTKind kind) {
     if (node == NULL)
         return NULL;
@@ -137,8 +227,17 @@ static ASTNode *find_child(ASTNode *node, ASTKind kind) {
     return NULL;
 }
 
-// Condición de un CONDITIONAL, ALTERNATIVE o LOOP_L: el hijo que no es
-// BLOCK, ALTERNATIVES ni RESIDUAL.
+/*
+ * find_condition — busca la condición de C, A o L.
+ *
+ * Entrada:
+ *   node  nodo de control o NULL.
+ * Salida:
+ *   primer hijo distinto de BLOCK, ALTERNATIVES y RESIDUAL, o NULL.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static ASTNode *find_condition(ASTNode *node) {
     if (node == NULL)
         return NULL;
@@ -158,9 +257,22 @@ static ASTNode *find_condition(ASTNode *node) {
     return NULL;
 }
 
-// Errors
+/* ==========================================================================
+ * DIAGNÓSTICOS
+ * ======================================================================= */
 
-// Símbolo de un operador (binario o unario); NULL si el nodo no es operador.
+
+/*
+ * operator_symbol — obtiene la grafía de un operador.
+ *
+ * Entrada:
+ *   kind  clase del nodo AST.
+ * Salida:
+ *   cadena literal o NULL si no es operador.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static const char *operator_symbol(ASTKind kind) {
     switch (kind) {
         case AST_OR:            return "|";
@@ -183,7 +295,17 @@ static const char *operator_symbol(ASTKind kind) {
     }
 }
 
-// Cantidad de dígitos de un número (sin signo).
+/*
+ * count_digits — cuenta dígitos decimales sin el signo.
+ *
+ * Entrada:
+ *   number  entero cuya longitud se pide.
+ * Salida:
+ *   cantidad de dígitos, al menos 1.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static int count_digits(long number) {
     int digits = 1;
 
@@ -196,19 +318,17 @@ static int count_digits(long number) {
 }
 
 /*
- * Único punto de salida de los errores semánticos (formato de §8.2).
- * Los errores se acumulan: después de reportar, el análisis sigue.
+ * semantic_error — reporta un error semántico con posición del AST.
  *
- * Posición y largo del señalador según node:
- *
- * NULL                        = sin posición
- * IDENTIFIER                  = el nodo, strlen(text)
- * NUMBER                      = el nodo, cantidad de dígitos
- * NEG de un NUMBER            = el nodo, desde el - hasta el último dígito
- * operador (binario o unario) = el nodo, strlen de su símbolo
- * BOOLEAN                     = el nodo, largo de verdadero o falso
- * otro con un hijo IDENTIFIER = ese hijo (el nombre declarado), strlen(text)
- * otro sin hijo IDENTIFIER    = el nodo, 1
+ * Entrada:
+ *   node  nodo para el señalador o NULL.
+ *   fmt  formato printf.
+ *   ...  argumentos del formato.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe diagnóstico mediante diag_verror e incrementa su contador.
+ * Restricciones:
+ *   el análisis continúa después de reportar.
  */
 static void semantic_error(ASTNode *node, const char *fmt, ...) {
     int line = 0;
@@ -267,13 +387,23 @@ static void semantic_error(ASTNode *node, const char *fmt, ...) {
     va_end(args);
 }
 
-// Libera un símbolo que todavía no pertenece a ningún ámbito.
+/*
+ * discard_symbol — libera un símbolo todavía sin ámbito dueño.
+ *
+ * Entrada:
+ *   symbol  símbolo no NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: libera el nombre y el símbolo.
+ * Restricciones:
+ *   sin parámetros propios; no debe estar enlazado a un ámbito.
+ */
 static void discard_symbol(Symbol *symbol) {
     free(symbol->name);
     free(symbol);
 }
 
-// Memory
+// Memoria
 
 // M-2: variables de ccom en 0x0000–0x0FFF; desde 0x1000, archivos de load_file
 #define DATA_BASE  0x0000
@@ -289,9 +419,27 @@ static int next_address = DATA_BASE;   // libro §6.3.4: el "offset"
 // El desborde de la memoria de datos se reporta una sola vez por programa.
 static int memory_reported = 0;
 
-// Libro §6.3.4: el nombre recibe el offset actual y el offset avanza su ancho.
-// node es el nodo que declara lo que se reserva (para el rl, la función).
-// Si no cabe se reporta (solo la primera vez) y se sigue asignando.
+/* ==========================================================================
+ * DIRECCIONES Y DIMENSIONES
+ * ======================================================================= */
+
+
+/*
+ * reserve — asigna un desplazamiento estático y avanza el área de datos.
+ *
+ * Entrada:
+ *   width  ancho en bytes no negativo.
+ *   what  nombre para diagnóstico.
+ *   node  nodo que declara el área.
+ *   out_address  puntero escribible para dirección.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe *out_address, avanza next_address y reporta el primer desborde.
+ * Restricciones:
+ *   continúa asignando después de 0x0FFF; widths llegan alineados a cuatro
+ *   bytes.
+ * Referencia: libro §6.3.4.
+ */
 static void reserve(int width, const char *what, ASTNode *node,
                     int *out_address) {
     if (next_address + width > DATA_LIMIT &&
@@ -309,7 +457,17 @@ static void reserve(int width, const char *what, ASTNode *node,
     next_address += width;
 }
 
-// M-1: int y bool ocupan 4 bytes (alineados para lw/sw)
+/*
+ * type_width — obtiene el ancho de un tipo escalar.
+ *
+ * Entrada:
+ *   type  tipo de símbolo.
+ * Salida:
+ *   4 para int/bool; 0 para otros tipos.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static int type_width(SymbolType type) {
     switch (type) {
         case TYPE_INT:
@@ -318,9 +476,19 @@ static int type_width(SymbolType type) {
     }
 }
 
-// Llena dimensions y dim_sizes a partir del nodo DIMENSIONS.
-// El ancho no se calcula aquí: es distinto en declaraciones y en parámetros.
-// node es la declaración o el parámetro, para ubicar el error.
+/*
+ * fill_dimensions — copia los tamaños declarados de un arreglo.
+ *
+ * Entrada:
+ *   symbol  símbolo nuevo no NULL.
+ *   dimensions  nodo DIMENSIONS o nodo opcional.
+ *   node  nodo declarador para diagnóstico.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: llena dimensions/dim_sizes y reporta tamaños no positivos.
+ * Restricciones:
+ *   hasta MAX_DIMS=2; no calcula width.
+ */
 static void fill_dimensions(Symbol *symbol, ASTNode *dimensions,
                             ASTNode *node) {
 
@@ -355,10 +523,22 @@ static void fill_dimensions(Symbol *symbol, ASTNode *dimensions,
     }
 }
 
-// Name checking
+/* ==========================================================================
+ * RESOLUCIÓN DE NOMBRES
+ * ======================================================================= */
 
-// Primer ámbito de la función actual (en la lista de todos los ámbitos) que
-// contiene el nombre; NULL si no hay ninguno o si no se está en una función.
+
+/*
+ * find_closed_scope — busca un nombre en los ámbitos de la función actual.
+ *
+ * Entrada:
+ *   name  nombre no NULL.
+ * Salida:
+ *   primer ámbito con el nombre o NULL.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   se usa después de fallar la búsqueda en ámbitos abiertos.
+ */
 static Scope *find_closed_scope(const char *name) {
     if (current_function == NULL)
         return NULL;
@@ -377,10 +557,17 @@ static Scope *find_closed_scope(const char *name) {
     return NULL;
 }
 
-// Libro §1.6.3 y §2.7: ámbito estático, regla del bloque anidado más cercano.
-// Un nombre usado antes de su declaración todavía no está en la tabla.
-// Se reporta cada uso de un nombre que no existe.
-// Devuelve el símbolo del nombre, o NULL si no existe (ya reportado).
+/*
+ * resolve_name — resuelve un identificador según el ámbito más cercano.
+ *
+ * Entrada:
+ *   identifier  identificador o NULL.
+ * Salida:
+ *   símbolo prestado o NULL si no resuelve.
+ *   Efectos: anota identifier->symbol o reporta nombre inexistente/fuera de ámbito.
+ * Restricciones:
+ *   current_scope configurado; no permite uso antes de declarar variables.
+ */
 static Symbol *resolve_name(ASTNode *identifier) {
     if (identifier == NULL || identifier->text == NULL)
         return NULL;
@@ -418,7 +605,7 @@ static Symbol *resolve_name(ASTNode *identifier) {
     return NULL;
 }
 
-// Types
+// Tipos
 
 // Tipo de una expresión.
 typedef enum {
@@ -445,6 +632,22 @@ typedef struct {
 
 #define TYPE_TEXT_SIZE 64   // alcanza para "bool[N][M]"
 
+/* ==========================================================================
+ * TIPOS DE EXPRESIONES
+ * ======================================================================= */
+
+
+/*
+ * make_type — crea una descripción de tipo sin valor constante.
+ *
+ * Entrada:
+ *   kind  clase de expresión.
+ * Salida:
+ *   ExprType inicializado con base VOID y tamaños cero.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static ExprType make_type(ExprKind kind) {
     ExprType type;
 
@@ -460,7 +663,17 @@ static ExprType make_type(ExprKind kind) {
     return type;
 }
 
-// Tipo escalar que corresponde a un tipo declarado.
+/*
+ * scalar_type — convierte un tipo declarado en tipo de expresión.
+ *
+ * Entrada:
+ *   type  tipo de símbolo.
+ * Salida:
+ *   ET_INT, ET_BOOL o ET_VOID.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static ExprType scalar_type(SymbolType type) {
     switch (type) {
         case TYPE_INT:  return make_type(ET_INT);
@@ -469,9 +682,17 @@ static ExprType scalar_type(SymbolType type) {
     }
 }
 
-// Tipo de un símbolo usado por su nombre suelto: escalar o arreglo completo.
-// Un arreglo con una dimensión 0 ya se reportó (S-06): cuenta como ET_ERROR
-// para no provocar más errores.
+/*
+ * symbol_value_type — describe el valor escalar o arreglo de un símbolo.
+ *
+ * Entrada:
+ *   symbol  símbolo no NULL.
+ * Salida:
+ *   tipo escalar o ET_ARRAY; ET_ERROR para tamaños no positivos.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   dimensions no mayor que MAX_DIMS.
+ */
 static ExprType symbol_value_type(Symbol *symbol) {
     if (symbol->dimensions == 0)
         return scalar_type(symbol->type);
@@ -492,7 +713,18 @@ static ExprType symbol_value_type(Symbol *symbol) {
     return type;
 }
 
-// Mismo tipo: igual clase y, en arreglos, igual base, dimensiones y tamaños.
+/*
+ * same_type — compara tipos y forma de arreglos.
+ *
+ * Entrada:
+ *   a  primer tipo.
+ *   b  segundo tipo.
+ * Salida:
+ *   1 si coinciden clase y forma; 0 en otro caso.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static int same_type(ExprType a, ExprType b) {
     if (a.kind != b.kind)
         return 0;
@@ -512,7 +744,18 @@ static int same_type(ExprType a, ExprType b) {
     return 1;
 }
 
-// Texto del tipo para los mensajes: int, bool, void, int[3], bool[2][4].
+/*
+ * type_text — escribe el tipo para un diagnóstico.
+ *
+ * Entrada:
+ *   type  tipo de expresión.
+ *   buffer  buffer de al menos TYPE_TEXT_SIZE=64 bytes.
+ * Salida:
+ *   el mismo buffer.
+ *   Efectos: escribe la representación de tipo en buffer.
+ * Restricciones:
+ *   ninguna.
+ */
 static const char *type_text(ExprType type, char *buffer) {
     const char *base;
 
@@ -538,8 +781,20 @@ static const char *type_text(ExprType type, char *buffer) {
     return buffer;
 }
 
-// Exige un tipo en un lugar (condición, límite de S, índice). ET_ERROR no
-// reporta nada: el error ya se dijo.
+/*
+ * expect_type — exige una clase de tipo sin repetir errores previos.
+ *
+ * Entrada:
+ *   node  nodo para diagnóstico.
+ *   type  tipo ya calculado.
+ *   wanted  clase requerida.
+ *   message  mensaje no NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: reporta incompatibilidad salvo ET_ERROR.
+ * Restricciones:
+ *   ninguna.
+ */
 static void expect_type(ASTNode *node, ExprType type, ExprKind wanted,
                         const char *message) {
     if (type.kind != ET_ERROR &&
@@ -547,8 +802,19 @@ static void expect_type(ASTNode *node, ExprType type, ExprKind wanted,
         semantic_error(node, "%s", message);
 }
 
-// Asignación de un valor a un destino (ASSIGNMENT, o DECLARATION con un
-// inicializador que no es lista). El error se reporta sobre el destino.
+/*
+ * check_assignable — comprueba compatibilidad de una asignación.
+ *
+ * Entrada:
+ *   target  nodo destino para diagnóstico.
+ *   destination  tipo destino.
+ *   value  tipo del valor.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: reporta incompatibilidad de tipo o forma.
+ * Restricciones:
+ *   no comprueba mutabilidad; ET_ERROR evita cascadas.
+ */
 static void check_assignable(ASTNode *target, ExprType destination,
                              ExprType value) {
     if (destination.kind == ET_ERROR ||
@@ -575,11 +841,12 @@ static void check_assignable(ASTNode *target, ExprType destination,
                        destination_text);
 }
 
-// Call graph
+// Grafo de llamadas
 
-// S-05: sin recursión no hace falta pila. Cada llamada de la pasada 2 se
-// guarda como (función que llama, función llamada, nodo CALL), en el orden
-// en que aparece. R no es una llamada.
+// S-05: se prohíben ciclos de llamadas y se mantiene asignación estática.
+// El generador sí usa pila para rl, argumentos escalares y temporales vivos.
+// Cada llamada de la pasada 2 guarda (llamadora, llamada, nodo CALL)
+// en orden de aparición. R no es una llamada.
 typedef struct {
     Symbol *caller;
     Symbol *callee;
@@ -595,6 +862,24 @@ static Symbol **function_list = NULL;
 static int function_count = 0;
 static int function_capacity = 0;
 
+/* ==========================================================================
+ * GRAFO DE FUNCIONES Y LLAMADAS
+ * ======================================================================= */
+
+
+/*
+ * add_call — registra una arista del grafo de llamadas.
+ *
+ * Entrada:
+ *   caller  símbolo de función llamadora.
+ *   callee  símbolo de función llamada.
+ *   call  nodo CALL para diagnóstico.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: amplía call_edges y registra punteros prestados.
+ * Restricciones:
+ *   R no se registra como llamada.
+ */
 static void add_call(Symbol *caller, Symbol *callee, ASTNode *call) {
     if (call_count == call_capacity) {
 
@@ -618,6 +903,17 @@ static void add_call(Symbol *caller, Symbol *callee, ASTNode *call) {
     call_count++;
 }
 
+/*
+ * add_function — registra una función para recorrer el grafo.
+ *
+ * Entrada:
+ *   function  símbolo de función no NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: amplía function_list y conserva un puntero prestado.
+ * Restricciones:
+ *   ninguna.
+ */
 static void add_function(Symbol *function) {
     if (function_count == function_capacity) {
 
@@ -639,7 +935,16 @@ static void add_function(Symbol *function) {
     function_count++;
 }
 
-// Libera el grafo (los símbolos y los nodos no son suyos).
+/*
+ * free_call_graph — libera las listas auxiliares del grafo.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: libera aristas y lista de funciones; reinicia contadores.
+ * Restricciones:
+ *   no libera símbolos ni nodos prestados.
+ */
 static void free_call_graph(void) {
     free(call_edges);
     free(function_list);
@@ -653,7 +958,7 @@ static void free_call_graph(void) {
     function_capacity = 0;
 }
 
-// Uses
+// Usos
 
 // A-1: la gramática produce el mismo nodo para v [ i ] y para f [ x ]. Cada
 // uso se resuelve contra la tabla de símbolos, según dónde aparece.
@@ -668,7 +973,22 @@ typedef enum {
 // Cada expresión se evalúa UNA sola vez, para no repetir sus errores.
 static ExprType check_expression(ASTNode *node);
 
-// Cantidad de hijos de node.
+/* ==========================================================================
+ * USOS, ARGUMENTOS E ÍNDICES
+ * ======================================================================= */
+
+
+/*
+ * count_children — cuenta hijos enlazados de un nodo.
+ *
+ * Entrada:
+ *   node  nodo o NULL.
+ * Salida:
+ *   cantidad de hijos, cero para NULL.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static int count_children(ASTNode *node) {
     int count = 0;
 
@@ -682,8 +1002,17 @@ static int count_children(ASTNode *node) {
     return count;
 }
 
-// Nombre suelto (en una expresión o como destino): una función solo puede
-// usarse invocándola. Un arreglo suelto es el arreglo completo.
+/*
+ * check_identifier — verifica un nombre usado sin corchetes.
+ *
+ * Entrada:
+ *   identifier  nodo AST_IDENTIFIER.
+ * Salida:
+ *   tipo escalar/arreglo o ET_ERROR.
+ *   Efectos: resuelve y anota símbolo; reporta funciones usadas sin invocación.
+ * Restricciones:
+ *   ninguna.
+ */
 static ExprType check_identifier(ASTNode *identifier) {
     Symbol *symbol = resolve_name(identifier);
 
@@ -702,8 +1031,20 @@ static ExprType check_identifier(ASTNode *identifier) {
     return symbol_value_type(symbol);
 }
 
-// Llamada a una función: punto de entrada y cantidad de argumentos.
-// node es el CALL o el REWIND. Devuelve 0 si hubo error.
+/*
+ * check_invocation — comprueba punto de entrada y cantidad de argumentos.
+ *
+ * Entrada:
+ *   node  nodo CALL o REWIND.
+ *   function  función resuelta.
+ *   n_args  cantidad de argumentos.
+ *   is_rewind  1 para R, 0 para llamada.
+ * Salida:
+ *   1 si cumple; 0 si reporta error.
+ *   Efectos: reporta invocación de main o cantidad incorrecta.
+ * Restricciones:
+ *   function no NULL; aún no verifica tipos.
+ */
 static int check_invocation(ASTNode *node, Symbol *function,
                             int n_args, int is_rewind) {
     int valid = 1;
@@ -732,8 +1073,20 @@ static int check_invocation(ASTNode *node, Symbol *function,
     return valid;
 }
 
-// Argumento número position (desde 0) de una llamada, contra el parámetro en
-// la misma posición. Solo se llama si la cantidad de argumentos coincide.
+/*
+ * check_argument — verifica tipo y mutabilidad de un argumento.
+ *
+ * Entrada:
+ *   argument  expresión argumento.
+ *   type  tipo ya calculado.
+ *   function  función con param_list.
+ *   position  posición desde 0.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: reporta tipo/forma incompatibles o arreglo Vi pasado a parámetro mutable.
+ * Restricciones:
+ *   cantidad ya coincide; position menor que parameter_count.
+ */
 static void check_argument(ASTNode *argument, ExprType type,
                            Symbol *function, int position) {
     Symbol *parameter = function->param_list[position];
@@ -776,9 +1129,20 @@ static void check_argument(ASTNode *argument, ExprType type,
                    type_text(type, received_text));
 }
 
-// Índice número position (desde 0) de un acceso: si es una constante
-// conocida (un literal o una expresión constante como 2 + 3), debe estar
-// dentro de esa dimensión. Los índices variables no se verifican (§5.4.5).
+/*
+ * check_index_range — verifica un índice conocido en compilación.
+ *
+ * Entrada:
+ *   index  expresión índice.
+ *   type  tipo ya calculado.
+ *   array  arreglo resuelto.
+ *   position  dimensión desde 0.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: reporta índice constante fuera de rango.
+ * Restricciones:
+ *   position menor que dimensions; no verifica índices dinámicos.
+ */
 static void check_index_range(ASTNode *index, ExprType type, Symbol *array,
                               int position) {
     if (!type.is_const)
@@ -808,9 +1172,22 @@ typedef enum {
     RESOLVED_ACCESS    // acceso a un elemento de un arreglo
 } Resolution;
 
-// Evalúa un argumento o índice (una sola vez) y lo verifica según lo que
-// resultó ser el nodo que lo contiene. valid indica que la cantidad de
-// argumentos o de índices es correcta.
+/*
+ * check_operand — verifica una vez un argumento o índice.
+ *
+ * Entrada:
+ *   operand  expresión o NULL.
+ *   symbol  símbolo resuelto o NULL.
+ *   resolution  resolución de llamada/acceso.
+ *   valid  1 si coincide la cantidad.
+ *   position  posición desde 0.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: evalúa tipo, anota nombres y reporta errores.
+ * Restricciones:
+ *   symbol válido si resolution exige comprobarlo; posición válida cuando
+ *   valid=1.
+ */
 static void check_operand(ASTNode *operand, Symbol *symbol,
                           Resolution resolution, int valid, int position) {
     ExprType type = check_expression(operand);
@@ -828,11 +1205,19 @@ static void check_operand(ASTNode *operand, Symbol *symbol,
     }
 }
 
-// CALL, INDEX y REWIND: resuelve el nombre, verifica que se use bien según
-// el contexto y devuelve el tipo del resultado (ET_VOID si es una llamada a
-// una función void; ET_ERROR si hubo un error de resolución o de cantidad de
-// índices o argumentos). Los argumentos e índices se verifican aunque haya
-// error.
+/*
+ * check_call — resuelve llamada, acceso o reinicio según su contexto.
+ *
+ * Entrada:
+ *   node  nodo CALL, INDEX o REWIND no NULL.
+ *   context  contexto de uso.
+ * Salida:
+ *   tipo escalar/VOID; ET_ERROR si resolución/cantidad falla o hay recursión directa.
+ *   Efectos: anota nombres, comprueba operandos y agrega llamadas al grafo.
+ * Restricciones:
+ *   argumentos en AST_ARGUMENTS; no evalúa una llamada para obtener
+ *   constante.
+ */
 static ExprType check_call(ASTNode *node, UseContext context) {
     ASTNode *arguments = find_child(node, AST_ARGUMENTS);
 
@@ -940,8 +1325,9 @@ static ExprType check_call(ASTNode *node, UseContext context) {
         operand = operand->next;
     }
 
-    // INDEX: el segundo índice es el hijo que sigue a ARGUMENTS (cualquier
-    // expresión, incluso un IDENTIFIER).
+    // Recorrido adicional de un hermano de ARGUMENTS si estuviera presente.
+    // ast_index normaliza los índices dentro de ARGUMENTS: en los nodos
+    // construidos por el parser, arguments->next es NULL.
     if (node->kind == AST_INDEX && arguments != NULL)
         check_operand(arguments->next, symbol, resolution, valid, position);
 
@@ -961,6 +1347,22 @@ typedef enum {
     OP_EQUALITY      // == !=: dos escalares del mismo tipo -> bool
 } OperatorFamily;
 
+/* ==========================================================================
+ * OPERADORES Y CONSTANTES
+ * ======================================================================= */
+
+
+/*
+ * operator_family — clasifica un operador por la regla de tipos.
+ *
+ * Entrada:
+ *   kind  clase del operador AST.
+ * Salida:
+ *   familia relacional, lógica, igualdad o aritmética.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static OperatorFamily operator_family(ASTKind kind) {
     switch (kind) {
 
@@ -984,9 +1386,19 @@ static OperatorFamily operator_family(ASTKind kind) {
     }
 }
 
-// Literal entero. Todo NUMBER mayor que 2147483647 desborda, salvo
-// 2147483648 como operando directo de un - unario (negated), para que
-// -2147483648 sea válido.
+/*
+ * number_type — verifica el rango de un literal entero.
+ *
+ * Entrada:
+ *   number  nodo AST_NUMBER no NULL.
+ *   negated  1 si es operando directo de menos unario.
+ * Salida:
+ *   ET_INT constante; ET_ERROR ante desborde.
+ *   Efectos: reporta literales mayores que el máximo permitido.
+ * Restricciones:
+ *   el léxico entrega magnitudes no negativas; admite 2147483648 solo con
+ *   negated=1.
+ */
 static ExprType number_type(ASTNode *number, int negated) {
     long long highest = negated ? INT32_HIGHEST + 1 : INT32_HIGHEST;
 
@@ -1006,8 +1418,19 @@ static ExprType number_type(ASTNode *number, int negated) {
     return type;
 }
 
-// base ^ exponent con exponent >= 0 (x ^ 0 = 1, también 0 ^ 0), por
-// cuadrados sucesivos. *overflow = 1 si el resultado no cabe en 32 bits.
+/*
+ * const_power — calcula potencia por cuadrados sucesivos.
+ *
+ * Entrada:
+ *   base  base en rango int32.
+ *   exponent  exponente no negativo.
+ *   overflow  puntero a bandera inicializada a 0.
+ * Salida:
+ *   potencia; 0 al detectar desborde.
+ *   Efectos: pone *overflow=1 si no cabe en int32.
+ * Restricciones:
+ *   x^0 y 0^0 valen 1.
+ */
 static long long const_power(long long base, long long exponent,
                              int *overflow) {
     long long result = 1;
@@ -1041,11 +1464,20 @@ static long long const_power(long long base, long long exponent,
     return result;
 }
 
-// Valor constante de un operador aritmético cuyos operandos ya son int.
-// Aritmética de un int de 32 bits con signo, calculada en 64 bits. La
-// división trunca hacia cero y % cumple a == (a/b)*b + a%b (C99).
-// Reporta sobre el operador y devuelve ET_ERROR si hay división entre cero,
-// exponente negativo o desborde.
+/*
+ * fold_constant — calcula operadores aritméticos constantes.
+ *
+ * Entrada:
+ *   node  nodo de operador.
+ *   left  tipo izquierdo.
+ *   right  tipo derecho, igual al izquierdo en unario.
+ * Salida:
+ *   ET_INT con valor si se conoce; ET_ERROR ante error.
+ *   Efectos: reporta división por cero, exponente negativo o desborde.
+ * Restricciones:
+ *   operandos ya int; división trunca hacia cero; no calcula constantes
+ *   lógicas.
+ */
 static ExprType fold_constant(ASTNode *node, ExprType left, ExprType right) {
     ExprType result = make_type(ET_INT);
 
@@ -1108,10 +1540,18 @@ static ExprType fold_constant(ASTNode *node, ExprType left, ExprType right) {
     return result;
 }
 
-// Operador binario o unario. Se reporta un error por operador como máximo.
-// Si algún operando es ET_ERROR no se reporta nada y el resultado es el de
-// su familia. Un operador que reporta error devuelve ET_ERROR, para no
-// provocar otro error en el operador de afuera.
+/*
+ * check_operator — verifica tipos de un operador y pliega aritmética constante.
+ *
+ * Entrada:
+ *   node  nodo de operador no NULL.
+ * Salida:
+ *   tipo de familia; ET_ERROR si el operador reporta error.
+ *   Efectos: verifica operandos una vez y reporta incompatibilidad.
+ * Restricciones:
+ *   si un operando es ET_ERROR devuelve el tipo de familia sin otro
+ *   diagnóstico.
+ */
 static ExprType check_operator(ASTNode *node) {
     const char *symbol = operator_symbol(node->kind);
 
@@ -1191,8 +1631,17 @@ static ExprType check_operator(ASTNode *node) {
     return result;
 }
 
-// Devuelve el tipo de la expresión. Nunca devuelve ET_VOID: una función void
-// usada como valor se reporta aquí y cuenta como ET_ERROR hacia arriba.
+/*
+ * check_expression — verifica nombres, usos y tipo de una expresión.
+ *
+ * Entrada:
+ *   node  expresión o NULL.
+ * Salida:
+ *   ExprType; ET_ERROR si no es valor válido; nunca ET_VOID.
+ *   Efectos: anota símbolos, agrega llamadas y reporta errores.
+ * Restricciones:
+ *   usar antes de generación; una función void no es un valor.
+ */
 static ExprType check_expression(ASTNode *node) {
     if (node == NULL)
         return make_type(ET_ERROR);
@@ -1245,7 +1694,22 @@ static ExprType check_expression(ASTNode *node) {
     return make_type(ET_ERROR);
 }
 
-// Condición de un C, A [ ] o L: debe ser bool.
+/* ==========================================================================
+ * CONDICIONES Y ASIGNACIONES
+ * ======================================================================= */
+
+
+/*
+ * check_condition — exige condición bool en C, A o L.
+ *
+ * Entrada:
+ *   node  nodo de control.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: verifica expresión y reporta condición de tipo distinto de bool.
+ * Restricciones:
+ *   ninguna.
+ */
 static void check_condition(ASTNode *node) {
     ASTNode *condition = find_condition(node);
 
@@ -1253,10 +1717,18 @@ static void check_condition(ASTNode *node) {
                 "la condicion debe ser de tipo bool");
 }
 
-// Destino de una asignación: un nombre suelto, o un elemento de un arreglo.
-// Verifica la mutabilidad (§5.2) y devuelve el tipo del destino.
-// Es inmutable todo símbolo con MODIFIER_VI: variables Vi, parámetros Vi y la
-// variable de un S. Los parámetros sin modificador son modificables.
+/*
+ * check_target — verifica el destino y su mutabilidad.
+ *
+ * Entrada:
+ *   target  nodo destino o NULL.
+ * Salida:
+ *   tipo destino o ET_ERROR.
+ *   Efectos: resuelve nombres y reporta escritura a Vi.
+ * Restricciones:
+ *   la mutabilidad incorrecta se reporta sin cambiar necesariamente el
+ *   tipo.
+ */
 static ExprType check_target(ASTNode *target) {
     if (target == NULL)
         return make_type(ET_ERROR);
@@ -1299,7 +1771,17 @@ static ExprType check_target(ASTNode *target) {
     return type;
 }
 
-// Asignación: mutabilidad del destino (§5.2) y después tipos (§5.1).
+/*
+ * check_assignment — verifica destino y valor de una asignación.
+ *
+ * Entrada:
+ *   statement  nodo AST_ASSIGNMENT no NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: anota nombres y reporta mutabilidad/tipos incompatibles.
+ * Restricciones:
+ *   ninguna.
+ */
 static void check_assignment(ASTNode *statement) {
     ASTNode *target = statement->child;               // primer hijo
     ASTNode *value = target ? target->next : NULL;    // segundo hijo
@@ -1309,7 +1791,22 @@ static void check_assignment(ASTNode *statement) {
     check_assignable(target, destination, check_expression(value));
 }
 
-// Verifica los nombres de todos los valores de una lista, sin exigir tipos.
+/* ==========================================================================
+ * LISTAS DE INICIALIZACIÓN
+ * ======================================================================= */
+
+
+/*
+ * check_list_names — verifica expresiones de una lista sin exigir forma.
+ *
+ * Entrada:
+ *   node  lista, valor o NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: recorre valores y reporta sus errores de expresión.
+ * Restricciones:
+ *   ninguna.
+ */
 static void check_list_names(ASTNode *node) {
     if (node == NULL)
         return;
@@ -1327,8 +1824,19 @@ static void check_list_names(ASTNode *node) {
     }
 }
 
-// Tipo incorrecto de los valores de una lista: se reporta una sola vez por
-// declaración, con el tipo del primer valor incorrecto (ET_ERROR = ninguno).
+/*
+ * report_list_type — reporta el primer tipo incorrecto de un inicializador.
+ *
+ * Entrada:
+ *   wrong  primer tipo incorrecto o ET_ERROR.
+ *   symbol  arreglo declarado.
+ *   node  nodo de declaración.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: emite diagnóstico salvo wrong=ET_ERROR.
+ * Restricciones:
+ *   ninguna.
+ */
 static void report_list_type(ExprType wrong, Symbol *symbol, ASTNode *node) {
     if (wrong.kind == ET_ERROR)
         return;
@@ -1342,10 +1850,20 @@ static void report_list_type(ExprType wrong, Symbol *symbol, ASTNode *node) {
                    type_text(scalar_type(symbol->type), base_text));
 }
 
-// Valores de una lista de una dimensión, o de una fila: ninguno es una lista
-// (se reporta una vez por lista o por fila) y todos son del tipo base del
-// arreglo. El primer tipo incorrecto se guarda en wrong, que comparten todas
-// las filas: lo reporta quien llama, con report_list_type.
+/*
+ * check_list_values — verifica los valores escalares de una lista o fila.
+ *
+ * Entrada:
+ *   list  lista de inicialización.
+ *   symbol  arreglo declarado.
+ *   node  nodo para diagnóstico.
+ *   wrong  puntero al primer tipo incorrecto, inicialmente ET_ERROR.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: actualiza *wrong, verifica expresiones y reporta listas anidadas inesperadas.
+ * Restricciones:
+ *   list, symbol y wrong no NULL; forma exterior la verifica el llamador.
+ */
 static void check_list_values(ASTNode *list, Symbol *symbol, ASTNode *node,
                               ExprType *wrong) {
     ExprType base = scalar_type(symbol->type);
@@ -1378,9 +1896,19 @@ static void check_list_values(ASTNode *list, Symbol *symbol, ASTNode *node,
                        "se recibio una lista donde se esperaba un valor");
 }
 
-// Forma y tipos de una lista de inicialización contra la declaración.
-// Todos los errores se reportan sobre la DECLARATION (node). Las filas se
-// numeran desde 0, como los índices.
+/*
+ * check_initializer_list — verifica forma y tipos de un inicializador de arreglo.
+ *
+ * Entrada:
+ *   symbol  símbolo declarado.
+ *   list  lista de inicialización.
+ *   node  nodo de declaración.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: verifica valores y reporta tamaños/filas/tipos incompatibles.
+ * Restricciones:
+ *   una o dos dimensiones; también reporta lista aplicada a escalar.
+ */
 static void check_initializer_list(Symbol *symbol, ASTNode *list,
                                    ASTNode *node) {
 
@@ -1468,7 +1996,23 @@ static void check_initializer_list(Symbol *symbol, ASTNode *list,
     report_list_type(wrong, symbol, node);
 }
 
-// Parámetro de la función con ese nombre, o NULL.
+/* ==========================================================================
+ * DECLARACIONES Y PARÁMETROS
+ * ======================================================================= */
+
+
+/*
+ * find_parameter — busca un parámetro por nombre.
+ *
+ * Entrada:
+ *   function  función con param_list.
+ *   name  nombre no NULL.
+ * Salida:
+ *   parámetro prestado o NULL.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static Symbol *find_parameter(Symbol *function, const char *name) {
     for (int i = 0; i < function->parameter_count; i++) {
 
@@ -1479,9 +2023,18 @@ static Symbol *find_parameter(Symbol *function, const char *name) {
     return NULL;
 }
 
-// Un local (o la variable de un S) no puede llamarse como un parámetro de
-// su función, en ningún bloque. Las globales no se revisan.
-// node es la declaración local, para ubicar el error. Devuelve 0 si choca.
+/*
+ * check_not_parameter — evita que un local o control S oculte un parámetro.
+ *
+ * Entrada:
+ *   name  nombre no NULL.
+ *   node  nodo declarador.
+ * Salida:
+ *   1 si no choca; 0 si reporta colisión.
+ *   Efectos: reporta colisión con parámetro de current_function.
+ * Restricciones:
+ *   no restringe declaraciones globales.
+ */
 static int check_not_parameter(const char *name, ASTNode *node) {
     if (current_function == NULL ||
         find_parameter(current_function, name) == NULL)
@@ -1494,10 +2047,18 @@ static int check_not_parameter(const char *name, ASTNode *node) {
     return 0;
 }
 
-// Inserta symbol en el ámbito actual. Si el nombre ya existe en ese ámbito,
-// reporta el error en la nueva declaración (node), señalando la línea del
-// símbolo existente, y descarta symbol: los usos posteriores se refieren al
-// primero.
+/*
+ * insert_symbol — inserta un símbolo en el ámbito actual.
+ *
+ * Entrada:
+ *   symbol  símbolo nuevo no NULL.
+ *   node  nodo declarador.
+ * Salida:
+ *   1 si transfiere propiedad al ámbito; 0 si rechaza.
+ *   Efectos: inserta o reporta redeclaración y libera symbol.
+ * Restricciones:
+ *   current_scope vigente; el llamador no usa symbol después del rechazo.
+ */
 static int insert_symbol(Symbol *symbol, ASTNode *node) {
     Symbol *existing =
         symbol_lookup_current(current_scope, symbol->name);
@@ -1510,7 +2071,7 @@ static int insert_symbol(Symbol *symbol, ASTNode *node) {
                        symbol->name,
                        existing ? existing->line : 0);
 
-        // symbol_insert() didn't take ownership because insertion failed.
+        // symbol_insert no tomó propiedad porque la inserción falló.
         discard_symbol(symbol);
 
         return 0;
@@ -1520,13 +2081,17 @@ static int insert_symbol(Symbol *symbol, ASTNode *node) {
 }
 
 /*
- * Las funciones analyze_* devuelven 0 solo ante un error interno (un nodo
- * inválido), que detiene el análisis. Los errores semánticos se reportan con
- * semantic_error y el análisis sigue.
+ * analyze_declaration — verifica y reserva una declaración de variable.
+ *
+ * Entrada:
+ *   node  nodo de declaración o NULL.
+ * Salida:
+ *   1 si continúa, incluso con errores semánticos; 0 ante nodo inválido.
+ *   Efectos: crea/anota/inserta símbolo, verifica inicializador y reserva dirección.
+ * Restricciones:
+ *   inicializador se verifica antes de insertar el nombre; semántico usa
+ *   el contador de diagnósticos para el éxito final.
  */
-
-// Variable declaration
-
 static int analyze_declaration(ASTNode *node) {
     if (node == NULL)
         return 1;
@@ -1620,10 +2185,17 @@ static int analyze_declaration(ASTNode *node) {
 }
 
 
-// Parameters
-
-// Crea el símbolo de un parámetro, sin insertarlo en ningún ámbito ni darle
-// dirección. Devuelve NULL solo si el nodo es inválido.
+/*
+ * create_parameter — crea un parámetro sin insertarlo ni asignar dirección.
+ *
+ * Entrada:
+ *   node  nodo AST_PARAMETER.
+ * Salida:
+ *   símbolo nuevo; NULL si falta identificador.
+ *   Efectos: reserva memoria y verifica dimensiones.
+ * Restricciones:
+ *   width=4 también para arreglos, cuya casilla contiene una dirección.
+ */
 static Symbol *create_parameter(ASTNode *node) {
     /*
      * PARAMETER
@@ -1661,11 +2233,27 @@ static Symbol *create_parameter(ASTNode *node) {
 }
 
 
-// Statements
+// Sentencias
 
 static int analyze_statement(ASTNode *statement);
 
-// Recorre las sentencias de un BLOCK en el ámbito actual (no abre ámbito).
+/* ==========================================================================
+ * BLOQUES Y CONTROL DE FLUJO
+ * ======================================================================= */
+
+
+/*
+ * analyze_statements — recorre sentencias en el ámbito actual.
+ *
+ * Entrada:
+ *   block  nodo BLOCK o NULL.
+ * Salida:
+ *   1 si continúa; 0 ante error interno de una sentencia.
+ *   Efectos: anota símbolos, reserva memoria y reporta errores.
+ * Restricciones:
+ *   no abre ámbito; informa una vez por bloque sobre código después de
+ *   E/R.
+ */
 static int analyze_statements(ASTNode *block) {
     if (block == NULL || block->kind != AST_BLOCK)
         return 1;
@@ -1701,8 +2289,18 @@ static int analyze_statements(ASTNode *block) {
     return 1;
 }
 
-// Abre un ámbito del tipo dado, recorre el BLOCK y lo cierra.
-// Libro §1.6.3 y §2.7: cada bloque tiene su propio ámbito anidado.
+/*
+ * analyze_block — abre un ámbito, analiza el bloque y regresa al padre.
+ *
+ * Entrada:
+ *   block  nodo BLOCK o NULL.
+ *   kind  clase del ámbito.
+ * Salida:
+ *   1 si continúa; 0 ante error interno.
+ *   Efectos: crea ámbito, analiza sentencias y restaura current_scope.
+ * Restricciones:
+ *   ninguna.
+ */
 static int analyze_block(ASTNode *block, ScopeKind kind) {
 
     // P-03: la línea del BLOCK es la de la palabra clave que lo abre.
@@ -1715,8 +2313,17 @@ static int analyze_block(ASTNode *block, ScopeKind kind) {
     return result;
 }
 
-// Condicional: un ámbito por cada rama. Cada condición se verifica antes de
-// abrir el ámbito de su rama.
+/*
+ * analyze_conditional — analiza C y cada rama A en su ámbito.
+ *
+ * Entrada:
+ *   node  nodo AST_CONDITIONAL.
+ * Salida:
+ *   1 si continúa; 0 ante error interno.
+ *   Efectos: verifica condiciones y abre un ámbito por rama.
+ * Restricciones:
+ *   cada condición se verifica antes de abrir su ámbito.
+ */
 static int analyze_conditional(ASTNode *node) {
 
     // Rama inicial  C [cond] ;
@@ -1754,14 +2361,35 @@ static int analyze_conditional(ASTNode *node) {
     return 1;
 }
 
-// Ciclo por predicado: la condición se verifica antes de abrir el ámbito.
+/*
+ * analyze_loop_l — analiza la condición y el ámbito de L.
+ *
+ * Entrada:
+ *   node  nodo AST_LOOP_L.
+ * Salida:
+ *   1 si continúa; 0 ante error interno.
+ *   Efectos: verifica condición bool y analiza cuerpo en SCOPE_L.
+ * Restricciones:
+ *   ninguna.
+ */
 static int analyze_loop_l(ASTNode *node) {
     check_condition(node);
 
     return analyze_block(find_child(node, AST_BLOCK), SCOPE_L);
 }
 
-// Ciclo acotado: el ámbito del S contiene su variable de control y su cuerpo.
+/*
+ * analyze_loop_s — analiza límites, control y ámbito del ciclo S.
+ *
+ * Entrada:
+ *   node  nodo AST_LOOP_S.
+ * Salida:
+ *   1 si continúa; 0 si falta identificador válido.
+ *   Efectos: crea control Vi, reserva su casilla y límite oculto; analiza cuerpo y reporta errores.
+ * Restricciones:
+ *   inicio/fin se verifican en el ámbito exterior; el cuerpo comparte el
+ *   ámbito del control.
+ */
 static int analyze_loop_s(ASTNode *node) {
     /*
      * LOOP_S (posición fija: los 5 hijos siempre existen)
@@ -1876,8 +2504,24 @@ static int analyze_loop_s(ASTNode *node) {
 #define DATA_ZONE_LAST     65535
 #define CRYPTO_BLOCK_BYTES 8
 
-// Argumento expr número position (desde 1) de una operación: debe ser int.
-// Mismo mensaje que en las llamadas. ET_ERROR no reporta nada más.
+/* ==========================================================================
+ * OPERACIONES DE CIFRADO
+ * ======================================================================= */
+
+
+/*
+ * check_crypto_argument — exige tipo int en un argumento de cifrado.
+ *
+ * Entrada:
+ *   argument  expresión argumento.
+ *   position  posición desde 1.
+ *   operation  nombre de operación no NULL.
+ * Salida:
+ *   tipo calculado, incluso si no es int.
+ *   Efectos: verifica expresión y reporta incompatibilidad.
+ * Restricciones:
+ *   ninguna.
+ */
 static ExprType check_crypto_argument(ASTNode *argument, int position,
                                       const char *operation) {
     ExprType type = check_expression(argument);
@@ -1897,7 +2541,19 @@ static ExprType check_crypto_argument(ASTNode *argument, int position,
     return type;
 }
 
-// k o w: un NUMBER escrito tal cual (lo garantiza la gramática), entre 0 y 3.
+/*
+ * check_crypto_selector — comprueba un selector literal de cifrado.
+ *
+ * Entrada:
+ *   number  nodo NUMBER o NULL.
+ *   name  nombre k o w.
+ *   operation  nombre de operación.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: reporta valores fuera de 0–3.
+ * Restricciones:
+ *   la gramática garantiza la forma NUMBER; no evalúa expresiones.
+ */
 static void check_crypto_selector(ASTNode *number, const char *name,
                                   const char *operation) {
     if (number == NULL || number->kind != AST_NUMBER)
@@ -1910,9 +2566,20 @@ static void check_crypto_selector(ASTNode *number, const char *name,
                        operation);
 }
 
-// Dirección de origen o destino: solo se verifica si es constante. Un solo
-// error por dirección: primero la zona de datos; si pasa, la alineación.
-// Devuelve 1 si es una constante que pasó las dos verificaciones.
+/*
+ * check_crypto_address — verifica zona y alineación de una dirección constante.
+ *
+ * Entrada:
+ *   argument  expresión para diagnóstico.
+ *   type  tipo ya calculado.
+ *   position  posición desde 1.
+ *   operation  nombre de operación.
+ * Salida:
+ *   1 si la constante int está en zona y alineada; 0 en otro caso.
+ *   Efectos: reporta una vez zona o alineación incorrecta.
+ * Restricciones:
+ *   solo verifica constantes; zona 4096–65535, múltiplos de 4.
+ */
 static int check_crypto_address(ASTNode *argument, ExprType type,
                                 int position, const char *operation) {
     if (type.kind != ET_INT || !type.is_const)
@@ -1947,8 +2614,20 @@ static int check_crypto_address(ASTNode *argument, ExprType type,
     return 1;
 }
 
-// Los bloques (constantes y > 0) desde una dirección ya verificada no pueden
-// pasar del final de la memoria. Se calcula en 64 bits.
+/*
+ * check_crypto_extent — comprueba que los bloques caben desde una dirección.
+ *
+ * Entrada:
+ *   blocks  expresión de bloques.
+ *   blocks_type  tipo constante de bloques.
+ *   address  tipo constante de dirección validada.
+ *   operation  nombre de operación.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: reporta si dirección + 8*bloques excede 65536.
+ * Restricciones:
+ *   bloques constante positivo; dirección ya verificada.
+ */
 static void check_crypto_extent(ASTNode *blocks, ExprType blocks_type,
                                 ExprType address, const char *operation) {
     long long end =
@@ -1964,9 +2643,18 @@ static void check_crypto_extent(ASTNode *blocks, ExprType blocks_type,
                        address.value);
 }
 
-// Operación de CRYPTO: no usa la tabla de símbolos ni el grafo de llamadas.
-// La cantidad y la forma de los argumentos las garantiza la gramática; los
-// argumentos se verifican en orden.
+/*
+ * analyze_crypto — verifica argumentos y selectores de una operación de cifrado.
+ *
+ * Entrada:
+ *   node  nodo AST_CRYPTO.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: resuelve nombres y tipos de argumentos; puede agregar sus llamadas al grafo.
+ * Restricciones:
+ *   cantidad y forma garantizadas por gramática; no verifica direcciones
+ *   dinámicas.
+ */
 static void analyze_crypto(ASTNode *node) {
     const char *operation = node->text;
 
@@ -2031,7 +2719,17 @@ static void analyze_crypto(ASTNode *node) {
     check_crypto_selector(blocks->next, "k", operation);
 }
 
-// Decide qué hacer con una sentencia según su kind.
+/*
+ * analyze_statement — despacha una sentencia para análisis semántico.
+ *
+ * Entrada:
+ *   statement  sentencia o NULL.
+ * Salida:
+ *   1 si continúa; 0 ante error interno de un analizador.
+ *   Efectos: anota símbolos, modifica ámbitos/direcciones y reporta errores.
+ * Restricciones:
+ *   EMIT y clases sin caso específico no requieren comprobación aquí.
+ */
 static int analyze_statement(ASTNode *statement) {
     if (statement == NULL)
         return 1;
@@ -2077,10 +2775,22 @@ static int analyze_statement(ASTNode *statement) {
 }
 
 
-// Function
+/* ==========================================================================
+ * FIRMAS Y CUERPOS DE FUNCIONES
+ * ======================================================================= */
 
-// Pasada 1: registra la firma de una función (símbolo y parámetros), para que
-// una función pueda llamar a otra escrita después.
+
+/*
+ * register_signature — registra una firma antes de analizar cuerpos.
+ *
+ * Entrada:
+ *   node  nodo AST_FUNCTION.
+ * Salida:
+ *   1 si continúa, incluso con redeclaración; 0 ante nodo inválido.
+ *   Efectos: crea función y parámetros; anota identificador y reporta colisiones.
+ * Restricciones:
+ *   primera pasada; parámetros pasan al ámbito dueño en la segunda.
+ */
 static int register_signature(ASTNode *node) {
     /*
      * FUNCTION
@@ -2117,7 +2827,7 @@ static int register_signature(ASTNode *node) {
     ASTNode *ret_type = find_child(return_type, AST_TYPE);
     ASTNode *ret_id = find_child(return_type, AST_IDENTIFIER);
 
-    // Funcion pertenece a scope global
+    // La función pertenece al ámbito global.
     Symbol *function =
         symbol_create(identifier->text,
                       SYMBOL_FUNCTION,
@@ -2185,7 +2895,17 @@ static int register_signature(ASTNode *node) {
     return 1;
 }
 
-// Pasada 1 sobre todas las funciones.
+/*
+ * register_signatures — registra todas las firmas en orden del archivo.
+ *
+ * Entrada:
+ *   functions  nodo FUNCTIONS o NULL.
+ * Salida:
+ *   1 si continúa; 0 ante error interno.
+ *   Efectos: llena símbolos globales y listas de parámetros.
+ * Restricciones:
+ *   debe ejecutarse antes de analizar cuerpos.
+ */
 static int register_signatures(ASTNode *functions) {
     if (functions == NULL || functions->kind != AST_FUNCTIONS)
         return 1;
@@ -2203,7 +2923,16 @@ static int register_signatures(ASTNode *functions) {
     return 1;
 }
 
-// El programa empieza en main, que no recibe ni devuelve nada.
+/*
+ * check_main — verifica la firma del punto de entrada.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: reporta si falta main o si recibe parámetros/devuelve valor.
+ * Restricciones:
+ *   firmas ya registradas en global_scope.
+ */
 static void check_main(void) {
     Symbol *main_function = symbol_lookup_current(global_scope, "main");
 
@@ -2224,7 +2953,18 @@ static void check_main(void) {
     }
 }
 
-// ¿El subárbol de node contiene algún nodo de ese kind?
+/*
+ * contains_kind — busca una clase en un subárbol.
+ *
+ * Entrada:
+ *   node  nodo o NULL.
+ *   kind  clase buscada.
+ * Salida:
+ *   1 si aparece; 0 si no aparece.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   recorre hijos, sin incluir hermanos del nodo raíz.
+ */
 static int contains_kind(ASTNode *node, ASTKind kind) {
     if (node == NULL)
         return 0;
@@ -2245,7 +2985,18 @@ static int contains_kind(ASTNode *node, ASTKind kind) {
     return 0;
 }
 
-// Pasada 2: ámbito, direcciones y cuerpo de una función ya registrada.
+/*
+ * analyze_function — asigna ámbito, direcciones y cuerpo de una función.
+ *
+ * Entrada:
+ *   node  nodo AST_FUNCTION.
+ * Salida:
+ *   1 si continúa o ignora duplicado; 0 ante error interno.
+ *   Efectos: inserta parámetros/retorno, reserva área y temporales, verifica cuerpo y E.
+ * Restricciones:
+ *   firma registrada en pasada 1; +0 reservado fuera de main, rl se salva
+ *   en pila al generar.
+ */
 static int analyze_function(ASTNode *node) {
     /*
      * FUNCTION
@@ -2280,7 +3031,7 @@ static int analyze_function(ASTNode *node) {
     /*
      * Área estática de la función (libro §7.1.1):
      *
-     * +0  rl guardado (todas excepto main)
+     * +0  casilla reservada (todas excepto main); rl se salva en la pila
      * +4  variable de retorno, si no es void
      * ... parámetros, en orden
      * ... locales de todos sus bloques, en el orden del recorrido
@@ -2288,7 +3039,7 @@ static int analyze_function(ASTNode *node) {
      */
     function->area_base = next_address;
 
-    // M-5: main no guarda rl
+    // M-5: main no reserva la casilla +0 para rl
     if (strcmp(function->name, "main") != 0) {
 
         int rl_address;   // no hay símbolo para rl
@@ -2296,7 +3047,7 @@ static int analyze_function(ASTNode *node) {
         reserve(4, function->name, node, &rl_address);
     }
 
-    // Crea function scope.
+    // Crea el ámbito de función.
     enter_scope(SCOPE_FUNCTION, function->line);
 
     // La variable de retorno va antes que los parámetros (queda en +4).
@@ -2358,14 +3109,15 @@ static int analyze_function(ASTNode *node) {
                            function->name);
     }
 
-    // Reserva al final del área espacio para salvar t0–t11 en llamadas.
+    // Reserva al final del área casillas de t0–t11 para expansiones CRYPTO;
+    // las llamadas normales guardan sus temporales vivos en la pila de rx.
     reserve(TEMP_WORDS * type_width(TYPE_INT), function->name, node,
             &function->temp_base);
 
     // El área termina donde quedó el offset, incluidos los temporales.
     function->area_size = next_address - function->area_base;
 
-    // Return to global scope.
+    // Regresa al ámbito global.
     exit_scope();
 
     current_function = NULL;
@@ -2374,12 +3126,27 @@ static int analyze_function(ASTNode *node) {
 }
 
 
-// Recursion
+// Recursión
 
 // Colores del recorrido en profundidad.
 enum { WHITE, GRAY, BLACK };
 
-// Posición de la función en function_list, o -1.
+/* ==========================================================================
+ * RETORNO Y RECURSIÓN
+ * ======================================================================= */
+
+
+/*
+ * function_index — busca una función en la lista del grafo.
+ *
+ * Entrada:
+ *   function  símbolo de función.
+ * Salida:
+ *   índice desde 0; -1 si no aparece.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static int function_index(Symbol *function) {
     for (int i = 0; i < function_count; i++) {
 
@@ -2390,9 +3157,20 @@ static int function_index(Symbol *function) {
     return -1;
 }
 
-// Reporta el ciclo que cierra una llamada hacia una función gris: las
-// funciones desde esa (stack[from]) hasta la actual (stack[depth]), más la
-// primera de nuevo. Se reporta sobre el CALL de esa llamada.
+/*
+ * report_cycle — reporta el ciclo que cierra una arista.
+ *
+ * Entrada:
+ *   stack  pila de índices del recorrido.
+ *   from  primera posición del ciclo.
+ *   depth  posición de la función actual.
+ *   call  nodo CALL que cierra el ciclo.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: reserva mensaje, reporta y lo libera.
+ * Restricciones:
+ *   0 <= from <= depth; índices pertenecen a function_list.
+ */
 static void report_cycle(int *stack, int from, int depth, ASTNode *call) {
     size_t size = 1;
 
@@ -2422,8 +3200,21 @@ static void report_cycle(int *stack, int from, int depth, ASTNode *call) {
     free(text);
 }
 
-// Recorre las llamadas de la función número index, que queda en la posición
-// depth de la pila del recorrido.
+/*
+ * visit_function — recorre llamadas con colores blanco, gris y negro.
+ *
+ * Entrada:
+ *   index  índice de función.
+ *   colors  arreglo de colores.
+ *   stack  arreglo de índices de la pila.
+ *   depth  profundidad actual.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: actualiza colores/stack y reporta ciclos.
+ * Restricciones:
+ *   índice válido; arreglos con function_count entradas; ignora aristas
+ *   repetidas.
+ */
 static void visit_function(int index, int *colors, int *stack, int depth) {
     colors[index] = GRAY;
     stack[depth] = index;
@@ -2468,8 +3259,16 @@ static void visit_function(int index, int *colors, int *stack, int depth) {
     colors[index] = BLACK;
 }
 
-// S-05: recursión indirecta. Recorrido en profundidad (blanco/gris/negro)
-// del grafo de llamadas, empezando por las funciones en orden del archivo.
+/*
+ * check_cycles — detecta recursión indirecta en el grafo.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: reserva recorrido, reporta ciclos y libera auxiliares.
+ * Restricciones:
+ *   cuerpos ya analizados; R no es una arista.
+ */
 static void check_cycles(void) {
     if (function_count == 0)
         return;
@@ -2492,8 +3291,12 @@ static void check_cycles(void) {
     free(stack);
 }
 
-// Program
+/* ==========================================================================
+ * PROGRAMA Y RESERVA DE PILA
+ * ======================================================================= */
 
+
+/* semantic_analyze — véase el contrato en semantic.h. */
 int semantic_analyze(ASTNode *root) {
     if (root == NULL)
         return 0;
@@ -2523,7 +3326,7 @@ int semantic_analyze(ASTNode *root) {
     ASTNode *globals = find_child(root, AST_GLOBALS);
     ASTNode *functions = find_child(root, AST_FUNCTIONS);
 
-    // Global declarations.
+    // Declaraciones globales.
     ASTNode *decl = globals ? globals->child : NULL;
 
     while (decl != NULL) {
@@ -2570,20 +3373,27 @@ int semantic_analyze(ASTNode *root) {
     return diag_count() == errors_before;
 }
 
+/* ==========================================================================
+ * CONSULTAS Y LIBERACIÓN
+ * ======================================================================= */
+
+
+/* semantic_data_end — véase el contrato en semantic.h. */
 int semantic_data_end(void) {
     return next_address;
 }
 
-// Symbol table output
-
+/* semantic_print_symbols — véase el contrato en semantic.h. */
 void semantic_print_symbols(void) {
     symbol_table_print(scope_list_head);
 }
 
+/* semantic_fprint_symbols — véase el contrato en semantic.h. */
 void semantic_fprint_symbols(FILE *out, const char *prefix) {
     symbol_table_fprint(out, scope_list_head, prefix, 1);
 }
 
+/* semantic_free — véase el contrato en semantic.h. */
 void semantic_free(void)
 {
     Scope *scope = scope_list_head;
@@ -2593,8 +3403,8 @@ void semantic_free(void)
         Scope *next = scope->next;
 
         /*
-         * Prevent scope_free from following
-         * anything unintended.
+         * Desenlaza el ámbito antes de liberarlo;
+         * la lista se recorre con next guardado.
          */
         scope->next = NULL;
 

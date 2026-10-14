@@ -1,3 +1,15 @@
+/*
+ * parser.y — Fase 2: análisis sintáctico y construcción del AST con Bison.
+ *
+ * Construye nodos con sus posiciones y observa tokens para diagnosticar
+ * bloques abiertos. LAC obtiene tokens esperados sin ejecutar las acciones.
+ *
+ * Usa: lexer.l, ast.c y diagnostics.c.
+ * Lo usa: main.c mediante yyparse.
+ * Referencias: libro §4.2 (notación), §4.8–4.9 (LALR y Bison),
+ * §5.3.1 (construcción del AST).
+ */
+
 %{
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,7 +21,7 @@
 extern int yylex(void);
 extern int yylineno;
 
-// 1 si un error léxico cortó la entrada (lexer.l).
+/* 1 si un error léxico cortó la entrada (lexer.l). */
 extern int lexical_fatal;
 
 void yyerror(const char *msg);
@@ -24,9 +36,10 @@ static void syntax_reset(void);
 %}
 
 
-/* ============================================================
- * Semantic values
- * ============================================================ */
+/* ==========================================================================
+ * VALORES SEMÁNTICOS
+ * ======================================================================= */
+
 
 %union
 {
@@ -36,11 +49,12 @@ static void syntax_reset(void);
 }
 
 
-/* ============================================================
- * Tokens
- * ============================================================ */
+/* ==========================================================================
+ * TOKENS
+ * ======================================================================= */
 
-/* Keywords */
+
+/* Palabras reservadas */
 
 %token TOKEN_F "F"
 %token TOKEN_VM "Vm"
@@ -69,7 +83,7 @@ static void syntax_reset(void);
 %token TOKEN_DESCIFRAR "descifrar"
 
 
-/* Operators */
+/* Operadores */
 
 %token TOKEN_OR "|"
 %token TOKEN_AND "&"
@@ -95,7 +109,7 @@ static void syntax_reset(void);
 %token TOKEN_ASSIGN "="
 
 
-/* Delimiters */
+/* Delimitadores */
 
 %token TOKEN_LBRACKET "["
 %token TOKEN_RBRACKET "]"
@@ -110,15 +124,16 @@ static void syntax_reset(void);
 
 
 
-/* Values */
+/* Valores */
 
 %token <str> TOKEN_IDENTIFIER "identificador"
 %token <num> TOKEN_NUMBER "numero"
 
 
-/* ============================================================
- * Nonterminal types
- * ============================================================ */
+/* ==========================================================================
+ * TIPOS DE NO TERMINALES
+ * ======================================================================= */
+
 
 %type <node> programa
 %type <node> globales
@@ -190,12 +205,12 @@ static void syntax_reset(void);
 %%
 
 
-/* ============================================================
- * PROGRAM
- *
- * programa -> globales funciones
- * ============================================================ */
+/* ==========================================================================
+ * PROGRAMA
+ * ======================================================================= */
 
+
+/* programa → globales funciones */
 programa
     : globales funciones
       {
@@ -205,15 +220,14 @@ programa
     ;
 
 
-/* ============================================================
- * GLOBALS
- *
- * globales -> globales decl
- *           | epsilon
- * ============================================================ */
+/* ==========================================================================
+ * GLOBALES
+ * ======================================================================= */
 
+
+/* globales → ε | globales decl */
 globales
-    : /* empty */
+    : /* vacío */
       {
           $$ = ast_list(AST_GLOBALS, NULL);
       }
@@ -226,13 +240,12 @@ globales
     ;
 
 
-/* ============================================================
- * FUNCTIONS
- *
- * funciones -> funciones funcion
- *            | funcion
- * ============================================================ */
+/* ==========================================================================
+ * FUNCIONES
+ * ======================================================================= */
 
+
+/* funciones → funcion | funciones funcion */
 funciones
     : funcion
       {
@@ -247,12 +260,12 @@ funciones
     ;
 
 
-/* ============================================================
- * FUNCTION
- *
- * funcion -> F id [ params ] : retorno ; cuerpo .
- * ============================================================ */
+/* ==========================================================================
+ * FUNCIÓN
+ * ======================================================================= */
 
+
+/* funcion → F id [ params ] : retorno ; cuerpo . */
 funcion
     : TOKEN_F
       TOKEN_IDENTIFIER
@@ -279,13 +292,12 @@ funcion
     ;
 
 
-/* ============================================================
- * RETURN
- *
- * retorno -> tipo id
- *          | void
- * ============================================================ */
+/* ==========================================================================
+ * RETORNO
+ * ======================================================================= */
 
+
+/* retorno → tipo id | void */
 retorno
     : tipo TOKEN_IDENTIFIER
       {
@@ -308,12 +320,14 @@ retorno
     ;
 
 
-/* ============================================================
- * PARAMETERS
- * ============================================================ */
+/* ==========================================================================
+ * PARÁMETROS
+ * ======================================================================= */
 
+
+/* params → ε | lista_param */
 params
-    : /* empty */
+    : /* vacío */
       {
           $$ = ast_list(AST_PARAMS, NULL);
       }
@@ -325,6 +339,7 @@ params
     ;
 
 
+/* lista_param → param | lista_param , param */
 lista_param
     : param
       {
@@ -339,6 +354,7 @@ lista_param
     ;
 
 
+/* param → modif_opt tipo id dims_opt */
 param
     : modif_opt tipo TOKEN_IDENTIFIER dims_opt
       {
@@ -356,6 +372,7 @@ param
     ;
 
 
+/* modif → Vm | Vi */
 modif
     : TOKEN_VM
       {
@@ -373,19 +390,21 @@ modif
     ;
 
 
+/* modif_opt → modif | ε */
 modif_opt
     : modif
       {
           $$ = $1;
       }
 
-    | /* empty */
+    | /* vacío */
       {
           $$ = NULL;
       }
     ;
 
 
+/* tipo → int | bool */
 tipo
     : TOKEN_INT
       {
@@ -403,19 +422,21 @@ tipo
     ;
 
 
+/* dims_opt → dims | ε */
 dims_opt
     : dims
       {
           $$ = $1;
       }
 
-    | /* empty */
+    | /* vacío */
       {
           $$ = NULL;
       }
     ;
 
 
+/* dims → [ numero ] | [ numero ] [ numero ] */
 dims
     : TOKEN_LBRACKET
       TOKEN_NUMBER
@@ -448,15 +469,14 @@ dims
     ;
 
 
-/* ============================================================
- * BODY
- *
- * cuerpo -> cuerpo sentencia
- *         | epsilon
- * ============================================================ */
+/* ==========================================================================
+ * CUERPO
+ * ======================================================================= */
 
+
+/* cuerpo → ε | cuerpo sentencia */
 cuerpo
-    : /* empty */
+    : /* vacío */
       {
           $$ = ast_block();
       }
@@ -469,10 +489,12 @@ cuerpo
     ;
 
 
-/* ============================================================
- * STATEMENT
- * ============================================================ */
+/* ==========================================================================
+ * SENTENCIAS
+ * ======================================================================= */
 
+
+/* sentencia → decl | sent_id | condicional | ciclo_l | ciclo_s | emit | rewind | crypto */
 sentencia
     : decl
       {
@@ -516,13 +538,12 @@ sentencia
     ;
 
 
-/* ============================================================
- * DECLARATION
- *
- * decl -> modif id : tipo dims_opt ;
- *      | modif id : tipo dims_opt = inicial ;
- * ============================================================ */
+/* ==========================================================================
+ * DECLARACIONES
+ * ======================================================================= */
 
+
+/* decl → modif id : tipo dims_opt ; | modif id : tipo dims_opt = inicial ; */
 decl
     : modif
       TOKEN_IDENTIFIER
@@ -568,10 +589,12 @@ decl
     ;
 
 
-/* ============================================================
- * INITIALIZER
- * ============================================================ */
+/* ==========================================================================
+ * INICIALIZADORES
+ * ======================================================================= */
 
+
+/* inicial → expr | lista_init */
 inicial
     : expr
       {
@@ -585,6 +608,7 @@ inicial
     ;
 
 
+/* lista_init → [ elems ] */
 lista_init
     : TOKEN_LBRACKET elems TOKEN_RBRACKET
       {
@@ -593,6 +617,7 @@ lista_init
     ;
 
 
+/* elems → elem | elems , elem */
 elems
     : elem
       {
@@ -609,6 +634,7 @@ elems
     ;
 
 
+/* elem → expr | lista_init */
 elem
     : expr
       {
@@ -622,10 +648,12 @@ elem
     ;
 
 
-/* ============================================================
- * ID STATEMENTS
- * ============================================================ */
+/* ==========================================================================
+ * SENTENCIAS CON IDENTIFICADOR
+ * ======================================================================= */
 
+
+/* sent_id → id = expr ; | id [ args ] = expr ; | id [ args ] [ expr ] = expr ; | id [ args ] ; */
 sent_id
     : TOKEN_IDENTIFIER
       TOKEN_ASSIGN
@@ -705,12 +733,12 @@ sent_id
     ;
 
 
-/* ============================================================
- * CONDITIONAL
- *
- * C [ expr ] ; cuerpo alts residual .
- * ============================================================ */
+/* ==========================================================================
+ * CONDICIONAL
+ * ======================================================================= */
 
+
+/* condicional → C [ expr ] ; cuerpo alts residual . */
 condicional
     : TOKEN_C
       TOKEN_LBRACKET
@@ -734,8 +762,9 @@ condicional
     ;
 
 
+/* alts → ε | alts A [ expr ] ; cuerpo */
 alts
-    : /* empty */
+    : /* vacío */
       {
           $$ = ast_list(AST_ALTERNATIVES, NULL);
       }
@@ -754,7 +783,7 @@ alts
                   $7
               );
 
-          // P-03: línea de la A
+          /* P-03: línea de la A */
           ast_set_location(alternative, @2.first_line, @2.first_column);
 
           ast_add_child($1, alternative);
@@ -764,8 +793,9 @@ alts
     ;
 
 
+/* residual → ε | A ; cuerpo */
 residual
-    : /* empty */
+    : /* vacío */
       {
           $$ = NULL;
       }
@@ -781,12 +811,12 @@ residual
     ;
 
 
-/* ============================================================
- * L LOOP
- *
- * L [ expr ] ; cuerpo .
- * ============================================================ */
+/* ==========================================================================
+ * CICLO L
+ * ======================================================================= */
 
+
+/* ciclo_l → L [ expr ] ; cuerpo . */
 ciclo_l
     : TOKEN_L
       TOKEN_LBRACKET
@@ -806,12 +836,12 @@ ciclo_l
     ;
 
 
-/* ============================================================
- * S LOOP
- *
- * S [ id , expr , expr , paso ] ; cuerpo .
- * ============================================================ */
+/* ==========================================================================
+ * CICLO S
+ * ======================================================================= */
 
+
+/* ciclo_s → S [ id , expr , expr , paso ] ; cuerpo . */
 ciclo_s
     : TOKEN_S
       TOKEN_LBRACKET
@@ -837,7 +867,7 @@ ciclo_s
 
           free($3);
 
-          // La variable de control recibe su posición real antes del relleno.
+          /* La variable de control recibe su posición real antes del relleno. */
           ast_set_location($$->child, @3.first_line, @3.first_column);
 
           ast_set_location($$, @1.first_line, @1.first_column);
@@ -845,6 +875,7 @@ ciclo_s
     ;
 
 
+/* paso → numero | - numero */
 paso
     : TOKEN_NUMBER
       {
@@ -862,10 +893,12 @@ paso
     ;
 
 
-/* ============================================================
- * EMIT
- * ============================================================ */
+/* ==========================================================================
+ * EMISIÓN
+ * ======================================================================= */
 
+
+/* emit → E ; */
 emit
     : TOKEN_E TOKEN_SEMICOLON
       {
@@ -876,10 +909,12 @@ emit
     ;
 
 
-/* ============================================================
- * REWIND
- * ============================================================ */
+/* ==========================================================================
+ * REINICIO
+ * ======================================================================= */
 
+
+/* rewind → R id [ args ] ; */
 rewind
     : TOKEN_R
       TOKEN_IDENTIFIER
@@ -895,7 +930,7 @@ rewind
 
           free($2);
 
-          // El nombre recibe su posición real antes del relleno.
+          /* El nombre recibe su posición real antes del relleno. */
           ast_set_location($$->child, @2.first_line, @2.first_column);
 
           ast_set_location($$, @1.first_line, @1.first_column);
@@ -903,20 +938,19 @@ rewind
     ;
 
 
-/* ============================================================
- * CRYPTO
- *
- * crypto -> autenticar    [ expr ] ;
- *         | cerrar_sesion [ ] ;
- *         | cargar_llave  [ num , num , expr ] ;          k, w, valor
- *         | sellar        [ ] ;
- *         | cambiar_ancla [ expr ] ;
- *         | cifrar        [ expr , expr , expr , num ] ;  origen, destino,
- *         | descifrar     [ expr , expr , expr , num ] ;  bloques, k
- *
- * k y w son TOKEN_NUMBER directo: una variable o -1 es error sintáctico.
- * ============================================================ */
+/* ==========================================================================
+ * CIFRADO
+ * ======================================================================= */
 
+
+/* crypto → autenticar [ expr ] ;
+ *        | cerrar_sesion [ ] ;
+ *        | cargar_llave [ numero , numero , expr ] ;
+ *        | sellar [ ] ;
+ *        | cambiar_ancla [ expr ] ;
+ *        | cifrar [ expr , expr , expr , numero ] ;
+ *        | descifrar [ expr , expr , expr , numero ] ;
+ */
 crypto
     : TOKEN_AUTENTICAR
       TOKEN_LBRACKET
@@ -1042,12 +1076,14 @@ crypto
     ;
 
 
-/* ============================================================
- * ARGUMENTS
- * ============================================================ */
+/* ==========================================================================
+ * ARGUMENTOS
+ * ======================================================================= */
 
+
+/* args → ε | lista_arg */
 args
-    : /* empty */
+    : /* vacío */
       {
           $$ = ast_list(AST_ARGUMENTS, NULL);
       }
@@ -1059,6 +1095,7 @@ args
     ;
 
 
+/* lista_arg → expr | lista_arg , expr */
 lista_arg
     : expr
       {
@@ -1073,12 +1110,12 @@ lista_arg
     ;
 
 
-/* ============================================================
- * EXPRESSIONS
- *
- * These preserve your original 9 precedence levels.
- * ============================================================ */
+/* ==========================================================================
+ * EXPRESIONES
+ * ======================================================================= */
 
+
+/* expr → disy */
 expr
     : disy
       {
@@ -1087,6 +1124,7 @@ expr
     ;
 
 
+/* disy → conj | disy '|' conj */
 disy
     : conj
       {
@@ -1101,12 +1139,13 @@ disy
                     $3
                 );
 
-          // El nodo queda en la posición del operador (señalador de errores).
+          /* El nodo queda en la posición del operador (señalador de errores). */
           ast_set_location($$, @2.first_line, @2.first_column);
       }
     ;
 
 
+/* conj → igualdad | conj & igualdad */
 conj
     : igualdad
       {
@@ -1121,12 +1160,13 @@ conj
                     $3
                 );
 
-          // El nodo queda en la posición del operador (señalador de errores).
+          /* El nodo queda en la posición del operador (señalador de errores). */
           ast_set_location($$, @2.first_line, @2.first_column);
       }
     ;
 
 
+/* igualdad → relacion | igualdad == relacion | igualdad != relacion */
 igualdad
     : relacion
       {
@@ -1141,7 +1181,7 @@ igualdad
                     $3
                 );
 
-          // El nodo queda en la posición del operador (señalador de errores).
+          /* El nodo queda en la posición del operador (señalador de errores). */
           ast_set_location($$, @2.first_line, @2.first_column);
       }
 
@@ -1153,12 +1193,18 @@ igualdad
                     $3
                 );
 
-          // El nodo queda en la posición del operador (señalador de errores).
+          /* El nodo queda en la posición del operador (señalador de errores). */
           ast_set_location($$, @2.first_line, @2.first_column);
       }
     ;
 
 
+/* relacion → aditivo
+ *          | relacion < aditivo
+ *          | relacion > aditivo
+ *          | relacion <= aditivo
+ *          | relacion >= aditivo
+ */
 relacion
     : aditivo
       {
@@ -1173,7 +1219,7 @@ relacion
                     $3
                 );
 
-          // El nodo queda en la posición del operador (señalador de errores).
+          /* El nodo queda en la posición del operador (señalador de errores). */
           ast_set_location($$, @2.first_line, @2.first_column);
       }
 
@@ -1185,7 +1231,7 @@ relacion
                     $3
                 );
 
-          // El nodo queda en la posición del operador (señalador de errores).
+          /* El nodo queda en la posición del operador (señalador de errores). */
           ast_set_location($$, @2.first_line, @2.first_column);
       }
 
@@ -1197,7 +1243,7 @@ relacion
                     $3
                 );
 
-          // El nodo queda en la posición del operador (señalador de errores).
+          /* El nodo queda en la posición del operador (señalador de errores). */
           ast_set_location($$, @2.first_line, @2.first_column);
       }
 
@@ -1209,12 +1255,13 @@ relacion
                     $3
                 );
 
-          // El nodo queda en la posición del operador (señalador de errores).
+          /* El nodo queda en la posición del operador (señalador de errores). */
           ast_set_location($$, @2.first_line, @2.first_column);
       }
     ;
 
 
+/* aditivo → multiplicativo | aditivo + multiplicativo | aditivo - multiplicativo */
 aditivo
     : multiplicativo
       {
@@ -1229,7 +1276,7 @@ aditivo
                     $3
                 );
 
-          // El nodo queda en la posición del operador (señalador de errores).
+          /* El nodo queda en la posición del operador (señalador de errores). */
           ast_set_location($$, @2.first_line, @2.first_column);
       }
 
@@ -1241,12 +1288,17 @@ aditivo
                     $3
                 );
 
-          // El nodo queda en la posición del operador (señalador de errores).
+          /* El nodo queda en la posición del operador (señalador de errores). */
           ast_set_location($$, @2.first_line, @2.first_column);
       }
     ;
 
 
+/* multiplicativo → unario
+ *                | multiplicativo * unario
+ *                | multiplicativo / unario
+ *                | multiplicativo % unario
+ */
 multiplicativo
     : unario
       {
@@ -1261,7 +1313,7 @@ multiplicativo
                     $3
                 );
 
-          // El nodo queda en la posición del operador (señalador de errores).
+          /* El nodo queda en la posición del operador (señalador de errores). */
           ast_set_location($$, @2.first_line, @2.first_column);
       }
 
@@ -1273,7 +1325,7 @@ multiplicativo
                     $3
                 );
 
-          // El nodo queda en la posición del operador (señalador de errores).
+          /* El nodo queda en la posición del operador (señalador de errores). */
           ast_set_location($$, @2.first_line, @2.first_column);
       }
 
@@ -1285,12 +1337,13 @@ multiplicativo
                     $3
                 );
 
-          // El nodo queda en la posición del operador (señalador de errores).
+          /* El nodo queda en la posición del operador (señalador de errores). */
           ast_set_location($$, @2.first_line, @2.first_column);
       }
     ;
 
 
+/* unario → - unario | ! unario | potencia */
 unario
     : TOKEN_MINUS unario
       {
@@ -1319,6 +1372,7 @@ unario
     ;
 
 
+/* potencia → primario | primario ^ unario */
 potencia
     : primario
       {
@@ -1333,12 +1387,13 @@ potencia
                     $3
                 );
 
-          // El nodo queda en la posición del operador (señalador de errores).
+          /* El nodo queda en la posición del operador (señalador de errores). */
           ast_set_location($$, @2.first_line, @2.first_column);
       }
     ;
 
 
+/* primario → ( expr ) | acceso | numero | verdadero | falso */
 primario
     : TOKEN_LPAREN expr TOKEN_RPAREN
       {
@@ -1373,6 +1428,7 @@ primario
     ;
 
 
+/* acceso → id | id [ args ] | id [ args ] [ expr ] */
 acceso
     : TOKEN_IDENTIFIER
       {
@@ -1441,6 +1497,21 @@ static YYLTYPE syntax_previous_location;
 static int syntax_pending;
 static YYLTYPE syntax_pending_location;
 
+/* ==========================================================================
+ * REPORTE DE ERRORES Y BLOQUES ABIERTOS
+ * ======================================================================= */
+
+
+/*
+ * syntax_reset — reinicia la observación de tokens para diagnósticos.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: libera syntax_blocks y reinicia posiciones y contadores.
+ * Restricciones:
+ *   se llama desde %initial-action.
+ */
 static void syntax_reset(void) {
     free(syntax_blocks);
     syntax_blocks = NULL;
@@ -1449,6 +1520,17 @@ static void syntax_reset(void) {
     syntax_previous_location = syntax_pending_location = (YYLTYPE) {1, 1, 1, 1};
 }
 
+/*
+ * block_word — nombra el bloque observado.
+ *
+ * Entrada:
+ *   token  token F, C, A, L o S.
+ * Salida:
+ *   cadena literal; ? para otros tokens.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static const char *block_word(int token) {
     switch (token) {
         case TOKEN_F: return "F";
@@ -1460,6 +1542,19 @@ static const char *block_word(int token) {
     }
 }
 
+/*
+ * syntax_accept — registra el token anterior y el estado de bloques.
+ *
+ * Entrada:
+ *   token  token leído.
+ *   location  posición del token.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: actualiza pila de bloques, delimitadores, comas y token anterior.
+ * Restricciones:
+ *   A comparte cierre del C; el observador se usa para mensajes, sin
+ *   cambiar reglas.
+ */
 static void syntax_accept(int token, YYLTYPE location) {
     syntax_previous = token;
     syntax_previous_location = location;
@@ -1498,6 +1593,17 @@ static void syntax_accept(int token, YYLTYPE location) {
     if (token == TOKEN_RBRACKET || token == TOKEN_RPAREN) syntax_delimiters--;
 }
 
+/*
+ * syntax_lex — envuelve yylex para observar tokens aceptados.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   token del léxico; 0 al fin de entrada.
+ *   Efectos: registra token pendiente, actualiza observador y libera pila al EOF sin bloques.
+ * Restricciones:
+ *   se invoca mediante macro yylex en Bison; llama al léxico real después
+ *   de #undef.
+ */
 static int syntax_lex(void) {
     if (syntax_pending) syntax_accept(syntax_pending, syntax_pending_location);
     int token = yylex();
@@ -1512,6 +1618,18 @@ static int syntax_lex(void) {
     return token;
 }
 
+/*
+ * syntax_report — emite diagnóstico sintáctico y libera el observador.
+ *
+ * Entrada:
+ *   location  posición para señalador.
+ *   message  mensaje no NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: invoca diag_error, libera syntax_blocks y reinicia contadores.
+ * Restricciones:
+ *   ninguna.
+ */
 static void syntax_report(YYLTYPE location, const char *message) {
     diag_error("error sintactico", location.first_line, location.first_column,
                location.last_column - location.first_column + 1, "%s", message);
@@ -1520,6 +1638,19 @@ static void syntax_report(YYLTYPE location, const char *message) {
     syntax_count = syntax_capacity = 0;
 }
 
+/*
+ * token_word — escribe el nombre legible de un símbolo Bison.
+ *
+ * Entrada:
+ *   token  símbolo Bison.
+ *   out  buffer escribible.
+ *   size  capacidad del buffer.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe out mediante snprintf.
+ * Restricciones:
+ *   buffer de size bytes; nombres se truncan si no caben.
+ */
 static void token_word(yysymbol_kind_t token, char *out, size_t size) {
     if (token == YYSYMBOL_YYEOF) {
         snprintf(out, size, "fin de archivo");
@@ -1536,6 +1667,17 @@ static void token_word(yysymbol_kind_t token, char *out, size_t size) {
     }
 }
 
+/*
+ * yyreport_syntax_error — selecciona un diagnóstico a partir de tokens esperados.
+ *
+ * Entrada:
+ *   context  contexto Bison no NULL.
+ * Salida:
+ *   0 si reporta o suprime; valor negativo si falla consulta de esperados.
+ *   Efectos: reporta primer error y libera observador; suprime cascada de lexical_fatal.
+ * Restricciones:
+ *   Bison con LAC; no hay producciones de recuperación.
+ */
 static int yyreport_syntax_error(const yypcontext_t *context) {
     if (lexical_fatal) {
         free(syntax_blocks);
@@ -1604,8 +1746,17 @@ static int yyreport_syntax_error(const yypcontext_t *context) {
     return 0;
 }
 
-/* Bison reserva yyerror para errores internos (p. ej., memoria agotada).
- * Los fallos sintácticos normales pasan por yyreport_syntax_error. */
+/*
+ * yyerror — reporta errores internos que Bison o Flex delegan.
+ *
+ * Entrada:
+ *   message  mensaje no NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: reporta con posición actual y libera observador salvo lexical_fatal.
+ * Restricciones:
+ *   fallos sintácticos normales pasan por yyreport_syntax_error.
+ */
 void yyerror(const char *message) {
     if (!lexical_fatal) {
         YYLTYPE location = yylloc;

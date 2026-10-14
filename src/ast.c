@@ -1,9 +1,36 @@
+/*
+ * ast.c — Fase 2: construcción y representación del árbol de sintaxis abstracta.
+ *
+ * Representa hijos y hermanos mediante listas enlazadas. Conserva posiciones
+ * del fuente y enlaces prestados a símbolos para las fases posteriores.
+ *
+ * Usa: ast.h; biblioteca C.
+ * Lo usa: parser.y, semantic.c, label_table.c, generate.c y main.c.
+ * Referencias: libro §2.5, §6.1.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "ast.h"
 
+/* ==========================================================================
+ * CREACIÓN Y ENLACES
+ * ======================================================================= */
+
+
+/*
+ * ast_strdup — duplica texto para un nodo del AST.
+ *
+ * Entrada:
+ *   str  texto o NULL.
+ * Salida:
+ *   cadena propia o NULL si no hay texto.
+ *   Efectos: reserva memoria o termina el proceso.
+ * Restricciones:
+ *   ninguna.
+ */
 static char *ast_strdup(const char *str) {
     if (str == NULL)
         return NULL;
@@ -19,8 +46,7 @@ static char *ast_strdup(const char *str) {
     return copy;
 }
 
-// Node creation
-
+/* ast_new — véase el contrato en ast.h. */
 ASTNode *ast_new(ASTKind kind) {
     ASTNode *node = malloc(sizeof(ASTNode));
 
@@ -41,7 +67,7 @@ ASTNode *ast_new(ASTKind kind) {
     return node;
 }
 
-// Add node as the last child of parent
+/* ast_add_child — véase el contrato en ast.h. */
 void ast_add_child(ASTNode *parent, ASTNode *child) {
     if (parent == NULL || child == NULL)
         return;
@@ -59,10 +85,7 @@ void ast_add_child(ASTNode *parent, ASTNode *child) {
     current->next = child;
 }
 
-// P-03: asigna la posición (línea y columna) al nodo y a todos sus
-// descendientes que aún no tengan una. Los hijos que ya tienen línea se
-// crearon en reducciones anteriores: se dejan como están y no se baja por
-// ellos.
+/* ast_set_location — véase el contrato en ast.h. */
 void ast_set_location(ASTNode *node, int line, int column) {
     if (node == NULL)
         return;
@@ -83,16 +106,19 @@ void ast_set_location(ASTNode *node, int line, int column) {
     }
 }
 
-// Lists
-
+/* ast_list — véase el contrato en ast.h. */
 ASTNode *ast_list(ASTKind kind, ASTNode *items) {
     ASTNode *node = ast_new(kind);
     node->child = items;
     return node;
 }
 
-// Program structure
+/* ==========================================================================
+ * PROGRAMA, TIPOS Y PARÁMETROS
+ * ======================================================================= */
 
+
+/* ast_program — véase el contrato en ast.h. */
 ASTNode *ast_program(ASTNode *globals, ASTNode *functions) {
     ASTNode *node = ast_new(AST_PROGRAM);
 
@@ -102,6 +128,7 @@ ASTNode *ast_program(ASTNode *globals, ASTNode *functions) {
     return node;
 }
 
+/* ast_function — véase el contrato en ast.h. */
 ASTNode *ast_function(char *name,
                       ASTNode *params,
                       ASTNode *return_type,
@@ -116,20 +143,21 @@ ASTNode *ast_function(char *name,
     return node;
 }
 
-// Types / parameters
-
+/* ast_type — véase el contrato en ast.h. */
 ASTNode *ast_type(const char *name) {
     ASTNode *node = ast_new(AST_TYPE);
     node->text = ast_strdup(name);
     return node;
 }
 
+/* ast_modifier — véase el contrato en ast.h. */
 ASTNode *ast_modifier(const char *name) {
     ASTNode *node = ast_new(AST_MODIFIER);
     node->text = ast_strdup(name);
     return node;
 }
 
+/* ast_return_type — véase el contrato en ast.h. */
 ASTNode *ast_return_type(ASTNode *type, char *name) {
     ASTNode *node = ast_new(AST_RETURN_TYPE);
 
@@ -139,6 +167,7 @@ ASTNode *ast_return_type(ASTNode *type, char *name) {
     return node;
 }
 
+/* ast_return_void — véase el contrato en ast.h. */
 ASTNode *ast_return_void(void) {
     ASTNode *node = ast_new(AST_RETURN_TYPE);
     node->text = ast_strdup("void");
@@ -146,6 +175,7 @@ ASTNode *ast_return_void(void) {
     return node;
 }
 
+/* ast_parameter — véase el contrato en ast.h. */
 ASTNode *ast_parameter(ASTNode *modifier,
                        ASTNode *type,
                        char *name,
@@ -160,10 +190,12 @@ ASTNode *ast_parameter(ASTNode *modifier,
     return node;
 }
 
+/* ast_dimensions — véase el contrato en ast.h. */
 ASTNode *ast_dimensions(void) {
     return ast_list(AST_DIMENSIONS, NULL);
 }
 
+/* ast_add_number — véase el contrato en ast.h. */
 void ast_add_number(ASTNode *node, long number) {
     if (node == NULL)
         return;
@@ -173,13 +205,18 @@ void ast_add_number(ASTNode *node, long number) {
     ast_add_child(node, item);
 }
 
-// Statements / declarations
+/* ==========================================================================
+ * SENTENCIAS Y CONTROL DE FLUJO
+ * ======================================================================= */
 
+
+/* ast_block — véase el contrato en ast.h. */
 ASTNode *ast_block(void) {
     return ast_list(AST_BLOCK, NULL);
 }
 
 
+/* ast_declaration — véase el contrato en ast.h. */
 ASTNode *ast_declaration(ASTNode *modifier,
                          char *name,
                          ASTNode *type,
@@ -197,11 +234,24 @@ ASTNode *ast_declaration(ASTNode *modifier,
 }
 
 
+/*
+ * ast_initializer_list — construye un nodo de lista de inicialización.
+ *
+ * Entrada:
+ *   elements  elementos enlazados o NULL.
+ * Salida:
+ *   nodo nuevo; liberar con ast_free.
+ *   Efectos: reserva nodo, copia nombres y toma propiedad de los hijos recibidos.
+ * Restricciones:
+ *   AST sin ciclos ni propiedad compartida; tipos y usos se verifican
+ *   después.
+ */
 ASTNode *ast_initializer_list(ASTNode *elements) {
     return ast_list(AST_INITIALIZER_LIST, elements);
 }
 
 
+/* ast_assignment — véase el contrato en ast.h. */
 ASTNode *ast_assignment(char *target,
                         ASTNode *args,
                         ASTNode *index,
@@ -211,8 +261,8 @@ ASTNode *ast_assignment(char *target,
     ASTNode *target_node;
 
     if (args != NULL || index != NULL) {
-        // Any bracketed assignment target is an AST_INDEX.
-        // Never create AST_CALL for an assignment destination.
+        // Un destino de asignación con corchetes se representa como AST_INDEX.
+        // El destino de asignación no se construye como AST_CALL.
         target_node = ast_index(target, args, index);
     } else {
         target_node = ast_identifier(target);
@@ -224,6 +274,7 @@ ASTNode *ast_assignment(char *target,
     return node;
 }
 
+/* ast_call_statement — véase el contrato en ast.h. */
 ASTNode *ast_call_statement(char *call,
                            ASTNode *args) {
     ASTNode *node = ast_new(AST_CALL_STATEMENT);
@@ -233,8 +284,7 @@ ASTNode *ast_call_statement(char *call,
     return node;
 }
 
-// Control flow
-
+/* ast_conditional — véase el contrato en ast.h. */
 ASTNode *ast_conditional(ASTNode *condition,
                          ASTNode *body,
                          ASTNode *alternatives,
@@ -249,6 +299,7 @@ ASTNode *ast_conditional(ASTNode *condition,
     return node;
 }
 
+/* ast_alternative — véase el contrato en ast.h. */
 ASTNode *ast_alternative(ASTNode *condition,
                          ASTNode *body) {
     ASTNode *node = ast_new(AST_ALTERNATIVE);
@@ -259,6 +310,7 @@ ASTNode *ast_alternative(ASTNode *condition,
     return node;
 }
 
+/* ast_residual — véase el contrato en ast.h. */
 ASTNode *ast_residual(ASTNode *body) {
     ASTNode *node = ast_new(AST_RESIDUAL);
 
@@ -267,6 +319,7 @@ ASTNode *ast_residual(ASTNode *body) {
     return node;
 }
 
+/* ast_loop_l — véase el contrato en ast.h. */
 ASTNode *ast_loop_l(ASTNode *condition,
                     ASTNode *body) {
     ASTNode *node = ast_new(AST_LOOP_L);
@@ -277,6 +330,7 @@ ASTNode *ast_loop_l(ASTNode *condition,
     return node;
 }
 
+/* ast_loop_s — véase el contrato en ast.h. */
 ASTNode *ast_loop_s(char *id,
                     ASTNode *start,
                     ASTNode *end,
@@ -293,10 +347,12 @@ ASTNode *ast_loop_s(char *id,
     return node;
 }
 
+/* ast_emit — véase el contrato en ast.h. */
 ASTNode *ast_emit(void) {
     return ast_new(AST_EMIT);
 }
 
+/* ast_rewind — véase el contrato en ast.h. */
 ASTNode *ast_rewind(char *id,
                     ASTNode *args) {
     ASTNode *node = ast_new(AST_REWIND);
@@ -307,7 +363,7 @@ ASTNode *ast_rewind(char *id,
     return node;
 }
 
-// CRYPTO: la operación va en text; el único hijo es ARGUMENTS.
+/* ast_crypto — véase el contrato en ast.h. */
 ASTNode *ast_crypto(const char *operation,
                     ASTNode *args) {
     ASTNode *node = ast_new(AST_CRYPTO);
@@ -319,14 +375,17 @@ ASTNode *ast_crypto(const char *operation,
     return node;
 }
 
-// Arguments
+/* ==========================================================================
+ * ARGUMENTOS Y EXPRESIONES
+ * ======================================================================= */
 
+
+/* ast_arguments — véase el contrato en ast.h. */
 ASTNode *ast_arguments(ASTNode *arguments) {
     return ast_list(AST_ARGUMENTS, arguments);
 }
 
-// Expressions
-
+/* ast_identifier — véase el contrato en ast.h. */
 ASTNode *ast_identifier(const char *name) {
     ASTNode *node = ast_new(AST_IDENTIFIER);
 
@@ -335,6 +394,7 @@ ASTNode *ast_identifier(const char *name) {
     return node;
 }
 
+/* ast_number — véase el contrato en ast.h. */
 ASTNode *ast_number(long value) {
     ASTNode *node = ast_new(AST_NUMBER);
 
@@ -343,6 +403,7 @@ ASTNode *ast_number(long value) {
     return node;
 }
 
+/* ast_boolean — véase el contrato en ast.h. */
 ASTNode *ast_boolean(int value) {
     ASTNode *node = ast_new(AST_BOOLEAN);
 
@@ -351,6 +412,7 @@ ASTNode *ast_boolean(int value) {
     return node;
 }
 
+/* ast_binary — véase el contrato en ast.h. */
 ASTNode *ast_binary(ASTKind kind,
                     ASTNode *left,
                     ASTNode *right) {
@@ -362,6 +424,7 @@ ASTNode *ast_binary(ASTKind kind,
     return node;
 }
 
+/* ast_unary — véase el contrato en ast.h. */
 ASTNode *ast_unary(ASTKind kind,
                    ASTNode *operand) {
     ASTNode *node = ast_new(kind);
@@ -371,6 +434,7 @@ ASTNode *ast_unary(ASTKind kind,
     return node;
 }
 
+/* ast_call — véase el contrato en ast.h. */
 ASTNode *ast_call(char *id,
                   ASTNode *args) {
     ASTNode *node = ast_new(AST_CALL);
@@ -381,6 +445,7 @@ ASTNode *ast_call(char *id,
     return node;
 }
 
+/* ast_index — véase el contrato en ast.h. */
 ASTNode *ast_index(char *name,
                    ASTNode *args,
                    ASTNode *index) {
@@ -388,9 +453,9 @@ ASTNode *ast_index(char *name,
 
     ast_add_child(node, ast_identifier(name));
 
-    //Keep every index under one AST_ARGUMENTS node.
-    // 'args' may already be an AST_ARGUMENTS node.
-    // 'index' may be an additional index from chained brackets.
+    //Conserva todos los índices dentro de un nodo AST_ARGUMENTS.
+    // args puede ser ya un nodo AST_ARGUMENTS.
+    // index puede ser otro índice de corchetes encadenados.
     ASTNode *indices = args;
 
     if (indices == NULL) {
@@ -410,8 +475,8 @@ ASTNode *ast_index(char *name,
                 item = next;
             }
 
-            //The wrapper has been emptied. Free only the wrapper,
-            // not its children, which now belong to 'indices'.
+            //El contenedor quedó vacío. Libera solo el contenedor,
+            // sus hijos pertenecen ahora a indices y deben conservarse.
             free(index);
         } else {
             ast_add_child(indices, index);
@@ -423,8 +488,22 @@ ASTNode *ast_index(char *name,
     return node;
 }
 
-// Printing 
+/* ==========================================================================
+ * IMPRESIÓN, EXPORTACIÓN Y LIBERACIÓN
+ * ======================================================================= */
 
+
+/*
+ * ast_kind_name — obtiene el nombre de una clase de nodo.
+ *
+ * Entrada:
+ *   kind  clase AST.
+ * Salida:
+ *   cadena literal o UNKNOWN.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static const char *ast_kind_name(ASTKind kind) {
     switch (kind) {
 
@@ -489,6 +568,18 @@ static const char *ast_kind_name(ASTKind kind) {
     }
 }
 
+/*
+ * ast_print_internal — imprime nodos y hermanos con profundidad.
+ *
+ * Entrada:
+ *   node  nodo o NULL.
+ *   depth  profundidad de sangría no negativa.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe árbol en stdout.
+ * Restricciones:
+ *   AST sin ciclos.
+ */
 static void ast_print_internal(ASTNode *node, int depth) {
     while (node != NULL) {
 
@@ -515,11 +606,23 @@ static void ast_print_internal(ASTNode *node, int depth) {
     }
 }
 
+/* ast_print — véase el contrato en ast.h. */
 void ast_print(ASTNode *root, int depth) {
     ast_print_internal(root, depth);
 }
 
-/* JSON independiente de la presentación en terminal; next son hermanos. */
+/*
+ * json_string — escribe una cadena JSON escapada.
+ *
+ * Entrada:
+ *   out  flujo no NULL.
+ *   text  texto no NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe cadena con comillas y escapes.
+ * Restricciones:
+ *   ninguna.
+ */
 static void json_string(FILE *out, const char *text) {
     fputc('"', out);
     for (const unsigned char *p = (const unsigned char *) text; *p; p++) {
@@ -530,6 +633,19 @@ static void json_string(FILE *out, const char *text) {
     fputc('"', out);
 }
 
+/*
+ * json_node — exporta un nodo y sus hijos a JSON.
+ *
+ * Entrada:
+ *   out  flujo no NULL.
+ *   node  nodo no NULL.
+ *   next_id  contador de identificadores no NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe JSON e incrementa *next_id.
+ * Restricciones:
+ *   AST sin ciclos; no exporta punteros symbol ni hermanos de raíz.
+ */
 static void json_node(FILE *out, const ASTNode *node, unsigned *next_id) {
     fprintf(out, "{\"id\":%u,\"kind\":", (*next_id)++);
     json_string(out, ast_kind_name(node->kind));
@@ -546,6 +662,7 @@ static void json_node(FILE *out, const ASTNode *node, unsigned *next_id) {
     fputs("]}", out);
 }
 
+/* ast_write_json — véase el contrato en ast.h. */
 int ast_write_json(FILE *out, const ASTNode *node, const char *source) {
     if (!out || !node) return 1;
     unsigned next_id = 1;
@@ -558,27 +675,28 @@ int ast_write_json(FILE *out, const ASTNode *node, const char *source) {
 }
 
 
+/* ast_free — véase el contrato en ast.h. */
 void ast_free(ASTNode *node) {
     if (node == NULL)
         return;
 
     /*
-     * First free all children.
+     * Primero libera todos los hijos.
      */
     ast_free(node->child);
 
     /*
-     * Then free siblings.
+     * Después libera los hermanos.
      */
     ast_free(node->next);
 
     /*
-     * Free dynamically allocated text.
+     * Libera el texto reservado dinámicamente.
      */
     free(node->text);
 
     /*
-     * Finally free the node itself.
+     * Finalmente libera el nodo.
      */
     free(node);
 }

@@ -1,3 +1,14 @@
+/*
+ * codegen.h — Fase 4: interfaz de emisión del IR, bundles e imagen de datos.
+ *
+ * Expone slots, instrucciones, IR, emisión, listados e imagen de datos.
+ * Los contratos indican entradas, resultados, efectos y límites de uso.
+ *
+ * Usa: tipos de la biblioteca C y declaraciones propias.
+ * Lo usa: codegen.c; generate.c, codegen_crypto.c, main.c y codegen_*.
+ * Referencias: isa.md §3, §9, §11; fase4_contrato_comun.md §1, §4, §5.
+ */
+
 #ifndef CODEGEN_H
 #define CODEGEN_H
  
@@ -61,83 +72,281 @@ typedef struct {
     } data;
 } CGIRRecord;
 
-/* Describe la sintaxis generada sin resolver etiquetas ni codificar palabras.
- * 0 = descripción conocida; 1 = desconocida/inválida, marcada como barrera.
- * text se presta: el llamador conserva su propiedad. El ensamblador sigue
- * siendo el responsable de la validación y de los mensajes de error. */
+/* ==========================================================================
+ * DESCRIPCIÓN, IR Y ORGANIZACIÓN
+ * ======================================================================= */
+
+/*
+ * cg_describe_instruction — describe unidad, registros y efectos de una instrucción.
+ *
+ * Entrada:
+ *   text  texto prestado o NULL.
+ *   slot  slot de emisión 0–3.
+ *   source_line  línea fuente, 0 si ausente.
+ *   out  salida escribible o NULL.
+ * Salida:
+ *   0 si conocida; 1 si desconocida/inválida.
+ *   Efectos: llena *out sin tomar propiedad del texto.
+ * Restricciones:
+ *   texto menor de 256 bytes; desconocida queda como barrera; el
+ *   ensamblador valida/codifica finalmente.
+ */
 int cg_describe_instruction(const char *text, Slot slot, int source_line,
                             CGInstruction *out);
 
-/* Flujo en orden de emisión, independiente de las líneas de salida.
- * cg_op registra operación + separación AUTOMATIC; cg_bundle conserva un
- * bundle fijo; cg_gap es separación EXPLICIT. Los textos pertenecen al emisor.
- * Los registros son de solo lectura y sus punteros valen hasta la siguiente
- * emisión o cg_free/cg_init. Una etiqueta o bundle fijo delimita regiones que
- * el organizador mantiene como fronteras de calendarización. */
+/*
+ * cg_ir_count — consulta la cantidad de registros del IR.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   cantidad de registros, incluidos etiquetas, bundles y huecos.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 int cg_ir_count(void);
+/*
+ * cg_ir_record — consulta un registro del IR.
+ *
+ * Entrada:
+ *   index  índice desde 0.
+ * Salida:
+ *   puntero interno de solo lectura o NULL fuera de rango.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   válido hasta nueva emisión, cg_free o cg_init.
+ */
 const CGIRRecord *cg_ir_record(int index);
 
-/* Organiza regiones del IR y reconstruye líneas/direcciones. Llamar una vez
- * al terminar la emisión, antes de consultar etiquetas o ensamblar. Idempotente;
- * después no admite nueva emisión. 0 = éxito (incluido fallback conservador),
- * 1 = no se pudo organizar. No cambia la imagen de datos ni el IR original. */
+/*
+ * cg_schedule — organiza regiones y reconstruye direcciones finales.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   0 si finaliza, incluso al conservar emisión; 1 si falla.
+ *   Efectos: reconstruye líneas/bundles y marca finalized.
+ * Restricciones:
+ *   idempotente; no emitir después; efectos desconocidos o saltos
+ *   numéricos conservan el programa completo.
+ */
 int cg_schedule(void);
 
+/* ==========================================================================
+ * EMISIÓN Y CONSULTAS
+ * ======================================================================= */
+
+/*
+ * cg_init — reinicia el emisor y la imagen de datos.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: libera emisión anterior y pone imagen y tamaño a cero.
+ * Restricciones:
+ *   ninguna.
+ */
 void cg_init(void);
+/*
+ * cg_free — libera el IR y las líneas de salida.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: libera memoria, reinicia línea y finalized.
+ * Restricciones:
+ *   la imagen de datos se reinicia con cg_init.
+ */
 void cg_free(void);
  
-/* Etiqueta: vale el índice del bundle que la sigue (isa.md §11.1). */
+/*
+ * cg_label — registra una etiqueta en IR y salida.
+ *
+ * Entrada:
+ *   name  nombre no NULL sin dos puntos.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: copia nombre y agrega línea de etiqueta.
+ * Restricciones:
+ *   antes de cg_schedule; su dirección es el índice del bundle siguiente.
+ */
 void cg_label(const char *name);
  
-/* Bundle completo. NULL en un slot = nopi. Las cadenas se copian. */
+/*
+ * cg_bundle — registra un bundle fijo de cuatro slots.
+ *
+ * Entrada:
+ *   s0  texto de slot 0 o NULL.
+ *   s1  texto de slot 1 o NULL.
+ *   s2  texto de slot 2 o NULL.
+ *   s3  texto de slot 3 o NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: copia/describe slots en IR y emite una línea.
+ * Restricciones:
+ *   antes de cg_schedule; los bundles fijos delimitan regiones.
+ */
 void cg_bundle(const char *s0, const char *s1, const char *s2, const char *s3);
  
-/* Registra una operación y su separación conservadora. cg_schedule podrá
-   agruparla con otras operaciones y reemplazar huecos automáticos. El slot es
-   preferido: una ALU normal admite 0 o 1. Formato tipo printf. */
+/*
+ * cg_op — registra una operación con separación conservadora.
+ *
+ * Entrada:
+ *   slot  slot preferido 0–3.
+ *   fmt  formato printf de la instrucción.
+ *   ...  argumentos del formato.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: copia operación al IR y emite operación más hueco automático.
+ * Restricciones:
+ *   texto menor de 256 bytes; antes de cg_schedule; slot/texto inválido
+ *   termina el proceso.
+ */
 void cg_op(Slot slot, const char *fmt, ...);
  
-/* Bundle vacío. */
+/*
+ * cg_gap — registra una separación explícita.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: agrega IR y bundle de cuatro nopi.
+ * Restricciones:
+ *   se conserva al organizar; antes de cg_schedule.
+ */
 void cg_gap(void);
  
-/* Escribe las líneas actuales: llamar cg_schedule antes para organizarlas.
- * Formato isa.md §11: un bundle por línea, cuatro slots. */
+/*
+ * cg_write — escribe las líneas actuales del emisor.
+ *
+ * Entrada:
+ *   out  flujo no NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe etiquetas y bundles.
+ * Restricciones:
+ *   organizar antes si se desea calendario compacto; comprobar errores del
+ *   flujo en el llamador.
+ */
 void cg_write(FILE *out);
 
-/* Línea del fuente vigente: cada bundle que se emita desde ahora la guarda,
-   para el .asm anotado. 0 = sin línea. */
+/*
+ * cg_set_line — selecciona la línea fuente de la emisión posterior.
+ *
+ * Entrada:
+ *   line  línea fuente, valores no positivos indican sin línea.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: actualiza current_source_line.
+ * Restricciones:
+ *   ninguna.
+ */
 void cg_set_line(int line);
 
-/* Como cg_write, pero anotado (enunciado CE1108 §6.2): la dirección (índice
-   de bundle) y la línea del fuente de cada bundle, y al final la tabla de
-   etiquetas con su dirección. Todo lo agregado va en comentarios con #
-   (isa.md §11.1): el archivo da los mismos bundles con ccom -x. */
+/*
+ * cg_write_listing — escribe ensamblador anotado y tabla de etiquetas.
+ *
+ * Entrada:
+ *   out  flujo no NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe direcciones, líneas por bundle/slot y tabla de etiquetas.
+ * Restricciones:
+ *   calendario actual; las anotaciones con # no cambian el ensamblado.
+ */
 void cg_write_listing(FILE *out);
 
-/* Dirección final después de cg_schedule (conservadora antes de llamarlo).
- * Índice de bundle de la etiqueta con ese nombre, o -1 si no
-   está definida. Es la misma que muestra el .asm anotado. */
+/*
+ * cg_label_address — consulta la dirección de una etiqueta.
+ *
+ * Entrada:
+ *   name  nombre no NULL sin dos puntos.
+ * Salida:
+ *   índice de bundle o -1 si no está definida.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   después de cg_schedule entrega dirección final; antes, conservadora.
+ */
 int cg_label_address(const char *name);
  
-/* Acceso para el ensamblado: cantidad de líneas y cada línea ya en texto.
-   Las etiquetas aparecen como líneas "nombre:" (no son bundles); un bundle
-   empieza con '{'. */
+/*
+ * cg_line_count — consulta la cantidad de líneas de salida.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   cantidad de etiquetas y bundles textuales.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 int         cg_line_count(void);
+/*
+ * cg_line — consulta una línea del ensamblador.
+ *
+ * Entrada:
+ *   i  índice desde 0.
+ * Salida:
+ *   cadena interna o NULL fuera de rango.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   no liberar; cg_schedule y nuevas emisiones pueden invalidarla.
+ */
 const char *cg_line(int i);
  
-/* Cantidad de bundles emitidos hasta ahora (índice del próximo bundle). */
+/*
+ * cg_bundle_count — consulta el índice del próximo bundle.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   cantidad de bundles emitidos.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 int cg_bundle_count(void);
  
-/* ---- Imagen de datos (contrato §4) --------------------------------------
- * Palabras de 32 bits que representan 0x0000-0x0FFF, en cero por defecto. */
+/* ==========================================================================
+ * IMAGEN DE DATOS
+ * ======================================================================= */
+
+/* Palabras de 32 bits para 0x0000–0x0FFF, cero por defecto (contrato §4). */
 #define CG_DATA_BYTES 0x1000
  
-/* AGREGADO por Kevin: el contrato solo exponía la lectura. Escribe la
-   palabra en la dirección de byte addr (múltiplo de 4, < CG_DATA_BYTES).
-   Devuelve 0 si ok, -1 si la dirección es inválida. */
+/*
+ * cg_data_set — escribe una palabra en la imagen de datos.
+ *
+ * Entrada:
+ *   addr  dirección en bytes.
+ *   value  palabra de 32 bits.
+ * Salida:
+ *   0 si escribe; -1 si la dirección no es válida.
+ *   Efectos: actualiza imagen y máximo de bytes usados.
+ * Restricciones:
+ *   addr múltiplo de 4 entre 0 y 4092.
+ */
 int cg_data_set(int addr, uint32_t value);
  
+/*
+ * cg_data_size — consulta los bytes usados de la imagen.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   máxima dirección escrita + 4, o cero; múltiplo de 4.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 int             cg_data_size(void);   /* bytes usados, múltiplo de 4 */
+
+/*
+ * cg_data — consulta las palabras de la imagen.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   puntero interno de solo lectura.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   usar cg_data_size para el tamaño; cg_init reinicia su contenido.
+ */
 const uint32_t *cg_data(void);        /* palabras desde la dirección 0 */
  
 #endif

@@ -1,9 +1,36 @@
+/*
+ * symbol_table.c — Fase 3: símbolos y ámbitos con búsqueda estática.
+ *
+ * Mantiene listas de símbolos por ámbito y enlaces al ámbito padre.
+ * Conserva tipo, forma, direcciones y parámetros ordenados de las funciones.
+ *
+ * Usa: symbol_table.h; biblioteca C.
+ * Lo usa: semantic.c; generate.c y codegen_* leen símbolos anotados.
+ * Referencias: libro §2.7, §6.3.4, §7.1.1.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "symbol_table.h"
 
+/* ==========================================================================
+ * CREACIÓN DE SÍMBOLOS Y ÁMBITOS
+ * ======================================================================= */
+
+
+/*
+ * str_duplicate — duplica el nombre de un símbolo.
+ *
+ * Entrada:
+ *   str  texto o NULL.
+ * Salida:
+ *   cadena propia o NULL si str es NULL.
+ *   Efectos: reserva memoria; termina el proceso sin memoria.
+ * Restricciones:
+ *   ninguna.
+ */
 static char *str_duplicate(const char *str) {
     if (str == NULL)
         return NULL;
@@ -20,6 +47,7 @@ static char *str_duplicate(const char *str) {
 }
 
 
+/* symbol_create — véase el contrato en symbol_table.h. */
 Symbol *symbol_create(const char *name,
                       SymbolKind kind,
                       SymbolType type) {
@@ -58,8 +86,7 @@ Symbol *symbol_create(const char *name,
     return symbol;
 }
 
-// Agrega param al final de la lista ordenada de parámetros de la función.
-// La lista guarda punteros NO dueños: el símbolo pertenece al ámbito de la función.
+/* symbol_add_param — véase el contrato en symbol_table.h. */
 void symbol_add_param(Symbol *function, Symbol *param) {
     if (function == NULL || param == NULL)
         return;
@@ -86,6 +113,7 @@ void symbol_add_param(Symbol *function, Symbol *param) {
     function->parameter_count++;
 }
 
+/* scope_create — véase el contrato en symbol_table.h. */
 Scope *scope_create(Scope *parent, ScopeKind kind) {
     Scope *scope = malloc(sizeof(Scope));
 
@@ -104,21 +132,28 @@ Scope *scope_create(Scope *parent, ScopeKind kind) {
     return scope;
 }
 
+/* ==========================================================================
+ * INSERCIÓN Y BÚSQUEDA
+ * ======================================================================= */
+
+
+/* symbol_insert — véase el contrato en symbol_table.h. */
 int symbol_insert(Scope *scope, Symbol *symbol) {
     if (scope == NULL || symbol == NULL)
         return 0;
 
-    // Don't allow duplicate declarations in the same scope.
+    // Impide declaraciones duplicadas dentro del mismo ámbito.
     if (symbol_lookup_current(scope, symbol->name) != NULL)
         return 0;
 
-    // Insert at the beginning of the list.
+    // Inserta al inicio de la lista.
     symbol->next = scope->symbols;
     scope->symbols = symbol;
 
     return 1;
 }
 
+/* symbol_lookup_current — véase el contrato en symbol_table.h. */
 Symbol *symbol_lookup_current(Scope *scope,
                                const char *name) {
     if (scope == NULL || name == NULL)
@@ -138,6 +173,7 @@ Symbol *symbol_lookup_current(Scope *scope,
 }
 
 
+/* symbol_lookup — véase el contrato en symbol_table.h. */
 Symbol *symbol_lookup(Scope *scope, const char *name) {
     Scope *current_scope = scope;
 
@@ -155,6 +191,22 @@ Symbol *symbol_lookup(Scope *scope, const char *name) {
     return NULL;
 }
 
+/* ==========================================================================
+ * LIBERACIÓN
+ * ======================================================================= */
+
+
+/*
+ * symbol_free — libera una lista de símbolos.
+ *
+ * Entrada:
+ *   symbol  primer símbolo o NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: libera nombres, arreglos param_list y símbolos.
+ * Restricciones:
+ *   no libera los parámetros prestados de param_list.
+ */
 static void symbol_free(Symbol *symbol) {
     while (symbol != NULL) {
 
@@ -173,6 +225,7 @@ static void symbol_free(Symbol *symbol) {
 }
 
 
+/* scope_free — véase el contrato en symbol_table.h. */
 void scope_free(Scope *scope) {
     if (scope == NULL)
         return;
@@ -182,7 +235,22 @@ void scope_free(Scope *scope) {
     free(scope);
 }
 
-// Printing
+/* ==========================================================================
+ * IMPRESIÓN DE LA TABLA DE SÍMBOLOS
+ * ======================================================================= */
+
+
+/*
+ * symbol_kind_string — obtiene el texto de clase de símbolo.
+ *
+ * Entrada:
+ *   kind  clase del símbolo.
+ * Salida:
+ *   cadena literal o unknown.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static const char *symbol_kind_string(SymbolKind kind) {
     switch (kind) {
 
@@ -203,6 +271,17 @@ static const char *symbol_kind_string(SymbolKind kind) {
     }
 }
 
+/*
+ * symbol_type_string — obtiene el texto de tipo de símbolo.
+ *
+ * Entrada:
+ *   type  tipo del símbolo.
+ * Salida:
+ *   cadena literal o unknown.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static const char *symbol_type_string(SymbolType type) {
     switch (type) {
 
@@ -221,6 +300,17 @@ static const char *symbol_type_string(SymbolType type) {
 }
 
 
+/*
+ * scope_kind_string — obtiene el texto de clase de ámbito.
+ *
+ * Entrada:
+ *   kind  clase del ámbito.
+ * Salida:
+ *   cadena literal o UNKNOWN.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
 static const char *scope_kind_string(ScopeKind kind) {
     switch (kind) {
 
@@ -251,6 +341,19 @@ static const char *scope_kind_string(ScopeKind kind) {
 }
 
 // Imprime una dirección en hexadecimal; ---- si todavía no se asignó (-1).
+/*
+ * print_address — escribe una dirección o su ausencia.
+ *
+ * Entrada:
+ *   out  flujo no NULL.
+ *   label  nombre del campo.
+ *   address  dirección en bytes o negativa.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe hexadecimal o ---- en out.
+ * Restricciones:
+ *   ninguna.
+ */
 static void print_address(FILE *out, const char *label, int address) {
     if (address < 0)
         fprintf(out, " %s=----", label);
@@ -258,8 +361,19 @@ static void print_address(FILE *out, const char *label, int address) {
         fprintf(out, " %s=0x%04X", label, (unsigned int) address);
 }
 
-// Comienzo de una línea: el prefijo (sin espacios finales si la línea queda
-// vacía).
+/*
+ * line_start — escribe un prefijo de línea.
+ *
+ * Entrada:
+ *   out  flujo no NULL.
+ *   prefix  prefijo no NULL.
+ *   empty  1 si la línea queda vacía.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe prefijo, sin espacios finales cuando empty.
+ * Restricciones:
+ *   ninguna.
+ */
 static void line_start(FILE *out, const char *prefix, int empty) {
     if (!empty) {
         fputs(prefix, out);
@@ -274,10 +388,12 @@ static void line_start(FILE *out, const char *prefix, int empty) {
     fwrite(prefix, 1, length, out);
 }
 
+/* symbol_table_print — véase el contrato en symbol_table.h. */
 void symbol_table_print(Scope *scope) {
     symbol_table_fprint(stdout, scope, "", 0);
 }
 
+/* symbol_table_fprint — véase el contrato en symbol_table.h. */
 void symbol_table_fprint(FILE *out, Scope *scope, const char *prefix,
                          int detailed) {
     int scope_number = 0;

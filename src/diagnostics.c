@@ -1,3 +1,14 @@
+/*
+ * diagnostics.c — Fases 1–3: presentación de errores con posición del fuente.
+ *
+ * Carga líneas del archivo y mantiene un contador de errores. Los mensajes
+ * incluyen el texto y un señalador que conserva las tabulaciones.
+ *
+ * Usa: diagnostics.h; biblioteca C.
+ * Lo usa: lexer.l, parser.y, semantic.c y main.c.
+ * Referencias: enunciado §8.2 (referencia ya citada en el código).
+ */
+
 #define _POSIX_C_SOURCE 200809L   // getline
 
 #include <stdarg.h>
@@ -16,6 +27,12 @@ static int diag_line_count = 0;
 
 static int diag_errors = 0;
 
+/* ==========================================================================
+ * CARGA Y REPORTE DE ERRORES
+ * ======================================================================= */
+
+
+/* diag_init — véase el contrato en diagnostics.h. */
 void diag_init(const char *filename) {
     diag_free();
 
@@ -71,6 +88,7 @@ void diag_init(const char *filename) {
     fclose(file);
 }
 
+/* diag_verror — véase el contrato en diagnostics.h. */
 void diag_verror(const char *category,
                  int line, int column, int length,
                  const char *fmt, va_list args) {
@@ -128,6 +146,7 @@ void diag_verror(const char *category,
     fprintf(stderr, "\n");
 }
 
+/* diag_error — véase el contrato en diagnostics.h. */
 void diag_error(const char *category,
                 int line, int column, int length,
                 const char *fmt, ...) {
@@ -138,14 +157,22 @@ void diag_error(const char *category,
     va_end(args);
 }
 
+/* ==========================================================================
+ * CONSULTAS Y LIBERACIÓN
+ * ======================================================================= */
+
+
+/* diag_last_line — véase el contrato en diagnostics.h. */
 int diag_last_line(void) {
     return diag_line_count > 0 ? diag_line_count : 1;
 }
 
+/* diag_count — véase el contrato en diagnostics.h. */
 int diag_count(void) {
     return diag_errors;
 }
 
+/* diag_free — véase el contrato en diagnostics.h. */
 void diag_free(void) {
     for (int i = 0; i < diag_line_count; i++)
         free(diag_lines[i]);

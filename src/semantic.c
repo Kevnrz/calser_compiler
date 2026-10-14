@@ -278,6 +278,11 @@ static void discard_symbol(Symbol *symbol) {
 // M-2: variables de ccom en 0x0000–0x0FFF; desde 0x1000, archivos de load_file
 #define DATA_BASE  0x0000
 #define DATA_LIMIT 0x1000          // primera dirección que NO se puede usar
+#define TEMP_WORDS 12             // una casilla para cada registro t0–t11
+
+// Espacio mínimo que debe quedar libre, después de la última área y antes de
+// DATA_LIMIT, para la pila de llamadas de la Fase 4 (generate.c).
+#define STACK_MIN_BYTES 256
 
 static int next_address = DATA_BASE;   // libro §6.3.4: el "offset"
 
@@ -899,8 +904,8 @@ static ExprType check_call(ASTNode *node, UseContext context) {
         }
         else if (resolution == RESOLVED_ACCESS) {
 
-            // Índices usados: los de ARGUMENTS y, en INDEX, uno más.
-            int used = n_args + (node->kind == AST_INDEX ? 1 : 0);
+            // Todos los indices en ARGUMETNS.
+            int used = n_args;
 
             valid = used == symbol->dimensions;
 
@@ -1573,6 +1578,8 @@ static int analyze_declaration(ASTNode *node) {
     symbol->line = node->line;
     symbol->decl_node = node;
 
+    identifier->symbol = symbol;
+
     fill_dimensions(symbol, dimensions, node);
 
     // El inicializador se verifica antes de insertar el símbolo:
@@ -1606,6 +1613,7 @@ static int analyze_declaration(ASTNode *node) {
     if (!insert_symbol(symbol, node))
         return 1;
 
+    identifier->symbol = symbol;
     reserve(symbol->width, symbol->name, node, &symbol->address);
 
     return 1;
@@ -1833,8 +1841,24 @@ static int analyze_loop_s(ASTNode *node) {
         control->line = node->line;
         control->decl_node = node;
 
-        if (insert_symbol(control, node))
-            reserve(control->width, control->name, node, &control->address);
+        if (insert_symbol(control, node)) {
+            reserve(control->width,
+                    control->name,
+                    node,
+                    &control->address);
+
+            // Casilla oculta para el fin del ciclo, junto a la variable de
+            // control. El fin se evalúa una sola vez al entrar
+            // (calser_diseno.md §5.8.2) y el generador lo guarda aquí para
+            // no retener un registro durante el cuerpo. No tiene nombre: no
+            // entra a la tabla de ámbitos.
+            reserve(type_width(TYPE_INT),
+                    control->name,
+                    node,
+                    &control->limit_address);
+
+            identifier->symbol = control;
+        }
     }
 
     // El cuerpo comparte el ámbito del S con su variable (no abre otro).
@@ -2103,6 +2127,7 @@ static int register_signature(ASTNode *node) {
     function->decl_node = node;
 
     symbol_insert(global_scope, function);
+    identifier->symbol = function;
 
     /*
      * Los parámetros solo quedan en param_list, que no es dueña: pasan a
@@ -2259,6 +2284,7 @@ static int analyze_function(ASTNode *node) {
      * +4  variable de retorno, si no es void
      * ... parámetros, en orden
      * ... locales de todos sus bloques, en el orden del recorrido
+     * ... 12 palabras para salvar temporales vivos (también en main)
      */
     function->area_base = next_address;
 
@@ -2291,8 +2317,10 @@ static int analyze_function(ASTNode *node) {
         ret->line = return_type->line;
         ret->decl_node = return_type;
 
-        if (insert_symbol(ret, return_type))
+        if (insert_symbol(ret, return_type)) {
+            ret_id->symbol = ret;
             reserve(ret->width, ret->name, return_type, &ret->address);
+        }
     }
 
     // Los parámetros ya existen en param_list: desde aquí pertenecen al
@@ -2330,7 +2358,11 @@ static int analyze_function(ASTNode *node) {
                            function->name);
     }
 
-    // El área termina donde quedó el offset.
+    // Reserva al final del área espacio para salvar t0–t11 en llamadas.
+    reserve(TEMP_WORDS * type_width(TYPE_INT), function->name, node,
+            &function->temp_base);
+
+    // El área termina donde quedó el offset, incluidos los temporales.
     function->area_size = next_address - function->area_base;
 
     // Return to global scope.
@@ -2522,13 +2554,34 @@ int semantic_analyze(ASTNode *root) {
     // Recursión indirecta: después de analizar todos los cuerpos.
     check_cycles();
 
+    // La pila de llamadas ocupa lo que queda libre en la zona de ccom. Si
+    // las variables ya se pasaron del límite, ese error ya se reportó.
+    if (!memory_reported &&
+        DATA_LIMIT - next_address < STACK_MIN_BYTES) {
+
+        semantic_error(NULL,
+                       "no queda espacio para la pila de llamadas: "
+                       "%d bytes libres, se necesitan %d (limite 0x%04X)",
+                       DATA_LIMIT - next_address,
+                       STACK_MIN_BYTES,
+                       (unsigned int) (DATA_LIMIT - 1));
+    }
+
     return diag_count() == errors_before;
+}
+
+int semantic_data_end(void) {
+    return next_address;
 }
 
 // Symbol table output
 
 void semantic_print_symbols(void) {
     symbol_table_print(scope_list_head);
+}
+
+void semantic_fprint_symbols(FILE *out, const char *prefix) {
+    symbol_table_fprint(out, scope_list_head, prefix, 1);
 }
 
 void semantic_free(void)

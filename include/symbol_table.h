@@ -1,6 +1,8 @@
 #ifndef SYMBOL_TABLE_H
 #define SYMBOL_TABLE_H
 
+#include <stdio.h>
+
 typedef enum {
     SYMBOL_VARIABLE,
     SYMBOL_FUNCTION,
@@ -47,6 +49,9 @@ typedef struct Symbol {
     int parameter_count;
     int area_base;             // inicio del área estática; -1 = sin asignar
     int area_size;             // tamaño del área en bytes
+    int temp_base;             // inicio de las 12 casillas de temporales; -1 = sin asignar
+    int limit_address;         // variable de control de un S: casilla oculta donde
+                               // se guarda el fin del ciclo; -1 = no aplica
     struct Symbol **param_list; // parámetros EN ORDEN. Punteros NO dueños:
                                 // los símbolos viven en el ámbito de la función
     int param_capacity;        // capacidad reservada de param_list
@@ -95,5 +100,12 @@ Scope *scope_create(Scope *parent, ScopeKind kind);
 void scope_free(Scope *scope);
 
 void symbol_table_print(Scope *scope);
+
+// Igual que symbol_table_print, en out y con prefix al inicio de cada línea
+// (el .asm anotado la escribe como comentarios con "#"). Con detailed agrega
+// lo que necesita la traza del simulador: la función dueña de cada ámbito,
+// los parámetros marcados y la línea de declaración de cada variable.
+void symbol_table_fprint(FILE *out, Scope *scope, const char *prefix,
+                         int detailed);
 
 #endif

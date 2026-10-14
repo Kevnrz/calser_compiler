@@ -6,8 +6,13 @@ cd "$(dirname "$0")/.." || exit 1
 out="${1:-pruebas/resultados.txt}"
 : > "$out"
 
+# ccom escribe .bin, .hex y .mem: van a una carpeta temporal que se borra al
+# terminar, para no dejar archivos en pruebas/.
+tmp="$(mktemp -d)" || exit 1
+trap 'rm -rf "$tmp"' EXIT
+
 for f in pruebas/*.cls; do
-    ./ccom -m "$f" > /tmp/ccom_out.txt 2> /tmp/ccom_err.txt
+    ./ccom -m "$f" -o "$tmp/salida.bin" > /tmp/ccom_out.txt 2> /tmp/ccom_err.txt
     code=$?
 
     {

@@ -63,3 +63,19 @@ Thumbs.db
 *.tmp
 *.temp
 pruebas/resultados_asan.txt
+
+# ============================================================
+# Python
+# ============================================================
+
+__pycache__/
+*.pyc
+
+# ============================================================
+# Salidas de ccom junto a las pruebas (correr ccom a mano)
+# ============================================================
+
+pruebas/*.bin
+pruebas/*.hex
+pruebas/*.mem
+pruebas/*.asm

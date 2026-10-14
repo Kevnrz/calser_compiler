@@ -171,6 +171,7 @@ ASTNode *ast_crypto(const char *operation,
 // Expressions
 ASTNode *ast_number(long value);
 ASTNode *ast_boolean(int value);
+ASTNode *ast_arguments(ASTNode *arguments);
 ASTNode *ast_identifier(const char *name);
 
 ASTNode *ast_binary(ASTKind kind,
@@ -191,6 +192,9 @@ ASTNode *ast_index(char *name,
 // Printing
 void ast_print(ASTNode *node,
                int indent);
+
+/* Exporta AST sintáctico, sin punteros a símbolos. 0 = éxito. */
+int ast_write_json(FILE *out, const ASTNode *node, const char *source);
 
 void ast_free(ASTNode *node);
 

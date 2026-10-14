@@ -24,50 +24,78 @@ void label_table_init(LabelTable *table) {
     table->next_id = 0;
 }
 
-static int label_table_add(LabelTable *table, ASTNode *node, LabelRole role, const char *prefix) {
-    char buffer[128];
+static int label_table_add_named(LabelTable *table, ASTNode *node,
+                                 LabelRole role, const char *name) {
+    char *copy = copy_string(name);
 
-    unsigned int id = table->next_id;
-
-    int length = snprintf(
-        buffer,
-        sizeof(buffer),
-        ".L_%s_%u",
-        prefix,
-        id
-    );
-
-    if (length < 0 || (size_t)length >= sizeof(buffer))
-        return -1;
-
-    char *name = copy_string(buffer);
-
-    if (name == NULL)
+    if (copy == NULL)
         return -1;
 
     LabelEntry *entry = malloc(sizeof(LabelEntry));
 
     if (entry == NULL) {
-        free(name);
+        free(copy);
         return -1;
     }
 
     entry->node = node;
     entry->role = role;
-    entry->name = name;
-
+    entry->name = copy;
+    entry->address = -1;
     entry->next = table->entries;
     table->entries = entry;
 
-    table->next_id++;
-
     return 0;
+}
+
+static int label_table_add(LabelTable *table, ASTNode *node,
+                           LabelRole role, const char *prefix) {
+    char buffer[128];
+    int length = snprintf(buffer, sizeof(buffer), ".L_%s_%u",
+                          prefix, table->next_id);
+
+    if (length < 0 || (size_t) length >= sizeof(buffer))
+        return -1;
+
+    if (label_table_add_named(table, node, role, buffer) != 0)
+        return -1;
+
+    table->next_id++;
+    return 0;
+}
+
+static int label_function(LabelTable *table, ASTNode *node) {
+    ASTNode *identifier = node->child;
+    while (identifier != NULL && identifier->kind != AST_IDENTIFIER)
+        identifier = identifier->next;
+
+    if (identifier == NULL || identifier->text == NULL)
+        return -1;
+
+    /* El nombre completo se conserva, sin un límite fijo de caracteres. */
+    size_t length = strlen(identifier->text) + sizeof(".L_func_");
+    char *name = malloc(length);
+    if (name == NULL)
+        return -1;
+
+    snprintf(name, length, ".L_func_%s", identifier->text);
+    int result = label_table_add_named(table, node, LABEL_FUNCTION, name);
+    if (result == 0) {
+        snprintf(name, length, ".L_body_%s", identifier->text);
+        result = label_table_add_named(table, node, LABEL_BODY, name);
+    }
+
+    free(name);
+    return result;
 }
 
 static int label_node(LabelTable *table, ASTNode *node) {
     switch (node->kind) {
         case AST_FUNCTION:
-            return label_table_add(table, node, LABEL_FUNCTION, "func");
+            return label_function(table, node);
+        case AST_AND:
+        case AST_OR:
+            return label_table_add(table, node, LABEL_SC_END, "sc_end");
         case AST_CONDITIONAL:
             if (label_table_add(table, node, LABEL_NEXT, "if_next") != 0)
                 return -1;
@@ -117,11 +145,20 @@ int label_table_build(LabelTable *table, ASTNode *root) {
 
     table->next_id = 0;
 
-    return label_traverse(table, root);
+    if (label_traverse(table, root) != 0)
+        return -1;
+
+    // Etiquetas globales: no pertenecen a ningún nodo del AST.
+    if (label_table_add_named(table, NULL, LABEL_PROGRAM_END,
+                              "fin_main") != 0)
+        return -1;
+
+    return label_table_add_named(table, NULL, LABEL_ARITH_ERROR,
+                                 ".L_arith_error");
 }
 
 const char *label_table_get(const LabelTable *table, const ASTNode *node, LabelRole role) {
-    if (table == NULL || node == NULL)
+    if (table == NULL)
         return NULL;
 
     const LabelEntry *entry = table->entries;
@@ -164,8 +201,36 @@ static const char *label_role_name(LabelRole role) {
         case LABEL_NEXT:     return "NEXT";
         case LABEL_END:      return "END";
         case LABEL_UPDATE:   return "UPDATE";
+        case LABEL_BODY:     return "BODY";
+        case LABEL_SC_END:   return "SC_END";
+        case LABEL_ARITH_ERROR: return "ARITH_ERROR";
+        case LABEL_PROGRAM_END: return "PROGRAM_END";
         default:             return "UNKNOWN";
     }
+}
+
+static const char *label_node_kind_name(const ASTNode *node) {
+    if (node == NULL)
+        return "GLOBAL";
+
+    switch (node->kind) {
+        case AST_FUNCTION:    return "FUNCTION";
+        case AST_CONDITIONAL: return "CONDITIONAL";
+        case AST_ALTERNATIVE: return "ALTERNATIVE";
+        case AST_LOOP_L:      return "LOOP_L";
+        case AST_LOOP_S:      return "LOOP_S";
+        case AST_AND:         return "AND";
+        case AST_OR:          return "OR";
+        default:             return "UNKNOWN";
+    }
+}
+
+void label_table_resolve(LabelTable *table, int (*lookup)(const char *name)) {
+    if (table == NULL || lookup == NULL)
+        return;
+
+    for (LabelEntry *entry = table->entries; entry != NULL; entry = entry->next)
+        entry->address = lookup(entry->name);
 }
 
 void label_table_print(const LabelTable *table) {
@@ -177,12 +242,21 @@ void label_table_print(const LabelTable *table) {
     const LabelEntry *entry = table->entries;
 
     while (entry != NULL) {
+        char address[16];
+
+        // "-" mientras la dirección no se conoce (libro §6.7).
+        if (entry->address >= 0)
+            snprintf(address, sizeof(address), "%d", entry->address);
+        else
+            snprintf(address, sizeof(address), "-");
+
         printf(
-            "%-10s | %-12s | AST kind: %d | Line: %d\n",
+            "%-10s | %-12s | AST kind: %s | Line: %d | Address: %s\n",
             entry->name,
             label_role_name(entry->role),
-            (int)entry->node->kind,
-            entry->node->line
+            label_node_kind_name(entry->node),
+            entry->node != NULL ? entry->node->line : 0,
+            address
         );
 
         entry = entry->next;

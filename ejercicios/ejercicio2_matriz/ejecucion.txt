@@ -1,0 +1,21 @@
+Ejecucion de ejercicio2 con tools/sim_asm.py
+Programa: ejercicios/ejercicio2_matriz/ejercicio2.asm (265 bundles)
+Fin: salto a sí mismo; bundles ejecutados: 567; ciclos: 583
+Avisos de separación: 0
+
+Valores finales de las variables:
+  m = [4, 8, 15, 16, 23, 42, 7, 1, 9, 3, 5, 2]
+  hallado = verdadero
+  mat = @0x0000
+  x = 42
+  pos = @0x0084
+  i = 1
+  j = 1
+  p = [1, 1]
+  ok = verdadero
+
+Resultado esperado contra obtenido:
+  ok: esperado verdadero, obtenido verdadero  OK
+  p: esperado [1, 1], obtenido [1, 1]  OK
+
+Veredicto: OK

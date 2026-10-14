@@ -42,6 +42,7 @@ typedef struct {
     int verbose;               /* -v */
     int emit_asm;              /* -s */
     const char *ast_json;       /* --ast-json archivo */
+    int no_schedule;           /* --no-schedule: comparación conservadora */
     int print_ast;             /* -t */
     int print_memory;          /* -m */
     int assemble_only;         /* -x */
@@ -50,7 +51,7 @@ typedef struct {
 
 #define EXIT_USAGE 2
 
-#define USAGE "uso: ccom [-v] [-t] [-m] [-s] [-p] [-x] [--ast-json <json>] <archivo> [-o <salida>]"
+#define USAGE "uso: ccom [-v] [-t] [-m] [-s] [-p] [-x] [--ast-json <json>] [--no-schedule] <archivo> [-o <salida>]"
 
 // Nombre por defecto del binario: el fuente sin extensión + ".bin". La
 // extensión es lo que sigue al último '.' del nombre del archivo (no de los
@@ -452,6 +453,10 @@ static int compile(const Options *options) {
     // código (§2.4) y ensamblarlo (§2.5).
     int gen_failed = generate_code(root, labels);
     report_phase(options, "fase 4: generacion de codigo", !gen_failed);
+    if (!gen_failed && !options->no_schedule) {
+        gen_failed = cg_schedule();
+        report_phase(options, "fase 4: organizacion de bundles", !gen_failed);
+    }
     if (gen_failed) {
         // Sin código generado no hay direcciones: se imprime con "-".
         if (options->print_memory)
@@ -462,6 +467,7 @@ static int compile(const Options *options) {
         free(labels);
 
         semantic_free();
+        cg_free();
 
         ast_free(root);
 
@@ -469,10 +475,10 @@ static int compile(const Options *options) {
         return 1; 
     }
 
-    // Ya hay código: cada etiqueta de la tabla recibe su dirección (índice
-    // de bundle), la misma que muestra el .asm anotado. Se completa después
-    // de registrar la etiqueta (libro §6.7, backpatching; aquí con la
-    // primera pasada del ensamblado, enunciado §2.5). Una etiqueta que no
+    // El calendario ya es definitivo. Resolver con sus índices finales,
+    // antes del listado y del ensamblado, nunca con las direcciones del IR
+    // conservador. La primera pasada del ensamblador cuenta esos mismos
+    // bundles (libro §6.7, backpatching; enunciado §2.5). Una etiqueta que no
     // llega al .asm (un & constante en un inicializador global) queda con -1.
     label_table_resolve(labels, cg_label_address);
 
@@ -572,6 +578,7 @@ int main(int argc, char **argv) {
     // antes o después del archivo (ccom prog.cls -o prog.bin).
     static const struct option long_options[] = {
         {"ast-json", required_argument, NULL, 1000},
+        {"no-schedule", no_argument, NULL, 1001},
         {NULL, 0, NULL, 0}
     };
     while ((option = getopt_long(argc, argv, "o:vstmxp", long_options, NULL)) != -1) {
@@ -590,6 +597,7 @@ int main(int argc, char **argv) {
                 break;
 
             case 1000: options.ast_json = optarg; break;
+            case 1001: options.no_schedule = 1; break;
             case 'v': options.verbose = 1;       break;
             case 's': options.emit_asm = 1;      break;
             case 't': options.print_ast = 1;     break;

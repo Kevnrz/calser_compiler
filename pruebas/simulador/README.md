@@ -134,3 +134,14 @@ intencional y el reporte expone `EXC` para comprobarlo.
 
 Para ejecutar el programa `.cls` compilado y cargar sus variables iniciales,
 consulta [la prueba de integración crypto](../crypto/README.md#programa-compilado-por-ccom).
+
+## Bundles con varias líneas del fuente
+
+El compilador puede agrupar operaciones procedentes de distintas sentencias.
+El comentario del listado conserva `linea N` como referencia principal y añade
+`slots 0=N,1=N,2=N,3=N` cuando sus ubicaciones difieren. La traza usa la ubicación
+del slot LSU para almacenamientos, BRU para saltos y CRYPTO para sus eventos;
+los listados antiguos sin esta extensión siguen funcionando.
+
+Para comparar ciclos de factorial con y sin organización, consultar
+[Organización de bundles](../../docs/organizacion_bundles.md).

@@ -13,6 +13,7 @@ cualquier bandera.
 
 | Bandera | Qué hace | Dónde sale | Estado |
 |---|---|---|---|
+| `--no-schedule` | Desactiva el organizador local y conserva la emisión de una operación más separación; útil para comparar | archivos | ✅ Disponible |
 | `--ast-json <archivo>` | Exporta el AST sintáctico a JSON para el visor gráfico | archivo JSON | ✅ Disponible |
 | `-t` | Imprime el árbol sintáctico abstracto (AST) | stdout | ✅ Disponible |
 | `-m` | Imprime la tabla de símbolos con las direcciones de memoria y la tabla de etiquetas, esta última con la dirección de cada etiqueta (su índice de bundle) | stdout | ✅ Disponible |
@@ -200,3 +201,18 @@ Con `-s`, `-m` o `-p`, exporta el AST y continúa el recorrido normal; puede
 conservar un JSON válido aunque las fases siguientes fallen. Si falla el
 análisis léxico o sintáctico, no escribe un JSON nuevo. Un archivo de una
 exportación anterior puede seguir existiendo; revisar siempre el código de salida.
+
+## Organización de bundles
+
+La compilación organiza operaciones independientes dentro de bloques básicos
+antes de resolver etiquetas y ensamblar. Puede aprovechar ambas ALU y compartir
+bundle con memoria o salto, respetando las dependencias de la ISA.
+
+```sh
+./ccom -s pruebas/p02_factorial.cls -o build/factorial_paralelo.bin
+./ccom --no-schedule -s pruebas/p02_factorial.cls -o build/factorial_escalar.bin
+```
+
+Las plantillas manuales mantienen sus slots. `-x` ensambla el `.asm` externo sin
+reorganizarlo. El detalle y los resultados están en
+[Organización de bundles](organizacion_bundles.md).

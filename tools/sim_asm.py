@@ -210,9 +210,10 @@ class Annotations:
         # Línea del fuente de cada bundle. El listado la muestra solo cuando
         # cambia, así que cada bundle hereda la última que se mostró.
         self.lines = [0] * bundle_count
+        self.slot_lines = [[0] * 4 for _ in range(bundle_count)]
         shown = 0
         for raw in text.splitlines():
-            match = re.match(r"^\s*\{.*\}\s*#\s*(\d+)(?:\s+linea\s+(\d+|-))?\s*$", raw)
+            match = re.match(r"^\s*\{.*\}\s*#\s*(\d+)(?:\s+linea\s+(\d+|-))?(?:\s+slots\s+([0-3]=\d+(?:,[0-3]=\d+)*))?\s*$", raw)
             if not match:
                 continue
             index = int(match[1])
@@ -220,6 +221,11 @@ class Annotations:
                 shown = 0 if match[2] == "-" else int(match[2])
             if index < bundle_count:
                 self.lines[index] = shown
+                self.slot_lines[index] = [shown] * 4
+                if match[3]:
+                    for item in match[3].split(','):
+                        slot, line = map(int, item.split('='))
+                        self.slot_lines[index][slot] = line
 
         # Variables: [{name, owner, line, kind, type, dims, width, address}]
         self.variables = []
@@ -336,17 +342,19 @@ class Tracer:
                     self.cipher_start[address - 1] = key
         self.cipher_args = {}
 
-    def _prefix(self, pc):
+    def _prefix(self, pc, slot=None):
         line = self.notes.lines[pc] if pc < len(self.notes.lines) else 0
+        if slot is not None and pc < len(self.notes.slot_lines):
+            line = self.notes.slot_lines[pc][slot]
         if line:
             return f"[bundle {pc:04d} · línea {line}]"
         return f"[bundle {pc:04d}]"
 
-    def _emit(self, pc, text):
+    def _emit(self, pc, text, slot=None):
         if len(self.events) >= self.limit:
             self.dropped += 1
             return
-        self.events.append(f"{self._prefix(pc)} {text}")
+        self.events.append(f"{self._prefix(pc, slot)} {text}")
 
     def visit(self, pc, snapshot):
         key = self.cipher_start.get(pc)
@@ -369,25 +377,25 @@ class Tracer:
         variable, index = found
         suffix = "  (prólogo)" if pc in self.prologues else ""
         self._emit(pc, f"{element_name(variable, index)} = "
-                       f"{format_value(variable, value)}{suffix}")
+                       f"{format_value(variable, value)}{suffix}", slot=3)
 
     def jump(self, pc, op, target):
         mn = op.mnemonic
         if mn == "jefR":
-            self._emit(pc, f"retorno → bundle {target}")
+            self._emit(pc, f"retorno → bundle {target}", slot=2)
             return
         token = op.args[-1]
         if token.startswith(INTERNAL_PREFIXES):
             return
         where = f"{token} (bundle {target})" if token in self.labels else f"bundle {target}"
-        self._emit(pc, f"{'llamada' if mn == 'jas' else mn} → {where}")
+        self._emit(pc, f"{'llamada' if mn == 'jas' else mn} → {where}", slot=2)
 
     def crypto(self, pc, op):
         if op.mnemonic == "kv_write":
             _, key, word = op.args
-            self._emit(pc, f"kv_write k={key} w={word}")
+            self._emit(pc, f"kv_write k={key} w={word}", slot=1)
         else:
-            self._emit(pc, op.mnemonic)
+            self._emit(pc, op.mnemonic, slot=1)
 
     def values(self, simulator):
         """Valor final de cada variable del listado, por dirección creciente:

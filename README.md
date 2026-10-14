@@ -57,6 +57,7 @@ Una entrada correcta devuelve código `0`. Los errores de análisis devuelven
 | Opción | Función | Estado |
 | --- | --- | --- |
 | `-t` | Mostrar el AST en terminal | Disponible |
+| `--no-schedule` | Usar emisión conservadora para comparar bundles y ciclos | Disponible |
 | `--ast-json <archivo>` | Exportar el AST para el visor gráfico | Disponible |
 | `-m` | Mostrar las tablas de símbolos y etiquetas | Disponible |
 | `-v` | Mostrar el avance de cada fase | Disponible |
@@ -164,15 +165,33 @@ bash pruebas/correr_pruebas.sh
 El reporte se escribe en `pruebas/resultados.txt`. Este script recopila
 resultados para su revisión; no compara automáticamente salidas esperadas.
 
+El organizador local de bundles está activado por defecto y verifica cada
+calendario antes de emitirlo. Sus dependencias,
+pruebas y comparación de factorial con `--no-schedule` se documentan en [Organización de bundles](docs/organizacion_bundles.md).
+
 Para verificar las rutinas de generación de código:
 
 ```bash
 make check-arith
 make check-arrays
 make check-crypto
+make check-bundles
+make check-salidas
 # O ejecutar todas:
 make check
 ```
+
+Para ver la comparación de factorial escalar y paralelo y conservar los
+ensambladores, trazas y métricas:
+
+```sh
+make validar-bundles
+less build/validacion_bundles/reporte.md
+```
+
+El reporte está en `build/validacion_bundles/`, junto a los archivos de ambos
+modos. Comprueba resultado 120, paralelismo realmente ejecutado, cero avisos
+y reducción de ciclos, además de seis entradas auxiliares.
 
 Estas pruebas usan un modelo de software de la arquitectura objetivo. Las
 pruebas crypto incluyen el recorrido `.cls` → `ccom` → `.asm`/`.mem` →

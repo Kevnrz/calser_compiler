@@ -52,6 +52,21 @@ CASES = [
     # E dentro de un S: 15 está en la posición 2; 99 no está (-1); después
     # otro S suma a tres veces.
     ('E dentro de S', HERE / 'e_en_s.cls', {'a': 2, 'b': -1, 'c': 6}),
+    # Corto circuito de & y | (libro §6.6.2). toca [] suma 1 a g y devuelve
+    # verdadero; gN es el valor de g después de cada caso.
+    #   falso & toca [ ]      -> 0, no llama        (g1 = 0)
+    #   verdadero | toca [ ]  -> 1, no llama        (g2 = 0)
+    #   verdadero & toca [ ]  -> 1, llama           (g3 = 1)
+    #   falso | toca [ ]      -> 1, llama           (g4 = 2)
+    # Tablas de verdad con v = verdadero y f = falso. mix1 = (f & f) | v y
+    # mix2 = v | (f & f) valen 1; con la precedencia al revés darían 0.
+    # C [ x > 0 & toca [ ] ] con x = 0 no entra ni llama (g5 = 2).
+    # L [ n < 2 & toca [ ] ] llama en las dos vueltas y no en la salida.
+    ('corto circuito', HERE / 'corto_circuito.cls',
+     {'r1': 0, 'g1': 0, 'r2': 1, 'g2': 0, 'r3': 1, 'g3': 1, 'r4': 1, 'g4': 2,
+      'and_ff': 0, 'and_fv': 0, 'and_vf': 0, 'and_vv': 1,
+      'or_ff': 0, 'or_fv': 1, 'or_vf': 1, 'or_vv': 1,
+      'mix1': 1, 'mix2': 1, 'en_c': 0, 'g5': 2, 'n': 2, 'g': 4}),
     # Ejercicio 2: 42 está en la fila 1, columna 1 de m.
     ('p12', ROOT / 'pruebas/p12_ejercicio2.cls', {'ok': 1, 'p': [1, 1]}),
 ]

@@ -384,6 +384,55 @@ static int emit_software_arithmetic(ASTNode *node, CGArithKind kind, int lhs, in
     return dst;
 }
 
+static void make_label(char *buffer, size_t size, const char *prefix);
+
+/*
+ * & y | en corto circuito (libro §6.6.2, Short-Circuit Code; G-11 de
+ * ccom_pendientes.md): el lado derecho solo se evalúa si hace falta.
+ *
+ *   a & b:  r = a ; beq r, rz, fin ; r = b ; fin:
+ *   a | b:  r = a ; bne r, rz, fin ; r = b ; fin:
+ *
+ * El resultado queda en r como 0 o 1, porque los bool ya valen 0 o 1. En
+ * los dos caminos (el que salta y el que no) queda ocupado solo r: el
+ * registro de b se libera antes de la etiqueta. cg_op deja el bundle de
+ * separación después de escribir r y después del salto (isa.md §9.3).
+ */
+static int emit_short_circuit(ASTNode *node, ASTNode *left, ASTNode *right) {
+    int result = emit_expression(left);
+
+    if (result < 0)
+        return -1;
+
+    char end_label[64];
+
+    make_label(end_label, sizeof(end_label), "sc_end");
+
+    cg_op(SLOT_BRU,
+          "%s %s, rz, %s",
+          node->kind == AST_AND ? "beq" : "bne",
+          reg_name(result),
+          end_label);
+
+    int other = emit_expression(right);
+
+    if (other < 0) {
+        free_reg(result);
+        return -1;
+    }
+
+    cg_op(SLOT_ALU0,
+          "saddi %s, %s, 0",
+          reg_name(result),
+          reg_name(other));
+
+    free_reg(other);
+
+    cg_label(end_label);
+
+    return result;
+}
+
 static int emit_binary_expression(ASTNode *node) {
     ASTNode *left = child_at(node, 0);
     ASTNode *right = child_at(node, 1);
@@ -393,6 +442,9 @@ static int emit_binary_expression(ASTNode *node) {
                      "expresion binaria incompleta");
         return -1;
     }
+
+    if (node->kind == AST_AND || node->kind == AST_OR)
+        return emit_short_circuit(node, left, right);
 
     int rd_left = emit_expression(left);
 
@@ -414,12 +466,6 @@ static int emit_binary_expression(ASTNode *node) {
             break;
         case AST_SUB:
             op = "sub";
-            break;
-        case AST_AND:
-            op = "and";
-            break;
-        case AST_OR:
-            op = "or";
             break;
         case AST_EQUAL:
             op = "seq";

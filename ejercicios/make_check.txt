@@ -53,10 +53,10 @@ PASS inicializadores globales: & constante sin etiqueta en el .asm; & no constan
 PASS simulador: 45 casos (parser, pipeline, cifrado, traza de ejecución)
 PASS IR: ISA, dependencias, efectos, slots, fronteras, copia de textos y liberacion
 PASS dependencias: 19 calendarios invalidos rechazados; RAW, WAR, WAW, memoria, control, cobertura y slots
-/home/luis/Documents/compi/calser/calser_compiler/pruebas/p02_factorial.cls: 54 operaciones, 2 bundles fijos, 123 registros IR
-/home/luis/Documents/compi/calser/calser_compiler/pruebas/p09_crypto.cls: 60 operaciones, 52 bundles fijos, 231 registros IR
-/home/luis/Documents/compi/calser/calser_compiler/pruebas/p11_ejercicio3.cls: 605 operaciones, 70 bundles fijos, 1410 registros IR
-/home/luis/Documents/compi/calser/calser_compiler/pruebas/programas/factorial_r.cls: 52 operaciones, 2 bundles fijos, 117 registros IR
+pruebas/p02_factorial.cls: 54 operaciones, 2 bundles fijos, 123 registros IR
+pruebas/p09_crypto.cls: 60 operaciones, 52 bundles fijos, 231 registros IR
+pruebas/p11_ejercicio3.cls: 605 operaciones, 70 bundles fijos, 1410 registros IR
+pruebas/programas/factorial_r.cls: 52 operaciones, 2 bundles fijos, 117 registros IR
 PASS IR del generador: factorial, crypto, ejercicio 3 y R sin operaciones desconocidas
 PASS emisor del organizador: escenarios de dependencias, fronteras y 128 programas aleatorios
 PASS calendario rechazado: diagnóstico y ningún callback de emisión ejecutado
@@ -70,5 +70,5 @@ PASS reubicación factorial: .L_func_factorial 38 → 28; bundles 110 → 80
 PASS factorial: 120; ciclos 337 → 231 (31.45% menos)
 PASS paralelismo: ambas ALU ejecutadas 14 veces; cero avisos
 PASS entradas adicionales: -1, 0, 1, 2, 10 y 12, en ambos modos
-Reporte: /home/luis/Documents/compi/calser/calser_compiler/build/validacion_bundles/reporte.md
+Reporte: build/validacion_bundles/reporte.md
 codigo de salida: 0

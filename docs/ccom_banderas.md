@@ -196,7 +196,7 @@ No requiere servidor, paquetes ni conexión. Ver [visor_ast.md](visor_ast.md).
 `--ast-json` solo, o junto a `-t`/`-v`, termina después del análisis sintáctico:
 no comprueba la semántica ni genera ensamblador. Su código 0 significa que el
 AST se pudo construir y exportar, no que el programa completo sea válido.
-Permite explorar construcciones cuyo generador todavía está pendiente.
+Permite inspeccionar el árbol de un programa sin ejecutar el resto de las fases.
 Con `-s`, `-m` o `-p`, exporta el AST y continúa el recorrido normal; puede
 conservar un JSON válido aunque las fases siguientes fallen. Si falla el
 análisis léxico o sintáctico, no escribe un JSON nuevo. Un archivo de una

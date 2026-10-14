@@ -1,6 +1,6 @@
 # Fase 4 — Saddy: cifrado, temporales, etiquetas y simulador
 
-**Rama:** `s-fase4`, desde `integracion`. **Lee primero** `fase4_contrato_comun.md`.
+**Rama:** `s-fase4`, desde `integracion`. **Lee primero** [isa.md](isa.md).
 Antes de escribir código, lee `semantic.c` (asignación de áreas),
 `symbol_table.h`, `label_table.c/h`, `main.c` y `crypto_para_ccom.md`.
 

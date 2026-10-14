@@ -79,3 +79,11 @@ pruebas/*.bin
 pruebas/*.hex
 pruebas/*.mem
 pruebas/*.asm
+
+# ============================================================
+# Archivos personales y temporales
+# ============================================================
+
+prueba_mano*
+*.zip
+*.log

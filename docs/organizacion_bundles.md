@@ -378,7 +378,7 @@ make check
 - AddressSanitizer y UndefinedBehaviorSanitizer pasan para las verificaciones
   negativas y para la organización y liberación de los escenarios completos.
 
-Factorial conserva **81 bundles estáticos, 231 ciclos, resultado 120 y cero
+Factorial conserva **80 bundles estáticos, 231 ciclos, resultado 120 y cero
 avisos**, con ambas ALU activas 14 veces durante la ejecución. El paso 3 añade
 verificación durante la compilación; no cambia los bundles válidos del paso 2.
 
@@ -440,7 +440,7 @@ Resultados:
 - **720 instrucciones BRU** codificadas correctamente, entre ambas modalidades.
 - Reubicación demostrada: `.L_func_factorial` pasa de **38 a 28**, y el código
   de la llamada usa el desplazamiento calculado hacia 28. Factorial pasa de
-  111 a 81 bundles sin cambiar su resultado.
+  110 a 80 bundles sin cambiar su resultado.
 - `make check` completo pasa, incluida esta prueba y las de dependencias,
   trazas, etiquetas, ensamblado y ejecución existentes.
 

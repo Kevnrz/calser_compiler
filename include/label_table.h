@@ -41,7 +41,7 @@ typedef enum {
     LABEL_SC_END,
     LABEL_ARITH_ERROR,
 
-    /* fin_main: donde termina el programa (fase4_contrato_comun.md §3). */
+    /* fin_main: donde termina el programa. */
     LABEL_PROGRAM_END
 
 } LabelRole;

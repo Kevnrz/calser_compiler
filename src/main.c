@@ -6,7 +6,7 @@
  *
  * Usa: lexer/parser, semantic, diagnostics, label_table, generate, codegen y assembler.
  * Lo usa: línea de comandos ccom y scripts de pruebas/herramientas.
- * Referencias: enunciado §2.3–§2.5, §5.1; fase4_contrato_comun.md §5.
+ * Referencias: enunciado §2.3–§2.5, §5.1.
  */
 
 #include <stdint.h>
@@ -45,7 +45,7 @@ extern int lexical_errors;
  *   -x  la entrada es un .asm y se genera el binario, sin compilar Calser
  *
  * Sin errores siempre se escriben .bin, .hex y .mem con el nombre base de
- * -o (fase4_contrato_comun.md §5).
+ * -o.
  */
 typedef struct {
     const char *input;         /* archivo fuente (.cls) o, con -x, .asm      */

@@ -15,24 +15,26 @@ El ejecutable `ccom` realiza análisis léxico, sintáctico y semántico. Constr
 el árbol sintáctico abstracto (AST), la tabla de símbolos con direcciones de
 memoria y la tabla de etiquetas. Los errores muestran archivo, línea y columna.
 
-`ccom -s` genera ensamblador y una imagen inicial de datos `.mem`. La
-integración CRYPTO se valida compilando y simulando `p09_crypto.cls`. También
-hay rutinas aritméticas y de acceso a arreglos con pruebas independientes.
-El generador general todavía está en desarrollo; el ensamblado a binario
-no está integrado.
-
-Para continuar el generador, consultar el [contexto para Kevin](docs/contexto_kevin_fase4.md).
+`ccom` genera el ensamblador (`-s`), el binario `.bin`, el `.hex` y la imagen
+inicial de datos `.mem`. Organiza las instrucciones en bundles VLIW y puede
+ensamblar un `.asm` ya escrito (`-x`). La integración CRYPTO se valida
+compilando y simulando `p09_crypto.cls`. Los entregables de los tres ejercicios
+están en [ejercicios/](ejercicios/README.md).
 
 El AST también se puede explorar como un árbol gráfico local; consultar
 [el visor del AST](docs/visor_ast.md).
 
 ## Requisitos
 
+Para compilar `ccom` solo se necesitan:
+
 - GCC o un compilador de C compatible.
 - GNU Make 4.3 o posterior.
 - Flex y Bison.
-- Python 3.9 o posterior para las pruebas de generación de código y el paquete de VS Code.
-- Bash para el script de pruebas del compilador.
+
+Python 3.9 o posterior se usa únicamente para `make check`, `make ejercicios`,
+el simulador (`tools/sim_asm.py`) y el paquete de VS Code; el compilador no lo
+necesita. Bash se usa para el script de pruebas `pruebas/correr_pruebas.sh`.
 
 Los comandos siguientes se ejecutan desde la raíz del repositorio, en Linux
 o un entorno compatible como WSL.
@@ -54,17 +56,17 @@ Una entrada correcta devuelve código `0`. Los errores de análisis devuelven
 ./ccom -t -m -v pruebas/p02_factorial.cls
 ```
 
-| Opción | Función | Estado |
-| --- | --- | --- |
-| `-t` | Mostrar el AST en terminal | Disponible |
-| `--no-schedule` | Usar emisión conservadora para comparar bundles y ciclos | Disponible |
-| `--ast-json <archivo>` | Exportar el AST para el visor gráfico | Disponible |
-| `-m` | Mostrar las tablas de símbolos y etiquetas | Disponible |
-| `-v` | Mostrar el avance de cada fase | Disponible |
-| `-o <archivo>` | Seleccionar el nombre del binario | Se guarda; aún no se escribe el binario |
-| `-s` | Emitir ensamblador `.asm` e imagen de datos `.mem` | Disponible |
-| `-p` | Mostrar bundles en ensamblador y binario | Pendiente; muestra un aviso |
-| `-x` | Ensamblar una entrada `.asm` | Pendiente; devuelve un error |
+| Opción | Función |
+| --- | --- |
+| `-t` | Mostrar el AST en terminal |
+| `-m` | Mostrar las tablas de símbolos y etiquetas |
+| `-v` | Mostrar el avance de cada fase |
+| `-o <archivo>` | Nombre del binario de salida; es también el nombre base del `.hex` y el `.mem` |
+| `-s` | Escribir además el ensamblador `.asm` |
+| `-p` | Mostrar cada bundle en ensamblador y en binario |
+| `-x` | Ensamblar una entrada `.asm` y generar `.bin`, `.hex` y `.mem`, sin compilar Calser |
+| `--ast-json <archivo>` | Exportar el AST para el visor gráfico |
+| `--no-schedule` | Usar emisión conservadora para comparar bundles y ciclos |
 
 Consulta los detalles en [Uso y banderas de ccom](docs/ccom_banderas.md).
 
@@ -98,8 +100,8 @@ mostrarlo completo.
 - **Ajustar árbol:** encuadrar los nodos visibles; **Ir a la raíz:** centrar la raíz.
 
 `--ast-json` usado solo exporta el árbol después del análisis sintáctico y
-termina allí: permite inspeccionar programas aunque su generación de código
-esté pendiente, pero no certifica que pasen el análisis semántico. Para
+termina allí: permite inspeccionar programas sin ejecutar el resto de las
+fases, pero no certifica que pasen el análisis semántico. Para
 exportar y continuar la compilación, combinarlo con `-s`.
 
 Más detalles y formato del JSON en [Visor del AST](docs/visor_ast.md).
@@ -151,6 +153,25 @@ calser_compiler/
 Las cabeceras están en `include/` y las implementaciones en `src/`. Flex y
 Bison generan sus archivos en `build/generated/`; los objetos y dependencias
 se guardan en `build/obj/`. El ejecutable se mantiene en `./ccom`.
+
+## Entregables
+
+Los entregables de los tres ejercicios (enunciado §10) están en
+[ejercicios/](ejercicios/README.md). Cada carpeta (`ejercicio1_factorial/`,
+`ejercicio2_matriz/`, `ejercicio3_cifrado/`) contiene:
+
+- el fuente `.cls`;
+- el ensamblador `.asm`, el binario `.bin`, el `.hex` y la imagen de datos `.mem`;
+- `compilacion.txt` (salida de `ccom -v -m -s -p`), `traza.txt` (traza de
+  ejecución) y `ejecucion.txt` (resumen contra los valores esperados).
+
+[ejercicios/README.md](ejercicios/README.md) explica cada archivo y dónde se
+cumple cada requisito. [ejercicios/make_check.txt](ejercicios/make_check.txt) es
+la salida de `make check`. Para regenerar los archivos de los ejercicios:
+
+```bash
+make ejercicios
+```
 
 ## Pruebas
 

@@ -2577,7 +2577,7 @@ static void emit_function(ASTNode *function) {
     cg_set_line(function->line);
     cg_label(entry_label);
 
-    // Prólogo (fase4_contrato_comun.md §3): el retorno empieza en 0 en cada
+    // Prólogo: el retorno empieza en 0 en cada
     // llamada. Va antes de .L_body_: R salta al cuerpo y conserva el valor.
     // main es void y no tiene retorno.
     Symbol *return_symbol = get_return_symbol(current_function_symbol);

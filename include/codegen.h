@@ -6,7 +6,7 @@
  *
  * Usa: tipos de la biblioteca C y declaraciones propias.
  * Lo usa: codegen.c; generate.c, codegen_crypto.c, main.c y codegen_*.
- * Referencias: isa.md §3, §9, §11; fase4_contrato_comun.md §1, §4, §5.
+ * Referencias: isa.md §3, §9, §11.
  */
 
 #ifndef CODEGEN_H
@@ -15,7 +15,7 @@
 #include <stdint.h>
 #include <stdio.h>
  
-/* Emisor de código de la Fase 4. Contrato: fase4_contrato_comun.md §1 y §4.
+/* Emisor de código de la Fase 4.
  *
  * La Fase 4 no escribe texto directamente: arma en memoria una lista de
  * líneas (etiquetas y bundles) y al final la escribe al .asm o la entrega

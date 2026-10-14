@@ -2,7 +2,7 @@
 """Pruebas del ensamblador de ccom (-x y el ensamblado tras la Fase 4).
 
 Vectores de isa.md §6.5, ejemplo de §11.1, formato del .bin
-(fase4_contrato_comun.md §5), errores de §11.4 e ida y vuelta con el .asm
+(nombre base de -o), errores de §11.4 e ida y vuelta con el .asm
 que genera el compilador. Sin dependencias externas.
 """
 from pathlib import Path

@@ -6,7 +6,7 @@
  *
  * Usa: codegen_instruction.c, codegen_schedule.c y codegen_verify.c.
  * Lo usa: generate.c, codegen_crypto.c y main.c.
- * Referencias: isa.md §3, §9, §11; fase4_contrato_comun.md §1, §4, §5.
+ * Referencias: isa.md §3, §9, §11.
  */
 
 #include <stdarg.h>

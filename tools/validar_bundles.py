@@ -214,7 +214,11 @@ def validate(output):
     print(f'PASS factorial: 120; ciclos {scalar["ciclos"]} → {parallel["ciclos"]} ({reduction}% menos)')
     print(f'PASS paralelismo: ambas ALU ejecutadas {parallel["bundles_dos_alu_ejecutados"]} veces; cero avisos')
     print('PASS entradas adicionales: -1, 0, 1, 2, 10 y 12, en ambos modos')
-    print(f'Reporte: {md_path}')
+    try:
+        shown = md_path.relative_to(ROOT)
+    except ValueError:
+        shown = md_path
+    print(f'Reporte: {shown}')
     return report
 
 def main(argv=None):

@@ -89,7 +89,7 @@ void diag_verror(const char *category,
      * <linea> | <texto de la línea>
      *         | <señalador>
      */
-    if (source == NULL)
+    if (source == NULL && strcmp(category, "error sintactico") != 0)
         fprintf(stderr, "%s: %s: ", filename, category);
     else
         fprintf(stderr, "%s:%d:%d: %s: ", filename, line, column, category);
@@ -100,7 +100,10 @@ void diag_verror(const char *category,
     if (source == NULL)
         return;
 
-    fprintf(stderr, "%6d | %s\n", line, source);
+    fprintf(stderr, "%6d |", line);
+    if (source[0] != '\0')
+        fprintf(stderr, " %s", source);
+    fputc('\n', stderr);
     fprintf(stderr, "%6s | ", "");
 
     // El señalador copia las tabulaciones de la línea original, para quedar
@@ -133,6 +136,10 @@ void diag_error(const char *category,
     va_start(args, fmt);
     diag_verror(category, line, column, length, fmt, args);
     va_end(args);
+}
+
+int diag_last_line(void) {
+    return diag_line_count > 0 ? diag_line_count : 1;
 }
 
 int diag_count(void) {

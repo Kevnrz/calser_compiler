@@ -139,9 +139,9 @@ Analisis semantico fallido: 3 error(es).
 
 ===== pruebas/e16_falta_punto_coma.cls =====
 --- stderr ---
-pruebas/e16_falta_punto_coma.cls:3:5: error sintactico: syntax error
-     3 |     E ;
-       |     ^
+pruebas/e16_falta_punto_coma.cls:2:15: error sintactico: se esperaba ';' al final de la sentencia
+     2 |     Vm a : int
+       |               ^
 --- tabla ---
 --- codigo de salida: 1 ---
 
@@ -501,7 +501,7 @@ Analisis lexico fallido: 1 error(es).
 pruebas/e56_lexico_y_sintactico.cls:3:9: error lexico: caracter no reconocido: '$'
      3 |     x = $ ;
        |         ^
-pruebas/e56_lexico_y_sintactico.cls:3:11: error sintactico: syntax error
+pruebas/e56_lexico_y_sintactico.cls:3:11: error sintactico: token inesperado ';'
      3 |     x = $ ;
        |           ^
 Analisis lexico fallido: 1 error(es).
@@ -510,7 +510,7 @@ Analisis lexico fallido: 1 error(es).
 
 ===== pruebas/e57_crypto_k_no_literal.cls =====
 --- stderr ---
-pruebas/e57_crypto_k_no_literal.cls:3:32: error sintactico: syntax error
+pruebas/e57_crypto_k_no_literal.cls:3:32: error sintactico: token inesperado identificador; se esperaba numero
      3 |     cifrar [ 4096 , 8192 , 1 , k ] ;
        |                                ^
 --- tabla ---
@@ -536,7 +536,7 @@ Analisis semantico fallido: 1 error(es).
 
 ===== pruebas/e60_crypto_faltan_argumentos.cls =====
 --- stderr ---
-pruebas/e60_crypto_faltan_argumentos.cls:2:30: error sintactico: syntax error
+pruebas/e60_crypto_faltan_argumentos.cls:2:30: error sintactico: token inesperado ']'
      2 |     cifrar [ 4096 , 8192 , 1 ] ;
        |                              ^
 --- tabla ---
@@ -580,7 +580,7 @@ Analisis semantico fallido: 1 error(es).
 
 ===== pruebas/e65_crypto_como_valor.cls =====
 --- stderr ---
-pruebas/e65_crypto_como_valor.cls:2:18: error sintactico: syntax error
+pruebas/e65_crypto_como_valor.cls:2:18: error sintactico: token inesperado 'cifrar'
      2 |     Vm x : int = cifrar [ 4096 , 8192 , 1 , 0 ] ;
        |                  ^^^^^^
 --- tabla ---
@@ -588,9 +588,113 @@ pruebas/e65_crypto_como_valor.cls:2:18: error sintactico: syntax error
 
 ===== pruebas/e66_crypto_nombre_reservado.cls =====
 --- stderr ---
-pruebas/e66_crypto_nombre_reservado.cls:2:8: error sintactico: syntax error
+pruebas/e66_crypto_nombre_reservado.cls:2:8: error sintactico: token inesperado 'cifrar'; se esperaba identificador
      2 |     Vm cifrar : int = 0 ;
        |        ^^^^^^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e67_l_sin_cerrar.cls =====
+--- stderr ---
+pruebas/e67_l_sin_cerrar.cls:2:5: error sintactico: el bloque 'L' abierto en la linea 2 nunca se cierra
+     2 |     L [ verdadero ] ;
+       |     ^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e68_funcion_anidada.cls =====
+--- stderr ---
+pruebas/e68_funcion_anidada.cls:2:5: error sintactico: no se permiten funciones anidadas; probablemente falta el '.'
+     2 |     F f [] : void ; E ; .
+       |     ^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e69_a_sin_c.cls =====
+--- stderr ---
+pruebas/e69_a_sin_c.cls:2:5: error sintactico: 'A' sin una estructura 'C' que lo preceda
+     2 |     A ;
+       |     ^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e70_cierre_sobrante.cls =====
+--- stderr ---
+pruebas/e70_cierre_sobrante.cls:4:1: error sintactico: cierre de bloque sin bloque correspondiente
+     4 | .
+       | ^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e71_s_tres_partes.cls =====
+--- stderr ---
+pruebas/e71_s_tres_partes.cls:2:19: error sintactico: 'S' requiere exactamente 4 partes: variable, inicio, fin, paso
+     2 |     S [ i , 0 , 3 ] ;
+       |                   ^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e72_s_cinco_partes.cls =====
+--- stderr ---
+pruebas/e72_s_cinco_partes.cls:2:23: error sintactico: 'S' requiere exactamente 4 partes: variable, inicio, fin, paso
+     2 |     S [ i , 0 , 3 , 1 , 2 ] ;
+       |                       ^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e73_parentesis_sin_cerrar.cls =====
+--- stderr ---
+pruebas/e73_parentesis_sin_cerrar.cls:2:25: error sintactico: se esperaba ')'
+     2 |     Vm x : int = (1 + 2 ;
+       |                         ^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e74_corchete_sin_cerrar.cls =====
+--- stderr ---
+pruebas/e74_corchete_sin_cerrar.cls:2:19: error sintactico: se esperaba ']'
+     2 |     L [ verdadero ;
+       |                   ^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e75_fin_archivo.cls =====
+--- stderr ---
+pruebas/e75_fin_archivo.cls:1:1: error sintactico: fin de archivo inesperado
+     1 |
+       | ^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e76_f_sin_cerrar.cls =====
+--- stderr ---
+pruebas/e76_f_sin_cerrar.cls:1:1: error sintactico: el bloque 'F' abierto en la linea 1 nunca se cierra
+     1 | F main [] : void ;
+       | ^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e77_c_sin_cerrar.cls =====
+--- stderr ---
+pruebas/e77_c_sin_cerrar.cls:2:5: error sintactico: el bloque 'C' abierto en la linea 2 nunca se cierra
+     2 |     C [ verdadero ] ;
+       |     ^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e78_a_sin_cerrar.cls =====
+--- stderr ---
+pruebas/e78_a_sin_cerrar.cls:3:5: error sintactico: el bloque 'A' abierto en la linea 3 nunca se cierra
+     3 |     A ;
+       |     ^
+--- tabla ---
+--- codigo de salida: 1 ---
+
+===== pruebas/e79_s_sin_cerrar.cls =====
+--- stderr ---
+pruebas/e79_s_sin_cerrar.cls:2:5: error sintactico: el bloque 'S' abierto en la linea 2 nunca se cierra
+     2 |     S [ i , 0 , 3 , 1 ] ;
+       |     ^
 --- tabla ---
 --- codigo de salida: 1 ---
 

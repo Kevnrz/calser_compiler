@@ -1,6 +1,7 @@
 %{
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "ast.h"
 #include "diagnostics.h"
@@ -14,6 +15,12 @@ extern int lexical_fatal;
 void yyerror(const char *msg);
 
 ASTNode *root = NULL;
+
+/* Observación de tokens para diagnósticos; no cambia reglas ni el AST.
+ * El token anterior se registra solo cuando Bison solicita el siguiente. */
+static int syntax_lex(void);
+static void syntax_reset(void);
+#define yylex syntax_lex
 %}
 
 
@@ -35,78 +42,78 @@ ASTNode *root = NULL;
 
 /* Keywords */
 
-%token TOKEN_F
-%token TOKEN_VM
-%token TOKEN_VI
+%token TOKEN_F "F"
+%token TOKEN_VM "Vm"
+%token TOKEN_VI "Vi"
 
-%token TOKEN_INT
-%token TOKEN_BOOL
-%token TOKEN_VOID
+%token TOKEN_INT "int"
+%token TOKEN_BOOL "bool"
+%token TOKEN_VOID "void"
 
-%token TOKEN_C
-%token TOKEN_A
-%token TOKEN_L
-%token TOKEN_S
-%token TOKEN_E
-%token TOKEN_R
+%token TOKEN_C "C"
+%token TOKEN_A "A"
+%token TOKEN_L "L"
+%token TOKEN_S "S"
+%token TOKEN_E "E"
+%token TOKEN_R "R"
 
-%token TOKEN_TRUE
-%token TOKEN_FALSE
+%token TOKEN_TRUE "verdadero"
+%token TOKEN_FALSE "falso"
 
-%token TOKEN_AUTENTICAR
-%token TOKEN_CERRAR_SESION
-%token TOKEN_CARGAR_LLAVE
-%token TOKEN_SELLAR
-%token TOKEN_CAMBIAR_ANCLA
-%token TOKEN_CIFRAR
-%token TOKEN_DESCIFRAR
+%token TOKEN_AUTENTICAR "autenticar"
+%token TOKEN_CERRAR_SESION "cerrar_sesion"
+%token TOKEN_CARGAR_LLAVE "cargar_llave"
+%token TOKEN_SELLAR "sellar"
+%token TOKEN_CAMBIAR_ANCLA "cambiar_ancla"
+%token TOKEN_CIFRAR "cifrar"
+%token TOKEN_DESCIFRAR "descifrar"
 
 
 /* Operators */
 
-%token TOKEN_OR
-%token TOKEN_AND
+%token TOKEN_OR "|"
+%token TOKEN_AND "&"
 
-%token TOKEN_EQUAL_EQUAL
-%token TOKEN_NOT_EQUAL
+%token TOKEN_EQUAL_EQUAL "=="
+%token TOKEN_NOT_EQUAL "!="
 
-%token TOKEN_LESS
-%token TOKEN_GREATER
-%token TOKEN_LESS_EQUAL
-%token TOKEN_GREATER_EQUAL
+%token TOKEN_LESS "<"
+%token TOKEN_GREATER ">"
+%token TOKEN_LESS_EQUAL "<="
+%token TOKEN_GREATER_EQUAL ">="
 
-%token TOKEN_PLUS
-%token TOKEN_MINUS
+%token TOKEN_PLUS "+"
+%token TOKEN_MINUS "-"
 
-%token TOKEN_MULTIPLY
-%token TOKEN_DIVIDE
-%token TOKEN_MODULO
+%token TOKEN_MULTIPLY "*"
+%token TOKEN_DIVIDE "/"
+%token TOKEN_MODULO "%"
 
-%token TOKEN_NOT
-%token TOKEN_POWER
+%token TOKEN_NOT "!"
+%token TOKEN_POWER "^"
 
-%token TOKEN_ASSIGN
+%token TOKEN_ASSIGN "="
 
 
 /* Delimiters */
 
-%token TOKEN_LBRACKET
-%token TOKEN_RBRACKET
+%token TOKEN_LBRACKET "["
+%token TOKEN_RBRACKET "]"
 
-%token TOKEN_LPAREN
-%token TOKEN_RPAREN
+%token TOKEN_LPAREN "("
+%token TOKEN_RPAREN ")"
 
-%token TOKEN_COLON
-%token TOKEN_SEMICOLON
-%token TOKEN_COMMA
-%token TOKEN_DOT
+%token TOKEN_COLON ":"
+%token TOKEN_SEMICOLON ";"
+%token TOKEN_COMMA ","
+%token TOKEN_DOT "."
 
 
 
 /* Values */
 
-%token <str> TOKEN_IDENTIFIER
-%token <num> TOKEN_NUMBER
+%token <str> TOKEN_IDENTIFIER "identificador"
+%token <num> TOKEN_NUMBER "numero"
 
 
 /* ============================================================
@@ -169,6 +176,13 @@ ASTNode *root = NULL;
 
 /* P-03: cada token y cada símbolo de una producción lleva su línea (@n). */
 %locations
+
+/* CE1108 §8.2; calser_diseno §8.3/§8.5 (mensajes y primer error).
+ * Libro, cap. 4: diagnóstico en el parser, sin producciones de recuperación.
+ * LAC obtiene esperados válidos tras reducciones, sin ejecutar sus acciones. */
+%define parse.error custom
+%define parse.lac full
+%initial-action { syntax_reset(); }
 
 %start programa
 
@@ -1407,22 +1421,196 @@ acceso
 %%
 
 
-/* ============================================================
- * Error reporting
- * ============================================================ */
+/* Diagnósticos de calser_diseno §8.5, sin recuperación (§8.3).
+ * C, todas sus A y su residual comparten un único cierre '.'. */
+#undef yylex
 
-void yyerror(const char *msg)
-{
-    // L-04: tras un error léxico fatal, el error sintáctico que provoca el
-    // fin abrupto de la entrada sería una cascada.
-    if (lexical_fatal)
-        return;
+typedef struct {
+    int token;                 /* F/C/L/S: dueño del cierre */
+    int shown;                 /* A identifica la rama actual de un C */
+    YYLTYPE location;
+    int header;                /* antes del ';' que abre el cuerpo */
+    int delimiters;            /* profundidad al iniciar su cabecera */
+    int commas;                /* comas de nivel superior en S */
+} SyntaxBlock;
 
-    // §8.2: posición del token de preanálisis, donde se detectó el error.
-    diag_error("error sintactico",
-               yylloc.first_line,
-               yylloc.first_column,
-               yylloc.last_column - yylloc.first_column + 1,
-               "%s",
-               msg);
+static SyntaxBlock *syntax_blocks;
+static int syntax_count, syntax_capacity, syntax_delimiters;
+static int syntax_previous;
+static YYLTYPE syntax_previous_location;
+static int syntax_pending;
+static YYLTYPE syntax_pending_location;
+
+static void syntax_reset(void) {
+    free(syntax_blocks);
+    syntax_blocks = NULL;
+    syntax_count = syntax_capacity = syntax_delimiters = 0;
+    syntax_previous = syntax_pending = 0;
+    syntax_previous_location = syntax_pending_location = (YYLTYPE) {1, 1, 1, 1};
+}
+
+static const char *block_word(int token) {
+    switch (token) {
+        case TOKEN_F: return "F";
+        case TOKEN_C: return "C";
+        case TOKEN_A: return "A";
+        case TOKEN_L: return "L";
+        case TOKEN_S: return "S";
+        default: return "?";
+    }
+}
+
+static void syntax_accept(int token, YYLTYPE location) {
+    syntax_previous = token;
+    syntax_previous_location = location;
+    if (token == TOKEN_F || token == TOKEN_C || token == TOKEN_L || token == TOKEN_S) {
+        if (syntax_count == syntax_capacity) {
+            int capacity = syntax_capacity ? syntax_capacity * 2 : 16;
+            SyntaxBlock *blocks = realloc(syntax_blocks, (size_t) capacity * sizeof(*blocks));
+            if (!blocks) {
+                yyerror("memoria insuficiente");
+                exit(EXIT_FAILURE);
+            }
+            syntax_blocks = blocks;
+            syntax_capacity = capacity;
+        }
+        syntax_blocks[syntax_count++] = (SyntaxBlock) {
+            token, token, location, 1, syntax_delimiters, 0
+        };
+    } else if (token == TOKEN_A && syntax_count && syntax_blocks[syntax_count - 1].token == TOKEN_C) {
+        /* No se apila: la rama usa el cierre del C, incluso varias A. */
+        SyntaxBlock *block = &syntax_blocks[syntax_count - 1];
+        block->shown = TOKEN_A;
+        block->location = location;
+        block->header = 1;
+    } else if (token == TOKEN_DOT && syntax_count) {
+        syntax_count--;
+    }
+    if (syntax_count) {
+        SyntaxBlock *block = &syntax_blocks[syntax_count - 1];
+        if (block->header && token == TOKEN_SEMICOLON && syntax_delimiters == block->delimiters)
+            block->header = 0;
+        if (block->token == TOKEN_S && block->header && token == TOKEN_COMMA &&
+            syntax_delimiters == block->delimiters + 1)
+            block->commas++;
+    }
+    if (token == TOKEN_LBRACKET || token == TOKEN_LPAREN) syntax_delimiters++;
+    if (token == TOKEN_RBRACKET || token == TOKEN_RPAREN) syntax_delimiters--;
+}
+
+static int syntax_lex(void) {
+    if (syntax_pending) syntax_accept(syntax_pending, syntax_pending_location);
+    int token = yylex();
+    syntax_pending = token;
+    syntax_pending_location = yylloc;
+    /* Al aceptar EOF sin bloques no queda memoria de observación pendiente. */
+    if (!token && !syntax_count) {
+        free(syntax_blocks);
+        syntax_blocks = NULL;
+        syntax_capacity = 0;
+    }
+    return token;
+}
+
+static void syntax_report(YYLTYPE location, const char *message) {
+    diag_error("error sintactico", location.first_line, location.first_column,
+               location.last_column - location.first_column + 1, "%s", message);
+    free(syntax_blocks);
+    syntax_blocks = NULL;
+    syntax_count = syntax_capacity = 0;
+}
+
+static void token_word(yysymbol_kind_t token, char *out, size_t size) {
+    if (token == YYSYMBOL_YYEOF) {
+        snprintf(out, size, "fin de archivo");
+    } else if (token == YYSYMBOL_TOKEN_IDENTIFIER || token == YYSYMBOL_TOKEN_NUMBER) {
+        snprintf(out, size, "%s", token == YYSYMBOL_TOKEN_IDENTIFIER ? "identificador" : "numero");
+    } else {
+        const char *name = yysymbol_name(token);
+        size_t length = strlen(name);
+        if (length >= 2 && name[0] == '"' && name[length - 1] == '"') {
+            name++;
+            length -= 2;
+        }
+        snprintf(out, size, "'%.*s'", (int) length, name);
+    }
+}
+
+static int yyreport_syntax_error(const yypcontext_t *context) {
+    if (lexical_fatal) {
+        free(syntax_blocks);
+        syntax_blocks = NULL;
+        syntax_count = syntax_capacity = 0;
+        return 0;             /* conservar supresión del error léxico fatal */
+    }
+    yysymbol_kind_t unexpected = yypcontext_token(context);
+    yysymbol_kind_t expected[YYNTOKENS];
+    int count = yypcontext_expected_tokens(context, expected, YYNTOKENS);
+    if (count < 0) return count;
+    int semicolon = 0, paren = 0, bracket = 0;
+    for (int i = 0; i < count; i++) {
+        semicolon |= expected[i] == YYSYMBOL_TOKEN_SEMICOLON;
+        paren |= expected[i] == YYSYMBOL_TOKEN_RPAREN;
+        bracket |= expected[i] == YYSYMBOL_TOKEN_RBRACKET;
+    }
+    YYLTYPE location = *yypcontext_location(context);
+    char message[512];
+    if (unexpected == YYSYMBOL_YYEOF) {
+        if (syntax_count) {
+            SyntaxBlock *block = &syntax_blocks[syntax_count - 1];
+            location = block->location;
+            snprintf(message, sizeof(message), "el bloque '%s' abierto en la linea %d nunca se cierra",
+                     block_word(block->shown), location.first_line);
+        } else {
+            location = (YYLTYPE) {diag_last_line(), 1, diag_last_line(), 1};
+            snprintf(message, sizeof(message), "fin de archivo inesperado");
+        }
+    } else if (unexpected == YYSYMBOL_TOKEN_F && syntax_count) {
+        snprintf(message, sizeof(message), "no se permiten funciones anidadas; probablemente falta el '.'");
+    } else if (unexpected == YYSYMBOL_TOKEN_A &&
+               (!syntax_count || syntax_blocks[syntax_count - 1].token != TOKEN_C)) {
+        snprintf(message, sizeof(message), "'A' sin una estructura 'C' que lo preceda");
+    } else if (unexpected == YYSYMBOL_TOKEN_DOT && !syntax_count) {
+        snprintf(message, sizeof(message), "cierre de bloque sin bloque correspondiente");
+    } else if (syntax_count && syntax_blocks[syntax_count - 1].token == TOKEN_S &&
+               syntax_blocks[syntax_count - 1].header &&
+               syntax_delimiters == syntax_blocks[syntax_count - 1].delimiters + 1 &&
+               ((unexpected == YYSYMBOL_TOKEN_RBRACKET && syntax_blocks[syntax_count - 1].commas != 3) ||
+                (unexpected == YYSYMBOL_TOKEN_COMMA && syntax_blocks[syntax_count - 1].commas >= 3))) {
+        snprintf(message, sizeof(message), "'S' requiere exactamente 4 partes: variable, inicio, fin, paso");
+    } else if (semicolon) {
+        location = syntax_previous_location;
+        location.first_line = location.last_line;
+        location.first_column = location.last_column + 1;
+        location.last_column = location.first_column;
+        snprintf(message, sizeof(message), "se esperaba ';' al final de la sentencia");
+    } else if (paren || bracket) {
+        snprintf(message, sizeof(message), "se esperaba '%c'", paren ? ')' : ']');
+    } else {
+        char word[64];
+        token_word(unexpected, word, sizeof(word));
+        snprintf(message, sizeof(message), "token inesperado %s", word);
+        if (count > 0 && count <= 4) {
+            size_t used = strlen(message);
+            snprintf(message + used, sizeof(message) - used, "; se esperaba ");
+            for (int i = 0; i < count; i++) {
+                token_word(expected[i], word, sizeof(word));
+                used = strlen(message);
+                snprintf(message + used, sizeof(message) - used, "%s%s", i ? " o " : "", word);
+            }
+        }
+    }
+    syntax_report(location, message);
+    return 0;
+}
+
+/* Bison reserva yyerror para errores internos (p. ej., memoria agotada).
+ * Los fallos sintácticos normales pasan por yyreport_syntax_error. */
+void yyerror(const char *message) {
+    if (!lexical_fatal) {
+        YYLTYPE location = yylloc;
+        if (location.first_line < 1 || location.first_line > diag_last_line())
+            location = (YYLTYPE) {diag_last_line(), 1, diag_last_line(), 1};
+        syntax_report(location, message);
+    }
 }

@@ -49,36 +49,6 @@ static int generation_errors;
 static const char *current_function_name;
 static Symbol *current_function_symbol;
 
-static int is_expression_kind(ASTKind kind) {
-    switch (kind) {
-        case AST_IDENTIFIER:
-        case AST_NUMBER:
-        case AST_BOOLEAN:
-        case AST_CALL:
-        case AST_INDEX:
-        case AST_OR:
-        case AST_AND:
-        case AST_EQUAL:
-        case AST_NOT_EQUAL:
-        case AST_LESS:
-        case AST_GREATER:
-        case AST_LESS_EQUAL:
-        case AST_GREATER_EQUAL:
-        case AST_ADD:
-        case AST_SUB:
-        case AST_MUL:
-        case AST_DIV:
-        case AST_MOD:
-        case AST_NEG:
-        case AST_NOT:
-        case AST_POWER:
-            return 1;
-
-        default:
-            return 0;
-    }
-}
- 
 static void report_error(ASTNode *node, const char *message) {
     if (node != NULL && node->line > 0) {
         fprintf(stderr,
@@ -412,177 +382,6 @@ static int emit_software_arithmetic(ASTNode *node, CGArithKind kind, int lhs, in
     // dst remains allocated because the caller needs
     // its value as the expression result.
     return dst;
-}
-
-static int emit_array_element(ASTNode *initializer, Symbol *array, int base_reg, int element_index) {
-    if (initializer == NULL || array == NULL) {
-        report_error(
-            initializer,
-            "elemento de inicializacion invalido"
-        );
-        return 0;
-    }
-
-    int total_elements = 1;
-
-    for (int i = 0; i < array->dimensions; i++) {
-        if (array->dim_sizes[i] <= 0 ||
-            total_elements > 1024 / array->dim_sizes[i]) {
-            report_error(
-                initializer,
-                "dimensiones de arreglo invalidas"
-            );
-            return 0;
-        }
-
-        total_elements *= array->dim_sizes[i];
-    }
-
-    if (element_index < 0 || element_index >= total_elements) {
-        report_error(
-            initializer,
-            "demasiados elementos en inicializador de arreglo"
-        );
-        return 0;
-    }
-
-    int offset = element_index * 4;
-
-    int value_reg = emit_expression(initializer);
-
-    if (value_reg < 0)
-        return 0;
-
-    cg_op(
-        SLOT_LSU,
-        "sw %s, %d(%s)",
-        reg_name(value_reg),
-        offset,
-        reg_name(base_reg)
-    );
-
-    free_reg(value_reg);
-
-    return 1;
-}
-
-static int emit_array_initializer_recursive(ASTNode *list, Symbol *array, int base_reg, int *element_index) {
-    if (list == NULL)
-        return 1;
-
-    if (list->kind != AST_INITIALIZER_LIST) {
-        if (!emit_array_element(
-                list,
-                array,
-                base_reg,
-                *element_index
-            )) {
-            return 0;
-        }
-
-        (*element_index)++;
-        return 1;
-    }
-
-    for (ASTNode *child = list->child;
-         child != NULL;
-         child = child->next) {
-
-        if (!emit_array_initializer_recursive(
-                child,
-                array,
-                base_reg,
-                element_index
-            )) {
-            return 0;
-        }
-    }
-
-    return 1;
-}
-
-static void emit_array_initializer(ASTNode *declaration, Symbol *array, ASTNode *initializer) {
-    if (array == NULL || initializer == NULL) {
-        report_error(
-            declaration,
-            "inicializador de arreglo invalido"
-        );
-        return;
-    }
-
-    if (array->dimensions < 1 || array->dimensions > 2) {
-        report_error(
-            declaration,
-            "numero de dimensiones no soportado"
-        );
-        return;
-    }
-
-    if (array->kind != SYMBOL_VARIABLE) {
-        report_error(
-            declaration,
-            "el destino no es un arreglo declarable"
-        );
-        return;
-    }
-
-    if (array->modifier == MODIFIER_VI) {
-        report_error(
-            declaration,
-            "no se puede inicializar un arreglo Vi"
-        );
-        return;
-    }
-
-    int base_reg = alloc_reg();
-
-    if (base_reg < 0) {
-        report_error(
-            declaration,
-            "sin registros para inicializar arreglo"
-        );
-        return;
-    }
-
-    if (!cg_array_base(
-            &arithmetic_context,
-            array,
-            base_reg
-        )) {
-        free_reg(base_reg);
-
-        report_error(
-            declaration,
-            "no se pudo generar la direccion base del arreglo"
-        );
-        return;
-    }
-
-    int element_index = 0;
-
-    int success = emit_array_initializer_recursive(
-        initializer,
-        array,
-        base_reg,
-        &element_index
-    );
-
-    free_reg(base_reg);
-
-    if (!success)
-        return;
-
-    int expected = 1;
-
-    for (int i = 0; i < array->dimensions; i++)
-        expected *= array->dim_sizes[i];
-
-    if (element_index != expected) {
-        report_error(
-            declaration,
-            "cantidad de elementos incorrecta en inicializador"
-        );
-    }
 }
 
 static int emit_binary_expression(ASTNode *node) {
@@ -1950,142 +1749,6 @@ static void emit_rewind(ASTNode *node) {
           current_function_name);
 }
 
-static void emit_declaration(ASTNode *node) {
-    ASTNode *identifier = NULL;
-    ASTNode *dimensions = NULL;
-    ASTNode *initializer = NULL;
-
-    // AST_DECLARATION children are:
-    //   modifier, identifier, type, dimensions, initializer
-    // Optional children are omitted by ast_add_child(),
-    // so identify them by kind instead of position.
-    for (ASTNode *c = node->child; c != NULL; c = c->next) {
-        switch (c->kind) {
-            case AST_IDENTIFIER:
-                if (identifier == NULL)
-                    identifier = c;
-                break;
-
-            case AST_DIMENSIONS:
-                dimensions = c;
-                break;
-
-            case AST_INITIALIZER_LIST:
-                initializer = c;
-                break;
-
-            default:
-                // Types and modifiers are not initializers.
-                // Other expression kinds may be initializers.
-                if (is_expression_kind(c->kind))
-                    initializer = c;
-                break;
-        }
-    }
-
-    if (identifier == NULL) {
-        report_error(node,
-                     "declaracion sin identificador");
-        return;
-    }
-
-    Symbol *symbol = get_symbol(identifier);
-
-    if (symbol == NULL) {
-        report_error(identifier,
-                     "variable sin simbolo semantico");
-        return;
-    }
-
-    int is_array = dimensions != NULL || symbol->dimensions > 0;
-
-    // Array declaration
-    if (is_array) {
-        if (initializer != NULL) {
-            if (initializer->kind != AST_INITIALIZER_LIST) {
-                report_error(
-                    initializer,
-                    "se esperaba una lista para inicializar el arreglo"
-                );
-                return;
-            }
-
-            emit_array_initializer(
-                node,
-                symbol,
-                initializer
-            );
-        } else {
-            // CALSER specifies that arrays without explicit initializers must default to zero.
-            int work[2] = { -1, -1 };
-
-            work[0] = alloc_reg();
-            work[1] = alloc_reg();
-
-            if (work[0] < 0 || work[1] < 0) {
-                free_reg(work[0]);
-                free_reg(work[1]);
-
-                report_error(
-                    node,
-                    "sin registros para inicializar arreglo"
-                );
-                return;
-            }
-
-            int success = cg_array_zero(
-                &arithmetic_context,
-                symbol,
-                work
-            );
-
-            free_reg(work[0]);
-            free_reg(work[1]);
-
-            if (!success) {
-                report_error(
-                    node,
-                    "no se pudo inicializar el arreglo con ceros"
-                );
-            }
-        }
-
-        return;
-    }
-
-    if (symbol->kind != SYMBOL_VARIABLE) {
-        report_error(identifier,
-                     "el simbolo declarado no es una variable");
-        return;
-    }
-
-    int rd;
-
-    if (initializer == NULL) {
-        // Uninitialized scalar variables default to zero.
-        rd = alloc_reg();
-
-        if (rd < 0) {
-            report_error(node,
-                        "sin registros para inicializar variable");
-            return;
-        }
-        if (emit_mov(rd, 0, node) != 0) {
-            free_reg(rd);
-            return;
-        }
-    } else {
-        rd = emit_expression(initializer);
-
-        if (rd < 0)
-            return;
-    }
-
-    emit_store_symbol(symbol, rd, identifier);
-
-    free_reg(rd);
-}
-
 static void emit_statement(ASTNode *node) {
     if (node == NULL)
         return;
@@ -2173,6 +1836,15 @@ static void emit_function(ASTNode *function) {
              name);
 
     cg_label(entry_label);
+
+    // Prólogo (fase4_contrato_comun.md §3): el retorno empieza en 0 en cada
+    // llamada. Va antes de .L_body_: R salta al cuerpo y conserva el valor.
+    // main es void y no tiene retorno.
+    Symbol *return_symbol = get_return_symbol(current_function_symbol);
+
+    if (return_symbol != NULL)
+        cg_op(SLOT_LSU, "sw rz, %d(rz)", return_symbol->address);
+
     cg_label(body_label);
 
     ASTNode *body = find_child(function, AST_BLOCK);
@@ -2191,14 +1863,21 @@ static void emit_function(ASTNode *function) {
 
     emit_block(body);
 
-    // If control reaches the end of main, terminate the program.
-    // Other functions need a well-defined fall-through policy.
-    if (inside_main) {
-        cg_op(SLOT_BRU, "jef fin_main");
-    } else {
-        // This assumes falling off the end of a function
-        // should return to the caller.
-        cg_op(SLOT_BRU, "jefR rz, rl");
+    // Salto final, por si el control llega al final del cuerpo: el semántico
+    // exige que la función contenga un E, no que termine en uno. Si la
+    // última sentencia ya es un E, ese E emitió el mismo salto y no se repite.
+    ASTNode *last = body->child;
+
+    while (last != NULL && last->next != NULL)
+        last = last->next;
+
+    if (last == NULL || last->kind != AST_EMIT) {
+
+        if (inside_main) {
+            cg_op(SLOT_BRU, "jef fin_main");
+        } else {
+            cg_op(SLOT_BRU, "jefR rz, rl");
+        }
     }
 
     inside_main = 0;

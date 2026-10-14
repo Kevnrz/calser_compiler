@@ -49,6 +49,7 @@ Symbol *symbol_create(const char *name,
     symbol->area_base = -1;
     symbol->area_size = 0;
     symbol->temp_base = -1;
+    symbol->limit_address = -1;
     symbol->param_list = NULL;
     symbol->param_capacity = 0;
 

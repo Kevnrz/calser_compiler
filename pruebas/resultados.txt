@@ -658,8 +658,8 @@ Scope 4: FUNCTION
 --- stderr ---
 --- tabla ---
 Scope 0: GLOBAL
-    main : void (function) params=[] area=0x0040 size=72 temp_base=0x0058
-    suma : int (function) params=[v] area=0x0000 size=64 temp_base=0x0010
+    main : void (function) params=[] area=0x0044 size=72 temp_base=0x005C
+    suma : int (function) params=[v] area=0x0000 size=68 temp_base=0x0014
 
 Scope 1: FUNCTION
     v : int[5] width=4 addr=0x0008
@@ -669,8 +669,8 @@ Scope 2: S
     i : int width=4 addr=0x000C
 
 Scope 3: FUNCTION
-    r : int width=4 addr=0x0054
-    datos : int[5] width=20 addr=0x0040
+    r : int width=4 addr=0x0058
+    datos : int[5] width=20 addr=0x0044
 
 =======================
 
@@ -690,8 +690,8 @@ Scope 3: FUNCTION
 --- stderr ---
 --- tabla ---
 Scope 0: GLOBAL
-    main : void (function) params=[] area=0x0070 size=76 temp_base=0x008C
-    maximo : int (function) params=[m, f, b] area=0x0024 size=76 temp_base=0x0040
+    main : void (function) params=[] area=0x0074 size=76 temp_base=0x0090
+    maximo : int (function) params=[m, f, b] area=0x0024 size=80 temp_base=0x0044
     tabla : int[2][3] width=24 addr=0x000C
     bandera : bool width=4 addr=0x0008
     limite : int width=4 addr=0x0004
@@ -707,15 +707,15 @@ Scope 2: S
     i : int width=4 addr=0x0038
 
 Scope 3: C
-    nuevo : int width=4 addr=0x003C
+    nuevo : int width=4 addr=0x0040
 
 Scope 4: FUNCTION
-    v : int[4] width=16 addr=0x0078
-    ok : bool width=4 addr=0x0074
-    r : int width=4 addr=0x0070
+    v : int[4] width=16 addr=0x007C
+    ok : bool width=4 addr=0x0078
+    r : int width=4 addr=0x0074
 
 Scope 5: L
-    paso : int width=4 addr=0x0088
+    paso : int width=4 addr=0x008C
 
 =======================
 
@@ -739,9 +739,9 @@ Scope 5: L
 --- stderr ---
 --- tabla ---
 Scope 0: GLOBAL
-    main : void (function) params=[] area=0x0080 size=88 temp_base=0x00A8
-    poner : void (function) params=[v, k] area=0x0044 size=60 temp_base=0x0050
-    suma_fila : int (function) params=[m, f] area=0x0000 size=68 temp_base=0x0014
+    main : void (function) params=[] area=0x0084 size=88 temp_base=0x00AC
+    poner : void (function) params=[v, k] area=0x0048 size=60 temp_base=0x0054
+    suma_fila : int (function) params=[m, f] area=0x0000 size=72 temp_base=0x0018
 
 Scope 1: FUNCTION
     f : int width=4 addr=0x000C
@@ -752,13 +752,13 @@ Scope 2: S
     j : int width=4 addr=0x0010
 
 Scope 3: FUNCTION
-    k : int width=4 addr=0x004C
-    v : int[3] width=4 addr=0x0048
+    k : int width=4 addr=0x0050
+    v : int[3] width=4 addr=0x004C
 
 Scope 4: FUNCTION
-    r : int width=4 addr=0x00A4
-    w : int[3] width=12 addr=0x0098
-    t : int[2][3] width=24 addr=0x0080
+    r : int width=4 addr=0x00A8
+    w : int[3] width=12 addr=0x009C
+    t : int[2][3] width=24 addr=0x0084
 
 =======================
 
@@ -780,8 +780,8 @@ Scope 4: FUNCTION
 --- stderr ---
 --- tabla ---
 Scope 0: GLOBAL
-    main : void (function) params=[] area=0x0080 size=80 temp_base=0x00A0
-    total : int (function) params=[v] area=0x0040 size=64 temp_base=0x0050
+    main : void (function) params=[] area=0x0084 size=80 temp_base=0x00A4
+    total : int (function) params=[v] area=0x0040 size=68 temp_base=0x0054
     es_par : bool (function) params=[n] area=0x0004 size=60 temp_base=0x0010
     tope : int width=4 addr=0x0000
 
@@ -799,10 +799,10 @@ Scope 3: S
 Scope 4: C
 
 Scope 5: FUNCTION
-    ok : bool width=4 addr=0x009C
-    t : int width=4 addr=0x0098
-    copia : int[3] width=12 addr=0x008C
-    datos : int[3] width=12 addr=0x0080
+    ok : bool width=4 addr=0x00A0
+    t : int width=4 addr=0x009C
+    copia : int[3] width=12 addr=0x0090
+    datos : int[3] width=12 addr=0x0084
 
 =======================
 
@@ -828,7 +828,7 @@ Scope 5: FUNCTION
 --- stderr ---
 --- tabla ---
 Scope 0: GLOBAL
-    main : void (function) params=[] area=0x007C size=60 temp_base=0x0088
+    main : void (function) params=[] area=0x007C size=64 temp_base=0x008C
     doble : int (function) params=[x] area=0x0040 size=60 temp_base=0x004C
     factorial : int (function) params=[n, acc] area=0x0000 size=64 temp_base=0x0010
 
@@ -945,13 +945,11 @@ Scope 3: FUNCTION
 
 ===== pruebas/p11_ejercicio3.cls =====
 --- stderr ---
-ccom:37:15: error de generacion: sin suficientes registros para la rutina aritmetica
-ccom:50:15: error de generacion: sin suficientes registros para la rutina aritmetica
 --- tabla ---
 Scope 0: GLOBAL
-    main : void (function) params=[] area=0x016C size=56 temp_base=0x0174
-    descifrar_archivo : int (function) params=[desde, hacia, total, tam] area=0x011C size=80 temp_base=0x013C
-    cifrar_archivo : int (function) params=[desde, hacia, total, tam] area=0x00CC size=80 temp_base=0x00EC
+    main : void (function) params=[] area=0x0174 size=56 temp_base=0x017C
+    descifrar_archivo : int (function) params=[desde, hacia, total, tam] area=0x0120 size=84 temp_base=0x0144
+    cifrar_archivo : int (function) params=[desde, hacia, total, tam] area=0x00CC size=84 temp_base=0x00F0
     preparar_boveda : void (function) params=[] area=0x0098 size=52 temp_base=0x009C
     direccion : int (function) params=[base, tam, i] area=0x0054 size=68 temp_base=0x0068
     bloques_de : int (function) params=[total, tam, i] area=0x000C size=72 temp_base=0x0024
@@ -986,7 +984,7 @@ Scope 6: FUNCTION
     n : int (return) width=4 addr=0x00D0
 
 Scope 7: S
-    b : int width=4 addr=0x00E8
+    b : int width=4 addr=0x00EC
     i : int width=4 addr=0x00E4
 
 Scope 8: C
@@ -994,23 +992,23 @@ Scope 8: C
 Scope 9: RESIDUAL
 
 Scope 10: FUNCTION
-    tam : int width=4 addr=0x0130
-    total : int width=4 addr=0x012C
-    hacia : int width=4 addr=0x0128
-    desde : int width=4 addr=0x0124
-    n : int (return) width=4 addr=0x0120
+    tam : int width=4 addr=0x0134
+    total : int width=4 addr=0x0130
+    hacia : int width=4 addr=0x012C
+    desde : int width=4 addr=0x0128
+    n : int (return) width=4 addr=0x0124
 
 Scope 11: S
-    b : int width=4 addr=0x0138
-    i : int width=4 addr=0x0134
+    b : int width=4 addr=0x0140
+    i : int width=4 addr=0x0138
 
 Scope 12: C
 
 Scope 13: RESIDUAL
 
 Scope 14: FUNCTION
-    n2 : int width=4 addr=0x0170
-    n1 : int width=4 addr=0x016C
+    n2 : int width=4 addr=0x0178
+    n1 : int width=4 addr=0x0174
 
 =======================
 
@@ -1041,15 +1039,14 @@ Scope 14: FUNCTION
 .L_body_bloques_de | BODY         | AST kind: FUNCTION | Line: 5
 .L_func_bloques_de | FUNCTION     | AST kind: FUNCTION | Line: 5
 =======================
---- codigo de salida: 1 ---
+--- codigo de salida: 0 ---
 
 ===== pruebas/p12_ejercicio2.cls =====
 --- stderr ---
-ccom:10:17: error de generacion: sin registros para acceder al arreglo
 --- tabla ---
 Scope 0: GLOBAL
-    main : void (function) params=[] area=0x007C size=60 temp_base=0x0088
-    buscar : bool (function) params=[mat, x, pos] area=0x0030 size=76 temp_base=0x004C
+    main : void (function) params=[] area=0x0084 size=60 temp_base=0x0090
+    buscar : bool (function) params=[mat, x, pos] area=0x0030 size=84 temp_base=0x0054
     m : int[3][4] width=48 addr=0x0000
 
 Scope 1: FUNCTION
@@ -1062,13 +1059,13 @@ Scope 2: S
     i : int width=4 addr=0x0044
 
 Scope 3: S
-    j : int width=4 addr=0x0048
+    j : int width=4 addr=0x004C
 
 Scope 4: C
 
 Scope 5: FUNCTION
-    ok : bool width=4 addr=0x0084
-    p : int[2] width=8 addr=0x007C
+    ok : bool width=4 addr=0x008C
+    p : int[2] width=8 addr=0x0084
 
 =======================
 
@@ -1087,5 +1084,5 @@ Scope 5: FUNCTION
 .L_body_buscar | BODY         | AST kind: FUNCTION | Line: 5
 .L_func_buscar | FUNCTION     | AST kind: FUNCTION | Line: 5
 =======================
---- codigo de salida: 1 ---
+--- codigo de salida: 0 ---
 

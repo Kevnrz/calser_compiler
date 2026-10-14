@@ -40,15 +40,25 @@ CASES = [
     # Copia completa con parámetros arreglo reenviados por dos funciones.
     ('copia de arreglos', HERE / 'copia_arreglos.cls',
      {'t': 15, 'y': [4, 5, 6], 'x': [4, 5, 6]}),
+    # Ciclo S (calser_diseno.md §5.8.2): fin exclusivo; el paso negativo
+    # sigue mientras i > fin.
+    ('S paso 1', HERE / 's_positivo.cls', {'x': 10}),          # 0+1+2+3+4
+    ('S paso -1', HERE / 's_negativo.cls', {'x': 15}),         # 5+4+3+2+1
+    ('S paso 3', HERE / 's_paso3.cls', {'x': 18}),             # 0+3+6+9
+    # Paso que no cabe en un inmediato de 18 bits: 0 + 200000.
+    ('S paso 200000', HERE / 's_paso_grande.cls', {'x': 200000}),
+    # Suma de i*j, i de 0 a 2 y j de 0 a 3: (0+1+2)·(0+1+2+3).
+    ('S anidados', HERE / 's_anidados.cls', {'x': 18}),
+    # E dentro de un S: 15 está en la posición 2; 99 no está (-1); después
+    # otro S suma a tres veces.
+    ('E dentro de S', HERE / 'e_en_s.cls', {'a': 2, 'b': -1, 'c': 6}),
+    # Ejercicio 2: 42 está en la fila 1, columna 1 de m.
+    ('p12', ROOT / 'pruebas/p12_ejercicio2.cls', {'ok': 1, 'p': [1, 1]}),
 ]
 
 # Programas que todavía no pasan por algo fuera de esta prueba: se informan
 # y no cuentan como fallo. Cuando pasen, la prueba avisa para quitarlos.
-PENDING = [
-    ('p12', ROOT / 'pruebas/p12_ejercicio2.cls', {'ok': 1, 'p': [1, 1]},
-     'el ciclo S retiene 5 registros durante su cuerpo; con dos S anidados '
-     'no quedan registros para leer mat[i][j]'),
-]
+PENDING = []
 
 
 class Failure(Exception):
@@ -141,6 +151,22 @@ def run_p09(sim_asm, directory):
         raise Failure('0x4000-0x4007 distinto de 0x1000-0x1007')
 
 
+def run_p11(sim_asm, directory):
+    """Ejercicio 3 con datos en 0x1000: cifra el archivo por tramos con dos
+    llaves y lo descifra. 128 bloques en tramos de 16 son 8 tramos."""
+    base, table = compile_program(ROOT / 'pruebas/p11_ejercicio3.cls', directory, 'p11')
+    original = bytes(range(256)) * 4
+    simulator = simulate(sim_asm, base, original)
+    check_values(simulator, table, {'n1': 8, 'n2': 8})
+    memory = simulator.memory
+    if memory[0x1000:0x1400] != original:
+        raise Failure('0x1000-0x13FF cambió')
+    if memory[0x3000:0x3400] != original:
+        raise Failure('0x3000-0x33FF distinto de 0x1000-0x13FF')
+    if memory[0x2000:0x2400] == original:
+        raise Failure('0x2000-0x23FF igual al original')
+
+
 def describe(expected):
     return ', '.join('%s = %s' % item for item in expected.items())
 
@@ -163,6 +189,12 @@ def main():
         except (Failure, sim_asm.AsmError) as error:
             failed += 1
             print('FAIL p09: %s' % error)
+        try:
+            run_p11(sim_asm, directory)
+            print('PASS p11: n1 = 8, n2 = 8, 0x3000 == 0x1000, 0x2000 distinto')
+        except (Failure, sim_asm.AsmError) as error:
+            failed += 1
+            print('FAIL p11: %s' % error)
         for name, source, expected, reason in PENDING:
             try:
                 run_case(sim_asm, directory, name, source, expected)

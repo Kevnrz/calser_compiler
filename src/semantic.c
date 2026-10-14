@@ -1847,6 +1847,16 @@ static int analyze_loop_s(ASTNode *node) {
                     node,
                     &control->address);
 
+            // Casilla oculta para el fin del ciclo, junto a la variable de
+            // control. El fin se evalúa una sola vez al entrar
+            // (calser_diseno.md §5.8.2) y el generador lo guarda aquí para
+            // no retener un registro durante el cuerpo. No tiene nombre: no
+            // entra a la tabla de ámbitos.
+            reserve(type_width(TYPE_INT),
+                    control->name,
+                    node,
+                    &control->limit_address);
+
             identifier->symbol = control;
         }
     }

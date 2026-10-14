@@ -1539,6 +1539,21 @@ static void emit_loop_l(ASTNode *node) {
     cg_label(end_label);
 }
 
+/*
+ * Ciclo S [ var , inicio , fin , paso ] (calser_diseno.md §5.8.2):
+ *   - inicio y fin se evalúan una sola vez, al entrar;
+ *   - fin es exclusivo;
+ *   - paso es un literal distinto de cero (lo garantizan la gramática y el
+ *     semántico): con paso positivo se sigue mientras var < fin, y con paso
+ *     negativo mientras var > fin.
+ *
+ * Los valores viven en memoria entre sentencias y los registros solo se
+ * usan dentro de cada una (libro §8.6): var está en su casilla, fin en la
+ * casilla oculta que reservó el semántico (limit_address) y el paso va como
+ * inmediato. Así ningún registro queda ocupado durante el cuerpo, y los S
+ * anidados o las rutinas aritméticas dentro de un S tienen los 12
+ * temporales disponibles.
+ */
 static void emit_loop_s(ASTNode *node) {
     ASTNode *id_node    = child_at(node, 0);
     ASTNode *start_node = child_at(node, 1);
@@ -1547,7 +1562,9 @@ static void emit_loop_s(ASTNode *node) {
     ASTNode *body       = child_at(node, 4);
 
     if (!id_node || id_node->kind != AST_IDENTIFIER ||
-        !start_node || !end_node || !step_node || !body) {
+        !start_node || !end_node || !body ||
+        !step_node || step_node->kind != AST_NUMBER ||
+        step_node->number == 0) {
         report_error(node, "estructura del ciclo S invalida");
         return;
     }
@@ -1560,34 +1577,33 @@ static void emit_loop_s(ASTNode *node) {
         return;
     }
 
+    if (loop_var->limit_address < 0) {
+        report_error(id_node, "ciclo S sin casilla para su fin");
+        return;
+    }
+
+    long step = step_node->number;
+    int limit = loop_var->limit_address;
+
+    // Al entrar: var = inicio y la casilla oculta = fin. Los dos se evalúan
+    // antes de escribir var, porque fin puede usar un nombre igual de afuera.
     int start = emit_expression(start_node);
-    if (start < 0) return;
+
+    if (start < 0)
+        return;
 
     int end = emit_expression(end_node);
+
     if (end < 0) {
         free_reg(start);
         return;
     }
 
-    int step = emit_expression(step_node);
-    if (step < 0) {
-        free_reg(start);
-        free_reg(end);
-        return;
-    }
+    emit_store_symbol(loop_var, start, id_node);
+    cg_op(SLOT_LSU, "sw %s, %d(rz)", reg_name(end), limit);
 
-    int current = alloc_reg();
-    int condition = alloc_reg();
-
-    if (current < 0 || condition < 0) {
-        report_error(node, "sin registros para generar el ciclo S");
-        free_reg(start);
-        free_reg(end);
-        free_reg(step);
-        if (current >= 0) free_reg(current);
-        if (condition >= 0) free_reg(condition);
-        return;
-    }
+    free_reg(start);
+    free_reg(end);
 
     char test_label[64];
     char end_label[64];
@@ -1595,65 +1611,88 @@ static void emit_loop_s(ASTNode *node) {
     make_label(test_label, sizeof(test_label), "for_test");
     make_label(end_label, sizeof(end_label), "for_end");
 
-    // i = start
-    emit_store_symbol(loop_var, start, id_node);
-
     cg_label(test_label);
 
-    // current = i
-    if (emit_load_symbol(current, loop_var, id_node) != 0) {
-        free_reg(start);
-        free_reg(end);
-        free_reg(step);
-        free_reg(current);
-        free_reg(condition);
+    // Cada vuelta: se cargan var y fin y se compara con signo (isa.md §6.2,
+    // bge). Se sale cuando ya no se cumple la condición de seguir:
+    //   paso > 0: sigue si var < fin, sale si var >= fin
+    //   paso < 0: sigue si var > fin, sale si fin >= var
+    int current = alloc_reg();
+    int bound = current >= 0 ? alloc_reg() : -1;
+
+    if (current < 0 || bound < 0) {
+        report_error(node, "sin registros para generar el ciclo S");
+
+        if (current >= 0)
+            free_reg(current);
+
         return;
     }
 
-    // condition = (i < end)
-    cg_op(SLOT_ALU0,
-          "slt %s, %s, %s",
-          reg_name(condition),
-          reg_name(current),
-          reg_name(end));
+    if (emit_load_symbol(current, loop_var, id_node) != 0) {
+        free_reg(current);
+        free_reg(bound);
+        return;
+    }
 
-    // Exit when i >= end.
-    cg_op(SLOT_BRU,
-          "beq %s, rz, %s",
-          reg_name(condition),
-          end_label);
+    cg_op(SLOT_LSU, "lw %s, %d(rz)", reg_name(bound), limit);
 
-    // Execute the body.
+    if (step > 0)
+        cg_op(SLOT_BRU, "bge %s, %s, %s",
+              reg_name(current), reg_name(bound), end_label);
+    else
+        cg_op(SLOT_BRU, "bge %s, %s, %s",
+              reg_name(bound), reg_name(current), end_label);
+
+    // Ningún registro queda ocupado durante el cuerpo.
+    free_reg(current);
+    free_reg(bound);
+
     emit_block(body);
 
-    // i = i + step
-    if (emit_load_symbol(current, loop_var, id_node) != 0) {
-        free_reg(start);
-        free_reg(end);
-        free_reg(step);
-        free_reg(current);
-        free_reg(condition);
+    // var = var + paso. El paso va como inmediato si cabe en 18 bits con
+    // signo (isa.md §4.2); si no, se carga como constante de 32 bits (§4.3).
+    current = alloc_reg();
+
+    if (current < 0) {
+        report_error(node, "sin registros para generar el ciclo S");
         return;
     }
 
-    cg_op(SLOT_ALU0,
-          "add %s, %s, %s",
-          reg_name(current),
-          reg_name(current),
-          reg_name(step));
+    if (emit_load_symbol(current, loop_var, id_node) != 0) {
+        free_reg(current);
+        return;
+    }
+
+    if (step >= -131072 && step <= 131071) {
+        cg_op(SLOT_ALU0, "saddi %s, %s, %ld",
+              reg_name(current), reg_name(current), step);
+    }
+    else {
+        int amount = alloc_reg();
+
+        if (amount < 0 || emit_mov(amount, step, step_node) != 0) {
+            if (amount < 0)
+                report_error(node, "sin registros para generar el ciclo S");
+            else
+                free_reg(amount);
+
+            free_reg(current);
+            return;
+        }
+
+        cg_op(SLOT_ALU0, "add %s, %s, %s",
+              reg_name(current), reg_name(current), reg_name(amount));
+
+        free_reg(amount);
+    }
 
     emit_store_symbol(loop_var, current, id_node);
 
-    // Repeat.
-    cg_op(SLOT_BRU, "jef %s", test_label);
-
-    cg_label(end_label);
-
-    free_reg(start);
-    free_reg(end);
-    free_reg(step);
     free_reg(current);
-    free_reg(condition);
+
+    cg_op(SLOT_BRU, "jef %s", test_label);
+    cg_label(end_label);
 }
 
 static int inside_main;

@@ -147,6 +147,11 @@ int label_table_build(LabelTable *table, ASTNode *root) {
     if (label_traverse(table, root) != 0)
         return -1;
 
+    // Etiquetas globales: no pertenecen a ningún nodo del AST.
+    if (label_table_add_named(table, NULL, LABEL_PROGRAM_END,
+                              "fin_main") != 0)
+        return -1;
+
     return label_table_add_named(table, NULL, LABEL_ARITH_ERROR,
                                  ".L_arith_error");
 }
@@ -198,6 +203,7 @@ static const char *label_role_name(LabelRole role) {
         case LABEL_BODY:     return "BODY";
         case LABEL_SC_END:   return "SC_END";
         case LABEL_ARITH_ERROR: return "ARITH_ERROR";
+        case LABEL_PROGRAM_END: return "PROGRAM_END";
         default:             return "UNKNOWN";
     }
 }

@@ -32,7 +32,20 @@
  * prohíbe la recursión. No se revisa el desborde en ejecución: el semántico
  * exige al menos 256 bytes libres para la pila.
  */
-#define ARITH_ERROR_LABEL ".L_arith_error"
+/*
+ * Etiquetas: la tabla de etiquetas se construye en la Fase 3
+ * (label_table.c) y la Fase 4 solo la consume. Cada etiqueta de control del
+ * .asm sale de label_table_get con el nodo del AST y su rol; el generador
+ * no inventa nombres. Si falta una, es un error interno.
+ *
+ * Quedan fuera de la tabla las etiquetas internas de cada expansión, que no
+ * son nodos del AST: __ccom_arith_N_*, __ccom_array_N_* y .L_crypto_*.
+ */
+static const LabelTable *label_table;
+
+// Etiquetas globales (nodo NULL en la tabla), leídas al empezar.
+static const char *arith_error_label;   // destino de / % ^ con error
+static const char *program_end_label;   // fin_main (contrato §3)
 
 static CGArithContext arithmetic_context;
 static CGCryptoContext crypto_context;
@@ -43,7 +56,6 @@ static void free_reg(int reg);
 static void report_error(ASTNode *node, const char *message);
 
 static int temp_used[TEMP_COUNT];
-static int label_counter;
 static int generation_errors;
 
 static const char *current_function_name;
@@ -349,7 +361,7 @@ static int emit_software_arithmetic(ASTNode *node, CGArithKind kind, int lhs, in
     if (kind == CG_ARITH_DIV ||
         kind == CG_ARITH_MOD ||
         kind == CG_ARITH_POWER) {
-        error_label = ARITH_ERROR_LABEL;
+        error_label = arith_error_label;
     }
 
     int success = cg_arith_emit(
@@ -384,7 +396,8 @@ static int emit_software_arithmetic(ASTNode *node, CGArithKind kind, int lhs, in
     return dst;
 }
 
-static void make_label(char *buffer, size_t size, const char *prefix);
+static int node_label(char *buffer, size_t size, ASTNode *node,
+                      LabelRole role, const char *what);
 
 /*
  * & y | en corto circuito (libro §6.6.2, Short-Circuit Code; G-11 de
@@ -406,7 +419,11 @@ static int emit_short_circuit(ASTNode *node, ASTNode *left, ASTNode *right) {
 
     char end_label[64];
 
-    make_label(end_label, sizeof(end_label), "sc_end");
+    if (!node_label(end_label, sizeof(end_label), node, LABEL_SC_END,
+                    "corto circuito")) {
+        free_reg(result);
+        return -1;
+    }
 
     cg_op(SLOT_BRU,
           "%s %s, rz, %s",
@@ -1026,6 +1043,20 @@ static int emit_function_call(ASTNode *node, int result_needed) {
         }
     }
 
+    // La entrada de la función llamada sale de la tabla: el símbolo guarda
+    // su nodo FUNCTION en decl_node.
+    char callee_label[128];
+
+    if (!node_label(callee_label, sizeof(callee_label),
+                    (ASTNode *) callee->decl_node, LABEL_FUNCTION,
+                    "entrada de la funcion")) {
+        for (int j = 0; j < saved_count; j++) {
+            free_reg(saved_regs[j]);
+        }
+
+        return -1;
+    }
+
     // The argument values have now been removed from the stack.
     // Only the caller's saved temporaries remain.
     // Save the old return link before jas overwrites rl.
@@ -1033,9 +1064,7 @@ static int emit_function_call(ASTNode *node, int result_needed) {
 
     // Call the function.
     // jas sets rl to the return address.
-    cg_op(SLOT_BRU,
-          "jas rl, .L_func_%s",
-          callee->name);
+    cg_op(SLOT_BRU, "jas rl, %s", callee_label);
 
     // The callee's E returns through the new rl.
     // Restore the caller's previous rl after returning.
@@ -1203,12 +1232,26 @@ static void initialize_declaration(ASTNode *node, int image, int dynamic_only) {
         initialize_cells(NULL, symbol, &offset, image, dynamic_only);
 }
 
-static void make_label(char *buffer, size_t size, const char *prefix) {
-    snprintf(buffer,
-             size,
-             ".L_%s_%d",
-             prefix,
-             label_counter++);
+// Copia en buffer la etiqueta de la tabla para ese nodo y rol. Si no está,
+// reporta un error interno (no se inventa una) y devuelve 0.
+static int node_label(char *buffer, size_t size, ASTNode *node,
+                      LabelRole role, const char *what) {
+    const char *name = label_table_get(label_table, node, role);
+
+    if (name == NULL || strlen(name) >= size) {
+        char message[128];
+
+        snprintf(message, sizeof(message),
+                 "error interno: falta la etiqueta de %s en la tabla", what);
+
+        report_error(node, message);
+
+        return 0;
+    }
+
+    strcpy(buffer, name);
+
+    return 1;
 }
 
 static void emit_statement(ASTNode *node);
@@ -1465,14 +1508,16 @@ static void emit_conditional(ASTNode *node) {
     char end_label[64];
     char next_label[64];
 
-    make_label(end_label, sizeof(end_label), "if_end");
+    if (!node_label(end_label, sizeof(end_label), node, LABEL_END,
+                    "fin del C") ||
+        !node_label(next_label, sizeof(next_label), node, LABEL_NEXT,
+                    "siguiente rama del C"))
+        return;
 
     int rc = emit_expression(condition);
 
     if (rc < 0)
         return;
-
-    make_label(next_label, sizeof(next_label), "if_next");
 
     cg_op(SLOT_BRU,
           "beq %s, rz, %s",
@@ -1510,9 +1555,9 @@ static void emit_conditional(ASTNode *node) {
 
             char following[64];
 
-            make_label(following,
-                       sizeof(following),
-                       "alt_next");
+            if (!node_label(following, sizeof(following), alt, LABEL_NEXT,
+                            "siguiente rama del A"))
+                continue;
 
             rc = emit_expression(alt_condition);
 
@@ -1559,8 +1604,11 @@ static void emit_loop_l(ASTNode *node) {
     char start_label[64];
     char end_label[64];
 
-    make_label(start_label, sizeof(start_label), "loop_start");
-    make_label(end_label, sizeof(end_label), "loop_end");
+    if (!node_label(start_label, sizeof(start_label), node, LABEL_START,
+                    "inicio del L") ||
+        !node_label(end_label, sizeof(end_label), node, LABEL_END,
+                    "fin del L"))
+        return;
 
     cg_label(start_label);
 
@@ -1652,10 +1700,16 @@ static void emit_loop_s(ASTNode *node) {
     free_reg(end);
 
     char test_label[64];
+    char update_label[64];
     char end_label[64];
 
-    make_label(test_label, sizeof(test_label), "for_test");
-    make_label(end_label, sizeof(end_label), "for_end");
+    if (!node_label(test_label, sizeof(test_label), node, LABEL_START,
+                    "inicio del S") ||
+        !node_label(update_label, sizeof(update_label), node, LABEL_UPDATE,
+                    "incremento del S") ||
+        !node_label(end_label, sizeof(end_label), node, LABEL_END,
+                    "fin del S"))
+        return;
 
     cg_label(test_label);
 
@@ -1695,6 +1749,9 @@ static void emit_loop_s(ASTNode *node) {
     free_reg(bound);
 
     emit_block(body);
+
+    // Inicio del incremento (rol UPDATE de la tabla).
+    cg_label(update_label);
 
     // var = var + paso. El paso va como inmediato si cabe en 18 bits con
     // signo (isa.md §4.2); si no, se carga como constante de 32 bits (§4.3).
@@ -1746,15 +1803,19 @@ static int inside_main;
 // `E` de main termina el programa (contrato §3):
 //   fin_main: { nopi | nopi | jef fin_main | nopi }
 static void emit_end_of_main(void) {
-    cg_label("fin_main");
-    cg_bundle(NULL, NULL, "jef fin_main", NULL);
+    char jump[96];
+
+    snprintf(jump, sizeof(jump), "jef %s", program_end_label);
+
+    cg_label(program_end_label);
+    cg_bundle(NULL, NULL, jump, NULL);
 }
 
 static void emit_return(ASTNode *node) {
     (void)node;
 
     if (inside_main) {
-        cg_op(SLOT_BRU, "jef fin_main");
+        cg_op(SLOT_BRU, "jef %s", program_end_label);
     } else {
         // jefR rz, rl:
         // jump to the address in rl without replacing rl.
@@ -1903,9 +1964,14 @@ static void emit_rewind(ASTNode *node) {
     // Restart the current function body.
     // Do not modify rl: R is a restart/tail-call operation,
     // not a new function call.
-    cg_op(SLOT_BRU,
-          "jef .L_body_%s",
-          current_function_name);
+    char body_label[128];
+
+    if (!node_label(body_label, sizeof(body_label),
+                    (ASTNode *) current_function_symbol->decl_node,
+                    LABEL_BODY, "cuerpo de la funcion"))
+        return;
+
+    cg_op(SLOT_BRU, "jef %s", body_label);
 }
 
 static void emit_statement(ASTNode *node) {
@@ -1984,15 +2050,11 @@ static void emit_function(ASTNode *function) {
     char entry_label[128];
     char body_label[128];
 
-    snprintf(entry_label,
-             sizeof(entry_label),
-             ".L_func_%s",
-             name);
-
-    snprintf(body_label,
-             sizeof(body_label),
-             ".L_body_%s",
-             name);
+    if (!node_label(entry_label, sizeof(entry_label), function,
+                    LABEL_FUNCTION, "entrada de la funcion") ||
+        !node_label(body_label, sizeof(body_label), function,
+                    LABEL_BODY, "cuerpo de la funcion"))
+        return;
 
     cg_label(entry_label);
 
@@ -2033,7 +2095,7 @@ static void emit_function(ASTNode *function) {
     if (last == NULL || last->kind != AST_EMIT) {
 
         if (inside_main) {
-            cg_op(SLOT_BRU, "jef fin_main");
+            cg_op(SLOT_BRU, "jef %s", program_end_label);
         } else {
             cg_op(SLOT_BRU, "jefR rz, rl");
         }
@@ -2045,9 +2107,21 @@ static void emit_function(ASTNode *function) {
     current_function_symbol = NULL;
 }
  
-int generate_code(ASTNode *root) {
+int generate_code(ASTNode *root, const LabelTable *labels) {
     if (root == NULL || root->kind != AST_PROGRAM)
         return 1;
+
+    // La tabla de etiquetas viene de la Fase 3; aquí solo se consulta.
+    label_table = labels;
+    arith_error_label = label_table_get(labels, NULL, LABEL_ARITH_ERROR);
+    program_end_label = label_table_get(labels, NULL, LABEL_PROGRAM_END);
+
+    if (arith_error_label == NULL || program_end_label == NULL) {
+        fprintf(stderr,
+                "ccom: error interno: faltan las etiquetas globales "
+                "en la tabla\n");
+        return 1;
+    }
  
     cg_init();
     crypto_context = (CGCryptoContext) {.eval = emit_crypto_argument, .next_label = 1};
@@ -2058,7 +2132,6 @@ int generate_code(ASTNode *root) {
     arithmetic_context.user = NULL;
     arithmetic_context.next_label = 0;
 
-    label_counter = 0;
     generation_errors = 0;
     inside_main = 0;
 
@@ -2105,8 +2178,8 @@ int generate_code(ASTNode *root) {
 
     emit_end_of_main();
 
-    cg_label(ARITH_ERROR_LABEL);
-    cg_op(SLOT_BRU, "jef %s", ARITH_ERROR_LABEL);
+    cg_label(arith_error_label);
+    cg_op(SLOT_BRU, "jef %s", arith_error_label);
 
     return generation_errors == 0 ? 0 : 1;
 }

@@ -66,7 +66,10 @@ check-asm: $(TARGET)
 check-programas: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/programas/probar.py
 
-check: check-arith check-arrays check-crypto check-ast check-asm check-programas
+check-etiquetas: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/etiquetas/probar.py
+
+check: check-arith check-arrays check-crypto check-ast check-asm check-programas check-etiquetas
 
 clean:
 	rm -f $(TARGET) $(OBJECTS) $(OBJECTS:.o=.d)
@@ -75,4 +78,4 @@ clean:
 
 -include $(OBJECTS:.o=.d)
 
-.PHONY: all clean check check-arith check-arrays check-crypto check-ast check-asm check-programas
+.PHONY: all clean check check-arith check-arrays check-crypto check-ast check-asm check-programas check-etiquetas

@@ -449,7 +449,7 @@ static int compile(const Options *options) {
     if (options->print_memory)
         label_table_print(labels);
 
-    int gen_failed = generate_code(root);
+    int gen_failed = generate_code(root, labels);
     report_phase(options, "fase 4: generacion de codigo", !gen_failed);
     if (gen_failed) {
         label_table_destroy(labels);

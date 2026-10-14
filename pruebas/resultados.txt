@@ -612,6 +612,7 @@ Scope 2: FUNCTION
 
 ===== LABEL TABLE =====
 .L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
 .L_body_doble | BODY         | AST kind: FUNCTION | Line: 7
 .L_func_doble | FUNCTION     | AST kind: FUNCTION | Line: 7
 .L_body_main | BODY         | AST kind: FUNCTION | Line: 1
@@ -643,6 +644,7 @@ Scope 4: FUNCTION
 
 ===== LABEL TABLE =====
 .L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
 .L_body_main | BODY         | AST kind: FUNCTION | Line: 14
 .L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 14
 .L_while_end_3 | END          | AST kind: LOOP_L | Line: 7
@@ -676,6 +678,7 @@ Scope 3: FUNCTION
 
 ===== LABEL TABLE =====
 .L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
 .L_body_main | BODY         | AST kind: FUNCTION | Line: 10
 .L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 10
 .L_for_end_2 | END          | AST kind: LOOP_S | Line: 4
@@ -721,6 +724,7 @@ Scope 5: L
 
 ===== LABEL TABLE =====
 .L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
 .L_while_end_6 | END          | AST kind: LOOP_L | Line: 23
 .L_while_start_5 | START        | AST kind: LOOP_L | Line: 23
 .L_body_main | BODY         | AST kind: FUNCTION | Line: 18
@@ -764,6 +768,7 @@ Scope 4: FUNCTION
 
 ===== LABEL TABLE =====
 .L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
 .L_body_main | BODY         | AST kind: FUNCTION | Line: 13
 .L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 13
 .L_body_poner | BODY         | AST kind: FUNCTION | Line: 8
@@ -808,6 +813,7 @@ Scope 5: FUNCTION
 
 ===== LABEL TABLE =====
 .L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
 .L_sc_end_6 | SC_END       | AST kind: OR | Line: 24
 .L_body_main | BODY         | AST kind: FUNCTION | Line: 17
 .L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 17
@@ -856,6 +862,7 @@ Scope 6: S
 
 ===== LABEL TABLE =====
 .L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
 .L_for_end_4 | END          | AST kind: LOOP_S | Line: 19
 .L_for_update_3 | UPDATE       | AST kind: LOOP_S | Line: 19
 .L_for_start_2 | START        | AST kind: LOOP_S | Line: 19
@@ -883,6 +890,7 @@ Scope 1: FUNCTION
 
 ===== LABEL TABLE =====
 .L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
 .L_body_main | BODY         | AST kind: FUNCTION | Line: 2
 .L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 2
 =======================
@@ -905,6 +913,7 @@ Scope 1: FUNCTION
 
 ===== LABEL TABLE =====
 .L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
 .L_body_main | BODY         | AST kind: FUNCTION | Line: 6
 .L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 6
 =======================
@@ -934,6 +943,7 @@ Scope 3: FUNCTION
 
 ===== LABEL TABLE =====
 .L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
 .L_body_main | BODY         | AST kind: FUNCTION | Line: 11
 .L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 11
 .L_body_add | BODY         | AST kind: FUNCTION | Line: 6
@@ -1014,6 +1024,7 @@ Scope 14: FUNCTION
 
 ===== LABEL TABLE =====
 .L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
 .L_body_main | BODY         | AST kind: FUNCTION | Line: 59
 .L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 59
 .L_if_end_11 | END          | AST kind: CONDITIONAL | Line: 50
@@ -1071,6 +1082,7 @@ Scope 5: FUNCTION
 
 ===== LABEL TABLE =====
 .L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
 .L_body_main | BODY         | AST kind: FUNCTION | Line: 21
 .L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 21
 .L_if_end_7 | END          | AST kind: CONDITIONAL | Line: 10

@@ -141,11 +141,12 @@ reproductora añadida. El éxito de p09 no demuestra que estén resueltos.
    funciones `void`. Revisar argumentos, retorno, preservación de `rl`,
    temporales y prólogo/epílogo con el contrato común; las etiquetas de entrada
    y cuerpo se emiten actualmente consecutivas, sin el prólogo allí requerido.
-2. **Memoria de llamadas:** `CALL_STACK_BASE` vale `CG_DATA_BYTES`, es decir,
-   `0x1000`. `emit_stack_push/pop()` usa esa región, mientras p09 carga su
-   buffer original allí. Una llamada que haga pushes puede sobrescribir esos
-   datos. p09 no ejecuta llamadas y no valida esa combinación. Resolver la
-   estrategia con el contrato (salvado en `temp_base`) antes de mezclar ambas.
+2. **Memoria de llamadas:** `emit_stack_push/pop()` usa una pila apuntada por
+   `rx` que vive en la zona de `ccom`: empieza en la primera dirección libre
+   después de la última área (`semantic_data_end()`) y llega hasta `0x0FFF`.
+   Ya no toca `0x1000` en adelante, que es la zona de los archivos de
+   `load_file`. El semántico exige al menos 256 bytes libres para ella. Sigue
+   pendiente decidir si se pasa al salvado en `temp_base` del contrato.
 3. **Arreglos:** `AST_INDEX` se rechaza en expresiones y la asignación admite
    solo destinos identificadores. Conectar `codegen_array` y validar lectura,
    escritura, parámetros y referencias desde un `.cls` real.

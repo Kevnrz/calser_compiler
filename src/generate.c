@@ -5,6 +5,7 @@
 #include "generate.h"
 #include "codegen.h"
 #include "symbol_table.h"
+#include "semantic.h"
 #include "codegen_arith.h"
 #include "codegen_array.h"
 #include "codegen_crypto.h"
@@ -12,12 +13,25 @@
 #define TEMP_FIRST 4
 #define TEMP_COUNT 12
 
-// The static data image occupies offsets 0 through 0xFFF.
-// Reserve runtime memory beginning at 0x1000 for the call stack.
-// This address assumes the target's data memory extends beyond
-// the static data image and that the static data base is address 0.
-#define CALL_STACK_BASE CG_DATA_BYTES
-
+/*
+ * Pila de llamadas (libro §7.2): guarda las direcciones de retorno (rl), los
+ * argumentos y los temporales vivos de las llamadas anidadas. Las variables
+ * siguen con asignación estática (libro §7.1.1); solo esto usa una pila.
+ *
+ * rx es un temporal libre según isa.md §8; aquí se usa por convención como
+ * puntero de pila. La pila crece hacia arriba (emit_stack_push).
+ *
+ * Vive en la zona de ccom (0x0000–0x0FFF): empieza en la primera dirección
+ * libre después de la última área que asignó el semántico
+ * (semantic_data_end) y llega hasta 0x0FFF. No puede estar desde 0x1000,
+ * que es la zona de los archivos de load_file (la de CRYPTO).
+ *
+ * Uso por llamada, en palabras: mientras se evalúan los argumentos, una por
+ * cada temporal vivo más una por argumento; al saltar, una por cada temporal
+ * vivo más una para rl. La profundidad está acotada porque el semántico
+ * prohíbe la recursión. No se revisa el desborde en ejecución: el semántico
+ * exige al menos 256 bytes libres para la pila.
+ */
 #define ARITH_ERROR_LABEL ".L_arith_error"
 
 static CGArithContext arithmetic_context;
@@ -2216,10 +2230,11 @@ int generate_code(ASTNode *root) {
     reset_registers();
     for (ASTNode *g = program_globals ? program_globals->child : NULL; g; g = g->next)
         initialize_declaration(g, 1, 0);
-    // Initialize return-link stack pointer
+    // Puntero de la pila de llamadas: primera dirección libre de la zona
+    // de ccom (ver el comentario de la pila al inicio del archivo).
     cg_op(SLOT_ALU0,
           "mov rx, %d",
-          CALL_STACK_BASE);
+          semantic_data_end());
  
     ASTNode *functions = find_child(root, AST_FUNCTIONS);
     ASTNode *main_function = NULL;

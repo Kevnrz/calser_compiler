@@ -280,6 +280,10 @@ static void discard_symbol(Symbol *symbol) {
 #define DATA_LIMIT 0x1000          // primera dirección que NO se puede usar
 #define TEMP_WORDS 12             // una casilla para cada registro t0–t11
 
+// Espacio mínimo que debe quedar libre, después de la última área y antes de
+// DATA_LIMIT, para la pila de llamadas de la Fase 4 (generate.c).
+#define STACK_MIN_BYTES 256
+
 static int next_address = DATA_BASE;   // libro §6.3.4: el "offset"
 
 // El desborde de la memoria de datos se reporta una sola vez por programa.
@@ -2540,7 +2544,24 @@ int semantic_analyze(ASTNode *root) {
     // Recursión indirecta: después de analizar todos los cuerpos.
     check_cycles();
 
+    // La pila de llamadas ocupa lo que queda libre en la zona de ccom. Si
+    // las variables ya se pasaron del límite, ese error ya se reportó.
+    if (!memory_reported &&
+        DATA_LIMIT - next_address < STACK_MIN_BYTES) {
+
+        semantic_error(NULL,
+                       "no queda espacio para la pila de llamadas: "
+                       "%d bytes libres, se necesitan %d (limite 0x%04X)",
+                       DATA_LIMIT - next_address,
+                       STACK_MIN_BYTES,
+                       (unsigned int) (DATA_LIMIT - 1));
+    }
+
     return diag_count() == errors_before;
+}
+
+int semantic_data_end(void) {
+    return next_address;
 }
 
 // Symbol table output

@@ -656,7 +656,6 @@ Scope 4: FUNCTION
 
 ===== pruebas/p03_suma.cls =====
 --- stderr ---
-ccom:5:25: error de generacion: funcion sin simbolo semantico valido
 --- tabla ---
 Scope 0: GLOBAL
     main : void (function) params=[] area=0x0040 size=72 temp_base=0x0058
@@ -685,7 +684,7 @@ Scope 3: FUNCTION
 .L_body_suma | BODY         | AST kind: FUNCTION | Line: 3
 .L_func_suma | FUNCTION     | AST kind: FUNCTION | Line: 3
 =======================
---- codigo de salida: 1 ---
+--- codigo de salida: 0 ---
 
 ===== pruebas/p04_memoria.cls =====
 --- stderr ---
@@ -779,7 +778,6 @@ Scope 4: FUNCTION
 
 ===== pruebas/p06_tipos.cls =====
 --- stderr ---
-ccom:10:22: error de generacion: funcion sin simbolo semantico valido
 --- tabla ---
 Scope 0: GLOBAL
     main : void (function) params=[] area=0x0080 size=80 temp_base=0x00A0
@@ -824,7 +822,7 @@ Scope 5: FUNCTION
 .L_body_es_par | BODY         | AST kind: FUNCTION | Line: 3
 .L_func_es_par | FUNCTION     | AST kind: FUNCTION | Line: 3
 =======================
---- codigo de salida: 1 ---
+--- codigo de salida: 0 ---
 
 ===== pruebas/p07_retorno_recursion.cls =====
 --- stderr ---

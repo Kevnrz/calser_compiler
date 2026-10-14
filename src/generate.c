@@ -631,8 +631,17 @@ static int emit_expression(ASTNode *node) {
             );
         }
 
-        case AST_CALL:
-            return emit_function_call(node, 1);
+        // nombre [ expr ] se escribe igual para una llamada y para la lectura
+        // de un arreglo 1D: el parser arma AST_CALL y lo distingue el símbolo
+        // que anotó el semántico. Un arreglo sigue por el camino de AST_INDEX
+        // (mismos hijos: IDENTIFIER y ARGUMENTS con los índices).
+        case AST_CALL: {
+            Symbol *named = get_symbol(child_at(node, 0));
+
+            if (named == NULL || named->dimensions == 0)
+                return emit_function_call(node, 1);
+        }
+        /* fallthrough */
 
         case AST_INDEX: {
             ASTNode *array_id = child_at(node, 0);

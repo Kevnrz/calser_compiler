@@ -689,44 +689,6 @@ Scope 3: FUNCTION
 
 ===== pruebas/p04_memoria.cls =====
 --- stderr ---
-ccom: <generado>:128: error de ensamblado: registro invalido: 'r1739007150'
-ccom: <generado>:130: error de ensamblado: inmediato fuera de rango: 1739007114 (de -131072 a 131071)
-ccom: <generado>:132: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:134: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:136: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:138: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:140: error de ensamblado: inmediato fuera de rango: 1739007117 (de -131072 a 131071)
-ccom: <generado>:142: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:144: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:146: error de ensamblado: registro invalido: 'r1739007150'
-ccom: <generado>:148: error de ensamblado: inmediato fuera de rango: 1739007114 (de -131072 a 131071)
-ccom: <generado>:150: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:152: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:154: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:156: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:158: error de ensamblado: inmediato fuera de rango: 1739007117 (de -131072 a 131071)
-ccom: <generado>:160: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:162: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:164: error de ensamblado: registro invalido: 'r1739007153'
-ccom: <generado>:176: error de ensamblado: registro invalido: 'r1739007150'
-ccom: <generado>:178: error de ensamblado: inmediato fuera de rango: 1739007114 (de -131072 a 131071)
-ccom: <generado>:180: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:182: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:184: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:186: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:188: error de ensamblado: inmediato fuera de rango: 1739007117 (de -131072 a 131071)
-ccom: <generado>:190: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:192: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:194: error de ensamblado: registro invalido: 'r1739007150'
-ccom: <generado>:196: error de ensamblado: inmediato fuera de rango: 1739007114 (de -131072 a 131071)
-ccom: <generado>:198: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:200: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:202: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:204: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:206: error de ensamblado: inmediato fuera de rango: 1739007117 (de -131072 a 131071)
-ccom: <generado>:208: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:210: error de ensamblado: registro invalido: 'r1739007144'
-ccom: <generado>:212: error de ensamblado: registro invalido: 'r1739007153'
 --- tabla ---
 Scope 0: GLOBAL
     main : void (function) params=[] area=0x0070 size=76 temp_base=0x008C
@@ -772,70 +734,10 @@ Scope 5: L
 .L_body_maximo | BODY         | AST kind: FUNCTION | Line: 8
 .L_func_maximo | FUNCTION     | AST kind: FUNCTION | Line: 8
 =======================
---- codigo de salida: 1 ---
+--- codigo de salida: 0 ---
 
 ===== pruebas/p05_arreglos_llamadas.cls =====
 --- stderr ---
-ccom: <generado>:121: error de ensamblado: inmediato fuera de rango: 2097128454 (de -131072 a 131071)
-ccom: <generado>:123: error de ensamblado: inmediato fuera de rango: 2097128586 (de -131072 a 131071)
-ccom: <generado>:125: error de ensamblado: registro invalido: 'r2097128601'
-ccom: <generado>:127: error de ensamblado: registro invalido: 'r2097128601'
-ccom: <generado>:129: error de ensamblado: registro invalido: 'r2097128601'
-ccom: <generado>:131: error de ensamblado: registro invalido: 'r2097128601'
-ccom: <generado>:133: error de ensamblado: inmediato fuera de rango: 2097128589 (de -131072 a 131071)
-ccom: <generado>:135: error de ensamblado: registro invalido: 'r2097128601'
-ccom: <generado>:137: error de ensamblado: registro invalido: 'r2097128601'
-ccom: <generado>:139: error de ensamblado: inmediato fuera de rango: 2097128454 (de -131072 a 131071)
-ccom: <generado>:141: error de ensamblado: inmediato fuera de rango: 2097128586 (de -131072 a 131071)
-ccom: <generado>:143: error de ensamblado: registro invalido: 'r2097128601'
-ccom: <generado>:145: error de ensamblado: registro invalido: 'r2097128601'
-ccom: <generado>:147: error de ensamblado: registro invalido: 'r2097128601'
-ccom: <generado>:149: error de ensamblado: registro invalido: 'r2097128601'
-ccom: <generado>:151: error de ensamblado: inmediato fuera de rango: 2097128589 (de -131072 a 131071)
-ccom: <generado>:153: error de ensamblado: registro invalido: 'r2097128601'
-ccom: <generado>:155: error de ensamblado: registro invalido: 'r2097128601'
-ccom: <generado>:157: error de ensamblado: registro invalido: 'r2097128610'
-ccom: <generado>:161: error de ensamblado: inmediato fuera de rango: 2097128454 (de -131072 a 131071)
-ccom: <generado>:163: error de ensamblado: registro invalido: 'r2097128598'
-ccom: <generado>:165: error de ensamblado: inmediato fuera de rango: 2097128589 (de -131072 a 131071)
-ccom: <generado>:167: error de ensamblado: registro invalido: 'r2097128598'
-ccom: <generado>:169: error de ensamblado: registro invalido: 'r2097128598'
-ccom: <generado>:171: error de ensamblado: inmediato fuera de rango: 2097128454 (de -131072 a 131071)
-ccom: <generado>:173: error de ensamblado: registro invalido: 'r2097128598'
-ccom: <generado>:175: error de ensamblado: inmediato fuera de rango: 2097128589 (de -131072 a 131071)
-ccom: <generado>:177: error de ensamblado: registro invalido: 'r2097128598'
-ccom: <generado>:179: error de ensamblado: registro invalido: 'r2097128598'
-ccom: <generado>:181: error de ensamblado: registro invalido: 'r2097128610'
-ccom: <generado>:210: error de ensamblado: registro invalido: 'r2097128625'
-ccom: <generado>:212: error de ensamblado: inmediato fuera de rango: 2097128586 (de -131072 a 131071)
-ccom: <generado>:214: error de ensamblado: registro invalido: 'r2097128619'
-ccom: <generado>:216: error de ensamblado: registro invalido: 'r2097128619'
-ccom: <generado>:218: error de ensamblado: registro invalido: 'r2097128619'
-ccom: <generado>:220: error de ensamblado: registro invalido: 'r2097128619'
-ccom: <generado>:222: error de ensamblado: inmediato fuera de rango: 2097128589 (de -131072 a 131071)
-ccom: <generado>:224: error de ensamblado: registro invalido: 'r2097128619'
-ccom: <generado>:226: error de ensamblado: registro invalido: 'r2097128619'
-ccom: <generado>:228: error de ensamblado: registro invalido: 'r2097128625'
-ccom: <generado>:230: error de ensamblado: inmediato fuera de rango: 2097128586 (de -131072 a 131071)
-ccom: <generado>:232: error de ensamblado: registro invalido: 'r2097128619'
-ccom: <generado>:234: error de ensamblado: registro invalido: 'r2097128619'
-ccom: <generado>:236: error de ensamblado: registro invalido: 'r2097128619'
-ccom: <generado>:238: error de ensamblado: registro invalido: 'r2097128619'
-ccom: <generado>:240: error de ensamblado: inmediato fuera de rango: 2097128589 (de -131072 a 131071)
-ccom: <generado>:242: error de ensamblado: registro invalido: 'r2097128619'
-ccom: <generado>:244: error de ensamblado: registro invalido: 'r2097128619'
-ccom: <generado>:246: error de ensamblado: registro invalido: 'r2097128629'
-ccom: <generado>:271: error de ensamblado: registro invalido: 'r2097128607'
-ccom: <generado>:273: error de ensamblado: registro invalido: 'r2097128601'
-ccom: <generado>:275: error de ensamblado: inmediato fuera de rango: 2097128589 (de -131072 a 131071)
-ccom: <generado>:277: error de ensamblado: registro invalido: 'r2097128601'
-ccom: <generado>:279: error de ensamblado: registro invalido: 'r2097128601'
-ccom: <generado>:281: error de ensamblado: registro invalido: 'r2097128607'
-ccom: <generado>:283: error de ensamblado: registro invalido: 'r2097128601'
-ccom: <generado>:285: error de ensamblado: inmediato fuera de rango: 2097128589 (de -131072 a 131071)
-ccom: <generado>:287: error de ensamblado: registro invalido: 'r2097128601'
-ccom: <generado>:289: error de ensamblado: registro invalido: 'r2097128601'
-ccom: <generado>:291: error de ensamblado: registro invalido: 'r2097128595'
 --- tabla ---
 Scope 0: GLOBAL
     main : void (function) params=[] area=0x0080 size=88 temp_base=0x00A8
@@ -873,7 +775,7 @@ Scope 4: FUNCTION
 .L_body_suma_fila | BODY         | AST kind: FUNCTION | Line: 1
 .L_func_suma_fila | FUNCTION     | AST kind: FUNCTION | Line: 1
 =======================
---- codigo de salida: 1 ---
+--- codigo de salida: 0 ---
 
 ===== pruebas/p06_tipos.cls =====
 --- stderr ---

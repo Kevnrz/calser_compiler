@@ -275,10 +275,11 @@ static void line_start(FILE *out, const char *prefix, int empty) {
 }
 
 void symbol_table_print(Scope *scope) {
-    symbol_table_fprint(stdout, scope, "");
+    symbol_table_fprint(stdout, scope, "", 0);
 }
 
-void symbol_table_fprint(FILE *out, Scope *scope, const char *prefix) {
+void symbol_table_fprint(FILE *out, Scope *scope, const char *prefix,
+                         int detailed) {
     int scope_number = 0;
 
     Scope *current_scope = scope;
@@ -292,9 +293,15 @@ void symbol_table_fprint(FILE *out, Scope *scope, const char *prefix) {
 
         // Un ámbito sin símbolos se imprime igual, solo con su cabecera.
         line_start(out, prefix, 0);
-        fprintf(out, "Scope %d: %s\n",
+        fprintf(out, "Scope %d: %s",
                 scope_number,
                 scope_kind_string(current_scope->kind));
+
+        // La función a la que pertenece el ámbito (NULL en el global).
+        if (detailed && current_scope->owner != NULL)
+            fprintf(out, " %s", current_scope->owner->name);
+
+        fprintf(out, "\n");
 
         Symbol *symbol = current_scope->symbols;
 
@@ -330,13 +337,17 @@ void symbol_table_fprint(FILE *out, Scope *scope, const char *prefix) {
                 for (int i = 0; i < symbol->dimensions; i++)
                     fprintf(out, "[%d]", symbol->dim_sizes[i]);
 
-                if (symbol->kind == SYMBOL_RETURN) {
+                if (symbol->kind == SYMBOL_RETURN ||
+                    (detailed && symbol->kind == SYMBOL_PARAMETER)) {
                     fprintf(out, " (%s)",
                             symbol_kind_string(symbol->kind));
                 }
 
                 fprintf(out, " width=%d", symbol->width);
                 print_address(out, "addr", symbol->address);
+
+                if (detailed)
+                    fprintf(out, " line=%d", symbol->line);
             }
             fprintf(out, "\n");
             symbol = symbol->next;

@@ -15,7 +15,7 @@ cualquier bandera.
 |---|---|---|---|
 | `--ast-json <archivo>` | Exporta el AST sintáctico a JSON para el visor gráfico | archivo JSON | ✅ Disponible |
 | `-t` | Imprime el árbol sintáctico abstracto (AST) | stdout | ✅ Disponible |
-| `-m` | Imprime la tabla de símbolos con las direcciones de memoria y la tabla de etiquetas | stdout | ✅ Disponible |
+| `-m` | Imprime la tabla de símbolos con las direcciones de memoria y la tabla de etiquetas, esta última con la dirección de cada etiqueta (su índice de bundle) | stdout | ✅ Disponible |
 | `-v` | Muestra el avance de cada fase (`ok` o `con errores`), incluido el ensamblado | stderr | ✅ Disponible |
 | `-o <archivo>` | Nombre del binario de salida. Sin `-o`: el nombre del fuente con `.bin` (`prog.cls` → `prog.bin`). Es también el nombre base de las demás salidas | archivos | ✅ Disponible |
 | `-s` | Escribe además el ensamblador (`.asm`) | archivo | ✅ Disponible |
@@ -38,6 +38,21 @@ Se pueden combinar: `ccom -t -m prog.cls` imprime el AST y después las tablas.
 ./ccom -x prog.asm           # ensambla un .asm, sin compilar Calser
 ```
 
+**Tabla de etiquetas de `-m`.** Cada fila trae el nombre, el rol, el nodo del
+AST, su línea y la columna `Address`: el índice de bundle donde está la
+etiqueta. El nombre y el nodo salen de la Fase 3 (enunciado CE1108 §2.3); la
+dirección solo se conoce después de generar el código, así que esta tabla se
+imprime al final, después del ensamblado, y se completa con la misma dirección
+que muestra el `.asm` anotado (libro §6.7, backpatching). La tabla de símbolos
+no se mueve. Si la compilación falla antes de generar código, la tabla sale
+igual con `-` en `Address`; también sale `-` en una etiqueta que no llega al
+`.asm` (un `&` o `|` constante dentro de un inicializador global).
+
+```
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 14 | Address: 2
+.L_if_end_1 | END          | AST kind: CONDITIONAL | Line: 2 | Address: 52
+```
+
 ## Archivos de salida
 
 Cuando no hay errores, `ccom` escribe siempre tres archivos con el nombre base
@@ -54,7 +69,8 @@ de `-o` (o el del fuente): `prog.cls` produce `prog.bin`, `prog.hex` y
 **`.asm` anotado (`-s`).** Además de las instrucciones, el archivo muestra lo
 que pide el enunciado CE1108 §6.2: la dirección de cada bundle (su índice, que
 es lo que cuenta el PC), la línea del `.cls` que lo generó (solo cuando
-cambia; los bundles vacíos de separación no la llevan), la tabla de etiquetas
+cambia; los bundles vacíos de separación no la llevan, y un bundle que no es
+de ninguna sentencia, como el salto final de una función, lleva `linea -`), la tabla de etiquetas
 con su dirección y la tabla de variables con su dirección de datos. Todo eso va
 en comentarios con `#` (`isa.md` §11.1), así que `ccom -x` sobre ese mismo
 archivo da exactamente los mismos bundles. Las etiquetas internas de las

@@ -1,0 +1,68 @@
+Ejecucion de ejercicio3 con tools/sim_asm.py
+Programa: ejercicios/ejercicio3_cifrado/ejercicio3.asm (1348 bundles)
+Fin: salto a sí mismo; bundles ejecutados: 22960; ciclos: 25273
+Avisos de separación: 0
+CRYPTO: 1035 instrucciones; autenticación de prueba (sin Ascon; token 999 falla)
+Estado: AUTH=0 KVLOCK=1 EXC=0
+
+Valores finales de las variables:
+  origen = 4096
+  cifrado = 8192
+  vuelta = 12288
+  bloques_de.b = 16
+  bloques_de.total = 128
+  bloques_de.tam = 16
+  bloques_de.i = 7
+  resto = 16
+  d = 13184
+  base = 12288
+  direccion.tam = 16
+  direccion.i = 7
+  cifrar_archivo.n = 8
+  cifrar_archivo.desde = 4096
+  cifrar_archivo.hacia = 8192
+  cifrar_archivo.total = 128
+  cifrar_archivo.tam = 16
+  cifrar_archivo.i = 8
+  cifrar_archivo.b = 16
+  descifrar_archivo.n = 8
+  descifrar_archivo.desde = 8192
+  descifrar_archivo.hacia = 12288
+  descifrar_archivo.total = 128
+  descifrar_archivo.tam = 16
+  descifrar_archivo.i = 8
+  descifrar_archivo.b = 16
+  n1 = 8
+  n2 = 8
+
+Resultado esperado contra obtenido:
+  n1: esperado 8, obtenido 8  OK
+  n2: esperado 8, obtenido 8  OK
+
+Archivo de entrada: datos.txt (1024 bytes) cargado en 0x1000.
+Primeros 64 bytes de cada region (hexadecimal y texto):
+
+0x1000, original:
+  0x1000  43 61 6c 73 65 72 20 65 73 20 75 6e 20 6c 65 6e  |Calser es un len|
+  0x1010  67 75 61 6a 65 20 70 65 71 75 65 6e 6f 20 79 20  |guaje pequeno y |
+  0x1020  65 73 74 72 69 63 74 6f 2c 20 70 65 6e 73 61 64  |estricto, pensad|
+  0x1030  6f 20 70 61 72 61 20 65 6e 73 65 6e 61 72 20 63  |o para ensenar c|
+
+0x2000, cifrado:
+  0x2000  0e 3d 78 e6 de ba 90 3c 76 0c dc 30 c9 2a e1 9d  |.=x....<v..0.*..|
+  0x2010  95 37 dc 8d 61 12 a3 c2 71 10 ec 2e 28 b2 14 89  |.7..a...q...(...|
+  0x2020  c2 bc 33 8b 1a c9 16 04 ec 87 40 01 c8 14 e8 95  |..3.......@.....|
+  0x2030  26 8c 1e 4c 1e 68 a6 bd 26 6e fe a9 07 5a 0c f3  |&..L.h..&n...Z..|
+
+0x3000, descifrado:
+  0x3000  43 61 6c 73 65 72 20 65 73 20 75 6e 20 6c 65 6e  |Calser es un len|
+  0x3010  67 75 61 6a 65 20 70 65 71 75 65 6e 6f 20 79 20  |guaje pequeno y |
+  0x3020  65 73 74 72 69 63 74 6f 2c 20 70 65 6e 73 61 64  |estricto, pensad|
+  0x3030  6f 20 70 61 72 61 20 65 6e 73 65 6e 61 72 20 63  |o para ensenar c|
+
+Comprobaciones:
+  0x3000-0x33FF == 0x1000-0x13FF: si
+  0x2000-0x23FF distinto del original: si
+  0x1000-0x13FF igual a datos.txt (no se altero): si
+
+Veredicto: OK

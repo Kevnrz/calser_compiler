@@ -35,11 +35,23 @@ typedef enum {
 
 } LabelRole;
 
+/* Qué fase llena cada campo de una entrada (enunciado CE1108 §2.3 a §2.5):
+ *   - node, role y name: la Fase 3, al armar la tabla a partir del AST
+ *     (§2.3, la tabla registra las etiquetas);
+ *   - address: la dirección de la etiqueta (su índice de bundle). Solo se
+ *     conoce después de generar el código (la Fase 4 lleva el contador de
+ *     instrucciones, §2.4) y se completa con label_table_resolve, a partir
+ *     de la primera pasada del ensamblado (Fase 5, §2.5).
+ *
+ * Es el esquema de backpatching del libro §6.7: la etiqueta se registra
+ * antes de conocer su dirección y la dirección se completa después. */
 typedef struct LabelEntry {
     ASTNode *node;  /* NULL para las etiquetas globales (error aritmético y
                        fin del programa). */
     LabelRole role;
     char *name;
+    int address;    /* índice de bundle; -1 mientras no se resuelve (y para
+                       las etiquetas que no llegan al .asm) */
 
     struct LabelEntry *next;
 } LabelEntry;
@@ -59,6 +71,10 @@ const char *label_table_get(
     const ASTNode *node,
     LabelRole role
 );
+
+/* Completa el campo address de cada entrada con lookup(nombre): el índice del
+ * bundle donde está definida la etiqueta, o -1 si no lo está. */
+void label_table_resolve(LabelTable *table, int (*lookup)(const char *name));
 
 void label_table_print(const LabelTable *table);
 

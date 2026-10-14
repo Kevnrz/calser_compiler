@@ -24,6 +24,9 @@ BRANCHES = {"beq", "bne", "blt", "bge"}
 MEMORY = {"lw", "sw", "lb", "sb"}
 CRYPTO = {"feis", "auth", "logout", "kv_write", "kv_lock", "sanc"}
 LABEL = r"[A-Za-z_.$][A-Za-z0-9_.$]*"
+# Etiquetas internas de una expansión (no son de la tabla de la Fase 3):
+# rutinas aritméticas, copia de arreglos y plantillas de cifrado.
+INTERNAL_PREFIXES = ("__ccom_arith_", "__ccom_array_", ".L_crypto_")
 
 
 class AsmError(ValueError):
@@ -193,6 +196,232 @@ def parse(text):
     return Program(bundles, labels)
 
 
+class Annotations:
+    """Lo que el .asm anotado de ccom -s dice en sus comentarios (enunciado
+    CE1108 §6.2): la línea del .cls de cada bundle y las variables con su
+    dirección de datos. Un .asm sin anotaciones da listas vacías."""
+
+    SCOPE = re.compile(r"^#   Scope (\d+): (\w+)(?: (\S+))?$")
+    VARIABLE = re.compile(
+        r"^#       (\w+) : (int|bool)((?:\[\d+\])*)(?: \((return|parameter)\))?"
+        r" width=(\d+) addr=0x([0-9A-Fa-f]+) line=(\d+)$")
+
+    def __init__(self, text, bundle_count):
+        # Línea del fuente de cada bundle. El listado la muestra solo cuando
+        # cambia, así que cada bundle hereda la última que se mostró.
+        self.lines = [0] * bundle_count
+        shown = 0
+        for raw in text.splitlines():
+            match = re.match(r"^\s*\{.*\}\s*#\s*(\d+)(?:\s+linea\s+(\d+|-))?\s*$", raw)
+            if not match:
+                continue
+            index = int(match[1])
+            if match[2]:
+                shown = 0 if match[2] == "-" else int(match[2])
+            if index < bundle_count:
+                self.lines[index] = shown
+
+        # Variables: [{name, owner, line, kind, type, dims, width, address}]
+        self.variables = []
+        if "# Variables (direccion de datos)" in text:
+            owner = None
+            for raw in text.split("# Variables (direccion de datos)", 1)[1].splitlines():
+                scope = self.SCOPE.match(raw)
+                if scope:
+                    owner = scope[3]
+                    continue
+                match = self.VARIABLE.match(raw)
+                if match:
+                    dims = [int(x) for x in re.findall(r"\d+", match[3])]
+                    self.variables.append({
+                        "name": match[1], "owner": owner, "type": match[2],
+                        "dims": dims, "kind": match[4] or "variable",
+                        "width": int(match[5]), "address": int(match[6], 16),
+                        "line": int(match[7])})
+        self._qualify()
+
+    def _qualify(self):
+        """Nombre con el que se muestra cada variable: el simple, o
+        función.nombre si se repite en el programa, o además @línea si
+        todavía se repite dentro de la misma función."""
+        by_name, by_owner = {}, {}
+        for v in self.variables:
+            by_name[v["name"]] = by_name.get(v["name"], 0) + 1
+            key = (v["owner"], v["name"])
+            by_owner[key] = by_owner.get(key, 0) + 1
+        for v in self.variables:
+            shown = v["name"]
+            if by_name[v["name"]] > 1:
+                shown = f"{v['owner'] or 'global'}.{shown}"
+                if by_owner[(v["owner"], v["name"])] > 1:
+                    shown += f"@{v['line']}"
+            v["shown"] = shown
+
+    def locate(self, address):
+        """(variable, índice de palabra) de la variable que contiene la
+        dirección, o None si no es una variable (pila, casillas ocultas del
+        S, temporales de llamadas)."""
+        for v in self.variables:
+            if v["address"] <= address < v["address"] + v["width"]:
+                return v, (address - v["address"]) // 4
+        return None
+
+
+def format_value(variable, value):
+    """Un valor de variable: verdadero/falso si es bool; si no, el número con
+    signo. Un parámetro arreglo guarda la dirección del arreglo."""
+    if variable["kind"] == "parameter" and variable["dims"]:
+        return f"@0x{value & MASK:04X}"
+    if variable["type"] == "bool":
+        return "verdadero" if value & MASK else "falso"
+    return str(signed(value))
+
+
+def element_name(variable, index):
+    """Nombre de un elemento: v[1] o m[1][2] (row-major)."""
+    dims = variable["dims"]
+    if not dims or (variable["kind"] == "parameter"):
+        return variable["shown"]
+    if len(dims) == 1:
+        return f"{variable['shown']}[{index}]"
+    return f"{variable['shown']}[{index // dims[1]}][{index % dims[1]}]"
+
+
+class Tracer:
+    """Traza de ejecución (enunciado CE1108 §8.4): valores de variables y
+    cambios de flujo, un evento por línea, a partir del .asm anotado.
+
+    Reglas, también escritas en la cabecera del archivo:
+      - no se muestran las escrituras fuera de las variables del listado: la
+        pila de llamadas (rx), las casillas ocultas del S y los temporales
+        que se salvan en las llamadas;
+      - no se muestran los saltos hacia las rutinas internas
+        (__ccom_arith_*, __ccom_array_*, .L_crypto_*): una multiplicación
+        tiene decenas y solo meten ruido. Sí se muestra el salto a
+        .L_arith_error.
+    """
+
+    HEADER = [
+        "# Traza de ejecución (enunciado CE1108 §8.4)",
+        "# Cada línea: [bundle N · línea L del .cls] evento.",
+        "# No se muestran las escrituras fuera de las variables del listado:",
+        "# la pila de llamadas (rx), las casillas ocultas del S y los temporales",
+        "# que se salvan en las llamadas.",
+        "# No se muestran los saltos hacia las rutinas internas",
+        "# (__ccom_arith_*, __ccom_array_*, .L_crypto_*); sí el salto a",
+        "# .L_arith_error. Los saltos condicionales no tomados tampoco.",
+    ]
+
+    CRYPTO_FIELD = re.compile(r"^\.L_crypto_(fin_)?(cifra|descifra)_(\d+)$")
+
+    def __init__(self, annotations, labels, limit):
+        self.notes = annotations
+        self.labels = labels
+        self.limit = limit
+        self.events = []
+        self.dropped = 0
+        self.prologues = {labels[name] for name in labels
+                          if name.startswith(".L_func_")}
+        # Plantillas de cifrado: el bundle que precede a la etiqueta de inicio
+        # es el bge que salta si no hay bloques, con origen, destino y
+        # bloques ya en t2, t3 y t5; la etiqueta de fin marca el final.
+        self.cipher_start, self.cipher_end = {}, {}
+        for name, address in labels.items():
+            match = self.CRYPTO_FIELD.match(name)
+            if match:
+                key = (match[2], match[3])
+                if match[1]:
+                    self.cipher_end[address] = key
+                else:
+                    self.cipher_start[address - 1] = key
+        self.cipher_args = {}
+
+    def _prefix(self, pc):
+        line = self.notes.lines[pc] if pc < len(self.notes.lines) else 0
+        if line:
+            return f"[bundle {pc:04d} · línea {line}]"
+        return f"[bundle {pc:04d}]"
+
+    def _emit(self, pc, text):
+        if len(self.events) >= self.limit:
+            self.dropped += 1
+            return
+        self.events.append(f"{self._prefix(pc)} {text}")
+
+    def visit(self, pc, snapshot):
+        key = self.cipher_start.get(pc)
+        if key:
+            # origen = t2 (r6), destino = t3 (r7), bloques = t5 (r9)
+            self.cipher_args[key] = (snapshot[6], snapshot[7], signed(snapshot[9]))
+        key = self.cipher_end.get(pc)
+        if key and key in self.cipher_args:
+            origin, destination, blocks = self.cipher_args.pop(key)
+            blocks = max(blocks, 0)
+            word = "bloque" if blocks == 1 else "bloques"
+            name = "cifrar" if key[0] == "cifra" else "descifrar"
+            self._emit(pc, f"{name}: {blocks} {word} de 0x{origin:04X} "
+                           f"a 0x{destination:04X}")
+
+    def store(self, pc, address, value, size):
+        found = self.notes.locate(address)
+        if found is None:
+            return
+        variable, index = found
+        suffix = "  (prólogo)" if pc in self.prologues else ""
+        self._emit(pc, f"{element_name(variable, index)} = "
+                       f"{format_value(variable, value)}{suffix}")
+
+    def jump(self, pc, op, target):
+        mn = op.mnemonic
+        if mn == "jefR":
+            self._emit(pc, f"retorno → bundle {target}")
+            return
+        token = op.args[-1]
+        if token.startswith(INTERNAL_PREFIXES):
+            return
+        where = f"{token} (bundle {target})" if token in self.labels else f"bundle {target}"
+        self._emit(pc, f"{'llamada' if mn == 'jas' else mn} → {where}")
+
+    def crypto(self, pc, op):
+        if op.mnemonic == "kv_write":
+            _, key, word = op.args
+            self._emit(pc, f"kv_write k={key} w={word}")
+        else:
+            self._emit(pc, op.mnemonic)
+
+    def values(self, simulator):
+        """Valor final de cada variable del listado, por dirección creciente:
+        [(variable, palabras)], con las palabras leídas de la memoria."""
+        result = []
+        for v in sorted(self.notes.variables, key=lambda v: v["address"]):
+            words = [int.from_bytes(simulator.memory[v["address"] + 4 * i:v["address"] + 4 * i + 4],
+                                    "little") for i in range(max(v["width"] // 4, 1))]
+            result.append((v, words))
+        return result
+
+    def final_state(self, simulator):
+        """Las líneas del estado final de las variables."""
+        lines = []
+        for v, words in self.values(simulator):
+            if v["dims"] and v["kind"] != "parameter":
+                value = "[" + ", ".join(format_value(v, w) for w in words) + "]"
+            else:
+                value = format_value(v, words[0])
+            lines.append(f"  {v['shown']} = {value}")
+        if not self.notes.variables:
+            lines.append("  (el .asm no trae la tabla de variables)")
+        return lines
+
+    def text(self, simulator):
+        out = list(self.HEADER) + self.events
+        if self.dropped:
+            out.append(f"… traza truncada en {self.limit} eventos")
+        out.append("")
+        out.append("Estado final de las variables:")
+        out.extend(self.final_state(simulator))
+        return "\n".join(out) + "\n"
+
+
 class Simulator:
     def __init__(self, program, warn=None):
         self.program = program
@@ -208,6 +437,7 @@ class Simulator:
         self.exc = False
         self.anchor = 0  # Solo observable desde Python, sin hash de autenticación.
         self.vault = [[0] * 4 for _ in range(4)]
+        self.tracer = None  # Tracer opcional: no cambia la ejecución.
 
     def load_data(self, data, address=0x1000):
         """Inyecta bytes en la zona de archivos, sin truncar ni extender memoria."""
@@ -280,6 +510,8 @@ class Simulator:
         bundle = self.program.bundles[self.pc]
         # Leer antes de hacer visibles los resultados del bundle anterior.
         snapshot = self.regs.copy()
+        if self.tracer:
+            self.tracer.visit(self.pc, snapshot)
         for slot, op in enumerate(bundle.slots):
             for reg in sorted((set(op.reads) & self.pending.keys()) - {0}):
                 message = (f"AVISO separación: bundle {self.pc}, línea {bundle.line}, "
@@ -288,7 +520,7 @@ class Simulator:
                 if self.warn:
                     self.warn(message)
         self.commit()
-        writes, target = {}, None
+        writes, target, taken = {}, None, None
         for op in bundle.slots:
             mn, args = op.mnemonic, op.args
             value = None
@@ -296,6 +528,8 @@ class Simulator:
                 continue
             if mn in CRYPTO:
                 value = self.execute_crypto(op, snapshot)
+                if self.tracer and mn != "feis":
+                    self.tracer.crypto(self.pc, op)
             elif mn == "mov":
                 value = args[1]
             elif mn in {"saddi", "xori"}:
@@ -323,6 +557,8 @@ class Simulator:
                 if mn in {"sw", "sb"}:
                     data = snapshot[rd] & ((1 << (8 * size)) - 1)
                     self.memory[address:address + size] = data.to_bytes(size, 'little')
+                    if self.tracer:
+                        self.tracer.store(self.pc, address, data, size)
                 else:
                     value = int.from_bytes(self.memory[address:address + size], 'little',
                                            signed=(mn == "lb"))
@@ -332,11 +568,14 @@ class Simulator:
                         "blt": signed(a) < signed(b), "bge": signed(a) >= signed(b)}[mn]
                 if take:
                     target = branch_target(args[2], self.pc, self.program.labels, 18)
+                    taken = op
             elif mn in {"jef", "jas"}:
                 target = branch_target(args[-1], self.pc, self.program.labels, 22)
+                taken = op
                 if mn == "jas": value = self.pc + 1
             elif mn == "jefR":
                 target = snapshot[args[1]] & ((1 << 22) - 1)
+                taken = op
                 value = self.pc + 1
             if value is not None and op.dest not in (None, 0):
                 writes[op.dest] = value & MASK
@@ -344,6 +583,8 @@ class Simulator:
         self.steps += 1
         self.cycles += 1
         if target is not None:
+            if self.tracer:
+                self.tracer.jump(self.pc, taken, target)
             # El bundle del salto se completa; el prefetched se descarta.
             self.cycles += 1
             self.commit()
@@ -406,16 +647,36 @@ def main(argv=None):
     parser.add_argument('--data-address', type=address_argument, default=0x1000,
                         help='dirección de carga decimal o hexadecimal (por defecto 0x1000)')
     parser.add_argument('--dump-memory', type=Path, help='guardar los 64 KiB finales como archivo binario')
+    parser.add_argument('--traza', type=Path,
+                        help='escribir la traza de ejecución (valores de variables y '
+                             'cambios de flujo, enunciado CE1108 §8.4); usa las anotaciones del .asm de ccom -s')
+    parser.add_argument('--traza-max', type=int, default=5000,
+                        help='máximo de eventos de la traza (por defecto 5000)')
     options = parser.parse_args(argv)
     try:
-        simulator = Simulator(parse(options.asm.read_text()), warn=lambda message: print(message, file=sys.stderr))
+        asm_text = options.asm.read_text()
+        program = parse(asm_text)
+        simulator = Simulator(program, warn=lambda message: print(message, file=sys.stderr))
+        if options.traza_max != 5000 and not options.traza:
+            raise AsmError("--traza-max requiere --traza")
+        if options.traza:
+            if options.traza_max <= 0:
+                raise AsmError("--traza-max debe ser positivo")
+            if options.traza.resolve() == options.asm.resolve():
+                raise AsmError("la traza no debe sobrescribir el .asm de entrada")
+            simulator.tracer = Tracer(Annotations(asm_text, len(program.bundles)),
+                                      program.labels, options.traza_max)
         if options.data_image:
             simulator.load_data_image(options.data_image.read_text())
         if options.load_data:
             simulator.load_data(options.load_data.read_bytes(), options.data_address)
         elif options.data_address != 0x1000:
             raise AsmError("--data-address requiere --load-data")
-        simulator.run(options.max_bundles)
+        try:
+            simulator.run(options.max_bundles)
+        finally:
+            if simulator.tracer:
+                options.traza.write_text(simulator.tracer.text(simulator), encoding='utf-8')
         if options.dump_memory:
             simulator_path = options.asm.resolve()
             inputs = {simulator_path}

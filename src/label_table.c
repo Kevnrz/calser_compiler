@@ -41,6 +41,7 @@ static int label_table_add_named(LabelTable *table, ASTNode *node,
     entry->node = node;
     entry->role = role;
     entry->name = copy;
+    entry->address = -1;
     entry->next = table->entries;
     table->entries = entry;
 
@@ -224,6 +225,14 @@ static const char *label_node_kind_name(const ASTNode *node) {
     }
 }
 
+void label_table_resolve(LabelTable *table, int (*lookup)(const char *name)) {
+    if (table == NULL || lookup == NULL)
+        return;
+
+    for (LabelEntry *entry = table->entries; entry != NULL; entry = entry->next)
+        entry->address = lookup(entry->name);
+}
+
 void label_table_print(const LabelTable *table) {
     if (table == NULL)
         return;
@@ -233,12 +242,21 @@ void label_table_print(const LabelTable *table) {
     const LabelEntry *entry = table->entries;
 
     while (entry != NULL) {
+        char address[16];
+
+        // "-" mientras la dirección no se conoce (libro §6.7).
+        if (entry->address >= 0)
+            snprintf(address, sizeof(address), "%d", entry->address);
+        else
+            snprintf(address, sizeof(address), "-");
+
         printf(
-            "%-10s | %-12s | AST kind: %s | Line: %d\n",
+            "%-10s | %-12s | AST kind: %s | Line: %d | Address: %s\n",
             entry->name,
             label_role_name(entry->role),
             label_node_kind_name(entry->node),
-            entry->node != NULL ? entry->node->line : 0
+            entry->node != NULL ? entry->node->line : 0,
+            address
         );
 
         entry = entry->next;

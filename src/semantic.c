@@ -2581,7 +2581,7 @@ void semantic_print_symbols(void) {
 }
 
 void semantic_fprint_symbols(FILE *out, const char *prefix) {
-    symbol_table_fprint(out, scope_list_head, prefix);
+    symbol_table_fprint(out, scope_list_head, prefix, 1);
 }
 
 void semantic_free(void)

@@ -102,7 +102,10 @@ void scope_free(Scope *scope);
 void symbol_table_print(Scope *scope);
 
 // Igual que symbol_table_print, en out y con prefix al inicio de cada línea
-// (el .asm anotado la escribe como comentarios con "#").
-void symbol_table_fprint(FILE *out, Scope *scope, const char *prefix);
+// (el .asm anotado la escribe como comentarios con "#"). Con detailed agrega
+// lo que necesita la traza del simulador: la función dueña de cada ámbito,
+// los parámetros marcados y la línea de declaración de cada variable.
+void symbol_table_fprint(FILE *out, Scope *scope, const char *prefix,
+                         int detailed);
 
 #endif

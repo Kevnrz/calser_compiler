@@ -151,6 +151,21 @@ void cg_set_line(int line) {
     current_source_line = line > 0 ? line : 0;
 }
 
+int cg_label_address(const char *name) {
+    size_t length = strlen(name);
+
+    for (int i = 0; i < line_count; i++) {
+
+        if (lines[i][0] != '{' &&
+            strlen(lines[i]) == length + 1 &&
+            strncmp(lines[i], name, length) == 0 &&
+            lines[i][length] == ':')
+            return addresses[i];
+    }
+
+    return -1;
+}
+
 // Etiquetas internas de una expansión (no son de la tabla de la Fase 3).
 static int internal_label(const char *name) {
     return strncmp(name, "__ccom_arith_", 13) == 0 ||
@@ -198,12 +213,19 @@ void cg_write_listing(FILE *out) {
         write_padded(out, text, width);
         fprintf(out, "# %04d", addresses[i]);
 
-        if (source_lines[i] > 0 &&
-            source_lines[i] != shown_line &&
-            strcmp(lines[i], EMPTY) != 0) {
+        if (strcmp(lines[i], EMPTY) != 0) {
 
-            fprintf(out, "  linea %d", source_lines[i]);
-            shown_line = source_lines[i];
+            if (source_lines[i] > 0 && source_lines[i] != shown_line) {
+                fprintf(out, "  linea %d", source_lines[i]);
+                shown_line = source_lines[i];
+            }
+            // Un bundle que no es de ninguna sentencia (el salto final de
+            // una función, fin_main) lo dice, para que no se le atribuya la
+            // línea anterior.
+            else if (source_lines[i] == 0 && shown_line != 0) {
+                fprintf(out, "  linea -");
+                shown_line = 0;
+            }
         }
 
         fputc('\n', out);

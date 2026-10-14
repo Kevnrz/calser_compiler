@@ -41,6 +41,10 @@ void cg_set_line(int line);
    etiquetas con su dirección. Todo lo agregado va en comentarios con #
    (isa.md §11.1): el archivo da los mismos bundles con ccom -x. */
 void cg_write_listing(FILE *out);
+
+/* Dirección (índice de bundle) de la etiqueta con ese nombre, o -1 si no
+   está definida. Es la misma que muestra el .asm anotado. */
+int cg_label_address(const char *name);
  
 /* Acceso para el ensamblado: cantidad de líneas y cada línea ya en texto.
    Las etiquetas aparecen como líneas "nombre:" (no son bundles); un bundle

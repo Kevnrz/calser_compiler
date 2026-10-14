@@ -88,6 +88,23 @@ de esta memoria.
 crypto que no aparecen en el reporte de palabras bajas. No permite sobrescribir
 el `.asm`, la imagen `.mem` ni el archivo de datos de entrada.
 
+`--traza archivo.txt` escribe la traza de ejecución (enunciado CE1108 §8.4):
+una línea por evento, `[bundle N · línea L del .cls] evento`, con las
+escrituras a variables (`res = 6`, `p[1] = 1`; un `bool` como `verdadero` o
+`falso`), los saltos tomados, las llamadas y los retornos, y las operaciones de
+cifrado. Los nombres de variables, las etiquetas y las líneas del `.cls` se
+leen de los comentarios del `.asm` anotado que escribe `ccom -s`; un `.asm`
+sin anotaciones solo da los cambios de flujo. Un nombre que se repite entre
+funciones se muestra como `funcion.nombre` (y `funcion.nombre@linea` si
+todavía se repite dentro de la función); `(prólogo)` marca el cero que cada
+función escribe en su variable de retorno al entrar. No se muestran las
+escrituras fuera de las variables (la pila de llamadas, las casillas ocultas
+del `S` y los temporales), los saltos condicionales no tomados ni los saltos
+hacia las rutinas internas (`__ccom_arith_*`, `__ccom_array_*`,
+`.L_crypto_*`). `--traza-max N` limita los eventos (5000 por defecto): al
+llegar se escribe `… traza truncada en N eventos`, y el estado final de las
+variables se escribe siempre. La cabecera del archivo repite estas reglas.
+
 Códigos de salida: `0` para ejecución sin avisos; `1` si hay avisos de
 separación o se alcanza el límite; `2` para errores de entrada o ejecución.
 

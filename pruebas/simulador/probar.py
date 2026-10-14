@@ -9,7 +9,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'tools'))
-from sim_asm import AsmError, Simulator, parse
+from sim_asm import Annotations, AsmError, Simulator, Tracer, parse
 
 GAP = '{ nopi | nopi | nopi | nopi }'
 END = 'fin: { nopi | nopi | jef fin | nopi }'
@@ -460,5 +460,226 @@ class CryptoTests(unittest.TestCase):
             self.assertEqual(asm.read_text(), END)
 
 
+def annotated(entries, variables):
+    """Arma un .asm con las anotaciones que escribe ccom -s (enunciado CE1108
+    §6.2): ('label', nombre) o (bundle, línea). La línea es un entero, '-' o
+    None (sin comentario de línea)."""
+    lines = ['# ccom: demo.cls']
+    index = 0
+    for entry in entries:
+        if entry[0] == 'label':
+            lines.append(f'{entry[1]}:   # bundle {index}')
+            continue
+        text, line = entry
+        note = f'# {index:04d}' + (f'  linea {line}' if line is not None else '')
+        lines.append(f'  {text}   {note}')
+        index += 1
+    lines += ['', '# Variables (direccion de datos)', '#',
+              '#   ===== SYMBOL TABLE =====', '#   Scope 0: GLOBAL', '#']
+    lines += variables
+    return '\n'.join(lines) + '\n'
+
+
+# Un programa pequeño con su traza esperada exacta. Variables (ccom -s los
+# escribe así): x en 0, ok en 4, v[3] en 8, r (retorno de f) en 20.
+TRACE_VARIABLES = [
+    '#   Scope 1: FUNCTION f',
+    '#       r : int (return) width=4 addr=0x0014 line=9',
+    '#',
+    '#   Scope 2: FUNCTION main',
+    '#       x : int width=4 addr=0x0000 line=1',
+    '#       ok : bool width=4 addr=0x0004 line=2',
+    '#       v : int[3] width=12 addr=0x0008 line=3',
+    '#',
+    '#   =======================',
+]
+
+TRACE_PROGRAM = [
+    ('{ mov t0, 7 | nopi | nopi | nopi }', 1),                          # 0
+    (GAP, None),                                                        # 1
+    ('{ nopi | nopi | nopi | sw t0, 0(rz) }', None),                    # 2
+    (GAP, None),                                                        # 3
+    ('{ mov t1, 1 | nopi | nopi | nopi }', 2),                          # 4
+    (GAP, None),                                                        # 5
+    ('{ nopi | nopi | nopi | sw t1, 4(rz) }', None),                    # 6
+    (GAP, None),                                                        # 7
+    ('{ mov t2, 9 | nopi | nopi | nopi }', 3),                          # 8
+    (GAP, None),                                                        # 9
+    ('{ nopi | nopi | nopi | sw t2, 16(rz) }', None),                   # 10
+    (GAP, None),                                                        # 11
+    # Fuera de las variables (pila, casilla oculta del S): no se muestra.
+    ('{ nopi | nopi | nopi | sw t2, 24(rz) }', None),                   # 12
+    (GAP, None),                                                        # 13
+    ('{ nopi | nopi | jas rl, .L_func_f | nopi }', 4),                  # 14
+    (GAP, None),                                                        # 15
+    # Salto hacia una rutina interna: no se muestra.
+    ('{ nopi | nopi | jef __ccom_arith_0_end | nopi }', 5),             # 16
+    (GAP, None),                                                        # 17
+    ('label', '__ccom_arith_0_end'),
+    ('{ mov t3, 2 | nopi | nopi | nopi }', None),                       # 18
+    (GAP, None),                                                        # 19
+    # Salto condicional no tomado: no se muestra.
+    ('{ nopi | nopi | beq t3, t0, .L_never | nopi }', 6),               # 20
+    (GAP, None),                                                        # 21
+    ('{ nopi | nopi | bne t3, t0, .L_next | nopi }', 7),                 # 22
+    (GAP, None),                                                        # 23
+    ('label', '.L_never'),
+    ('{ nopi | nopi | jef fin_main | nopi }', None),                    # 24
+    (GAP, None),                                                        # 25
+    ('label', '.L_next'),
+    ('{ nopi | nopi | jef fin_main | nopi }', 8),                       # 26
+    (GAP, None),                                                        # 27
+    ('label', 'fin_main'),
+    ('{ nopi | nopi | jef fin_main | nopi }', '-'),                     # 28
+    ('label', '.L_func_f'),
+    ('{ nopi | nopi | nopi | sw rz, 20(rz) }', 9),                      # 29
+    (GAP, None),                                                        # 30
+    ('{ nopi | nopi | jefR rz, rl | nopi }', 10),                       # 31
+]
+
+TRACE_EXPECTED = [
+    '[bundle 0002 · línea 1] x = 7',
+    '[bundle 0006 · línea 2] ok = verdadero',
+    '[bundle 0010 · línea 3] v[2] = 9',
+    '[bundle 0014 · línea 4] llamada → .L_func_f (bundle 29)',
+    '[bundle 0029 · línea 9] r = 0  (prólogo)',
+    '[bundle 0031 · línea 10] retorno → bundle 15',
+    '[bundle 0022 · línea 7] bne → .L_next (bundle 26)',
+    '[bundle 0026 · línea 8] jef → fin_main (bundle 28)',
+    '[bundle 0028] jef → fin_main (bundle 28)',
+]
+
+
+def traced(text, limit=5000):
+    program = parse(text)
+    sim = Simulator(program)
+    sim.tracer = Tracer(Annotations(text, len(program.bundles)), program.labels, limit)
+    sim.run()
+    return sim, sim.tracer.text(sim)
+
+
+class TraceTests(unittest.TestCase):
+    def test_exact_trace_of_a_small_program(self):
+        text = annotated(TRACE_PROGRAM, TRACE_VARIABLES)
+        sim, trace = traced(text)
+        self.assertEqual(sim.warnings, [])
+        events = [line for line in trace.splitlines()
+                  if line.startswith('[bundle')]
+        self.assertEqual(events, TRACE_EXPECTED)
+        self.assertIn('\nEstado final de las variables:\n'
+                      '  x = 7\n  ok = verdadero\n  v = [0, 0, 9]\n  r = 0\n', trace)
+        # La cabecera documenta las dos reglas de lo que no se muestra.
+        self.assertIn('la pila de llamadas (rx)', trace)
+        self.assertIn('hacia las rutinas internas', trace)
+
+    def test_trace_does_not_change_the_execution(self):
+        text = annotated(TRACE_PROGRAM, TRACE_VARIABLES)
+        plain = Simulator(parse(text)).run()
+        sim, _ = traced(text)
+        self.assertEqual((plain.steps, plain.cycles, plain.regs, plain.memory),
+                         (sim.steps, sim.cycles, sim.regs, sim.memory))
+
+    def test_internal_jumps_are_not_traced(self):
+        text = annotated(TRACE_PROGRAM, TRACE_VARIABLES)
+        _, trace = traced(text)
+        events = [line for line in trace.splitlines() if line.startswith('[bundle')]
+        self.assertFalse([line for line in events if '__ccom_' in line or '.L_crypto_' in line])
+        self.assertFalse([line for line in events if 'beq' in line])  # no tomado
+
+    def test_limit_truncates_but_keeps_the_final_state(self):
+        text = annotated(TRACE_PROGRAM, TRACE_VARIABLES)
+        _, trace = traced(text, limit=3)
+        lines = trace.splitlines()
+        events = [line for line in lines if line.startswith('[bundle')]
+        self.assertEqual(events, TRACE_EXPECTED[:3])
+        self.assertIn('… traza truncada en 3 eventos', lines)
+        self.assertIn('Estado final de las variables:', lines)
+        self.assertIn('  v = [0, 0, 9]', lines)
+
+    def test_command_line(self):
+        script = ROOT / 'tools' / 'sim_asm.py'
+        with tempfile.TemporaryDirectory() as folder:
+            asm = Path(folder) / 'demo.asm'
+            asm.write_text(annotated(TRACE_PROGRAM, TRACE_VARIABLES))
+            out = Path(folder) / 'demo.traza'
+            result = subprocess.run([sys.executable, '-I', str(script), str(asm),
+                                     '--traza', str(out), '--traza-max', '4'],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = out.read_text(encoding='utf-8').splitlines()
+            self.assertEqual([l for l in lines if l.startswith('[bundle')],
+                             TRACE_EXPECTED[:4])
+            self.assertIn('… traza truncada en 4 eventos', lines)
+            # --traza-max sin --traza, o no positivo, o sobre el .asm: error.
+            for arguments in (['--traza-max', '4'],
+                              ['--traza', str(out), '--traza-max', '0'],
+                              ['--traza', str(asm)]):
+                result = subprocess.run([sys.executable, '-I', str(script), str(asm)] + arguments,
+                                        capture_output=True)
+                self.assertEqual(result.returncode, 2, arguments)
+
+    def test_an_unannotated_asm_traces_only_the_flow(self):
+        _, trace = traced('{ nopi | nopi | jef fin | nopi }\n' + GAP + '\n' + END)
+        events = [line for line in trace.splitlines() if line.startswith('[bundle')]
+        self.assertEqual(events, ['[bundle 0000] jef → fin (bundle 2)',
+                                  '[bundle 0002] jef → fin (bundle 2)'])
+        self.assertIn('(el .asm no trae la tabla de variables)', trace)
+
+    def test_repeated_names_are_qualified(self):
+        variables = ['#   Scope 1: FUNCTION f', '#       r : int width=4 addr=0x0000 line=1',
+                     '#   Scope 2: FUNCTION g', '#       r : int width=4 addr=0x0004 line=5',
+                     '#   Scope 3: S g', '#       r : int width=4 addr=0x0008 line=9']
+        notes = Annotations(annotated([('{ nopi | nopi | nopi | nopi }', 1)], variables), 1)
+        self.assertEqual([v['shown'] for v in notes.variables], ['f.r', 'g.r@5', 'g.r@9'])
+
+    def test_compiled_programs(self):
+        ccom = ROOT / 'ccom'
+        if not ccom.exists():
+            self.skipTest('falta compilar ccom')
+        with tempfile.TemporaryDirectory() as folder:
+            directory = Path(folder)
+            for name in ('p02_factorial', 'p09_crypto'):
+                base = directory / name
+                result = subprocess.run([str(ccom), '-s', str(ROOT / 'pruebas' / (name + '.cls')),
+                                         '-o', str(base.with_suffix('.bin'))],
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                text = base.with_suffix('.asm').read_text()
+                program = parse(text)
+                sim = Simulator(program)
+                sim.tracer = Tracer(Annotations(text, len(program.bundles)), program.labels, 5000)
+                sim.load_data_image(base.with_suffix('.mem').read_text())
+                if name == 'p09_crypto':
+                    sim.load_data(bytes(range(256)) * 4)
+                sim.run(100000)
+                trace = sim.tracer.text(sim)
+                self.assertEqual(sim.warnings, [])
+                self.assertNotIn('__ccom_', ''.join(l for l in trace.splitlines() if l.startswith('[')))
+                if name == 'p02_factorial':
+                    self.assertIn('res = 0  (prólogo)', trace)
+                    self.assertIn('res = 120', trace)
+                    self.assertIn('  f = 120', trace)
+                else:
+                    for expected in ('auth', 'kv_write k=0 w=0', 'kv_lock', 'logout',
+                                     'cifrar: 128 bloques de 0x1000 a 0x2000',
+                                     'descifrar: 128 bloques de 0x2000 a 0x3000',
+                                     'cifrar: 1 bloque de 0x1000 a 0x4000'):
+                        self.assertTrue(any(expected in l for l in trace.splitlines()), expected)
+
+
 if __name__ == '__main__':
-    unittest.main()
+    if len(sys.argv) > 1:
+        unittest.main()
+    else:
+        # Corrida completa (make check-simulador): una línea PASS y sin
+        # tiempos, para que la evidencia de make check sea determinista.
+        import io
+        stream = io.StringIO()
+        result = unittest.TextTestRunner(stream=stream, verbosity=0).run(
+            unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__]))
+        if result.wasSuccessful():
+            print(f'PASS simulador: {result.testsRun} casos (parser, pipeline, '
+                  'cifrado, traza de ejecución)')
+        else:
+            print(stream.getvalue(), file=sys.stderr)
+            sys.exit(1)

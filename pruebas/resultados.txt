@@ -611,12 +611,12 @@ Scope 2: FUNCTION
 =======================
 
 ===== LABEL TABLE =====
-.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
-fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
-.L_body_doble | BODY         | AST kind: FUNCTION | Line: 7
-.L_func_doble | FUNCTION     | AST kind: FUNCTION | Line: 7
-.L_body_main | BODY         | AST kind: FUNCTION | Line: 1
-.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 1
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0 | Address: 47
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0 | Address: 46
+.L_body_doble | BODY         | AST kind: FUNCTION | Line: 7 | Address: 36
+.L_func_doble | FUNCTION     | AST kind: FUNCTION | Line: 7 | Address: 34
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 1 | Address: 2
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 1 | Address: 2
 =======================
 --- codigo de salida: 0 ---
 
@@ -643,16 +643,16 @@ Scope 4: FUNCTION
 =======================
 
 ===== LABEL TABLE =====
-.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
-fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
-.L_body_main | BODY         | AST kind: FUNCTION | Line: 14
-.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 14
-.L_while_end_3 | END          | AST kind: LOOP_L | Line: 7
-.L_while_start_2 | START        | AST kind: LOOP_L | Line: 7
-.L_if_end_1 | END          | AST kind: CONDITIONAL | Line: 2
-.L_if_next_0 | NEXT         | AST kind: CONDITIONAL | Line: 2
-.L_body_factorial | BODY         | AST kind: FUNCTION | Line: 1
-.L_func_factorial | FUNCTION     | AST kind: FUNCTION | Line: 1
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0 | Address: 109
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0 | Address: 108
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 14 | Address: 2
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 14 | Address: 2
+.L_while_end_3 | END          | AST kind: LOOP_L | Line: 7 | Address: 106
+.L_while_start_2 | START        | AST kind: LOOP_L | Line: 7 | Address: 60
+.L_if_end_1 | END          | AST kind: CONDITIONAL | Line: 2 | Address: 52
+.L_if_next_0 | NEXT         | AST kind: CONDITIONAL | Line: 2 | Address: 52
+.L_body_factorial | BODY         | AST kind: FUNCTION | Line: 1 | Address: 40
+.L_func_factorial | FUNCTION     | AST kind: FUNCTION | Line: 1 | Address: 38
 =======================
 --- codigo de salida: 0 ---
 
@@ -677,15 +677,15 @@ Scope 3: FUNCTION
 =======================
 
 ===== LABEL TABLE =====
-.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
-fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
-.L_body_main | BODY         | AST kind: FUNCTION | Line: 10
-.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 10
-.L_for_end_2 | END          | AST kind: LOOP_S | Line: 4
-.L_for_update_1 | UPDATE       | AST kind: LOOP_S | Line: 4
-.L_for_start_0 | START        | AST kind: LOOP_S | Line: 4
-.L_body_suma | BODY         | AST kind: FUNCTION | Line: 3
-.L_func_suma | FUNCTION     | AST kind: FUNCTION | Line: 3
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0 | Address: 103
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0 | Address: 102
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 10 | Address: 2
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 10 | Address: 2
+.L_for_end_2 | END          | AST kind: LOOP_S | Line: 4 | Address: 100
+.L_for_update_1 | UPDATE       | AST kind: LOOP_S | Line: 4 | Address: 92
+.L_for_start_0 | START        | AST kind: LOOP_S | Line: 4 | Address: 56
+.L_body_suma | BODY         | AST kind: FUNCTION | Line: 3 | Address: 48
+.L_func_suma | FUNCTION     | AST kind: FUNCTION | Line: 3 | Address: 46
 =======================
 --- codigo de salida: 0 ---
 
@@ -723,19 +723,19 @@ Scope 5: L
 =======================
 
 ===== LABEL TABLE =====
-.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
-fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
-.L_while_end_6 | END          | AST kind: LOOP_L | Line: 23
-.L_while_start_5 | START        | AST kind: LOOP_L | Line: 23
-.L_body_main | BODY         | AST kind: FUNCTION | Line: 18
-.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 18
-.L_if_end_4 | END          | AST kind: CONDITIONAL | Line: 10
-.L_if_next_3 | NEXT         | AST kind: CONDITIONAL | Line: 10
-.L_for_end_2 | END          | AST kind: LOOP_S | Line: 9
-.L_for_update_1 | UPDATE       | AST kind: LOOP_S | Line: 9
-.L_for_start_0 | START        | AST kind: LOOP_S | Line: 9
-.L_body_maximo | BODY         | AST kind: FUNCTION | Line: 8
-.L_func_maximo | FUNCTION     | AST kind: FUNCTION | Line: 8
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0 | Address: 217
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0 | Address: 216
+.L_while_end_6 | END          | AST kind: LOOP_L | Line: 23 | Address: 90
+.L_while_start_5 | START        | AST kind: LOOP_L | Line: 23 | Address: 68
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 18 | Address: 2
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 18 | Address: 2
+.L_if_end_4 | END          | AST kind: CONDITIONAL | Line: 10 | Address: 206
+.L_if_next_3 | NEXT         | AST kind: CONDITIONAL | Line: 10 | Address: 206
+.L_for_end_2 | END          | AST kind: LOOP_S | Line: 9 | Address: 214
+.L_for_update_1 | UPDATE       | AST kind: LOOP_S | Line: 9 | Address: 206
+.L_for_start_0 | START        | AST kind: LOOP_S | Line: 9 | Address: 102
+.L_body_maximo | BODY         | AST kind: FUNCTION | Line: 8 | Address: 94
+.L_func_maximo | FUNCTION     | AST kind: FUNCTION | Line: 8 | Address: 92
 =======================
 --- codigo de salida: 0 ---
 
@@ -767,17 +767,17 @@ Scope 4: FUNCTION
 =======================
 
 ===== LABEL TABLE =====
-.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
-fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
-.L_body_main | BODY         | AST kind: FUNCTION | Line: 13
-.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 13
-.L_body_poner | BODY         | AST kind: FUNCTION | Line: 8
-.L_func_poner | FUNCTION     | AST kind: FUNCTION | Line: 8
-.L_for_end_2 | END          | AST kind: LOOP_S | Line: 2
-.L_for_update_1 | UPDATE       | AST kind: LOOP_S | Line: 2
-.L_for_start_0 | START        | AST kind: LOOP_S | Line: 2
-.L_body_suma_fila | BODY         | AST kind: FUNCTION | Line: 1
-.L_func_suma_fila | FUNCTION     | AST kind: FUNCTION | Line: 1
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0 | Address: 269
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0 | Address: 268
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 13 | Address: 2
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 13 | Address: 2
+.L_body_poner | BODY         | AST kind: FUNCTION | Line: 8 | Address: 240
+.L_func_poner | FUNCTION     | AST kind: FUNCTION | Line: 8 | Address: 240
+.L_for_end_2 | END          | AST kind: LOOP_S | Line: 2 | Address: 238
+.L_for_update_1 | UPDATE       | AST kind: LOOP_S | Line: 2 | Address: 230
+.L_for_start_0 | START        | AST kind: LOOP_S | Line: 2 | Address: 176
+.L_body_suma_fila | BODY         | AST kind: FUNCTION | Line: 1 | Address: 168
+.L_func_suma_fila | FUNCTION     | AST kind: FUNCTION | Line: 1 | Address: 166
 =======================
 --- codigo de salida: 0 ---
 
@@ -812,21 +812,21 @@ Scope 5: FUNCTION
 =======================
 
 ===== LABEL TABLE =====
-.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
-fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
-.L_sc_end_6 | SC_END       | AST kind: OR | Line: 24
-.L_body_main | BODY         | AST kind: FUNCTION | Line: 17
-.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 17
-.L_sc_end_5 | SC_END       | AST kind: AND | Line: 10
-.L_if_end_4 | END          | AST kind: CONDITIONAL | Line: 10
-.L_if_next_3 | NEXT         | AST kind: CONDITIONAL | Line: 10
-.L_for_end_2 | END          | AST kind: LOOP_S | Line: 9
-.L_for_update_1 | UPDATE       | AST kind: LOOP_S | Line: 9
-.L_for_start_0 | START        | AST kind: LOOP_S | Line: 9
-.L_body_total | BODY         | AST kind: FUNCTION | Line: 8
-.L_func_total | FUNCTION     | AST kind: FUNCTION | Line: 8
-.L_body_es_par | BODY         | AST kind: FUNCTION | Line: 3
-.L_func_es_par | FUNCTION     | AST kind: FUNCTION | Line: 3
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0 | Address: 297
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0 | Address: 296
+.L_sc_end_6 | SC_END       | AST kind: OR | Line: 24 | Address: 82
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 17 | Address: 2
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 17 | Address: 2
+.L_sc_end_5 | SC_END       | AST kind: AND | Line: 10 | Address: 252
+.L_if_end_4 | END          | AST kind: CONDITIONAL | Line: 10 | Address: 286
+.L_if_next_3 | NEXT         | AST kind: CONDITIONAL | Line: 10 | Address: 286
+.L_for_end_2 | END          | AST kind: LOOP_S | Line: 9 | Address: 294
+.L_for_update_1 | UPDATE       | AST kind: LOOP_S | Line: 9 | Address: 286
+.L_for_start_0 | START        | AST kind: LOOP_S | Line: 9 | Address: 166
+.L_body_total | BODY         | AST kind: FUNCTION | Line: 8 | Address: 158
+.L_func_total | FUNCTION     | AST kind: FUNCTION | Line: 8 | Address: 156
+.L_body_es_par | BODY         | AST kind: FUNCTION | Line: 3 | Address: 88
+.L_func_es_par | FUNCTION     | AST kind: FUNCTION | Line: 3 | Address: 86
 =======================
 --- codigo de salida: 0 ---
 
@@ -861,19 +861,19 @@ Scope 6: S
 =======================
 
 ===== LABEL TABLE =====
-.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
-fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
-.L_for_end_4 | END          | AST kind: LOOP_S | Line: 19
-.L_for_update_3 | UPDATE       | AST kind: LOOP_S | Line: 19
-.L_for_start_2 | START        | AST kind: LOOP_S | Line: 19
-.L_body_main | BODY         | AST kind: FUNCTION | Line: 15
-.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 15
-.L_body_doble | BODY         | AST kind: FUNCTION | Line: 10
-.L_func_doble | FUNCTION     | AST kind: FUNCTION | Line: 10
-.L_if_end_1 | END          | AST kind: CONDITIONAL | Line: 2
-.L_if_next_0 | NEXT         | AST kind: CONDITIONAL | Line: 2
-.L_body_factorial | BODY         | AST kind: FUNCTION | Line: 1
-.L_func_factorial | FUNCTION     | AST kind: FUNCTION | Line: 1
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0 | Address: 397
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0 | Address: 396
+.L_for_end_4 | END          | AST kind: LOOP_S | Line: 19 | Address: 108
+.L_for_update_3 | UPDATE       | AST kind: LOOP_S | Line: 19 | Address: 100
+.L_for_start_2 | START        | AST kind: LOOP_S | Line: 19 | Address: 56
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 15 | Address: 2
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 15 | Address: 2
+.L_body_doble | BODY         | AST kind: FUNCTION | Line: 10 | Address: 366
+.L_func_doble | FUNCTION     | AST kind: FUNCTION | Line: 10 | Address: 364
+.L_if_end_1 | END          | AST kind: CONDITIONAL | Line: 2 | Address: 362
+.L_if_next_0 | NEXT         | AST kind: CONDITIONAL | Line: 2 | Address: 324
+.L_body_factorial | BODY         | AST kind: FUNCTION | Line: 1 | Address: 308
+.L_func_factorial | FUNCTION     | AST kind: FUNCTION | Line: 1 | Address: 306
 =======================
 --- codigo de salida: 0 ---
 
@@ -889,10 +889,10 @@ Scope 1: FUNCTION
 =======================
 
 ===== LABEL TABLE =====
-.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
-fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
-.L_body_main | BODY         | AST kind: FUNCTION | Line: 2
-.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 2
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0 | Address: 27
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0 | Address: 26
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 2 | Address: 2
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 2 | Address: 2
 =======================
 --- codigo de salida: 0 ---
 
@@ -912,10 +912,10 @@ Scope 1: FUNCTION
 =======================
 
 ===== LABEL TABLE =====
-.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
-fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
-.L_body_main | BODY         | AST kind: FUNCTION | Line: 6
-.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 6
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0 | Address: 220
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0 | Address: 219
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 6 | Address: 2
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 6 | Address: 2
 =======================
 --- codigo de salida: 0 ---
 
@@ -942,14 +942,14 @@ Scope 3: FUNCTION
 =======================
 
 ===== LABEL TABLE =====
-.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
-fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
-.L_body_main | BODY         | AST kind: FUNCTION | Line: 11
-.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 11
-.L_body_add | BODY         | AST kind: FUNCTION | Line: 6
-.L_func_add | FUNCTION     | AST kind: FUNCTION | Line: 6
-.L_body_identity | BODY         | AST kind: FUNCTION | Line: 1
-.L_func_identity | FUNCTION     | AST kind: FUNCTION | Line: 1
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0 | Address: 107
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0 | Address: 106
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 11 | Address: 2
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 11 | Address: 2
+.L_body_add | BODY         | AST kind: FUNCTION | Line: 6 | Address: 96
+.L_func_add | FUNCTION     | AST kind: FUNCTION | Line: 6 | Address: 94
+.L_body_identity | BODY         | AST kind: FUNCTION | Line: 1 | Address: 88
+.L_func_identity | FUNCTION     | AST kind: FUNCTION | Line: 1 | Address: 86
 =======================
 --- codigo de salida: 0 ---
 
@@ -1023,32 +1023,32 @@ Scope 14: FUNCTION
 =======================
 
 ===== LABEL TABLE =====
-.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
-fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
-.L_body_main | BODY         | AST kind: FUNCTION | Line: 59
-.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 59
-.L_if_end_11 | END          | AST kind: CONDITIONAL | Line: 50
-.L_if_next_10 | NEXT         | AST kind: CONDITIONAL | Line: 50
-.L_for_end_9 | END          | AST kind: LOOP_S | Line: 48
-.L_for_update_8 | UPDATE       | AST kind: LOOP_S | Line: 48
-.L_for_start_7 | START        | AST kind: LOOP_S | Line: 48
-.L_body_descifrar_archivo | BODY         | AST kind: FUNCTION | Line: 46
-.L_func_descifrar_archivo | FUNCTION     | AST kind: FUNCTION | Line: 46
-.L_if_end_6 | END          | AST kind: CONDITIONAL | Line: 37
-.L_if_next_5 | NEXT         | AST kind: CONDITIONAL | Line: 37
-.L_for_end_4 | END          | AST kind: LOOP_S | Line: 35
-.L_for_update_3 | UPDATE       | AST kind: LOOP_S | Line: 35
-.L_for_start_2 | START        | AST kind: LOOP_S | Line: 35
-.L_body_cifrar_archivo | BODY         | AST kind: FUNCTION | Line: 33
-.L_func_cifrar_archivo | FUNCTION     | AST kind: FUNCTION | Line: 33
-.L_body_preparar_boveda | BODY         | AST kind: FUNCTION | Line: 20
-.L_func_preparar_boveda | FUNCTION     | AST kind: FUNCTION | Line: 20
-.L_body_direccion | BODY         | AST kind: FUNCTION | Line: 15
-.L_func_direccion | FUNCTION     | AST kind: FUNCTION | Line: 15
-.L_if_end_1 | END          | AST kind: CONDITIONAL | Line: 7
-.L_if_next_0 | NEXT         | AST kind: CONDITIONAL | Line: 7
-.L_body_bloques_de | BODY         | AST kind: FUNCTION | Line: 5
-.L_func_bloques_de | FUNCTION     | AST kind: FUNCTION | Line: 5
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0 | Address: 1346
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0 | Address: 1345
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 59 | Address: 2
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 59 | Address: 2
+.L_if_end_11 | END          | AST kind: CONDITIONAL | Line: 50 | Address: 1335
+.L_if_next_10 | NEXT         | AST kind: CONDITIONAL | Line: 50 | Address: 1197
+.L_for_end_9 | END          | AST kind: LOOP_S | Line: 48 | Address: 1343
+.L_for_update_8 | UPDATE       | AST kind: LOOP_S | Line: 48 | Address: 1335
+.L_for_start_7 | START        | AST kind: LOOP_S | Line: 48 | Address: 935
+.L_body_descifrar_archivo | BODY         | AST kind: FUNCTION | Line: 46 | Address: 857
+.L_func_descifrar_archivo | FUNCTION     | AST kind: FUNCTION | Line: 46 | Address: 855
+.L_if_end_6 | END          | AST kind: CONDITIONAL | Line: 37 | Address: 845
+.L_if_next_5 | NEXT         | AST kind: CONDITIONAL | Line: 37 | Address: 707
+.L_for_end_4 | END          | AST kind: LOOP_S | Line: 35 | Address: 853
+.L_for_update_3 | UPDATE       | AST kind: LOOP_S | Line: 35 | Address: 845
+.L_for_start_2 | START        | AST kind: LOOP_S | Line: 35 | Address: 445
+.L_body_cifrar_archivo | BODY         | AST kind: FUNCTION | Line: 33 | Address: 367
+.L_func_cifrar_archivo | FUNCTION     | AST kind: FUNCTION | Line: 33 | Address: 365
+.L_body_preparar_boveda | BODY         | AST kind: FUNCTION | Line: 20 | Address: 272
+.L_func_preparar_boveda | FUNCTION     | AST kind: FUNCTION | Line: 20 | Address: 272
+.L_body_direccion | BODY         | AST kind: FUNCTION | Line: 15 | Address: 214
+.L_func_direccion | FUNCTION     | AST kind: FUNCTION | Line: 15 | Address: 212
+.L_if_end_1 | END          | AST kind: CONDITIONAL | Line: 7 | Address: 210
+.L_if_next_0 | NEXT         | AST kind: CONDITIONAL | Line: 7 | Address: 206
+.L_body_bloques_de | BODY         | AST kind: FUNCTION | Line: 5 | Address: 160
+.L_func_bloques_de | FUNCTION     | AST kind: FUNCTION | Line: 5 | Address: 158
 =======================
 --- codigo de salida: 0 ---
 
@@ -1081,20 +1081,20 @@ Scope 5: FUNCTION
 =======================
 
 ===== LABEL TABLE =====
-.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0
-fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0
-.L_body_main | BODY         | AST kind: FUNCTION | Line: 21
-.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 21
-.L_if_end_7 | END          | AST kind: CONDITIONAL | Line: 10
-.L_if_next_6 | NEXT         | AST kind: CONDITIONAL | Line: 10
-.L_for_end_5 | END          | AST kind: LOOP_S | Line: 9
-.L_for_update_4 | UPDATE       | AST kind: LOOP_S | Line: 9
-.L_for_start_3 | START        | AST kind: LOOP_S | Line: 9
-.L_for_end_2 | END          | AST kind: LOOP_S | Line: 8
-.L_for_update_1 | UPDATE       | AST kind: LOOP_S | Line: 8
-.L_for_start_0 | START        | AST kind: LOOP_S | Line: 8
-.L_body_buscar | BODY         | AST kind: FUNCTION | Line: 5
-.L_func_buscar | FUNCTION     | AST kind: FUNCTION | Line: 5
+.L_arith_error | ARITH_ERROR  | AST kind: GLOBAL | Line: 0 | Address: 263
+fin_main   | PROGRAM_END  | AST kind: GLOBAL | Line: 0 | Address: 262
+.L_body_main | BODY         | AST kind: FUNCTION | Line: 21 | Address: 2
+.L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 21 | Address: 2
+.L_if_end_7 | END          | AST kind: CONDITIONAL | Line: 10 | Address: 244
+.L_if_next_6 | NEXT         | AST kind: CONDITIONAL | Line: 10 | Address: 244
+.L_for_end_5 | END          | AST kind: LOOP_S | Line: 9 | Address: 252
+.L_for_update_4 | UPDATE       | AST kind: LOOP_S | Line: 9 | Address: 244
+.L_for_start_3 | START        | AST kind: LOOP_S | Line: 9 | Address: 130
+.L_for_end_2 | END          | AST kind: LOOP_S | Line: 8 | Address: 260
+.L_for_update_1 | UPDATE       | AST kind: LOOP_S | Line: 8 | Address: 252
+.L_for_start_0 | START        | AST kind: LOOP_S | Line: 8 | Address: 116
+.L_body_buscar | BODY         | AST kind: FUNCTION | Line: 5 | Address: 52
+.L_func_buscar | FUNCTION     | AST kind: FUNCTION | Line: 5 | Address: 50
 =======================
 --- codigo de salida: 0 ---
 

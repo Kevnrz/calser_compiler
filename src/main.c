@@ -446,12 +446,17 @@ static int compile(const Options *options) {
 
     report_phase(options, "fase 3: tabla de etiquetas", 1);
 
-    if (options->print_memory)
-        label_table_print(labels);
-
+    // La tabla de etiquetas de -m se imprime al final, con las direcciones
+    // (enunciado CE1108 §2.3): el nombre y el nodo salen de la Fase 3, pero
+    // la dirección de cada etiqueta solo se conoce después de generar el
+    // código (§2.4) y ensamblarlo (§2.5).
     int gen_failed = generate_code(root, labels);
     report_phase(options, "fase 4: generacion de codigo", !gen_failed);
     if (gen_failed) {
+        // Sin código generado no hay direcciones: se imprime con "-".
+        if (options->print_memory)
+            label_table_print(labels);
+
         label_table_destroy(labels);
 
         free(labels);
@@ -464,6 +469,13 @@ static int compile(const Options *options) {
         return 1; 
     }
 
+    // Ya hay código: cada etiqueta de la tabla recibe su dirección (índice
+    // de bundle), la misma que muestra el .asm anotado. Se completa después
+    // de registrar la etiqueta (libro §6.7, backpatching; aquí con la
+    // primera pasada del ensamblado, enunciado §2.5). Una etiqueta que no
+    // llega al .asm (un & constante en un inicializador global) queda con -1.
+    label_table_resolve(labels, cg_label_address);
+
     // Primera línea del .asm: un comentario con el fuente. El ensamblado
     // recibe la misma línea, así los errores de <generado> citan la línea
     // del .asm que escribe -s.
@@ -472,6 +484,10 @@ static int compile(const Options *options) {
 
     if (header == NULL) {
         fprintf(stderr, "ccom: error: memoria insuficiente\n");
+
+        if (options->print_memory)
+            label_table_print(labels);
+
         label_table_destroy(labels);
         free(labels);
         semantic_free();
@@ -528,6 +544,10 @@ static int compile(const Options *options) {
     }
 
     free(header);
+
+    // Tabla de etiquetas con direcciones, después del ensamblado.
+    if (options->print_memory)
+        label_table_print(labels);
 
     label_table_destroy(labels);
 

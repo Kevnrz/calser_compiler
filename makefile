@@ -66,10 +66,18 @@ check-asm: $(TARGET)
 check-programas: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/programas/probar.py
 
+# Entregables de los tres ejercicios (enunciado CE1108 §10.4 y §10.5). No
+# forma parte de check: es para generar los archivos de ejercicios/.
+ejercicios: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 python3 tools/ejercicios.py
+
+check-simulador: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/simulador/probar.py
+
 check-etiquetas: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/etiquetas/probar.py
 
-check: check-arith check-arrays check-crypto check-ast check-asm check-programas check-etiquetas
+check: check-arith check-arrays check-crypto check-ast check-asm check-programas check-etiquetas check-simulador
 
 clean:
 	rm -f $(TARGET) $(OBJECTS) $(OBJECTS:.o=.d)
@@ -78,4 +86,4 @@ clean:
 
 -include $(OBJECTS:.o=.d)
 
-.PHONY: all clean check check-arith check-arrays check-crypto check-ast check-asm check-programas check-etiquetas
+.PHONY: all clean ejercicios check check-arith check-arrays check-crypto check-ast check-asm check-programas check-etiquetas check-simulador

@@ -171,7 +171,8 @@ int main(int argc, char **argv) {
         cg_op(SLOT_LSU, "sw t0, %d(rz)", 16 + 4 * i);
     }
     cg_op(SLOT_ALU0, "mov t0, 1004");
-    ASTNode arg = {.kind = AST_NUMBER, .number = 1234567};
+    ASTNode token = {.kind = AST_NUMBER, .number = 193210613};
+    ASTNode arg = {.kind = AST_NEG, .child = &token};
     if (operation(&ctx, "autenticar", &arg, 1)) return 1;
     long values[] = {0x0123ABCD, -1985229329L, 0x13579BDF, 0x2468ACE0};
     for (int word = 0; word < 4; word++) {
@@ -183,7 +184,7 @@ int main(int argc, char **argv) {
         if (operation(&ctx, "cargar_llave", args, 3)) return 1;
     }
     if (operation(&ctx, "sellar", NULL, 0)) return 1;
-    arg.number = 5;
+    arg = (ASTNode) {.kind = AST_NUMBER, .number = 5};
     if (operation(&ctx, "cambiar_ancla", &arg, 1)) return 1;
     if (loop(&ctx, "cifrar", 4096, inplace ? 4096 : 8192, blocks, key, dynamic)) return 1;
     if (!single) {

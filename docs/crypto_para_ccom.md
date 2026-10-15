@@ -205,7 +205,7 @@ Vi vuelta: int = 12288 ;    # 0x3000
 Vi negado: int = 16384 ;    # 0x4000
 
 F main [] : void ;
-    autenticar[1234567] ;               # PROVISIONAL: token de la cadena de Saddy
+    autenticar[-193210613] ;           # x99 = 0xF47BD70B, primer token Lamport
 
     # Las 4 llaves (caso 6: almacenamiento de las 4 llaves)
     cargar_llave[0, 0, 19114957] ;      # 0x0123ABCD
@@ -227,8 +227,10 @@ F main [] : void ;
 .
 ```
 
-**Pendiente:** el token real lo da el script de la cadena de Lamport de Saddy,
-junto con `RESET_ANCHOR`. Hasta entonces, `1234567` es provisional.
+**Cadena de demostración:** ancla inicial `0xFEFF95FF`, token `x99 =
+0xF47BD70B` (`-193210613` en Calser) y siguiente token `x98 = 0xA45326BA`.
+Se generan con `tools/lamport.py` del proyecto de hardware. Cada token se
+consume una sola vez; un reset normal no restaura el ancla inicial.
 
 ---
 

@@ -1,12 +1,12 @@
 # Demostración manual de las plantillas de crypto_para_ccom.md §4.
 # No es salida de ccom; su integración al AST sigue pendiente.
 # Cargar 1024 bytes en 0x1000 con --load-data.
-# auth usa la regla de prueba: cualquier token distinto de 999.
-{ mov t6, 37 | mov t11, 15 | nopi | nopi }
+# auth usa x99 = 0xF47BD70B contra el ancla de fabrica 0xFEFF95FF.
+{ mov t6, -5897 | mov t11, 15 | nopi | nopi }
 { nopi | nopi | nopi | nopi }
 { sll t6, t6, t11 | nopi | nopi | nopi }
 { nopi | nopi | nopi | nopi }
-{ saddi t6, t6, 22151 | nopi | nopi | nopi }
+{ saddi t6, t6, 22283 | nopi | nopi | nopi }
 { nopi | nopi | nopi | nopi }
 { nopi | auth t6 | nopi | nopi }
 { mov t6, 583 | mov t11, 15 | nopi | nopi }

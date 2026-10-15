@@ -255,6 +255,9 @@ Las [pruebas matriciales](pruebas/matrices/README.md) verifican suma, resta y
 productos con ciclos e índices, incluyendo AB distinto de BA, matrices
 rectangulares, identidad y ceros, con y sin organización de bundles.
 
+El simulador verifica autenticación Lamport mediante Ascon-Hash256 truncado
+a 32 bits, consume los tokens válidos y rechaza su reutilización.
+
 Estas pruebas usan un modelo de software de la arquitectura objetivo. Las
 pruebas crypto incluyen el recorrido `.cls` → `ccom` → `.asm`/`.mem` →
 simulador; no representan una simulación RTL.

@@ -52,6 +52,13 @@ la función devuelve además `hallado` (línea 13). Si no está, `pos` queda en
 | Estructuras de control anidadas (condicionales dentro de ciclos) | `C [ i % 2 == 0 ] ; … A ; …` (líneas 37 a 41) dentro de `S [ i , 0 , n , 1 ]` (línea 35); lo mismo en `descifrar_archivo` (líneas 48 a 54) |
 | Operaciones complejas o algoritmo significativo | Cifrado y descifrado de un archivo de 1024 bytes en 8 tramos de 16 bloques, alternando entre dos llaves según la paridad del tramo (`cifrar [ … , 0 ]` y `cifrar [ … , 1 ]`, líneas 38 y 40). La aritmética: `( total + tam - 1 ) / tam` (línea 34, el número de tramos con redondeo hacia arriba), `i % 2` (línea 37) y `base + i * tam * 8` (línea 16, la dirección de cada tramo). Se usan seis de las siete operaciones de cifrado: `autenticar` (línea 62), `cargar_llave` (líneas 21 a 28), `sellar` (línea 29), `cifrar`, `descifrar` y `cerrar_sesion` (línea 66); `cambiar_ancla` no se usa. El archivo se carga en 0x1000 (zona de `load_file`) |
 
+La autenticación del ejercicio 3 usa el token Lamport `x99 = 0xF47BD70B`,
+escrito como `-193210613` en Calser. Su hash Ascon truncado es `0xFEFF95FF`,
+el ancla de fábrica. El simulador verifica ese hash; después de consumir x99
+la siguiente autenticación debe presentar x98 (`0xA45326BA`). Una nueva
+instancia del simulador comienza con el ancla de fábrica; no representa el
+reset normal del hardware, que conserva el ancla activa.
+
 ## Qué contiene cada archivo
 
 | Archivo | Contenido |

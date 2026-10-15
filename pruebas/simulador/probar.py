@@ -9,7 +9,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'tools'))
-from sim_asm import Annotations, AsmError, Simulator, Tracer, parse
+from sim_asm import Annotations, AsmError, Simulator, Tracer, auth_hash32, parse
 
 GAP = '{ nopi | nopi | nopi | nopi }'
 END = 'fin: { nopi | nopi | jef fin | nopi }'
@@ -165,7 +165,11 @@ class SimulatorTests(unittest.TestCase):
         self.assertEqual(sim.regs[5], 9)
         self.assertEqual(sim.crypto_count, 6)
         self.assertEqual(len(sim.warnings), 0)
-        self.assertFalse(sim.exc)
+        self.assertTrue(sim.exc)
+        self.assertFalse(sim.auth)
+        self.assertFalse(sim.kv_lock)
+        self.assertEqual(sim.anchor, 0xFEFF95FF)
+        self.assertEqual(sim.vault, [[0] * 4 for _ in range(4)])
 
     def test_limit_and_eof_flush_results(self):
         sim = run('{ mov r4, 7 | nopi | nopi | nopi }')
@@ -286,18 +290,62 @@ class CryptoTests(unittest.TestCase):
         self.assertEqual(sim.regs[7], 0)
         self.assertEqual(len(sim.warnings), 1)
 
+    def test_auth_hash_external_vectors(self):
+        # Valores de la referencia C ascon/ascon-c, conservados en
+        # vliw-block-cipher/tb/reference; no se generan con auth_hash32.
+        vectors = [(0x03020100, 0xEDC7E4D7), (0, 0x8F28B790),
+                   (1, 0xEC267D58), (0x80000000, 0xF5C202DC),
+                   (0x80000001, 0xFEFEC6C6), (0x12345678, 0x88035407),
+                   (0xFFFFFFFF, 0x8A6AD37E), (0xA5A55A5A, 0xD020C92A),
+                   (0xF47BD70B, 0xFEFF95FF), (0xA45326BA, 0xF47BD70B)]
+        for token, expected in vectors:
+            with self.subTest(token=hex(token)):
+                self.assertEqual(auth_hash32(token), expected)
+        for invalid in (-1, 1 << 32):
+            with self.assertRaises(ValueError):
+                auth_hash32(invalid)
+
     def test_auth_success_failure_and_exception_clear(self):
-        for token, success in [(0, True), (1234567, True), (999, False), (0xFFFFFFFF, True)]:
+        for token, success in [(0xF47BD70B, True), (0, False), (1234567, False),
+                               (999, False), (0xFFFFFFFF, False), (0xA45326BA, False)]:
             with self.subTest(token=token):
                 sim = Simulator(parse('{ nopi | auth t0 | nopi | nopi }\n' + END))
                 sim.regs[4] = token
-                sim.exc = True
-                sim.anchor = 42
+                sim.auth = sim.exc = True
                 sim.run()
                 self.assertEqual(sim.auth, success)
                 self.assertEqual(sim.exc, not success)
-                self.assertEqual(sim.anchor, token if success else 42)
+                self.assertEqual(sim.anchor, token if success else 0xFEFF95FF)
                 self.assertEqual(sim.cycles, 16)  # auth 14 + fin 1 + descarte 1
+
+    def test_lamport_consumption_logout_replay_and_next_token(self):
+        sim = Simulator(parse('\n'.join([
+            '{ nopi | auth r4 | nopi | nopi }',
+            '{ nopi | logout | nopi | nopi }',
+            '{ nopi | auth r4 | nopi | nopi }',
+            '{ nopi | auth r5 | nopi | nopi }', END])))
+        sim.regs[4:6] = [0xF47BD70B, 0xA45326BA]
+        sim.step()
+        self.assertEqual((sim.auth, sim.exc, sim.anchor), (True, False, 0xF47BD70B))
+        sim.step()
+        self.assertEqual((sim.auth, sim.anchor), (False, 0xF47BD70B))
+        sim.step()
+        self.assertEqual((sim.auth, sim.exc, sim.anchor), (False, True, 0xF47BD70B))
+        sim.step()
+        self.assertEqual((sim.auth, sim.exc, sim.anchor), (True, False, 0xA45326BA))
+        self.assertFalse(sim.warnings)
+
+    def test_sanc_renews_chain_and_999_has_no_special_treatment(self):
+        # H(999) = 0xA6FB3D15, calculado por tools/lamport.py del hardware.
+        sim = Simulator(parse('\n'.join([
+            '{ nopi | auth r4 | nopi | nopi }',
+            '{ nopi | sanc r5 | nopi | nopi }',
+            '{ nopi | logout | nopi | nopi }',
+            '{ nopi | auth r6 | nopi | nopi }', END])))
+        sim.regs[4:7] = [0xF47BD70B, 0xA6FB3D15, 999]
+        sim.run()
+        self.assertEqual((sim.auth, sim.exc, sim.anchor), (True, False, 999))
+        self.assertFalse(sim.warnings)
 
     def test_all_vault_words_write_and_are_available_next_bundle(self):
         for key in range(4):
@@ -321,13 +369,13 @@ class CryptoTests(unittest.TestCase):
             '{ nopi | auth r5 | nopi | nopi }',
             '{ nopi | kv_write r5, 0, 0 | nopi | nopi }', END])))
         sim.auth = True
-        sim.regs[4:6] = [10, 20]
+        sim.regs[4:6] = [10, 0xF47BD70B]
         sim.run()
         self.assertTrue(sim.kv_lock)
         self.assertTrue(sim.auth)
         self.assertTrue(sim.exc)
         self.assertEqual(sim.vault[0][0], 10)
-        # Un nuevo simulador representa reset y no conserva el sello o las llaves.
+        # Una nueva instancia representa arranque de fabrica, no reset normal.
         reset = Simulator(sim.program)
         self.assertFalse(reset.kv_lock)
         self.assertEqual(reset.vault, [[0] * 4 for _ in range(4)])
@@ -358,9 +406,10 @@ class CryptoTests(unittest.TestCase):
 
     def test_same_bundle_reads_pre_crypto_registers(self):
         sim = Simulator(parse('{ mov r4, 99 | auth r4 | nopi | nopi }\n' + END))
-        sim.regs[4] = 999
+        sim.regs[4] = 0xF47BD70B
         sim.run()
-        self.assertFalse(sim.auth)
+        self.assertTrue(sim.auth)
+        self.assertEqual(sim.anchor, 0xF47BD70B)
         self.assertEqual(sim.regs[4], 99)
 
     def test_templates_encrypt_decrypt_and_denied_session(self):

@@ -50,17 +50,21 @@ bundles ni expande pseudoinstrucciones.
 - Dos destinos iguales dentro de un bundle se rechazan, excepto escrituras
   a `rz`, que se descartan.
 - CRYPTO implementa `feis`, una bóveda de 4 llaves de 4 palabras,
-  `kv_write`, `kv_lock`, `logout`, `sanc` y autenticación de prueba.
+  `kv_write`, `kv_lock`, `logout`, `sanc` y autenticación Lamport con Ascon-Hash256.
   Sin autorización, las instrucciones protegidas no tienen efecto y activan
   `EXC`; `logout` siempre puede ejecutarse. El sello permanece hasta reset.
   Una escritura rechazada por el sello también activa `EXC`.
-- `auth` acepta cualquier token salvo `999`, según `docs/fase4_saddy.md`.
-  El éxito activa `AUTH`, actualiza el ancla y limpia `EXC`; el fallo quita
-  autorización y activa `EXC`. Se cuentan 14 ciclos por `auth` sin agregar
-  bundles; las dependencias entre registros conservan la separación habitual.
-  **Esta autenticación es un sustituto de prueba: no calcula Ascon ni valida
-  cadenas reales de Lamport.** `sanc` actualiza el ancla, pero la regla de
-  aceptación del sustituto sigue siendo «token distinto de 999».
+- `auth` calcula Ascon-Hash256 de los cuatro bytes little-endian del token,
+  toma los primeros cuatro bytes del hash como entero little-endian y los
+  compara con el ancla activa. El éxito activa `AUTH`, consume el token al
+  actualizar el ancla y limpia `EXC`; el fallo conserva el ancla, quita la
+  autorización y activa `EXC`. Un token consumido no puede reutilizarse.
+  Se cuentan 14 ciclos por `auth` sin agregar bundles.
+- Una nueva instancia representa el arranque de fábrica: ancla `0xFEFF95FF`,
+  primer token `0xF47BD70B` y siguiente `0xA45326BA`. No modela la señal de
+  reset normal del hardware, que conserva el ancla. `sanc` permite renovar
+  el ancla mientras existe autorización. El valor `999` no tiene una regla
+  especial: se verifica mediante el mismo hash que cualquier otro token.
 - `AUTH`, `KVLOCK` y `EXC` se muestran en el reporte del simulador. Ninguna
   instrucción del programa puede leerlos ni extraer palabras de la bóveda.
 - `jefR` usa los 22 bits bajos del registro destino (C-06).

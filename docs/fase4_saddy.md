@@ -94,8 +94,8 @@ otros o guarda en `temp_base`, para no pisarlos antes de copiarlos.
   una llamada.
 
 **El simulador debe implementar CRYPTO** (`feis` con la función F, la bóveda,
-`kv_write`, `kv_lock`, `logout`, y `auth` como siempre exitoso salvo con el
-token de prueba falso `999`), para poder comprobar el resultado y no solo la
+`kv_write`, `kv_lock`, `logout`, y `auth` con la verificación Lamport
+mediante Ascon-Hash256 truncado a 32 bits contra el ancla activa), para poder comprobar el resultado y no solo la
 estructura. Para la memoria de 0x1000 en adelante, que se le pueda cargar un
 archivo de datos de prueba.
 

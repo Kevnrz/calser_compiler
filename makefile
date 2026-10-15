@@ -63,6 +63,18 @@ check-ast: $(TARGET)
 check-asm: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/ensamblador/probar.py
 
+check-runner:
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/ejecutor/probar.py
+
+check-help: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/ayuda/probar.py
+
+check-time: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/tiempo/probar.py
+
+check-matrices: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/matrices/probar.py
+
 check-programas: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/programas/probar.py
 
@@ -101,7 +113,7 @@ check-salidas: $(TARGET)
 validar-bundles: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 tools/validar_bundles.py
 
-check: check-arith check-arrays check-crypto check-ast check-asm check-programas check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+check: check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 clean:
 	rm -f $(TARGET) $(OBJECTS) $(OBJECTS:.o=.d)
@@ -110,4 +122,4 @@ clean:
 
 -include $(OBJECTS:.o=.d)
 
-.PHONY: all clean ejercicios check check-arith check-arrays check-crypto check-ast check-asm check-programas check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+.PHONY: all clean ejercicios check check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles

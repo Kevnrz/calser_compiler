@@ -55,7 +55,7 @@ PASS IR: ISA, dependencias, efectos, slots, fronteras, copia de textos y liberac
 PASS dependencias: 19 calendarios invalidos rechazados; RAW, WAR, WAW, memoria, control, cobertura y slots
 pruebas/p02_factorial.cls: 54 operaciones, 2 bundles fijos, 123 registros IR
 pruebas/p09_crypto.cls: 60 operaciones, 52 bundles fijos, 231 registros IR
-pruebas/p11_ejercicio3.cls: 605 operaciones, 70 bundles fijos, 1410 registros IR
+pruebas/p11_ejercicio3.cls: 606 operaciones, 70 bundles fijos, 1412 registros IR
 pruebas/programas/factorial_r.cls: 52 operaciones, 2 bundles fijos, 117 registros IR
 PASS IR del generador: factorial, crypto, ejercicio 3 y R sin operaciones desconocidas
 PASS emisor del organizador: escenarios de dependencias, fronteras y 128 programas aleatorios

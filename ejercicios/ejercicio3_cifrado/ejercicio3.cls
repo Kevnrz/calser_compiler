@@ -59,7 +59,7 @@ F descifrar_archivo [ int desde , int hacia , int total , int tam ] : int n ;
 F main [] : void ;
     Vm n1 : int ;
     Vm n2 : int ;
-    autenticar [ 1234567 ] ;
+    autenticar [ -193210613 ] ;
     preparar_boveda [ ] ;
     n1 = cifrar_archivo [ origen , cifrado , 128 , 16 ] ;
     n2 = descifrar_archivo [ cifrado , vuelta , 128 , 16 ] ;

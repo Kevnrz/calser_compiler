@@ -4,7 +4,7 @@ Vi vuelta: int = 12288 ;
 Vi negado: int = 16384 ;
 
 F main [] : void ;
-    autenticar [ 1234567 ] ;
+    autenticar [ -193210613 ] ;
     cargar_llave [ 0 , 0 , 19114957 ] ;
     cargar_llave [ 0 , 1 , -1985229329 ] ;
     cargar_llave [ 0 , 2 , 324508639 ] ;

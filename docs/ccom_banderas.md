@@ -13,15 +13,17 @@ cualquier bandera.
 
 | Bandera | Qué hace | Dónde sale | Estado |
 |---|---|---|---|
-| `--no-schedule` | Desactiva el organizador local y conserva la emisión de una operación más separación; útil para comparar | archivos | ✅ Disponible |
-| `--ast-json <archivo>` | Exporta el AST sintáctico a JSON para el visor gráfico | archivo JSON | ✅ Disponible |
-| `-t` | Imprime el árbol sintáctico abstracto (AST) | stdout | ✅ Disponible |
-| `-m` | Imprime la tabla de símbolos con las direcciones de memoria y la tabla de etiquetas, esta última con la dirección de cada etiqueta (su índice de bundle) | stdout | ✅ Disponible |
-| `-v` | Muestra el avance de cada fase (`ok` o `con errores`), incluido el ensamblado | stderr | ✅ Disponible |
-| `-o <archivo>` | Nombre del binario de salida. Sin `-o`: el nombre del fuente con `.bin` (`prog.cls` → `prog.bin`). Es también el nombre base de las demás salidas | archivos | ✅ Disponible |
-| `-s` | Escribe además el ensamblador (`.asm`) | archivo | ✅ Disponible |
-| `-p` | Muestra cada bundle en ensamblador y en binario | stdout | ✅ Disponible |
-| `-x` | Toma un `.asm` y genera el binario, sin compilar Calser | archivos | ✅ Disponible |
+| `-h`, `--help` | Muestra todas las banderas, ejemplos y códigos de salida, sin requerir entrada | stdout | Disponible |
+| `--time` | Muestra la duración total en milisegundos, con estado completado o fallido | stderr | Disponible |
+| `--no-schedule` | Desactiva el organizador local y conserva la emisión de una operación más separación; útil para comparar | archivos | Disponible |
+| `--ast-json <archivo>` | Exporta el AST sintáctico a JSON para el visor gráfico | archivo JSON | Disponible |
+| `-t` | Imprime el árbol sintáctico abstracto (AST) | stdout | Disponible |
+| `-m` | Imprime la tabla de símbolos con las direcciones de memoria y la tabla de etiquetas, esta última con la dirección de cada etiqueta (su índice de bundle) | stdout | Disponible |
+| `-v` | Muestra el avance de cada fase (`ok` o `con errores`), incluido el ensamblado | stderr | Disponible |
+| `-o <archivo>` | Nombre del binario de salida. Sin `-o`: el nombre del fuente con `.bin` (`prog.cls` → `prog.bin`). Es también el nombre base de las demás salidas | archivos | Disponible |
+| `-s` | Escribe además el ensamblador (`.asm`) | archivo | Disponible |
+| `-p` | Muestra cada bundle en ensamblador y en binario | stdout | Disponible |
+| `-x` | Toma un `.asm` y genera el binario, sin compilar Calser | archivos | Disponible |
 
 Se pueden combinar: `ccom -t -m prog.cls` imprime el AST y después las tablas.
 
@@ -53,6 +55,41 @@ igual con `-` en `Address`; también sale `-` en una etiqueta que no llega al
 .L_func_main | FUNCTION     | AST kind: FUNCTION | Line: 14 | Address: 2
 .L_if_end_1 | END          | AST kind: CONDITIONAL | Line: 2 | Address: 52
 ```
+
+## Ayuda (`-h`, `--help`)
+
+```bash
+./ccom --help
+./ccom -h
+```
+
+Ambas formas muestran la misma ayuda en stdout y devuelven 0, sin requerir
+archivo de entrada ni generar salidas. La ayuda enumera todas las opciones,
+los archivos producidos, ejemplos y códigos de salida. Al encontrar la opción
+de ayuda se termina inmediatamente: no se abre la entrada ni se inicia la
+medición de `--time`. Un error de opciones anterior a la ayuda sigue siendo
+un error de uso (código 2).
+
+## Duración del trabajo (`--time`)
+
+```bash
+./ccom --time -s prog.cls
+# ccom: tiempo de compilacion (completado): 1.234 ms
+```
+
+Mide tiempo de pared con `CLOCK_MONOTONIC`, desde antes de abrir la entrada
+hasta terminar el trabajo y cerrar las salidas. Incluye análisis, generación,
+organización de bundles, ensamblado, escritura y limpieza; con `-t`, `-m`,
+`-p` o `-v` también incluye el costo de sus listados dentro de esas fases.
+No mide la construcción del ejecutable `ccom` ni la ejecución del programa
+compilado. El valor varía entre ejecuciones.
+
+La línea se escribe al final en stderr. Si falla la compilación se informa
+`(fallido)` y se conserva el código de salida original. Con `-x` se etiqueta
+como `ensamblado`; con `--ast-json` sin `-s`, `-m` ni `-p`, como
+`exportacion AST`, pues ese modo termina después del análisis sintáctico.
+Los errores de uso no inician trabajo ni muestran una duración. Si el reloj
+no está disponible se emite un aviso, sin cambiar el resultado del compilador.
 
 ## Archivos de salida
 
@@ -163,14 +200,14 @@ antes del análisis semántico. Con errores léxicos o sintácticos no hay AST.
 
 | Código | Significado |
 |---|---|
-| 0 | Compiló sin errores |
+| 0 | Trabajo completado o ayuda mostrada |
 | 1 | Errores léxicos, sintácticos, semánticos, de generación o de ensamblado, o un archivo de salida que no se pudo escribir |
 | 2 | Error de uso: bandera desconocida, `-o` sin nombre, ningún archivo o más de uno |
 
 Línea de uso que se imprime en los errores de uso:
 
 ```
-uso: ccom [-v] [-t] [-m] [-s] [-p] [-x] [--ast-json <json>] <archivo> [-o <salida>]
+uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-p] [-x] [--ast-json <json>] [--no-schedule] [--time] <archivo> [-o <salida>]
 ```
 
 ## Pruebas

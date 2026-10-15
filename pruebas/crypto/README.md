@@ -80,8 +80,8 @@ resultado contra una referencia independiente de Feistel, constantes de
 32 bits con signo, las cuatro llaves, límites negativos/cero, argumentos
 dinámicos, cifrado en el mismo lugar, temporales vivos, etiquetas únicas y
 separación. El emisor también prueba contratos inválidos y errores del
-evaluador. La autenticación usa el sustituto del simulador (todos los tokens
-salvo 999), no verifica Ascon ni cadenas reales de Lamport.
+evaluador. La autenticación verifica el token Lamport `x99 = 0xF47BD70B`
+contra el ancla inicial `0xFEFF95FF` mediante Ascon-Hash256 truncado a 32 bits.
 
 ## Programa compilado por ccom
 
@@ -102,7 +102,7 @@ inicializadores globales dinámicos se ejecutan al entrar a main; los locales
 se inicializan al recorrer su declaración. Las variables sin inicializador
 se ponen en cero.
 
-`probar_integracion.py`, incluido en `make check-crypto`, comprueba siete
+`probar_integracion.py`, incluido en `make check-crypto`, comprueba once
 escenarios mediante el compilador real: p09 y su ejecución por CLI, argumentos
 calculados (incluida multiplicación), cero y negativos, una variable global
 dinámica, constantes de 32 bits e inicializadores, y fallos de escritura de

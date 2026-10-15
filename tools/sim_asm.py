@@ -2,8 +2,8 @@
 """sim_asm.py — Herramienta de ejecución: modelo de bundles y trazas de la ISA.
 
 Decodifica ensamblador y modela registros, memoria y separación RAW.
-Simula Feistel y bóveda con autenticación de prueba: el token 999 falla;
-no valida Ascon ni una cadena real de Lamport.
+Simula Feistel y bóveda con autenticación Lamport: Ascon-Hash256 de cuatro
+bytes little-endian, truncado a 32 bits, contra el ancla activa.
 
 Usa: biblioteca estándar de Python; listado .asm e imagen .mem.
 Lo usa: ejercicios.py, validar_bundles.py, pruebas y línea de comandos.
@@ -38,6 +38,45 @@ class AsmError(ValueError):
 # ===========================================================================
 # PALABRAS Y OPERANDOS
 # ===========================================================================
+
+
+# Ancla de fábrica: x100 de la cadena con semilla 0xCAFEDECE (isa.md §7.2).
+LAMPORT_INITIAL_ANCHOR = 0xFEFF95FF
+
+
+def auth_hash32(token):
+    """H de la ISA: primeros cuatro bytes de Ascon-Hash256, little-endian.
+
+    Entrada: palabra sin signo de 32 bits. Salida: palabra sin signo de 32 bits.
+    Modelo de tools/lamport.py del proyecto de hardware vliw-block-cipher;
+    contrastado con vectores de la referencia C ascon/ascon-c en las pruebas.
+    La entrada fija de cuatro bytes requiere una permutación de 12 rondas
+    tras la inicialización precalculada y el relleno de NIST SP 800-232.
+    """
+    if not 0 <= token <= MASK:
+        raise ValueError("el token debe ser una palabra sin signo de 32 bits")
+    mask64 = (1 << 64) - 1
+    state = [0x9B1E5494E934D681, 0x4BC3A01E333751D2, 0xAE65396C6B34B81A,
+             0x3C7FD4A4D56A4DB3, 0x1A5C464906C5976D]
+    state[0] ^= token | (1 << 32)  # Cuatro bytes LE y relleno 01 00 00 00.
+    rotations = ((19, 28), (61, 39), (1, 6), (10, 17), (7, 41))
+    for constant in (0xF0, 0xE1, 0xD2, 0xC3, 0xB4, 0xA5,
+                     0x96, 0x87, 0x78, 0x69, 0x5A, 0x4B):
+        state[2] ^= constant
+        state[0] ^= state[4]
+        state[4] ^= state[3]
+        state[2] ^= state[1]
+        temp = [state[j] ^ ((~state[(j + 1) % 5] & mask64) & state[(j + 2) % 5])
+                for j in range(5)]
+        temp[1] ^= temp[0]
+        temp[0] ^= temp[4]
+        temp[3] ^= temp[2]
+        temp[2] = ~temp[2] & mask64
+        state = [word ^ (((word >> r1) | (word << (64 - r1))) & mask64)
+                      ^ (((word >> r2) | (word << (64 - r2))) & mask64)
+                 for word, (r1, r2) in zip(temp, rotations)]
+    return state[0] & MASK
+
 
 def signed(value):
     """signed — interpreta una palabra como entero de 32 bits con signo.
@@ -713,7 +752,7 @@ class Simulator:
         self.auth = False
         self.kv_lock = False
         self.exc = False
-        self.anchor = 0  # Solo observable desde Python, sin hash de autenticación.
+        self.anchor = LAMPORT_INITIAL_ANCHOR  # Nueva instancia: arranque de fábrica.
         self.vault = [[0] * 4 for _ in range(4)]
         self.tracer = None  # Tracer opcional: no cambia la ejecución.
 
@@ -767,14 +806,14 @@ class Simulator:
         Salida:
             palabra de feis si autentica; None si no escribe registro. Efectos: modifica contador, bóveda, banderas, ancla y ciclos.
         Restricciones:
-            autenticación de prueba: token 999 falla; no implementa
-            Ascon/Lamport real.
+            cada auth compara H(token) con el ancla activa; un token
+            aceptado se consume al actualizar el ancla.
         """
         self.crypto_count += 1
         mn, args = op.mnemonic, op.args
         if mn == "auth":
             token = snapshot[args[0]]
-            self.auth = token != 999
+            self.auth = auth_hash32(token) == self.anchor
             self.exc = not self.auth
             if self.auth:
                 self.anchor = token
@@ -976,8 +1015,8 @@ class Simulator:
         lines = [f"Fin: {self.reason}; bundles ejecutados: {self.steps}; ciclos: {self.cycles}",
                  f"Avisos de separación: {len(self.warnings)}"]
         if self.crypto_count:
-            lines.append(f"CRYPTO: {self.crypto_count} instrucciones; autenticación de prueba "
-                         "(sin Ascon; token 999 falla)")
+            lines.append(f"CRYPTO: {self.crypto_count} instrucciones; autenticación Lamport "
+                         "(Ascon-Hash256 truncado a 32 bits)")
             lines.append(f"Estado: AUTH={int(self.auth)} KVLOCK={int(self.kv_lock)} EXC={int(self.exc)}")
         lines.append("Memoria 0x0000–0x00FF (palabras no nulas):")
         words = [(addr, int.from_bytes(self.memory[addr:addr + 4], 'little'))

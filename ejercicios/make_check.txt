@@ -16,6 +16,10 @@ PASS integración expresiones: .cls, .asm, .mem, datos y cero avisos RAW
 PASS integración sin_bloques: .cls, .asm, .mem, datos y cero avisos RAW
 PASS integración bloques_negativos: .cls, .asm, .mem, datos y cero avisos RAW
 PASS integración global_dinamica: .cls, .asm, .mem, datos y cero avisos RAW
+PASS integracion token_arbitrario: autenticacion rechazada y boveda intacta
+PASS integracion token_adelantado: autenticacion rechazada y boveda intacta
+PASS integracion token_reutilizado: autenticacion rechazada y boveda intacta
+PASS ejercicio 3: token Lamport consumido, cifrado y vuelta correcta
 PASS integración constantes: INT32_MIN/MAX, inicializadores locales, cero y matriz global
 PASS error de salida: no informa éxito si no puede escribir .asm/.mem
 PASS AST JSON: estructura, orden, IDs, ubicación, escapes, modo sintáctico, errores y combinación con -s
@@ -46,16 +50,27 @@ PASS corto circuito: r1 = 0, g1 = 0, r2 = 1, g2 = 0, r3 = 1, g3 = 1, r4 = 1, g4 
 PASS p12: ok = 1, p = [1, 1]
 PASS p09: 0x3000 == 0x1000, 0x2000 distinto, 0x4000-0x4007 == 0x1000-0x1007
 PASS p11: n1 = 8, n2 = 8, 0x3000 == 0x1000, 0x2000 distinto
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.006s
+
+OK
+PASS ayuda: -h/--help, opciones, ejemplos, errores y archivos intactos
+PASS --time: exito, errores, modos, stdout y archivos sin cambios
+PASS cuadradas (con organizador): 12 matrices verificadas
+PASS cuadradas (sin organizador): 12 matrices verificadas
+PASS rectangulares (con organizador): 4 matrices verificadas
+PASS rectangulares (sin organizador): 4 matrices verificadas
 PASS 25 programas, 258 etiquetas de tabla: cada una definida una vez en el .asm y ninguna del .asm fuera de la tabla
 PASS excepciones por prefijo: __ccom_arith_* 68, __ccom_array_* 3, .L_crypto_* 14
 PASS direcciones: Address de -m = bundle contado en el .asm = tabla anotada; "-" solo en las que no llegan al .asm
 PASS inicializadores globales: & constante sin etiqueta en el .asm; & no constante con su etiqueta al inicio de main
-PASS simulador: 45 casos (parser, pipeline, cifrado, traza de ejecución)
+PASS simulador: 48 casos (parser, pipeline, cifrado, traza de ejecución)
 PASS IR: ISA, dependencias, efectos, slots, fronteras, copia de textos y liberacion
 PASS dependencias: 19 calendarios invalidos rechazados; RAW, WAR, WAW, memoria, control, cobertura y slots
 pruebas/p02_factorial.cls: 54 operaciones, 2 bundles fijos, 123 registros IR
-pruebas/p09_crypto.cls: 60 operaciones, 52 bundles fijos, 231 registros IR
-pruebas/p11_ejercicio3.cls: 605 operaciones, 70 bundles fijos, 1410 registros IR
+pruebas/p09_crypto.cls: 61 operaciones, 52 bundles fijos, 233 registros IR
+pruebas/p11_ejercicio3.cls: 606 operaciones, 70 bundles fijos, 1412 registros IR
 pruebas/programas/factorial_r.cls: 52 operaciones, 2 bundles fijos, 117 registros IR
 PASS IR del generador: factorial, crypto, ejercicio 3 y R sin operaciones desconocidas
 PASS emisor del organizador: escenarios de dependencias, fronteras y 128 programas aleatorios
@@ -63,9 +78,9 @@ PASS calendario rechazado: diagnóstico y ningún callback de emisión ejecutado
 PASS organizador: 143 ejecuciones equivalentes, fallback y protección de entrada fija
 PASS anotaciones: almacenamiento y salto comparten bundle y conservan sus líneas individuales
 PASS factorial: ciclos 337 → 231; bundles 110 → 80; dos ALU ejecutadas 14 veces; f=120
-PASS compilador: 26 programas equivalentes con y sin organizador, cero avisos
-PASS salidas: 26 programas × 2 modos; ASM, BIN, HEX, MEM, -m, -p y reensamblado coherentes
-PASS BRU: 720 instrucciones codificadas con destinos/registros finales correctos
+PASS compilador: 28 programas equivalentes con y sin organizador, cero avisos
+PASS salidas: 28 programas × 2 modos; ASM, BIN, HEX, MEM, -m, -p y reensamblado coherentes
+PASS BRU: 814 instrucciones codificadas con destinos/registros finales correctos
 PASS reubicación factorial: .L_func_factorial 38 → 28; bundles 110 → 80
 PASS factorial: 120; ciclos 337 → 231 (31.45% menos)
 PASS paralelismo: ambas ALU ejecutadas 14 veces; cero avisos

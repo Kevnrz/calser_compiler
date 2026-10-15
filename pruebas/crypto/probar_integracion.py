@@ -50,6 +50,7 @@ def main():
                 assert not any(sim.memory[0x3000:0x3400]), name
             assert sim.memory[0x4000:0x4008] == data[:8], name
             assert not sim.auth and sim.kv_lock and sim.exc
+            assert sim.anchor == 0xF47BD70B, name
             if name == 'p09':
                 payload = directory / 'datos.bin'
                 payload.write_bytes(data)
@@ -60,6 +61,26 @@ def main():
                 assert result.returncode == 0, result.stderr
                 assert dump.read_bytes() == sim.memory
             print(f'PASS integración {name}: .cls, .asm, .mem, datos y cero avisos RAW')
+        # El recorrido completo debe denegar tokens arbitrarios, adelantados
+        # y repetidos, no solo pasar las pruebas positivas del cifrado.
+        auth = 'autenticar [ -193210613 ] ;'
+        for name, replacement in [
+            ('token_arbitrario', 'autenticar [ 1234567 ] ;'),
+            ('token_adelantado', 'autenticar [ -1538054470 ] ;'),
+            ('token_reutilizado', auth + '\n    ' + auth),
+        ]:
+            sim, _, _ = compile_run(original_program.replace(auth, replacement), data, directory, name)
+            assert not sim.auth and sim.exc and not sim.kv_lock, name
+            assert sim.vault == [[0] * 4 for _ in range(4)], name
+            assert sim.anchor == (0xF47BD70B if name == 'token_reutilizado' else 0xFEFF95FF), name
+            print(f'PASS integracion {name}: autenticacion rechazada y boveda intacta')
+        exercise = (ROOT / 'pruebas/p11_ejercicio3.cls').read_text()
+        sim, _, _ = compile_run(exercise, data, directory, 'ejercicio3_lamport')
+        assert not sim.auth and sim.kv_lock and not sim.exc
+        assert sim.anchor == 0xF47BD70B
+        assert sim.memory[0x3000:0x3400] == data
+        assert sim.memory[0x2000:0x2400] != data
+        print('PASS ejercicio 3: token Lamport consumido, cifrado y vuelta correcta')
         source = '''Vi minimo: int = -2147483648 ;
 Vi maximo: int = 2147483647 ;
 Vi lista: int [2][2] = [[1, 2], [3, 4]] ;

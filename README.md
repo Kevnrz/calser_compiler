@@ -58,6 +58,7 @@ Una entrada correcta devuelve código `0`. Los errores de análisis devuelven
 
 | Opción | Función |
 | --- | --- |
+| `-h`, `--help` | Mostrar todas las banderas, ejemplos y códigos de salida |
 | `-t` | Mostrar el AST en terminal |
 | `-m` | Mostrar las tablas de símbolos y etiquetas |
 | `-v` | Mostrar el avance de cada fase |
@@ -66,7 +67,25 @@ Una entrada correcta devuelve código `0`. Los errores de análisis devuelven
 | `-p` | Mostrar cada bundle en ensamblador y en binario |
 | `-x` | Ensamblar una entrada `.asm` y generar `.bin`, `.hex` y `.mem`, sin compilar Calser |
 | `--ast-json <archivo>` | Exportar el AST para el visor gráfico |
+| `--time` | Mostrar en stderr la duración total del trabajo en milisegundos |
 | `--no-schedule` | Usar emisión conservadora para comparar bundles y ciclos |
+
+Para consultar todas las opciones sin compilar:
+
+```bash
+./ccom --help
+```
+
+Para medir cuánto tarda la compilación del programa:
+
+```bash
+./ccom --time pruebas/p02_factorial.cls
+```
+
+El tiempo incluye análisis, generación, organización, ensamblado y escritura
+de salidas; también se informa si el trabajo falla. Se mide tiempo de pared
+con un reloj monotónico. Con `-x` se mide el ensamblado y con `--ast-json`
+solo se mide la exportación del AST.
 
 Consulta los detalles en [Uso y banderas de ccom](docs/ccom_banderas.md).
 
@@ -175,6 +194,23 @@ make ejercicios
 
 ## Pruebas
 
+El ejecutor opcional permite elegir suites y muestra un resumen de resultados:
+
+```bash
+python3 tools/probar.py --listar
+python3 tools/probar.py matrices tiempo ayuda
+python3 tools/probar.py                   # todas las suites
+python3 tools/probar.py --sin-compilar matrices
+python3 tools/probar.py --caso pruebas/p02_factorial.cls
+python3 tools/probar.py --caso pruebas/e01_no_declarado.cls --codigo-esperado 1
+```
+
+Make se usa solo para preparar los binarios requeridos; `--sin-compilar` evita
+ese paso. El script es independiente de `ccom` y no se ejecuta al compilar
+normalmente. `--caso` comprueba el código de salida del compilador; las suites
+`programas` y `matrices` también verifican valores finales en el simulador.
+Consultar [la guía del ejecutor](docs/pruebas.md) para más opciones.
+
 Para ejecutar los casos del compilador y guardar errores, tablas y códigos
 de salida en un reporte:
 
@@ -195,6 +231,7 @@ Para verificar las rutinas de generación de código:
 ```bash
 make check-arith
 make check-arrays
+make check-matrices
 make check-crypto
 make check-bundles
 make check-salidas
@@ -213,6 +250,10 @@ less build/validacion_bundles/reporte.md
 El reporte está en `build/validacion_bundles/`, junto a los archivos de ambos
 modos. Comprueba resultado 120, paralelismo realmente ejecutado, cero avisos
 y reducción de ciclos, además de seis entradas auxiliares.
+
+Las [pruebas matriciales](pruebas/matrices/README.md) verifican suma, resta y
+productos con ciclos e índices, incluyendo AB distinto de BA, matrices
+rectangulares, identidad y ceros, con y sin organización de bundles.
 
 Estas pruebas usan un modelo de software de la arquitectura objetivo. Las
 pruebas crypto incluyen el recorrido `.cls` → `ccom` → `.asm`/`.mem` →

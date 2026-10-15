@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <sys/stat.h>
+#include <time.h>
 
 #include "semantic.h"
 #include "diagnostics.h"
@@ -36,6 +37,8 @@ extern int lexical_errors;
  *
  *   ccom [opciones] <archivo> [-o <salida>]
  *
+ *   -h, --help  muestra ayuda y termina sin compilar
+ *   --time  muestra la duracion total en stderr
  *   -t  imprime el AST
  *   -m  imprime la tabla de símbolos con direcciones y la de etiquetas
  *   -v  imprime en stderr el avance de cada fase
@@ -50,6 +53,7 @@ extern int lexical_errors;
 typedef struct {
     const char *input;         /* archivo fuente (.cls) o, con -x, .asm      */
     char       *output;        /* -o; por defecto: fuente sin extensión .bin */
+    int show_time;             /* --time */
     int verbose;               /* -v */
     int emit_asm;              /* -s */
     const char *ast_json;       /* --ast-json archivo */
@@ -62,7 +66,69 @@ typedef struct {
 
 #define EXIT_USAGE 2
 
-#define USAGE "uso: ccom [-v] [-t] [-m] [-s] [-p] [-x] [--ast-json <json>] [--no-schedule] <archivo> [-o <salida>]"
+#define USAGE "uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-p] [-x] [--ast-json <json>] [--no-schedule] [--time] <archivo> [-o <salida>]"
+
+/*
+ * print_help — describe las opciones sin requerir ni procesar una entrada.
+ *
+ * Entrada: ninguna. Salida: ninguna; escribe la ayuda en stdout.
+ * Restricciones: mantener las opciones alineadas con getopt_long en main.
+ */
+static void print_help(void) {
+    puts(USAGE);
+    puts("\nCompila un fuente Calser (.cls); con -x ensambla un archivo .asm.\n"
+         "Las opciones pueden ir antes o despues del archivo.\n"
+         "\nOpciones:\n"
+         "  -h, --help           Muestra esta ayuda y termina sin compilar.\n"
+         "  -t                   Muestra el arbol sintactico (AST).\n"
+         "  -m                   Muestra las tablas de simbolos y etiquetas.\n"
+         "  -v                   Muestra el avance de las fases en stderr.\n"
+         "  -o <salida>          Nombre del .bin y base de las demas salidas.\n"
+         "  -s                   Escribe ademas el ensamblador .asm.\n"
+         "  -p                   Muestra los bundles en ensamblador y binario.\n"
+         "  -x                   Ensambla la entrada .asm; ignora -s, -t y -m.\n"
+         "  --ast-json <json>    Exporta el AST; sin -s, -m ni -p termina\n"
+         "                       despues del analisis sintactico.\n"
+         "  --no-schedule        Desactiva la organizacion de bundles.\n"
+         "  --time               Muestra la duracion total en ms en stderr.\n"
+         "\nSalidas: .bin, .hex y .mem; con -s tambien .asm.\n"
+         "Sin -o se usa el nombre de la entrada con extension .bin.\n"
+         "\nEjemplos:\n"
+         "  ccom programa.cls\n"
+         "  ccom --time -s programa.cls -o salida.bin\n"
+         "  ccom -x programa.asm\n"
+         "  ccom --ast-json arbol.json programa.cls\n"
+         "\nCodigos de salida:\n"
+         "  0  Trabajo completado o ayuda mostrada.\n"
+         "  1  Error de compilacion, ensamblado o archivos.\n"
+         "  2  Uso incorrecto de la linea de comandos.");
+}
+
+/*
+ * report_elapsed — muestra tiempo de pared medido con reloj monotónico.
+ *
+ * Entrada: inicio válido, opciones y código de salida del trabajo realizado.
+ * Salida: ninguna; escribe en stderr, sin alterar el código de salida.
+ * Restricciones: llamar solo si --time obtuvo la lectura inicial del reloj.
+ */
+static void report_elapsed(const Options *options, const struct timespec *start,
+                           int code) {
+    struct timespec end;
+    if (clock_gettime(CLOCK_MONOTONIC, &end) != 0) {
+        fprintf(stderr, "ccom: aviso: no se pudo medir la duracion\n");
+        return;
+    }
+
+    double milliseconds = (double) (end.tv_sec - start->tv_sec) * 1000.0
+                        + (double) (end.tv_nsec - start->tv_nsec) / 1000000.0;
+    const char *operation = options->assemble_only ? "ensamblado" : "compilacion";
+    if (!options->assemble_only && options->ast_json && !options->emit_asm &&
+        !options->print_memory && !options->print_bundles)
+        operation = "exportacion AST";
+
+    fprintf(stderr, "ccom: tiempo de %s (%s): %.3f ms\n", operation,
+            code == 0 ? "completado" : "fallido", milliseconds);
+}
 
 /* ==========================================================================
  * NOMBRES Y ARCHIVOS DE SALIDA
@@ -721,7 +787,7 @@ static int compile(const Options *options) {
  *   0 si completa; 1 si falla; 2 por uso incorrecto.
  *   Efectos: getopt_long puede reordenar argv; lee/escribe archivos y mensajes.
  * Restricciones:
- *   exactamente una entrada; -s se ignora con -x.
+ *   exactamente una entrada salvo ayuda; -s se ignora con -x.
  */
 int main(int argc, char **argv) {
     Options options = { 0 };
@@ -730,13 +796,20 @@ int main(int argc, char **argv) {
     // Sin '+' al inicio: getopt reordena, así que las opciones pueden ir
     // antes o después del archivo (ccom prog.cls -o prog.bin).
     static const struct option long_options[] = {
+        {"help", no_argument, NULL, 'h'},
         {"ast-json", required_argument, NULL, 1000},
         {"no-schedule", no_argument, NULL, 1001},
+        {"time", no_argument, NULL, 1002},
         {NULL, 0, NULL, 0}
     };
-    while ((option = getopt_long(argc, argv, "o:vstmxp", long_options, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "ho:vstmxp", long_options, NULL)) != -1) {
 
         switch (option) {
+
+            case 'h':
+                print_help();
+                free(options.output);
+                return 0;
 
             case 'o':
                 free(options.output);
@@ -751,6 +824,7 @@ int main(int argc, char **argv) {
 
             case 1000: options.ast_json = optarg; break;
             case 1001: options.no_schedule = 1; break;
+            case 1002: options.show_time = 1; break;
             case 'v': options.verbose = 1;       break;
             case 's': options.emit_asm = 1;      break;
             case 't': options.print_ast = 1;     break;
@@ -783,6 +857,13 @@ int main(int argc, char **argv) {
         }
     }
 
+    struct timespec start;
+    int timed = options.show_time;
+    if (timed && clock_gettime(CLOCK_MONOTONIC, &start) != 0) {
+        fprintf(stderr, "ccom: aviso: no se pudo medir la duracion\n");
+        timed = 0;
+    }
+
     int code;
 
     if (options.assemble_only) {
@@ -796,6 +877,9 @@ int main(int argc, char **argv) {
     else {
         code = compile(&options);
     }
+
+    if (timed)
+        report_elapsed(&options, &start, code);
 
     free(options.output);
 

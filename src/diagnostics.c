@@ -5,7 +5,7 @@
  * incluyen el texto y un señalador que conserva las tabulaciones.
  *
  * Usa: diagnostics.h; biblioteca C.
- * Lo usa: lexer.l, parser.y, semantic.c y main.c.
+ * Lo usa: lexer.l, parser.y, semantic.c, semantic_expr.c y main.c.
  * Referencias: enunciado §8.2 (referencia ya citada en el código).
  */
 

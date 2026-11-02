@@ -5,7 +5,7 @@
  * de bundles fijos para bóveda, autenticación y cuatro rondas Feistel.
  *
  * Usa: codegen.h, AST anotado y evaluador del llamador.
- * Lo usa: generate.c y pruebas/crypto.
+ * Lo usa: generate_expr.c y pruebas/crypto.
  * Referencias: isa.md §5.5, §6.4, §7, §9.3; docs/crypto_para_ccom.md.
  */
 
@@ -56,11 +56,11 @@ static int valid_area(const CGCryptoContext *ctx) {
     if (ctx->live_mask == 0)
         return 1;
     const Symbol *f = ctx->function;
-    if (f == NULL || f->kind != SYMBOL_FUNCTION || f->area_base < 0 ||
-        f->area_size < 48 || f->temp_base < f->area_base || f->temp_base % 4)
+    if (f == NULL || f->kind != SYMBOL_FUNCTION || f->frame.area_base < 0 ||
+        f->frame.area_size < 48 || f->frame.temp_base < f->frame.area_base || f->frame.temp_base % 4)
         return 0;
-    int64_t end = (int64_t) f->area_base + f->area_size;
-    return (int64_t) f->temp_base + 48 <= end && end <= CG_DATA_BYTES;
+    int64_t end = (int64_t) f->frame.area_base + f->frame.area_size;
+    return (int64_t) f->frame.temp_base + 48 <= end && end <= CG_DATA_BYTES;
 }
 
 /*
@@ -80,7 +80,7 @@ static void save_live(const CGCryptoContext *ctx) {
     cg_gap();  /* La última expresión del llamador puede haber escrito un vivo. */
     for (int r = 4; r < 16; r++)
         if (ctx->live_mask & (1u << r))
-            cg_op(SLOT_LSU, "sw r%d, %d(rz)", r, ctx->function->temp_base + 4 * (r - 4));
+            cg_op(SLOT_LSU, "sw r%d, %d(rz)", r, ctx->function->frame.temp_base + 4 * (r - 4));
 }
 
 /*
@@ -97,7 +97,7 @@ static void save_live(const CGCryptoContext *ctx) {
 static void restore_live(const CGCryptoContext *ctx) {
     for (int r = 4; r < 16; r++)
         if (ctx->live_mask & (1u << r))
-            cg_op(SLOT_LSU, "lw r%d, %d(rz)", r, ctx->function->temp_base + 4 * (r - 4));
+            cg_op(SLOT_LSU, "lw r%d, %d(rz)", r, ctx->function->frame.temp_base + 4 * (r - 4));
 }
 
 /*

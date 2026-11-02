@@ -58,7 +58,7 @@ los valores originales, incluso los registros usados para argumentos.
 llamadas o spills. Su adaptador debe coordinar esta reserva con su asignador de
 registros/memoria; si no puede evaluarlo conservando `preserve_mask` y las
 casillas guardadas, debe devolver error. No asumir que sus spills actuales ya
-son compatibles. El adaptador de `generate.c` guarda los argumentos previos en casillas libres
+son compatibles. El adaptador de `generate_expr.c` guarda los argumentos previos en casillas libres
 del área temporal, evalúa la expresión y los recupera. Rechaza una evaluación
 si no hay casillas libres suficientes; nunca reutiliza las casillas de los
 temporales vivos guardados por el módulo.

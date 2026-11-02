@@ -21,7 +21,7 @@ int main(void) {
         snprintf(text, sizeof text, "%s t0, r5, t2", alu[i]);
         for (int slot = 0; slot < 2; slot++) {
             CGInstruction ins = describe(text, (Slot) slot, B(5)|B(6), B(4), 3);
-            assert(ins.unit == CG_UNIT_ALU);
+            assert(ins.unit == ISA_UNIT_ALU);
             assert(ins.effects == (strcmp(alu[i], "ifmov") == 0 ? CG_EFFECT_CONDITIONAL_WRITE : 0u));
         }
     }
@@ -92,7 +92,7 @@ int main(void) {
     r = cg_ir_record(4);
     assert(r->kind == CG_IR_FIXED_BUNDLE && r->bundle_address == 3);
     assert(!strcmp(r->data.slots[0].text, "add t1, t1, t2"));
-    assert(r->data.slots[1].unit == CG_UNIT_CRYPTO && r->data.slots[2].unit == CG_UNIT_NONE);
+    assert(r->data.slots[1].unit == ISA_UNIT_CRYPTO && r->data.slots[2].unit == ISA_UNIT_NONE);
     assert(r->data.slots[3].effects == CG_EFFECT_MEMORY_WRITE);
     assert(!strcmp(cg_line(1), "{ mov t0, 3 | nopi | nopi | nopi }"));
     assert(!strcmp(cg_line(4), "{ add t1, t1, t2 | feis t3, t3, t4, 0, 1 | nopi | sw t5, 0(t6) }"));

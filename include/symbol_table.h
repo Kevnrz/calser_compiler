@@ -5,7 +5,7 @@
  * Los contratos indican entradas, resultados, efectos y límites de uso.
  *
  * Usa: tipos de la biblioteca C y declaraciones propias.
- * Lo usa: symbol_table.c; semantic.c, generate.c y codegen_array.c/codegen_crypto.c.
+ * Lo usa: symbol_table.c; semantic*.c, generate*.c y codegen_array.c/codegen_crypto.c.
  * Referencias: libro §2.7, §6.3.4, §7.1.1.
  */
 
@@ -38,6 +38,20 @@ typedef enum {
 
 #define MAX_DIMS 2   // Calser admite hasta 2 dimensiones (gramática: dims)
 
+/*
+ * FrameLayout — área estática de una función (libro §7.1.1).
+ *
+ * La asigna el semántico al analizar el cuerpo: empieza en area_base, sigue
+ * con la casilla de rl, la variable de retorno, los parámetros y las locales,
+ * y termina con las 12 casillas de t0–t11. Solo tiene sentido en símbolos de
+ * función; en los demás queda en los valores iniciales.
+ */
+typedef struct {
+    int area_base;             // inicio del área estática; -1 = sin asignar
+    int area_size;             // tamaño del área en bytes
+    int temp_base;             // inicio de las 12 casillas de temporales; -1 = sin asignar
+} FrameLayout;
+
 typedef struct Symbol {
     char *name;
 
@@ -58,9 +72,7 @@ typedef struct Symbol {
 
     // Solo funciones
     int parameter_count;
-    int area_base;             // inicio del área estática; -1 = sin asignar
-    int area_size;             // tamaño del área en bytes
-    int temp_base;             // inicio de las 12 casillas de temporales; -1 = sin asignar
+    FrameLayout frame;         // área estática de la función (ver FrameLayout)
     int limit_address;         // variable de control de un S: casilla oculta donde
                                // se guarda el fin del ciclo; -1 = no aplica
     struct Symbol **param_list; // parámetros EN ORDEN. Punteros NO dueños:

@@ -148,9 +148,14 @@ calser_compiler/
 ├── src/                 # Implementación en C
 ├── include/             # Cabeceras de los módulos
 ├── grammar/             # lexer.l (Flex) y parser.y (Bison)
-├── pruebas/             # Programas Calser y pruebas de generación de código
-│   ├── aritmetica/
-│   └── arreglos/
+├── pruebas/             # Programas Calser y una carpeta por suite de pruebas
+│   ├── aritmetica/ arreglos/ crypto/        # rutinas de generación, por separado
+│   ├── ast/ ayuda/ tiempo/ ejecutor/        # AST, banderas, --time y el ejecutor
+│   ├── ensamblador/ simulador/ etiquetas/   # ensamblado, simulador y etiquetas
+│   ├── bundles/ matrices/ programas/        # organizador, matrices y programas
+│   └── p*.cls  e*.cls                       # programas válidos y casos de error
+├── tools/               # Simulador, ejecutor de pruebas, generador de ejercicios y visor del AST
+├── ejercicios/          # Entregables de los tres ejercicios
 ├── docs/                # Documentación del compilador
 ├── assets/branding/     # Logo del lenguaje e icono de los programas
 ├── editors/vscode/      # Extensión para Calser, Lex/Flex y Yacc/Bison
@@ -159,15 +164,37 @@ calser_compiler/
 └── README.md
 ```
 
-| Módulo | Responsabilidad |
-| --- | --- |
-| `main` | Opciones de ejecución y coordinación de las fases |
-| `ast` | Construcción, impresión y liberación del AST |
-| `semantic` | Análisis semántico |
-| `symbol_table` | Símbolos, ámbitos y direcciones |
-| `label_table` | Tabla de etiquetas |
-| `diagnostics` | Reporte de errores |
-| `codegen_arith` / `codegen_array` | Rutinas de generación de código con pruebas independientes |
+Los módulos con interfaz propia tienen su `include/<módulo>.h`. `main` no
+tiene cabecera; `semantic_expr`, `semantic_crypto` y los `generate_*` comparten
+`semantic_internal.h` y `generate_internal.h`; `codegen_instruction` y
+`codegen_verify` se declaran en `codegen.h` y `codegen_schedule.h`.
+
+| Grupo | Módulo | Responsabilidad |
+| --- | --- | --- |
+| Entrada | `main` | Opciones de ejecución; coordina las fases con un estado de compilación y una función por fase |
+| | `diagnostics` | Reporte de errores con archivo, línea y columna |
+| | `ast` | Construcción, impresión, exportación JSON y liberación del AST; consultas de hijos |
+| Semántico | `semantic` | Recorrido del análisis: firmas, declaraciones, bloques y funciones |
+| | `semantic_scope` | Ámbitos, función en análisis y resolución de nombres |
+| | `semantic_expr` | Tipos de expresiones, usos con corchetes, constantes, condiciones, asignaciones e inicializadores |
+| | `semantic_calls` | Grafo de llamadas y detección de recursión |
+| | `semantic_crypto` | Verificación de las operaciones de cifrado |
+| | `data_area` | Contador de la memoria de datos estática y su límite |
+| | `symbol_table` | Símbolos, ámbitos y el área estática de cada función (`FrameLayout`) |
+| | `label_table` | Tabla de etiquetas y sus direcciones |
+| | `semantic_internal` | Cabecera interna: errores semánticos y tipos de expresión compartidos |
+| Generación | `generate` | Recorrido del programa: globales, `main` primero y el resto de las funciones |
+| | `generate_support` | Registros temporales, constantes, variables en memoria, pila y etiquetas |
+| | `generate_expr` | Expresiones, aritmética por software, arreglos, llamadas y CRYPTO |
+| | `generate_stmt` | Bloques, asignaciones, `C`/`A`, ciclos `L` y `S`, `E` y `R` |
+| | `generate_init` | Inicializadores de variables, en la imagen de datos o en código |
+| | `generate_internal` | Cabecera interna: `GenCtx`, el estado de una generación |
+| | `codegen_arith` / `codegen_array` / `codegen_crypto` | Rutinas de aritmética, arreglos y CRYPTO, con pruebas independientes |
+| Salida | `codegen` | Emisor: IR, líneas, bundles e imagen de datos |
+| | `codegen_instruction` | Descripción de cada instrucción (unidad, registros, efectos) para las dependencias |
+| | `codegen_schedule` / `codegen_verify` | Organizador de bundles y verificación de su calendario |
+| | `isa_table` | Tabla única de instrucciones de la ISA y lectura de registros y enteros |
+| | `assembler` | Ensamblador de dos pasadas: etiquetas y codificación de bundles |
 
 Las cabeceras están en `include/` y las implementaciones en `src/`. Flex y
 Bison generan sus archivos en `build/generated/`; los objetos y dependencias
@@ -223,8 +250,8 @@ El reporte se escribe en `pruebas/resultados.txt`. Este script recopila
 resultados para su revisión; no compara automáticamente salidas esperadas.
 
 El organizador local de bundles está activado por defecto y verifica cada
-calendario antes de emitirlo. Sus dependencias,
-pruebas y comparación de factorial con `--no-schedule` se documentan en [Organización de bundles](docs/organizacion_bundles.md).
+calendario antes de emitirlo. Su uso y la comparación de factorial con
+`--no-schedule` están en [Organización de bundles](docs/ccom_banderas.md#organización-de-bundles).
 
 Para verificar las rutinas de generación de código:
 

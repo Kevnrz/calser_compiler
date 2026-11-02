@@ -5,7 +5,7 @@
  * Los contratos indican entradas, resultados, efectos y límites de uso.
  *
  * Usa: ast.h.
- * Lo usa: label_table.c; main.c y generate.c.
+ * Lo usa: label_table.c; main.c, generate.h y generate_internal.h.
  * Referencias: libro §6.7 (backpatching); enunciado §2.3–§2.5.
  */
 

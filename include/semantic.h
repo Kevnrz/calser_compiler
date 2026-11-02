@@ -1,11 +1,11 @@
 /*
  * semantic.h — Fase 3: interfaz de análisis de ámbitos, tipos y direcciones estáticas.
  *
- * Expone análisis del AST, consulta de direcciones y salida de símbolos.
+ * Expone análisis del AST y salida de símbolos.
  * Los contratos indican entradas, resultados, efectos y límites de uso.
  *
  * Usa: ast.h.
- * Lo usa: semantic.c; main.c y generate.c.
+ * Lo usa: semantic.c y main.c.
  * Referencias: libro §1.6.3, §2.7, §6.3.4, §6.5, §7.1.1.
  */
 
@@ -59,19 +59,6 @@ void semantic_print_symbols(void);
  *   tabla vigente del análisis; el llamador comprueba errores del flujo.
  */
 void semantic_fprint_symbols(FILE *out, const char *prefix);
-
-/*
- * semantic_data_end — consulta la primera dirección libre del área estática.
- *
- * Entrada: ninguna
- * Salida:
- *   desplazamiento en bytes, múltiplo de 4.
- *   Efectos: ninguno.
- * Restricciones:
- *   consultar después de un análisis exitoso para usarlo como base de
- *   pila.
- */
-int semantic_data_end(void);
 
 /*
  * semantic_free — libera ámbitos, símbolos y grafo del análisis.

@@ -5,7 +5,7 @@
  * Conserva tipo, forma, direcciones y parámetros ordenados de las funciones.
  *
  * Usa: symbol_table.h; biblioteca C.
- * Lo usa: semantic.c; generate.c y codegen_* leen símbolos anotados.
+ * Lo usa: semantic*.c; generate*.c y codegen_* leen símbolos anotados.
  * Referencias: libro §2.7, §6.3.4, §7.1.1.
  */
 
@@ -74,9 +74,9 @@ Symbol *symbol_create(const char *name,
     symbol->dim_sizes[1] = 0;
 
     symbol->parameter_count = 0;
-    symbol->area_base = -1;
-    symbol->area_size = 0;
-    symbol->temp_base = -1;
+    symbol->frame.area_base = -1;
+    symbol->frame.area_size = 0;
+    symbol->frame.temp_base = -1;
     symbol->limit_address = -1;
     symbol->param_list = NULL;
     symbol->param_capacity = 0;
@@ -443,9 +443,9 @@ void symbol_table_fprint(FILE *out, Scope *scope, const char *prefix,
 
                 fprintf(out, "]");
 
-                print_address(out, "area", symbol->area_base);
-                fprintf(out, " size=%d", symbol->area_size);
-                print_address(out, "temp_base", symbol->temp_base);
+                print_address(out, "area", symbol->frame.area_base);
+                fprintf(out, " size=%d", symbol->frame.area_size);
+                print_address(out, "temp_base", symbol->frame.temp_base);
             }
             else {
 

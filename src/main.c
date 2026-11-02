@@ -217,6 +217,21 @@ static void report_phase(const Options *options, const char *phase, int ok) {
 }
 
 /*
+ * report_oom — informa que falló una reserva de memoria.
+ *
+ * Entrada: ninguna
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe el mensaje de memoria insuficiente en stderr.
+ * Restricciones:
+ *   el llamador decide el código de salida; un solo texto para todos los
+ *   puntos donde main.c reserva memoria.
+ */
+static void report_oom(void) {
+    fprintf(stderr, "ccom: error: memoria insuficiente\n");
+}
+
+/*
  * open_output — abre un archivo con el nombre base de -o.
  *
  * Entrada:
@@ -235,7 +250,7 @@ static FILE *open_output(const Options *options, const char *extension,
     *path = with_extension(options->output, extension);
 
     if (*path == NULL) {
-        fprintf(stderr, "ccom: error: memoria insuficiente\n");
+        report_oom();
         return NULL;
     }
 
@@ -488,7 +503,7 @@ static int assemble_file(const Options *options) {
     int code = 1;
 
     if (failed)
-        fprintf(stderr, "ccom: error: memoria insuficiente\n");
+        report_oom();
     else
         code = assemble_and_write(options, (const char *const *) lines, count,
                                   options->input, NULL, 0);
@@ -507,24 +522,86 @@ static int assemble_file(const Options *options) {
 
 
 /*
- * compile — coordina las fases de compilación y las salidas.
+ * Compilation — estado de una compilación en curso.
+ *
+ * Reúne lo que cada fase crea y lo que hay que liberar al terminar, para que
+ * todas las salidas (éxito o error) cierren con compile_release. Cada campo
+ * dice hasta dónde llegó la compilación: compile_release libera solo eso.
+ */
+typedef struct {
+    const Options *options;
+    ASTNode *root;         /* AST entregado por el parser; NULL si no hubo   */
+    LabelTable *labels;    /* tabla de etiquetas; NULL hasta construirla     */
+    int semantic_started;  /* hay tabla de símbolos que liberar              */
+    int codegen_started;   /* hay código generado que liberar                */
+    int exit_code;         /* código de salida cuando una fase corta el paso */
+} Compilation;
+
+/*
+ * compile_release — libera lo que las fases dejaron vivo.
  *
  * Entrada:
- *   options  opciones con rutas y banderas.
+ *   compilation  estado de la compilación no NULL.
  * Salida:
- *   0 si completa; 1 si falla alguna fase o salida.
- *   Efectos: lee fuente, crea/libera AST/tablas/IR; escribe archivos y diagnósticos.
+ *   ninguna (solo efectos).
+ *   Efectos: libera etiquetas, símbolos, código, AST y líneas del fuente.
  * Restricciones:
- *   --ast-json solo puede terminar antes del semántico; símbolos deben
- *   vivir hasta terminar generación.
+ *   el orden importa: semantic_free invalida los enlaces symbol del AST, así
+ *   que va antes de ast_free; diag_free va al final y siempre se ejecuta.
  */
-static int compile(const Options *options) {
-    yyin = fopen(options->input, "r");
+static void compile_release(Compilation *compilation) {
+    if (compilation->labels != NULL) {
+        label_table_destroy(compilation->labels);
 
-    if (!yyin) {
-        perror("fopen");
-        return 1;
+        free(compilation->labels);
     }
+
+    if (compilation->semantic_started)
+        semantic_free();
+
+    if (compilation->codegen_started)
+        cg_free();
+
+    if (compilation->root != NULL)
+        ast_free(compilation->root);
+
+    diag_free();
+}
+
+/*
+ * print_labels — imprime la tabla de etiquetas cuando se pidió -m.
+ *
+ * Entrada:
+ *   compilation  estado con la tabla de etiquetas ya construida.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: escribe la tabla en stdout si -m está activo.
+ * Restricciones:
+ *   la tabla se imprime al final, con las direcciones que se conozcan
+ *   (enunciado CE1108 §2.3): el nombre y el nodo salen de la Fase 3, pero
+ *   la dirección de cada etiqueta solo existe después de generar el código
+ *   (§2.4) y ensamblarlo (§2.5). Sin código generado se imprime con "-".
+ */
+static void print_labels(const Compilation *compilation) {
+    if (compilation->options->print_memory)
+        label_table_print(compilation->labels);
+}
+
+/*
+ * phase_parse — fases 1–2: análisis léxico y sintáctico.
+ *
+ * Entrada:
+ *   compilation  estado con options; el fuente ya está abierto en yyin.
+ * Salida:
+ *   1 si hay AST y la compilación sigue; 0 si corta (exit_code queda en 1).
+ *   Efectos: inicializa diagnósticos, construye el AST y reporta errores.
+ * Restricciones:
+ *   con errores léxicos no se sigue: la recuperación (descartar, truncar,
+ *   sustituir por 0) cambia el programa y el semántico podría reportar
+ *   errores que no existen.
+ */
+static int phase_parse(Compilation *compilation) {
+    const Options *options = compilation->options;
 
     // §8.2: los errores muestran el archivo y la línea del programa.
     diag_init(options->input);
@@ -533,37 +610,53 @@ static int compile(const Options *options) {
 
     fclose(yyin);
 
-    // Con errores léxicos no hay AST, tabla ni análisis semántico: la
-    // recuperación (descartar, truncar, sustituir por 0) cambia el programa
-    // y el semántico podría reportar errores que no existen.
+    // Solo hay AST que liberar si el parser terminó bien.
+    if (result == 0)
+        compilation->root = root;
+
     if (lexical_errors > 0) {
-
-        if (result == 0)
-            ast_free(root);
-
         fprintf(stderr,
                 "Analisis lexico fallido: %d error(es).\n",
                 lexical_errors);
 
         report_phase(options, "fase 1-2: analisis lexico y sintactico", 0);
 
-        diag_free();
+        compilation->exit_code = 1;
 
-        return 1;
+        return 0;
     }
 
     if (result != 0) {
         report_phase(options, "fase 1-2: analisis lexico y sintactico", 0);
 
-        diag_free();
+        compilation->exit_code = 1;
 
-        return 1;
+        return 0;
     }
 
     report_phase(options, "fase 1-2: analisis lexico y sintactico", 1);
 
+    return 1;
+}
+
+/*
+ * phase_export_ast — salidas del AST: -t y --ast-json.
+ *
+ * Entrada:
+ *   compilation  estado con el AST del parser.
+ * Salida:
+ *   1 si la compilación sigue; 0 si corta (exit_code 0 o 1 según el JSON).
+ *   Efectos: imprime el AST o escribe el JSON.
+ * Restricciones:
+ *   --ast-json solo exporta y termina después del análisis sintáctico, salvo
+ *   que se combine con -s, -m o -p; permite inspeccionar construcciones que
+ *   el semántico o el generador rechazarían.
+ */
+static int phase_export_ast(Compilation *compilation) {
+    const Options *options = compilation->options;
+
     if (options->print_ast)
-        ast_print(root, 0);
+        ast_print(compilation->root, 0);
 
     if (options->ast_json) {
         struct stat src_stat, dst_stat;
@@ -579,35 +672,50 @@ static int compile(const Options *options) {
             perror(options->ast_json);
             failed = 1;
         } else {
-            failed = ast_write_json(out, root, options->input);
+            failed = ast_write_json(out, compilation->root, options->input);
             if (fclose(out) != 0) failed = 1;
             if (failed) fprintf(stderr, "ccom: error al escribir AST JSON\n");
         }
         /* Exportación sola: inspeccionar incluso construcciones sin codegen. */
         if (failed || (!options->emit_asm && !options->print_memory && !options->print_bundles)) {
-            ast_free(root);
-            diag_free();
-            return failed ? 1 : 0;
+            compilation->exit_code = failed ? 1 : 0;
+
+            return 0;
         }
     }
 
-    // S-03: si el análisis falla no hay tabla y el código de salida es 1.
+    return 1;
+}
+
+/*
+ * phase_semantic — fase 3: análisis semántico y tabla de símbolos.
+ *
+ * Entrada:
+ *   compilation  estado con el AST.
+ * Salida:
+ *   1 si el análisis pasa; 0 si corta (exit_code queda en 1).
+ *   Efectos: anota el AST, reserva direcciones, reporta errores y, con -m,
+ *   imprime la tabla de símbolos.
+ * Restricciones:
+ *   S-03: si el análisis falla no hay tabla y el código de salida es 1; los
+ *   símbolos deben vivir hasta terminar la generación.
+ */
+static int phase_semantic(Compilation *compilation) {
+    const Options *options = compilation->options;
     int errors_before = diag_count();
 
-    if (!semantic_analyze(root)) {
+    compilation->semantic_started = 1;
+
+    if (!semantic_analyze(compilation->root)) {
         fprintf(stderr,
                 "Analisis semantico fallido: %d error(es).\n",
                 diag_count() - errors_before);
 
         report_phase(options, "fase 3: analisis semantico", 0);
 
-        semantic_free();
+        compilation->exit_code = 1;
 
-        ast_free(root);
-
-        diag_free();
-
-        return 1;
+        return 0;
     }
 
     report_phase(options, "fase 3: analisis semantico", 1);
@@ -615,66 +723,80 @@ static int compile(const Options *options) {
     if (options->print_memory)
         semantic_print_symbols();
 
+    return 1;
+}
+
+/*
+ * phase_labels — fase 3: tabla de etiquetas.
+ *
+ * Entrada:
+ *   compilation  estado con el AST ya analizado.
+ * Salida:
+ *   1 si la tabla queda construida; 0 si corta (exit_code queda en 1).
+ *   Efectos: reserva y llena compilation->labels.
+ * Restricciones:
+ *   compilation->labels se asigna apenas existe la tabla inicializada, así
+ *   compile_release la destruye también si label_table_build falla.
+ */
+static int phase_labels(Compilation *compilation) {
+    const Options *options = compilation->options;
     LabelTable *labels = malloc(sizeof(LabelTable));
 
     if (labels == NULL) {
         report_phase(options, "fase 3: tabla de etiquetas", 0);
 
-        semantic_free();
+        compilation->exit_code = 1;
 
-        ast_free(root);
-
-        diag_free();
-
-        return 1;
+        return 0;
     }
 
     label_table_init(labels);
 
-    if (label_table_build(labels, root) != 0) {
+    compilation->labels = labels;
+
+    if (label_table_build(labels, compilation->root) != 0) {
         report_phase(options, "fase 3: tabla de etiquetas", 0);
 
-        label_table_destroy(labels);
+        compilation->exit_code = 1;
 
-        free(labels);
-
-        semantic_free();
-
-        ast_free(root);
-
-        diag_free();
-
-        return 1;
+        return 0;
     }
 
     report_phase(options, "fase 3: tabla de etiquetas", 1);
 
-    // La tabla de etiquetas de -m se imprime al final, con las direcciones
-    // (enunciado CE1108 §2.3): el nombre y el nodo salen de la Fase 3, pero
-    // la dirección de cada etiqueta solo se conoce después de generar el
-    // código (§2.4) y ensamblarlo (§2.5).
-    int gen_failed = generate_code(root, labels);
+    return 1;
+}
+
+/*
+ * phase_codegen — fase 4: generación, organización de bundles y direcciones.
+ *
+ * Entrada:
+ *   compilation  estado con AST, símbolos y tabla de etiquetas.
+ * Salida:
+ *   1 si el calendario queda definitivo; 0 si corta (exit_code queda en 1).
+ *   Efectos: genera el código, lo organiza (salvo --no-schedule) y resuelve
+ *   las direcciones de la tabla de etiquetas.
+ * Restricciones:
+ *   si falla, la tabla de etiquetas de -m se imprime igual, con "-" en las
+ *   direcciones, antes de liberar.
+ */
+static int phase_codegen(Compilation *compilation) {
+    const Options *options = compilation->options;
+
+    compilation->codegen_started = 1;
+
+    int gen_failed = generate_code(compilation->root, compilation->labels);
     report_phase(options, "fase 4: generacion de codigo", !gen_failed);
     if (!gen_failed && !options->no_schedule) {
         gen_failed = cg_schedule();
         report_phase(options, "fase 4: organizacion de bundles", !gen_failed);
     }
     if (gen_failed) {
-        // Sin código generado no hay direcciones: se imprime con "-".
-        if (options->print_memory)
-            label_table_print(labels);
+        print_labels(compilation);
 
-        label_table_destroy(labels);
+        compilation->exit_code = 1;
 
-        free(labels);
-
-        semantic_free();
-        cg_free();
-
-        ast_free(root);
-
-        diag_free();
-        return 1; 
+        return 0;
     }
 
     // El calendario ya es definitivo. Resolver con sus índices finales,
@@ -682,94 +804,157 @@ static int compile(const Options *options) {
     // conservador. La primera pasada del ensamblador cuenta esos mismos
     // bundles (libro §6.7, backpatching; enunciado §2.5). Una etiqueta que no
     // llega al .asm (un & constante en un inicializador global) queda con -1.
-    label_table_resolve(labels, cg_label_address);
+    label_table_resolve(compilation->labels, cg_label_address);
 
-    // Primera línea del .asm: un comentario con el fuente. El ensamblado
-    // recibe la misma línea, así los errores de <generado> citan la línea
-    // del .asm que escribe -s.
+    return 1;
+}
+
+/*
+ * write_listing — escribe el .asm anotado de -s.
+ *
+ * Entrada:
+ *   options  opciones con la ruta base de salida.
+ *   header  comentario inicial con el nombre del fuente.
+ * Salida:
+ *   0 si escribe todo; 1 si falla.
+ *   Efectos: crea/trunca el .asm y reporta errores de escritura.
+ * Restricciones:
+ *   anotado según el enunciado CE1108 §6.2: la dirección y la línea del
+ *   fuente de cada bundle, la tabla de etiquetas con sus direcciones y la
+ *   de variables con sus direcciones de datos. Todo lo agregado va en
+ *   comentarios con # (isa.md §11.1): ccom -x da los mismos bundles.
+ */
+static int write_listing(const Options *options, const char *header) {
+    char *path;
+    FILE *out = open_output(options, ".asm", "w", &path);
+
+    if (out != NULL) {
+        fprintf(out, "%s\n", header);
+        cg_write_listing(out);
+        fprintf(out, "\n# Variables (direccion de datos)\n");
+        semantic_fprint_symbols(out, "#   ");
+    }
+
+    return close_output(out, path);
+}
+
+/*
+ * assemble_generated — ensambla las líneas del generador y escribe las salidas.
+ *
+ * Entrada:
+ *   options  opciones con la ruta base de salida.
+ *   header  primera línea del .asm, ya construida.
+ * Salida:
+ *   0 si ensambla y escribe; 1 si falla.
+ *   Efectos: ensambla, escribe .bin/.hex/.mem y reporta errores.
+ * Restricciones:
+ *   el ensamblado toma las líneas del generador (contrato §1) después de la
+ *   cabecera; es la misma línea que escribe -s, así los errores de
+ *   <generado> citan la línea del .asm.
+ */
+static int assemble_generated(const Options *options, const char *header) {
+    int line_count = cg_line_count() + 1;
+    const char **lines = malloc((size_t) line_count * sizeof(char *));
+
+    if (lines == NULL) {
+        report_oom();
+
+        return 1;
+    }
+
+    lines[0] = header;
+
+    for (int i = 1; i < line_count; i++)
+        lines[i] = cg_line(i - 1);
+
+    int failed = assemble_and_write(options, lines, line_count, "<generado>",
+                                    cg_data(), cg_data_size()) != 0;
+
+    free(lines);
+
+    return failed;
+}
+
+/*
+ * phase_emit — escribe el .asm (-s) y los binarios de una compilación exitosa.
+ *
+ * Entrada:
+ *   compilation  estado con el código generado y las etiquetas resueltas.
+ * Salida:
+ *   0 si completa; 1 si falla alguna salida.
+ *   Efectos: escribe .asm, .bin, .hex y .mem y, con -m, la tabla de
+ *   etiquetas con sus direcciones.
+ * Restricciones:
+ *   última fase: su valor de retorno es el código de salida de compile.
+ */
+static int phase_emit(const Compilation *compilation) {
+    const Options *options = compilation->options;
+
+    // Primera línea del .asm: un comentario con el fuente.
     size_t header_size = strlen(options->input) + sizeof("# ccom: ");
     char *header = malloc(header_size);
 
     if (header == NULL) {
-        fprintf(stderr, "ccom: error: memoria insuficiente\n");
+        report_oom();
 
-        if (options->print_memory)
-            label_table_print(labels);
+        print_labels(compilation);
 
-        label_table_destroy(labels);
-        free(labels);
-        semantic_free();
-        cg_free();
-        ast_free(root);
-        diag_free();
         return 1;
     }
 
     snprintf(header, header_size, "# ccom: %s", options->input);
 
-    // -s: además el .asm (isa.md §11), anotado (enunciado CE1108 §6.2): la
-    // dirección y la línea del fuente de cada bundle, la tabla de etiquetas
-    // con sus direcciones y la de variables con sus direcciones de datos.
-    // Todo lo agregado va en comentarios con # (isa.md §11.1): ccom -x da
-    // los mismos bundles.
     int output_failed = 0;
 
-    if (options->emit_asm) {
-        char *path;
-        FILE *out = open_output(options, ".asm", "w", &path);
+    if (options->emit_asm)
+        output_failed = write_listing(options, header);
 
-        if (out != NULL) {
-            fprintf(out, "%s\n", header);
-            cg_write_listing(out);
-            fprintf(out, "\n# Variables (direccion de datos)\n");
-            semantic_fprint_symbols(out, "#   ");
-        }
-
-        output_failed = close_output(out, path);
-    }
-
-    // El ensamblado toma las líneas del generador (contrato §1), después de
-    // la cabecera.
-    int line_count = cg_line_count() + 1;
-    const char **lines = malloc((size_t) line_count * sizeof(char *));
-
-    if (lines == NULL) {
-        fprintf(stderr, "ccom: error: memoria insuficiente\n");
+    if (assemble_generated(options, header) != 0)
         output_failed = 1;
-    }
-    else {
-
-        lines[0] = header;
-
-        for (int i = 1; i < line_count; i++)
-            lines[i] = cg_line(i - 1);
-
-        if (assemble_and_write(options, lines, line_count, "<generado>",
-                               cg_data(), cg_data_size()) != 0)
-            output_failed = 1;
-
-        free(lines);
-    }
 
     free(header);
 
-    // Tabla de etiquetas con direcciones, después del ensamblado.
-    if (options->print_memory)
-        label_table_print(labels);
-
-    label_table_destroy(labels);
-
-    free(labels);
-
-    semantic_free();
-
-    cg_free();
-
-    ast_free(root);
-
-    diag_free();
+    print_labels(compilation);
 
     return output_failed ? 1 : 0;
+}
+
+/*
+ * compile — coordina las fases de compilación y las salidas.
+ *
+ * Entrada:
+ *   options  opciones con rutas y banderas.
+ * Salida:
+ *   0 si completa; 1 si falla alguna fase o salida.
+ *   Efectos: lee fuente, crea/libera AST/tablas/IR; escribe archivos y diagnósticos.
+ * Restricciones:
+ *   las fases corren en orden y la primera que corta fija el código de
+ *   salida; los símbolos viven hasta terminar la generación y todo se libera
+ *   al final con compile_release.
+ */
+static int compile(const Options *options) {
+    yyin = fopen(options->input, "r");
+
+    if (!yyin) {
+        perror("fopen");
+        return 1;
+    }
+
+    Compilation compilation = { .options = options };
+    int code;
+
+    if (phase_parse(&compilation) &&
+        phase_export_ast(&compilation) &&
+        phase_semantic(&compilation) &&
+        phase_labels(&compilation) &&
+        phase_codegen(&compilation))
+        code = phase_emit(&compilation);
+    else
+        code = compilation.exit_code;
+
+    compile_release(&compilation);
+
+    return code;
 }
 
 /* ==========================================================================
@@ -778,19 +963,21 @@ static int compile(const Options *options) {
 
 
 /*
- * main — interpreta banderas y ejecuta compilación o ensamblado.
+ * parse_options — interpreta las banderas y el archivo de entrada.
  *
  * Entrada:
  *   argc  cantidad de argumentos.
  *   argv  arreglo de argumentos del proceso.
+ *   options  opciones a llenar; inicializadas en cero.
  * Salida:
- *   0 si completa; 1 si falla; 2 por uso incorrecto.
- *   Efectos: getopt_long puede reordenar argv; lee/escribe archivos y mensajes.
+ *   -1 si hay que seguir; en otro caso, el código con que termina el
+ *   proceso: 0 tras la ayuda, 1 sin memoria, 2 por uso incorrecto.
+ *   Efectos: getopt_long puede reordenar argv; escribe ayuda o mensajes.
  * Restricciones:
- *   exactamente una entrada salvo ayuda; -s se ignora con -x.
+ *   exactamente una entrada salvo ayuda; si devuelve un código, options->output
+ *   ya quedó liberado.
  */
-int main(int argc, char **argv) {
-    Options options = { 0 };
+static int parse_options(int argc, char **argv, Options *options) {
     int option;
 
     // Sin '+' al inicio: getopt reordena, así que las opciones pueden ir
@@ -808,32 +995,32 @@ int main(int argc, char **argv) {
 
             case 'h':
                 print_help();
-                free(options.output);
+                free(options->output);
                 return 0;
 
             case 'o':
-                free(options.output);
-                options.output = strdup(optarg);
+                free(options->output);
+                options->output = strdup(optarg);
 
-                if (options.output == NULL) {
-                    fprintf(stderr, "ccom: error: memoria insuficiente\n");
+                if (options->output == NULL) {
+                    report_oom();
                     return 1;
                 }
 
                 break;
 
-            case 1000: options.ast_json = optarg; break;
-            case 1001: options.no_schedule = 1; break;
-            case 1002: options.show_time = 1; break;
-            case 'v': options.verbose = 1;       break;
-            case 's': options.emit_asm = 1;      break;
-            case 't': options.print_ast = 1;     break;
-            case 'm': options.print_memory = 1;  break;
-            case 'x': options.assemble_only = 1; break;
-            case 'p': options.print_bundles = 1; break;
+            case 1000: options->ast_json = optarg; break;
+            case 1001: options->no_schedule = 1; break;
+            case 1002: options->show_time = 1; break;
+            case 'v': options->verbose = 1;       break;
+            case 's': options->emit_asm = 1;      break;
+            case 't': options->print_ast = 1;     break;
+            case 'm': options->print_memory = 1;  break;
+            case 'x': options->assemble_only = 1; break;
+            case 'p': options->print_bundles = 1; break;
 
             default:
-                free(options.output);
+                free(options->output);
                 fprintf(stderr, "%s\n", USAGE);
                 return EXIT_USAGE;
         }
@@ -841,21 +1028,43 @@ int main(int argc, char **argv) {
 
     // Exactamente un archivo de entrada.
     if (argc - optind != 1) {
-        free(options.output);
+        free(options->output);
         fprintf(stderr, "%s\n", USAGE);
         return EXIT_USAGE;
     }
 
-    options.input = argv[optind];
+    options->input = argv[optind];
 
-    if (options.output == NULL) {
-        options.output = default_output(options.input);
+    if (options->output == NULL) {
+        options->output = default_output(options->input);
 
-        if (options.output == NULL) {
-            fprintf(stderr, "ccom: error: memoria insuficiente\n");
+        if (options->output == NULL) {
+            report_oom();
             return 1;
         }
     }
+
+    return -1;
+}
+
+/*
+ * main — interpreta banderas y ejecuta compilación o ensamblado.
+ *
+ * Entrada:
+ *   argc  cantidad de argumentos.
+ *   argv  arreglo de argumentos del proceso.
+ * Salida:
+ *   0 si completa; 1 si falla; 2 por uso incorrecto.
+ *   Efectos: getopt_long puede reordenar argv; lee/escribe archivos y mensajes.
+ * Restricciones:
+ *   exactamente una entrada salvo ayuda; -s se ignora con -x.
+ */
+int main(int argc, char **argv) {
+    Options options = { 0 };
+    int status = parse_options(argc, argv, &options);
+
+    if (status >= 0)
+        return status;
 
     struct timespec start;
     int timed = options.show_time;

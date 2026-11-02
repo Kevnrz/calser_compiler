@@ -70,8 +70,8 @@ static int operation(CGCryptoContext *ctx, const char *name, ASTNode *args, int 
     return cg_crypto(ctx, &node);
 }
 
-static Symbol function = {.kind = SYMBOL_FUNCTION, .area_base = 32,
-                          .area_size = 80, .temp_base = 64};
+static Symbol function = {.kind = SYMBOL_FUNCTION,
+                          .frame = {.area_base = 32, .area_size = 80, .temp_base = 64}};
 
 static int contracts(void) {
     CGCryptoContext ctx = {.eval = evaluate, .function = &function, .next_label = 1};
@@ -88,12 +88,12 @@ static int contracts(void) {
     assert(cg_crypto(&ctx, &node) == 1);
     Symbol bad = function;
     ctx.function = &bad;
-    bad.temp_base = 65;
+    bad.frame.temp_base = 65;
     assert(cg_crypto(&ctx, &node) == 1);
-    bad.temp_base = 80;
+    bad.frame.temp_base = 80;
     assert(cg_crypto(&ctx, &node) == 1);
     bad = function;
-    bad.area_base = INT_MAX;
+    bad.frame.area_base = INT_MAX;
     assert(cg_crypto(&ctx, &node) == 1);
     ctx.function = &function;
     ctx.live_mask = 0;

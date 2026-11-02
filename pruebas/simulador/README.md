@@ -148,4 +148,4 @@ del slot LSU para almacenamientos, BRU para saltos y CRYPTO para sus eventos;
 los listados antiguos sin esta extensión siguen funcionando.
 
 Para comparar ciclos de factorial con y sin organización, consultar
-[Organización de bundles](../../docs/organizacion_bundles.md).
+[Organización de bundles](../../docs/ccom_banderas.md#organización-de-bundles).

@@ -251,5 +251,4 @@ bundle con memoria o salto, respetando las dependencias de la ISA.
 ```
 
 Las plantillas manuales mantienen sus slots. `-x` ensambla el `.asm` externo sin
-reorganizarlo. El detalle y los resultados están en
-[Organización de bundles](organizacion_bundles.md).
+reorganizarlo.

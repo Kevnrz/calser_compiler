@@ -5,7 +5,7 @@
  * quedan pendientes hasta resolverlas con el calendario final de Fase 4.
  *
  * Usa: AST; label_table.h.
- * Lo usa: main.c y generate.c.
+ * Lo usa: main.c, generate.c y generate_support.c.
  * Referencias: libro §6.7 (backpatching); enunciado §2.3–§2.5.
  */
 

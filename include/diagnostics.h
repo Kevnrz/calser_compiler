@@ -5,7 +5,7 @@
  * Los contratos indican entradas, resultados, efectos y límites de uso.
  *
  * Usa: tipos de la biblioteca C y declaraciones propias.
- * Lo usa: diagnostics.c; lexer.l, parser.y, semantic.c y main.c.
+ * Lo usa: diagnostics.c; lexer.l, parser.y, semantic.c, semantic_expr.c y main.c.
  * Referencias: enunciado §8.2 (referencia ya citada en el código).
  */
 

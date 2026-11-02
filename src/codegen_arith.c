@@ -5,7 +5,7 @@
  * Entrega operaciones al callback para que el llamador organice los bundles.
  *
  * Usa: codegen_arith.h; biblioteca C.
- * Lo usa: generate.c y pruebas/aritmetica.
+ * Lo usa: generate_expr.c y pruebas/aritmetica.
  * Referencias: isa.md §6.1, §6.2, §8.
  */
 

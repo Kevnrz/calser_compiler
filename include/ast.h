@@ -1,11 +1,12 @@
 /*
  * ast.h — Fase 2: interfaz de construcción y representación del árbol de sintaxis abstracta.
  *
- * Expone ASTKind, ASTNode, constructores, posiciones y exportación JSON.
+ * Expone ASTKind, ASTNode, constructores, posiciones, consultas de hijos
+ * (ast_find_child, ast_count_children, ast_contains_kind) y exportación JSON.
  * Los contratos indican entradas, resultados, efectos y límites de uso.
  *
  * Usa: tipos de la biblioteca C y declaraciones propias.
- * Lo usa: ast.c; parser.y, semantic.c, label_table.c, generate.c y main.c.
+ * Lo usa: ast.c; lexer.l, parser.y, semantic*.c, label_table.c, generate*.c y main.c.
  * Referencias: libro §2.5, §6.1.
  */
 
@@ -155,6 +156,47 @@ void ast_set_location(ASTNode *node, int line, int column);
  *   items sin propiedad compartida.
  */
 ASTNode *ast_list(ASTKind kind, ASTNode *items);
+
+/*
+ * ast_find_child — busca el primer hijo de una clase.
+ *
+ * Entrada:
+ *   node  nodo o NULL.
+ *   kind  clase buscada.
+ * Salida:
+ *   hijo prestado o NULL.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   solo mira los hijos directos de node.
+ */
+ASTNode *ast_find_child(ASTNode *node, ASTKind kind);
+
+/*
+ * ast_count_children — cuenta hijos enlazados de un nodo.
+ *
+ * Entrada:
+ *   node  nodo o NULL.
+ * Salida:
+ *   cantidad de hijos, cero para NULL.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
+int ast_count_children(ASTNode *node);
+
+/*
+ * ast_contains_kind — busca una clase en un subárbol.
+ *
+ * Entrada:
+ *   node  nodo o NULL.
+ *   kind  clase buscada.
+ * Salida:
+ *   1 si aparece; 0 si no aparece.
+ *   Efectos: ninguno.
+ * Restricciones:
+ *   recorre node y sus descendientes, sin incluir hermanos del nodo raíz.
+ */
+int ast_contains_kind(ASTNode *node, ASTKind kind);
 
 /* ==========================================================================
  * PROGRAMA Y FUNCIONES

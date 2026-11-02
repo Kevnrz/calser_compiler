@@ -5,7 +5,7 @@
  * del fuente y enlaces prestados a símbolos para las fases posteriores.
  *
  * Usa: ast.h; biblioteca C.
- * Lo usa: parser.y, semantic.c, label_table.c, generate.c y main.c.
+ * Lo usa: lexer.l, parser.y, semantic*.c, label_table.c, generate*.c y main.c.
  * Referencias: libro §2.5, §6.1.
  */
 
@@ -111,6 +111,59 @@ ASTNode *ast_list(ASTKind kind, ASTNode *items) {
     ASTNode *node = ast_new(kind);
     node->child = items;
     return node;
+}
+
+/* ast_find_child — véase el contrato en ast.h. */
+ASTNode *ast_find_child(ASTNode *node, ASTKind kind) {
+    if (node == NULL)
+        return NULL;
+
+    ASTNode *child = node->child;
+
+    while (child != NULL) {
+
+        if (child->kind == kind)
+            return child;
+
+        child = child->next;
+    }
+
+    return NULL;
+}
+
+/* ast_count_children — véase el contrato en ast.h. */
+int ast_count_children(ASTNode *node) {
+    int count = 0;
+
+    ASTNode *child = node ? node->child : NULL;
+
+    while (child != NULL) {
+        count++;
+        child = child->next;
+    }
+
+    return count;
+}
+
+/* ast_contains_kind — véase el contrato en ast.h. */
+int ast_contains_kind(ASTNode *node, ASTKind kind) {
+    if (node == NULL)
+        return 0;
+
+    if (node->kind == kind)
+        return 1;
+
+    ASTNode *child = node->child;
+
+    while (child != NULL) {
+
+        if (ast_contains_kind(child, kind))
+            return 1;
+
+        child = child->next;
+    }
+
+    return 0;
 }
 
 /* ==========================================================================

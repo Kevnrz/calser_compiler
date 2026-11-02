@@ -6,7 +6,7 @@
  *
  * Usa: codegen.h y codegen_verify.c.
  * Lo usa: codegen.c y pruebas del organizador.
- * Referencias: isa.md §3, §9; docs/organizacion_bundles.md.
+ * Referencias: isa.md §3, §9.
  */
 
 #include <stdio.h>

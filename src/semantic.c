@@ -5,8 +5,10 @@
  * Anota los usos con símbolos, verifica tipos, constantes y ciclos de llamadas,
  * y deja espacio mínimo para la pila de generación.
  *
- * Usa: AST, symbol_table.c y diagnostics.c.
- * Lo usa: main.c; generate.c consulta semantic_data_end.
+ * Usa: AST, symbol_table.c, diagnostics.c, semantic_scope.c (ámbitos) y
+ * semantic_calls.c (grafo de llamadas y ciclos), semantic_crypto.c (operaciones
+ * de cifrado) y data_area.c (contador de la memoria de datos).
+ * Lo usa: main.c.
  * Referencias: libro §1.6.3, §2.7, §6.3.4, §6.5, §7.1.1.
  */
 
@@ -16,118 +18,13 @@
 #include <string.h>
 
 #include "semantic.h"
+#include "semantic_internal.h"
+#include "data_area.h"
+#include "semantic_calls.h"
+#include "semantic_scope.h"
 #include "symbol_table.h"
 #include "ast.h"
 #include "diagnostics.h"
-
-static Scope *global_scope = NULL;
-static Scope *current_scope = NULL;
-
-//Lista de todos los ámbitos.
-static Scope *scope_list_head = NULL;
-static Scope *scope_list_tail = NULL;
-
-// Función que se está analizando; NULL fuera de las funciones (globales).
-static Symbol *current_function = NULL;
-
-/* ==========================================================================
- * ÁMBITOS
- * ======================================================================= */
-
-
-/*
- * create_scope — crea y abre un ámbito anidado.
- *
- * Entrada:
- *   kind  clase de ámbito.
- *   line  línea de apertura.
- * Salida:
- *   ámbito creado; NULL si scope_create devolviera NULL.
- *   Efectos: actualiza current_scope y la lista de ámbitos; enlaza la función dueña.
- * Restricciones:
- *   ninguna.
- */
-static Scope *create_scope(ScopeKind kind, int line) {
-    Scope *scope = scope_create(current_scope, kind);
-
-    if (scope == NULL)
-        return NULL;
-
-    // P-03: línea donde abre el bloque y función a la que pertenece.
-    scope->line = line;
-    scope->owner = current_function;
-
-    // Agrega el ámbito a la lista de ámbitos.
-    if (scope_list_head == NULL) {
-        scope_list_head = scope;
-        scope_list_tail = scope;
-    }
-    else {
-        scope_list_tail->next = scope;
-        scope_list_tail = scope;
-    }
-
-    current_scope = scope;
-
-    return scope;
-}
-
-/*
- * enter_global_scope — crea el ámbito global del análisis.
- *
- * Entrada: ninguna
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: reinicia punteros de ámbitos y reserva el ámbito global.
- * Restricciones:
- *   liberar un análisis anterior con semantic_free antes de comenzar otro.
- */
-static void enter_global_scope(void) {
-    current_scope = NULL;
-
-    global_scope = scope_create(NULL, SCOPE_GLOBAL);
-
-    if (global_scope == NULL) {
-        fprintf(stderr, "Error: could not create global scope\n");
-        exit(EXIT_FAILURE);
-    }
-
-    scope_list_head = global_scope;
-    scope_list_tail = global_scope;
-
-    current_scope = global_scope;
-}
-
-/*
- * enter_scope — abre un ámbito del tipo indicado.
- *
- * Entrada:
- *   kind  clase de ámbito.
- *   line  línea de apertura.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: crea un ámbito y actualiza current_scope y la lista.
- * Restricciones:
- *   ninguna.
- */
-static void enter_scope(ScopeKind kind, int line) {
-    create_scope(kind, line);
-}
-
-/*
- * exit_scope — regresa al ámbito padre.
- *
- * Entrada: ninguna
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: actualiza current_scope; conserva el ámbito cerrado en la lista.
- * Restricciones:
- *   ninguna.
- */
-static void exit_scope(void) {
-    if (current_scope != NULL)
-        current_scope = current_scope->parent;
-}
 
 /* ==========================================================================
  * TIPOS DECLARADOS Y CONSULTAS DEL AST
@@ -198,43 +95,13 @@ static SymbolModifier get_modifier(ASTNode *node) {
     return MODIFIER_NONE;
 }
 
-/*
- * find_condition — busca la condición de C, A o L.
- *
- * Entrada:
- *   node  nodo de control o NULL.
- * Salida:
- *   primer hijo distinto de BLOCK, ALTERNATIVES y RESIDUAL, o NULL.
- *   Efectos: ninguno.
- * Restricciones:
- *   ninguna.
- */
-static ASTNode *find_condition(ASTNode *node) {
-    if (node == NULL)
-        return NULL;
-
-    ASTNode *child = node->child;
-
-    while (child != NULL) {
-
-        if (child->kind != AST_BLOCK &&
-            child->kind != AST_ALTERNATIVES &&
-            child->kind != AST_RESIDUAL)
-            return child;
-
-        child = child->next;
-    }
-
-    return NULL;
-}
-
 /* ==========================================================================
  * DIAGNÓSTICOS
  * ======================================================================= */
 
 
 /*
- * operator_symbol — obtiene la grafía de un operador.
+ * semantic_operator_symbol — obtiene la grafía de un operador.
  *
  * Entrada:
  *   kind  clase del nodo AST.
@@ -244,7 +111,7 @@ static ASTNode *find_condition(ASTNode *node) {
  * Restricciones:
  *   ninguna.
  */
-static const char *operator_symbol(ASTKind kind) {
+const char *semantic_operator_symbol(ASTKind kind) {
     switch (kind) {
         case AST_OR:            return "|";
         case AST_AND:           return "&";
@@ -301,7 +168,7 @@ static int count_digits(long number) {
  * Restricciones:
  *   el análisis continúa después de reportar.
  */
-static void semantic_error(ASTNode *node, const char *fmt, ...) {
+void semantic_error(ASTNode *node, const char *fmt, ...) {
     int line = 0;
     int column = 0;
     int length = 1;
@@ -330,10 +197,10 @@ static void semantic_error(ASTNode *node, const char *fmt, ...) {
         }
         // Operador: el nodo está en la posición del operador (parser.y).
         // Va antes de buscar el hijo IDENTIFIER, que sería un operando.
-        else if (operator_symbol(node->kind) != NULL) {
+        else if (semantic_operator_symbol(node->kind) != NULL) {
             line = node->line;
             column = node->column;
-            length = (int) strlen(operator_symbol(node->kind));
+            length = (int) strlen(semantic_operator_symbol(node->kind));
         }
         else if (node->kind == AST_BOOLEAN) {
             line = node->line;
@@ -358,37 +225,9 @@ static void semantic_error(ASTNode *node, const char *fmt, ...) {
     va_end(args);
 }
 
-/*
- * discard_symbol — libera un símbolo todavía sin ámbito dueño.
- *
- * Entrada:
- *   symbol  símbolo no NULL.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: libera el nombre y el símbolo.
- * Restricciones:
- *   sin parámetros propios; no debe estar enlazado a un ámbito.
- */
-static void discard_symbol(Symbol *symbol) {
-    free(symbol->name);
-    free(symbol);
-}
-
 // Memoria
 
-// M-2: variables de ccom en 0x0000–0x0FFF; desde 0x1000, archivos de load_file
-#define DATA_BASE  0x0000
-#define DATA_LIMIT 0x1000          // primera dirección que NO se puede usar
 #define TEMP_WORDS 12             // una casilla para cada registro t0–t11
-
-// Espacio mínimo que debe quedar libre, después de la última área y antes de
-// DATA_LIMIT, para la pila de llamadas de la Fase 4 (generate.c).
-#define STACK_MIN_BYTES 256
-
-static int next_address = DATA_BASE;   // libro §6.3.4: el "offset"
-
-// El desborde de la memoria de datos se reporta una sola vez por programa.
-static int memory_reported = 0;
 
 /* ==========================================================================
  * DIRECCIONES Y DIMENSIONES
@@ -405,27 +244,21 @@ static int memory_reported = 0;
  *   out_address  puntero escribible para dirección.
  * Salida:
  *   ninguna (solo efectos).
- *   Efectos: escribe *out_address, avanza next_address y reporta el primer desborde.
+ *   Efectos: escribe *out_address, avanza el área de datos y reporta el primer desborde.
  * Restricciones:
  *   continúa asignando después de 0x0FFF; widths llegan alineados a cuatro
- *   bytes.
+ *   bytes. El contador vive en data_area.c; el mensaje se emite aquí, en el
+ *   mismo punto del recorrido de siempre, para conservar su orden entre los
+ *   demás errores semánticos.
  * Referencia: libro §6.3.4.
  */
 static void reserve(int width, const char *what, ASTNode *node,
                     int *out_address) {
-    if (next_address + width > DATA_LIMIT &&
-        !memory_reported) {
-
+    if (data_area_alloc(width, out_address))
         semantic_error(node,
                        "'%s' no cabe en la memoria de datos (limite 0x%04X)",
                        what,
                        (unsigned int) (DATA_LIMIT - 1));
-
-        memory_reported = 1;
-    }
-
-    *out_address = next_address;
-    next_address += width;
 }
 
 /*
@@ -495,1455 +328,6 @@ static void fill_dimensions(Symbol *symbol, ASTNode *dimensions,
 }
 
 /* ==========================================================================
- * RESOLUCIÓN DE NOMBRES
- * ======================================================================= */
-
-
-/*
- * find_closed_scope — busca un nombre en los ámbitos de la función actual.
- *
- * Entrada:
- *   name  nombre no NULL.
- * Salida:
- *   primer ámbito con el nombre o NULL.
- *   Efectos: ninguno.
- * Restricciones:
- *   se usa después de fallar la búsqueda en ámbitos abiertos.
- */
-static Scope *find_closed_scope(const char *name) {
-    if (current_function == NULL)
-        return NULL;
-
-    Scope *scope = scope_list_head;
-
-    while (scope != NULL) {
-
-        if (scope->owner == current_function &&
-            symbol_lookup_current(scope, name) != NULL)
-            return scope;
-
-        scope = scope->next;
-    }
-
-    return NULL;
-}
-
-/*
- * resolve_name — resuelve un identificador según el ámbito más cercano.
- *
- * Entrada:
- *   identifier  identificador o NULL.
- * Salida:
- *   símbolo prestado o NULL si no resuelve.
- *   Efectos: anota identifier->symbol o reporta nombre inexistente/fuera de ámbito.
- * Restricciones:
- *   current_scope configurado; no permite uso antes de declarar variables.
- */
-static Symbol *resolve_name(ASTNode *identifier) {
-    if (identifier == NULL || identifier->text == NULL)
-        return NULL;
-
-    Symbol *symbol = symbol_lookup(current_scope, identifier->text);
-
-    if (symbol != NULL) {
-
-        // Enlace uso -> símbolo: lo usará la generación de código.
-        identifier->symbol = symbol;
-
-        return symbol;
-    }
-
-    // Fuera de alcance: el nombre existe en un bloque de esta función que ya
-    // se cerró. No hace falta excluir los ámbitos abiertos: symbol_lookup ya
-    // buscó en el actual y en sus padres.
-    Scope *closed = find_closed_scope(identifier->text);
-
-    if (closed != NULL) {
-
-        semantic_error(identifier,
-                       "'%s' esta fuera de alcance; "
-                       "fue declarado en el bloque de la linea %d",
-                       identifier->text,
-                       closed->line);
-
-        return NULL;
-    }
-
-    semantic_error(identifier,
-                   "'%s' no ha sido declarado",
-                   identifier->text);
-
-    return NULL;
-}
-
-// Tipos
-
-// Tipo de una expresión.
-typedef enum {
-    ET_ERROR,   // ya hubo un error en esta expresión: no reportar nada más sobre ella
-    ET_INT,
-    ET_BOOL,
-    ET_VOID,    // resultado de llamar a una función void
-    ET_ARRAY    // arreglo completo (nombre suelto de un arreglo)
-} ExprKind;
-
-typedef struct {
-    ExprKind kind;
-    SymbolType base;       // ET_ARRAY: tipo de los elementos
-    int dimensions;        // ET_ARRAY: 1 o 2
-    int sizes[MAX_DIMS];   // ET_ARRAY: tamaño de cada dimensión
-
-    int is_const;          // 1 si la expresión es una constante entera conocida
-    long value;            // su valor (solo si is_const)
-} ExprType;
-
-// Rango de un int de 32 bits con signo.
-#define INT32_LOWEST  (-2147483648LL)
-#define INT32_HIGHEST 2147483647LL
-
-#define TYPE_TEXT_SIZE 64   // alcanza para "bool[N][M]"
-
-/* ==========================================================================
- * TIPOS DE EXPRESIONES
- * ======================================================================= */
-
-
-/*
- * make_type — crea una descripción de tipo sin valor constante.
- *
- * Entrada:
- *   kind  clase de expresión.
- * Salida:
- *   ExprType inicializado con base VOID y tamaños cero.
- *   Efectos: ninguno.
- * Restricciones:
- *   ninguna.
- */
-static ExprType make_type(ExprKind kind) {
-    ExprType type;
-
-    type.kind = kind;
-    type.base = TYPE_VOID;
-    type.dimensions = 0;
-    type.is_const = 0;
-    type.value = 0;
-
-    for (int i = 0; i < MAX_DIMS; i++)
-        type.sizes[i] = 0;
-
-    return type;
-}
-
-/*
- * scalar_type — convierte un tipo declarado en tipo de expresión.
- *
- * Entrada:
- *   type  tipo de símbolo.
- * Salida:
- *   ET_INT, ET_BOOL o ET_VOID.
- *   Efectos: ninguno.
- * Restricciones:
- *   ninguna.
- */
-static ExprType scalar_type(SymbolType type) {
-    switch (type) {
-        case TYPE_INT:  return make_type(ET_INT);
-        case TYPE_BOOL: return make_type(ET_BOOL);
-        default:        return make_type(ET_VOID);
-    }
-}
-
-/*
- * symbol_value_type — describe el valor escalar o arreglo de un símbolo.
- *
- * Entrada:
- *   symbol  símbolo no NULL.
- * Salida:
- *   tipo escalar o ET_ARRAY; ET_ERROR para tamaños no positivos.
- *   Efectos: ninguno.
- * Restricciones:
- *   dimensions no mayor que MAX_DIMS.
- */
-static ExprType symbol_value_type(Symbol *symbol) {
-    if (symbol->dimensions == 0)
-        return scalar_type(symbol->type);
-
-    ExprType type = make_type(ET_ARRAY);
-
-    type.base = symbol->type;
-    type.dimensions = symbol->dimensions;
-
-    for (int i = 0; i < symbol->dimensions; i++) {
-
-        if (symbol->dim_sizes[i] <= 0)
-            return make_type(ET_ERROR);
-
-        type.sizes[i] = symbol->dim_sizes[i];
-    }
-
-    return type;
-}
-
-/*
- * same_type — compara tipos y forma de arreglos.
- *
- * Entrada:
- *   a  primer tipo.
- *   b  segundo tipo.
- * Salida:
- *   1 si coinciden clase y forma; 0 en otro caso.
- *   Efectos: ninguno.
- * Restricciones:
- *   ninguna.
- */
-static int same_type(ExprType a, ExprType b) {
-    if (a.kind != b.kind)
-        return 0;
-
-    if (a.kind != ET_ARRAY)
-        return 1;
-
-    if (a.base != b.base || a.dimensions != b.dimensions)
-        return 0;
-
-    for (int i = 0; i < a.dimensions; i++) {
-
-        if (a.sizes[i] != b.sizes[i])
-            return 0;
-    }
-
-    return 1;
-}
-
-/*
- * type_text — escribe el tipo para un diagnóstico.
- *
- * Entrada:
- *   type  tipo de expresión.
- *   buffer  buffer de al menos TYPE_TEXT_SIZE=64 bytes.
- * Salida:
- *   el mismo buffer.
- *   Efectos: escribe la representación de tipo en buffer.
- * Restricciones:
- *   ninguna.
- */
-static const char *type_text(ExprType type, char *buffer) {
-    const char *base;
-
-    switch (type.kind) {
-        case ET_INT:   base = "int";  break;
-        case ET_BOOL:  base = "bool"; break;
-        case ET_VOID:  base = "void"; break;
-        case ET_ARRAY: base = type.base == TYPE_BOOL ? "bool" : "int"; break;
-        default:       base = "?";    break;
-    }
-
-    int length = snprintf(buffer, TYPE_TEXT_SIZE, "%s", base);
-
-    for (int i = 0; type.kind == ET_ARRAY && i < type.dimensions; i++) {
-
-        if (length < TYPE_TEXT_SIZE)
-            length += snprintf(buffer + length,
-                               TYPE_TEXT_SIZE - (size_t) length,
-                               "[%d]",
-                               type.sizes[i]);
-    }
-
-    return buffer;
-}
-
-/*
- * expect_type — exige una clase de tipo sin repetir errores previos.
- *
- * Entrada:
- *   node  nodo para diagnóstico.
- *   type  tipo ya calculado.
- *   wanted  clase requerida.
- *   message  mensaje no NULL.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: reporta incompatibilidad salvo ET_ERROR.
- * Restricciones:
- *   ninguna.
- */
-static void expect_type(ASTNode *node, ExprType type, ExprKind wanted,
-                        const char *message) {
-    if (type.kind != ET_ERROR &&
-        type.kind != wanted)
-        semantic_error(node, "%s", message);
-}
-
-/*
- * check_assignable — comprueba compatibilidad de una asignación.
- *
- * Entrada:
- *   target  nodo destino para diagnóstico.
- *   destination  tipo destino.
- *   value  tipo del valor.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: reporta incompatibilidad de tipo o forma.
- * Restricciones:
- *   no comprueba mutabilidad; ET_ERROR evita cascadas.
- */
-static void check_assignable(ASTNode *target, ExprType destination,
-                             ExprType value) {
-    if (destination.kind == ET_ERROR ||
-        value.kind == ET_ERROR ||
-        same_type(destination, value))
-        return;
-
-    char value_text[TYPE_TEXT_SIZE];
-    char destination_text[TYPE_TEXT_SIZE];
-
-    type_text(value, value_text);
-    type_text(destination, destination_text);
-
-    // Arreglo completo: copia el contenido, así que la forma debe coincidir.
-    if (destination.kind == ET_ARRAY)
-        semantic_error(target,
-                       "no se puede asignar %s a %s",
-                       value_text,
-                       destination_text);
-    else
-        semantic_error(target,
-                       "no se puede asignar '%s' a una variable '%s'",
-                       value_text,
-                       destination_text);
-}
-
-// Grafo de llamadas
-
-// S-05: se prohíben ciclos de llamadas y se mantiene asignación estática.
-// El generador sí usa pila para rl, argumentos escalares y temporales vivos.
-// Cada llamada de la pasada 2 guarda (llamadora, llamada, nodo CALL)
-// en orden de aparición. R no es una llamada.
-typedef struct {
-    Symbol *caller;
-    Symbol *callee;
-    ASTNode *call;
-} CallEdge;
-
-static CallEdge *call_edges = NULL;
-static int call_count = 0;
-static int call_capacity = 0;
-
-// Funciones analizadas en la pasada 2, en el orden del archivo.
-static Symbol **function_list = NULL;
-static int function_count = 0;
-static int function_capacity = 0;
-
-/* ==========================================================================
- * GRAFO DE FUNCIONES Y LLAMADAS
- * ======================================================================= */
-
-
-/*
- * add_call — registra una arista del grafo de llamadas.
- *
- * Entrada:
- *   caller  símbolo de función llamadora.
- *   callee  símbolo de función llamada.
- *   call  nodo CALL para diagnóstico.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: amplía call_edges y registra punteros prestados.
- * Restricciones:
- *   R no se registra como llamada.
- */
-static void add_call(Symbol *caller, Symbol *callee, ASTNode *call) {
-    if (call_count == call_capacity) {
-
-        int capacity = call_capacity == 0 ? 16 : call_capacity * 2;
-
-        CallEdge *edges =
-            realloc(call_edges, (size_t) capacity * sizeof(CallEdge));
-
-        if (edges == NULL) {
-            fprintf(stderr, "Error: out of memory\n");
-            exit(EXIT_FAILURE);
-        }
-
-        call_edges = edges;
-        call_capacity = capacity;
-    }
-
-    call_edges[call_count].caller = caller;
-    call_edges[call_count].callee = callee;
-    call_edges[call_count].call = call;
-    call_count++;
-}
-
-/*
- * add_function — registra una función para recorrer el grafo.
- *
- * Entrada:
- *   function  símbolo de función no NULL.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: amplía function_list y conserva un puntero prestado.
- * Restricciones:
- *   ninguna.
- */
-static void add_function(Symbol *function) {
-    if (function_count == function_capacity) {
-
-        int capacity = function_capacity == 0 ? 16 : function_capacity * 2;
-
-        Symbol **list =
-            realloc(function_list, (size_t) capacity * sizeof(Symbol *));
-
-        if (list == NULL) {
-            fprintf(stderr, "Error: out of memory\n");
-            exit(EXIT_FAILURE);
-        }
-
-        function_list = list;
-        function_capacity = capacity;
-    }
-
-    function_list[function_count] = function;
-    function_count++;
-}
-
-/*
- * free_call_graph — libera las listas auxiliares del grafo.
- *
- * Entrada: ninguna
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: libera aristas y lista de funciones; reinicia contadores.
- * Restricciones:
- *   no libera símbolos ni nodos prestados.
- */
-static void free_call_graph(void) {
-    free(call_edges);
-    free(function_list);
-
-    call_edges = NULL;
-    call_count = 0;
-    call_capacity = 0;
-
-    function_list = NULL;
-    function_count = 0;
-    function_capacity = 0;
-}
-
-// Usos
-
-// A-1: la gramática produce el mismo nodo para v [ i ] y para f [ x ]. Cada
-// uso se resuelve contra la tabla de símbolos, según dónde aparece.
-typedef enum {
-    USE_EXPRESSION,   // CALL o INDEX dentro de una expresión
-    USE_TARGET,       // CALL o INDEX como destino de una asignación
-    USE_STATEMENT,    // CALL de un CALL_STATEMENT
-    USE_REWIND        // REWIND
-} UseContext;
-
-// Devuelve el tipo de la expresión y verifica nombres, usos y tipos.
-// Cada expresión se evalúa UNA sola vez, para no repetir sus errores.
-static ExprType check_expression(ASTNode *node);
-
-/* ==========================================================================
- * USOS, ARGUMENTOS E ÍNDICES
- * ======================================================================= */
-
-
-/*
- * check_identifier — verifica un nombre usado sin corchetes.
- *
- * Entrada:
- *   identifier  nodo AST_IDENTIFIER.
- * Salida:
- *   tipo escalar/arreglo o ET_ERROR.
- *   Efectos: resuelve y anota símbolo; reporta funciones usadas sin invocación.
- * Restricciones:
- *   ninguna.
- */
-static ExprType check_identifier(ASTNode *identifier) {
-    Symbol *symbol = resolve_name(identifier);
-
-    if (symbol == NULL)
-        return make_type(ET_ERROR);
-
-    if (symbol->kind == SYMBOL_FUNCTION) {
-
-        semantic_error(identifier,
-                       "'%s' es una funcion; debe invocarse con corchetes",
-                       identifier->text);
-
-        return make_type(ET_ERROR);
-    }
-
-    return symbol_value_type(symbol);
-}
-
-/*
- * check_invocation — comprueba punto de entrada y cantidad de argumentos.
- *
- * Entrada:
- *   node  nodo CALL o REWIND.
- *   function  función resuelta.
- *   n_args  cantidad de argumentos.
- *   is_rewind  1 para R, 0 para llamada.
- * Salida:
- *   1 si cumple; 0 si reporta error.
- *   Efectos: reporta invocación de main o cantidad incorrecta.
- * Restricciones:
- *   function no NULL; aún no verifica tipos.
- */
-static int check_invocation(ASTNode *node, Symbol *function,
-                            int n_args, int is_rewind) {
-    int valid = 1;
-
-    // main solo la invoca el arranque del programa (no aplica a REWIND).
-    if (!is_rewind &&
-        strcmp(function->name, "main") == 0) {
-
-        semantic_error(node,
-                       "'main' es el punto de entrada y no puede invocarse");
-
-        valid = 0;
-    }
-
-    if (n_args != function->parameter_count) {
-
-        semantic_error(node,
-                       "'%s' espera %d argumentos, se recibieron %d",
-                       function->name,
-                       function->parameter_count,
-                       n_args);
-
-        valid = 0;
-    }
-
-    return valid;
-}
-
-/*
- * check_argument — verifica tipo y mutabilidad de un argumento.
- *
- * Entrada:
- *   argument  expresión argumento.
- *   type  tipo ya calculado.
- *   function  función con param_list.
- *   position  posición desde 0.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: reporta tipo/forma incompatibles o arreglo Vi pasado a parámetro mutable.
- * Restricciones:
- *   cantidad ya coincide; position menor que parameter_count.
- */
-static void check_argument(ASTNode *argument, ExprType type,
-                           Symbol *function, int position) {
-    Symbol *parameter = function->param_list[position];
-
-    if (type.kind == ET_ERROR)
-        return;
-
-    // Un arreglo se pasa por referencia: uno inmutable no puede llegar a un
-    // parámetro que permite modificarlo. Los escalares se pasan por valor.
-    Symbol *symbol =
-        argument->kind == AST_IDENTIFIER ? argument->symbol : NULL;
-
-    if (symbol != NULL &&
-        type.kind == ET_ARRAY &&
-        symbol->modifier == MODIFIER_VI &&
-        parameter->dimensions > 0 &&
-        parameter->modifier != MODIFIER_VI) {
-
-        semantic_error(argument,
-                       "'%s' es inmutable; el parametro '%s' permite modificacion",
-                       symbol->name,
-                       parameter->name);
-    }
-
-    // Escalar: el mismo tipo. Arreglo: misma base, dimensiones y tamaños.
-    ExprType expected = symbol_value_type(parameter);
-
-    if (expected.kind == ET_ERROR ||
-        same_type(expected, type))
-        return;
-
-    char expected_text[TYPE_TEXT_SIZE];
-    char received_text[TYPE_TEXT_SIZE];
-
-    semantic_error(argument,
-                   "argumento %d de '%s': se esperaba %s, se recibio %s",
-                   position + 1,
-                   function->name,
-                   type_text(expected, expected_text),
-                   type_text(type, received_text));
-}
-
-/*
- * check_index_range — verifica un índice conocido en compilación.
- *
- * Entrada:
- *   index  expresión índice.
- *   type  tipo ya calculado.
- *   array  arreglo resuelto.
- *   position  dimensión desde 0.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: reporta índice constante fuera de rango.
- * Restricciones:
- *   position menor que dimensions; no verifica índices dinámicos.
- */
-static void check_index_range(ASTNode *index, ExprType type, Symbol *array,
-                              int position) {
-    if (!type.is_const)
-        return;
-
-    long value = type.value;
-
-    int size = array->dim_sizes[position];
-
-    // Dimensión 0: ya se reportó en la declaración (S-06).
-    if (size <= 0)
-        return;
-
-    if (value < 0 || value >= size) {
-
-        semantic_error(index,
-                       "indice %ld fuera del rango [0..%d]",
-                       value,
-                       size - 1);
-    }
-}
-
-// Qué resultó ser un CALL, INDEX o REWIND al resolver su nombre.
-typedef enum {
-    RESOLVED_NONE,     // nombre no encontrado o mal usado (ya reportado)
-    RESOLVED_CALL,     // llamada a una función
-    RESOLVED_ACCESS    // acceso a un elemento de un arreglo
-} Resolution;
-
-/*
- * check_operand — verifica una vez un argumento o índice.
- *
- * Entrada:
- *   operand  expresión o NULL.
- *   symbol  símbolo resuelto o NULL.
- *   resolution  resolución de llamada/acceso.
- *   valid  1 si coincide la cantidad.
- *   position  posición desde 0.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: evalúa tipo, anota nombres y reporta errores.
- * Restricciones:
- *   symbol válido si resolution exige comprobarlo; posición válida cuando
- *   valid=1.
- */
-static void check_operand(ASTNode *operand, Symbol *symbol,
-                          Resolution resolution, int valid, int position) {
-    ExprType type = check_expression(operand);
-
-    if (resolution == RESOLVED_ACCESS) {
-
-        expect_type(operand, type, ET_INT,
-                    "el indice debe ser de tipo int");
-
-        if (valid)
-            check_index_range(operand, type, symbol, position);
-    }
-    else if (resolution == RESOLVED_CALL && valid) {
-        check_argument(operand, type, symbol, position);
-    }
-}
-
-/*
- * check_call — resuelve llamada, acceso o reinicio según su contexto.
- *
- * Entrada:
- *   node  nodo CALL, INDEX o REWIND no NULL.
- *   context  contexto de uso.
- * Salida:
- *   tipo escalar/VOID; ET_ERROR si resolución/cantidad falla o hay recursión directa.
- *   Efectos: anota nombres, comprueba operandos y agrega llamadas al grafo.
- * Restricciones:
- *   argumentos en AST_ARGUMENTS; no evalúa una llamada para obtener
- *   constante.
- */
-static ExprType check_call(ASTNode *node, UseContext context) {
-    ASTNode *arguments = ast_find_child(node, AST_ARGUMENTS);
-
-    int n_args = ast_count_children(arguments);
-
-    // Si el nombre no existe ya se reportó y no se dice nada más de este uso.
-    Symbol *symbol = resolve_name(ast_find_child(node, AST_IDENTIFIER));
-
-    Resolution resolution = RESOLVED_NONE;
-    int valid = 0;
-
-    // Llamada que se resolvió pero no puede usarse como valor (recursión
-    // directa): sus argumentos se verifican, pero el resultado es ET_ERROR.
-    int poisoned = 0;
-
-    // R solo reinicia la función actual. Si apunta a otra, se verifican los
-    // nombres de sus argumentos, pero no su cantidad ni sus tipos.
-    if (context == USE_REWIND &&
-        symbol != NULL &&
-        symbol->kind == SYMBOL_FUNCTION &&
-        symbol != current_function) {
-
-        semantic_error(node,
-                       "'R' solo puede reiniciar la funcion actual");
-    }
-    else if (symbol != NULL) {
-
-        int is_function = symbol->kind == SYMBOL_FUNCTION;
-        int is_array = !is_function && symbol->dimensions > 0;
-
-        // En una expresión, un CALL es llamada o acceso; un INDEX solo puede
-        // ser acceso. Solo se puede asignar a un elemento de un arreglo. Una
-        // sentencia de llamada y un R solo admiten funciones.
-        if (context == USE_EXPRESSION &&
-            is_function && node->kind == AST_CALL)
-            resolution = RESOLVED_CALL;
-        else if ((context == USE_STATEMENT || context == USE_REWIND) &&
-                 is_function)
-            resolution = RESOLVED_CALL;
-        else if ((context == USE_EXPRESSION || context == USE_TARGET) &&
-                 is_array)
-            resolution = RESOLVED_ACCESS;
-
-        if (resolution == RESOLVED_CALL) {
-
-            valid = check_invocation(node,
-                                     symbol,
-                                     n_args,
-                                     context == USE_REWIND);
-
-            // S-05: R no es una llamada, y llamar a main ya es un error.
-            if (context != USE_REWIND &&
-                strcmp(symbol->name, "main") != 0) {
-
-                if (symbol == current_function) {
-
-                    // Recursión directa: no se agrega al grafo.
-                    semantic_error(node,
-                                   "'%s' se invoca a si misma; "
-                                   "la recursion debe expresarse con 'R'",
-                                   symbol->name);
-
-                    poisoned = 1;
-                }
-                else if (current_function != NULL) {
-                    add_call(current_function, symbol, node);
-                }
-            }
-        }
-        else if (resolution == RESOLVED_ACCESS) {
-
-            // Todos los indices en ARGUMETNS.
-            int used = n_args;
-
-            valid = used == symbol->dimensions;
-
-            if (!valid)
-                semantic_error(node,
-                               "'%s' tiene %d dimensiones, se usaron %d indices",
-                               symbol->name,
-                               symbol->dimensions,
-                               used);
-        }
-        else if (context == USE_STATEMENT || context == USE_REWIND) {
-            semantic_error(node,
-                           "'%s' no es una funcion",
-                           symbol->name);
-        }
-        else {
-            semantic_error(node,
-                           "'%s' no es un arreglo",
-                           symbol->name);
-        }
-    }
-
-    // Argumentos o índices, en orden. Si valid, position nunca pasa de la
-    // cantidad de parámetros ni de MAX_DIMS.
-    int position = 0;
-
-    ASTNode *operand = arguments ? arguments->child : NULL;
-
-    while (operand != NULL) {
-        check_operand(operand, symbol, resolution, valid, position);
-        position++;
-        operand = operand->next;
-    }
-
-    // Recorrido adicional de un hermano de ARGUMENTS si estuviera presente.
-    // ast_index normaliza los índices dentro de ARGUMENTS: en los nodos
-    // construidos por el parser, arguments->next es NULL.
-    if (node->kind == AST_INDEX && arguments != NULL)
-        check_operand(arguments->next, symbol, resolution, valid, position);
-
-    if (!valid || poisoned)
-        return make_type(ET_ERROR);
-
-    // Llamada: el tipo de retorno. Acceso: el tipo de los elementos (un
-    // índice fuera de rango no lo cambia).
-    return scalar_type(symbol->type);
-}
-
-// Familias de operadores (§2).
-typedef enum {
-    OP_ARITHMETIC,   // + - * / % ^ y - unario: int -> int
-    OP_RELATIONAL,   // < > <= >=: int -> bool
-    OP_LOGICAL,      // & | y ! unario: bool -> bool
-    OP_EQUALITY      // == !=: dos escalares del mismo tipo -> bool
-} OperatorFamily;
-
-/* ==========================================================================
- * OPERADORES Y CONSTANTES
- * ======================================================================= */
-
-
-/*
- * operator_family — clasifica un operador por la regla de tipos.
- *
- * Entrada:
- *   kind  clase del operador AST.
- * Salida:
- *   familia relacional, lógica, igualdad o aritmética.
- *   Efectos: ninguno.
- * Restricciones:
- *   ninguna.
- */
-static OperatorFamily operator_family(ASTKind kind) {
-    switch (kind) {
-
-        case AST_LESS:
-        case AST_GREATER:
-        case AST_LESS_EQUAL:
-        case AST_GREATER_EQUAL:
-            return OP_RELATIONAL;
-
-        case AST_OR:
-        case AST_AND:
-        case AST_NOT:
-            return OP_LOGICAL;
-
-        case AST_EQUAL:
-        case AST_NOT_EQUAL:
-            return OP_EQUALITY;
-
-        default:
-            return OP_ARITHMETIC;
-    }
-}
-
-/*
- * number_type — verifica el rango de un literal entero.
- *
- * Entrada:
- *   number  nodo AST_NUMBER no NULL.
- *   negated  1 si es operando directo de menos unario.
- * Salida:
- *   ET_INT constante; ET_ERROR ante desborde.
- *   Efectos: reporta literales mayores que el máximo permitido.
- * Restricciones:
- *   el léxico entrega magnitudes no negativas; admite 2147483648 solo con
- *   negated=1.
- */
-static ExprType number_type(ASTNode *number, int negated) {
-    long long highest = negated ? INT32_HIGHEST + 1 : INT32_HIGHEST;
-
-    if (number->number > highest) {
-
-        semantic_error(number,
-                       "la expresion constante desborda el rango de int");
-
-        return make_type(ET_ERROR);
-    }
-
-    ExprType type = make_type(ET_INT);
-
-    type.is_const = 1;
-    type.value = number->number;
-
-    return type;
-}
-
-/*
- * const_power — calcula potencia por cuadrados sucesivos.
- *
- * Entrada:
- *   base  base en rango int32.
- *   exponent  exponente no negativo.
- *   overflow  puntero a bandera inicializada a 0.
- * Salida:
- *   potencia; 0 al detectar desborde.
- *   Efectos: pone *overflow=1 si no cabe en int32.
- * Restricciones:
- *   x^0 y 0^0 valen 1.
- */
-static long long const_power(long long base, long long exponent,
-                             int *overflow) {
-    long long result = 1;
-
-    while (exponent > 0) {
-
-        if (exponent & 1) {
-
-            result *= base;
-
-            if (result < INT32_LOWEST || result > INT32_HIGHEST) {
-                *overflow = 1;
-                return 0;
-            }
-        }
-
-        exponent >>= 1;
-
-        if (exponent > 0) {
-
-            base *= base;
-
-            // base se volverá a usar y result no es 0: ya no cabe.
-            if (base > INT32_HIGHEST) {
-                *overflow = 1;
-                return 0;
-            }
-        }
-    }
-
-    return result;
-}
-
-/*
- * fold_constant — calcula operadores aritméticos constantes.
- *
- * Entrada:
- *   node  nodo de operador.
- *   left  tipo izquierdo.
- *   right  tipo derecho, igual al izquierdo en unario.
- * Salida:
- *   ET_INT con valor si se conoce; ET_ERROR ante error.
- *   Efectos: reporta división por cero, exponente negativo o desborde.
- * Restricciones:
- *   operandos ya int; división trunca hacia cero; no calcula constantes
- *   lógicas.
- */
-static ExprType fold_constant(ASTNode *node, ExprType left, ExprType right) {
-    ExprType result = make_type(ET_INT);
-
-    int is_unary = node->kind == AST_NEG;
-
-    // Aunque el dividendo o la base no sean constantes.
-    if ((node->kind == AST_DIV || node->kind == AST_MOD) &&
-        right.is_const && right.value == 0) {
-
-        semantic_error(node, "division entre cero");
-
-        return make_type(ET_ERROR);
-    }
-
-    if (node->kind == AST_POWER &&
-        right.is_const && right.value < 0) {
-
-        semantic_error(node,
-                       "exponente negativo: "
-                       "resultado no representable como int");
-
-        return make_type(ET_ERROR);
-    }
-
-    if (!left.is_const ||
-        (!is_unary && !right.is_const))
-        return result;
-
-    long long a = left.value;
-    long long b = right.value;
-    long long value = 0;
-
-    int overflow = 0;
-
-    switch (node->kind) {
-        case AST_NEG:   value = -a;    break;
-        case AST_ADD:   value = a + b; break;
-        case AST_SUB:   value = a - b; break;
-        case AST_MUL:   value = a * b; break;
-        case AST_DIV:   value = a / b; break;
-        case AST_MOD:   value = a % b; break;
-        case AST_POWER: value = const_power(a, b, &overflow); break;
-        default:        return result;
-    }
-
-    // Solo se reporta el operador más interno que se sale de rango: su padre
-    // recibe ET_ERROR.
-    if (overflow ||
-        value < INT32_LOWEST || value > INT32_HIGHEST) {
-
-        semantic_error(node,
-                       "la expresion constante desborda el rango de int");
-
-        return make_type(ET_ERROR);
-    }
-
-    result.is_const = 1;
-    result.value = (long) value;
-
-    return result;
-}
-
-/*
- * check_operator — verifica tipos de un operador y pliega aritmética constante.
- *
- * Entrada:
- *   node  nodo de operador no NULL.
- * Salida:
- *   tipo de familia; ET_ERROR si el operador reporta error.
- *   Efectos: verifica operandos una vez y reporta incompatibilidad.
- * Restricciones:
- *   si un operando es ET_ERROR devuelve el tipo de familia sin otro
- *   diagnóstico.
- */
-static ExprType check_operator(ASTNode *node) {
-    const char *symbol = operator_symbol(node->kind);
-
-    ASTNode *first = node->child;
-    ASTNode *second = first ? first->next : NULL;   // NULL en los unarios
-
-    // -2147483648: el literal es operando directo del - unario.
-    ExprType left =
-        (node->kind == AST_NEG && first != NULL && first->kind == AST_NUMBER)
-            ? number_type(first, 1)
-            : check_expression(first);
-
-    ExprType right = second ? check_expression(second) : left;
-
-    OperatorFamily family = operator_family(node->kind);
-
-    ExprType result =
-        make_type(family == OP_ARITHMETIC ? ET_INT : ET_BOOL);
-
-    if (left.kind == ET_ERROR ||
-        right.kind == ET_ERROR)
-        return result;
-
-    char text[TYPE_TEXT_SIZE];
-
-    int errors_before = diag_count();
-
-    switch (family) {
-
-        case OP_ARITHMETIC:
-            if (left.kind != ET_INT || right.kind != ET_INT)
-                semantic_error(node,
-                               "el operador '%s' requiere operandos de tipo int",
-                               symbol);
-            break;
-
-        // Se nombra el tipo del primer operando que no es int.
-        case OP_RELATIONAL:
-            if (left.kind != ET_INT || right.kind != ET_INT)
-                semantic_error(node,
-                               "el operador '%s' no acepta operandos de tipo %s",
-                               symbol,
-                               type_text(left.kind != ET_INT ? left : right,
-                                         text));
-            break;
-
-        case OP_LOGICAL:
-            if (left.kind != ET_BOOL || right.kind != ET_BOOL)
-                semantic_error(node,
-                               "el operador '%s' requiere operandos de tipo bool",
-                               symbol);
-            break;
-
-        // Solo se comparan escalares, y del mismo tipo.
-        case OP_EQUALITY:
-            if (left.kind == ET_ARRAY || right.kind == ET_ARRAY)
-                semantic_error(node,
-                               "el operador '%s' no acepta operandos de tipo %s",
-                               symbol,
-                               type_text(left.kind == ET_ARRAY ? left : right,
-                                         text));
-            else if (left.kind != right.kind)
-                semantic_error(node,
-                               "el operador '%s' requiere operandos del mismo tipo",
-                               symbol);
-            break;
-    }
-
-    // El operador reportó un error: no se dice nada más sobre esta expresión.
-    if (diag_count() != errors_before)
-        return make_type(ET_ERROR);
-
-    // Tipos correctos: valor constante, si se conoce en compilación.
-    if (family == OP_ARITHMETIC)
-        return fold_constant(node, left, right);
-
-    return result;
-}
-
-/*
- * check_expression — verifica nombres, usos y tipo de una expresión.
- *
- * Entrada:
- *   node  expresión o NULL.
- * Salida:
- *   ExprType; ET_ERROR si no es valor válido; nunca ET_VOID.
- *   Efectos: anota símbolos, agrega llamadas y reporta errores.
- * Restricciones:
- *   usar antes de generación; una función void no es un valor.
- */
-static ExprType check_expression(ASTNode *node) {
-    if (node == NULL)
-        return make_type(ET_ERROR);
-
-    switch (node->kind) {
-
-        case AST_IDENTIFIER:
-            return check_identifier(node);
-
-        case AST_NUMBER:
-            return number_type(node, 0);
-
-        case AST_BOOLEAN:
-            return make_type(ET_BOOL);
-
-        case AST_CALL:
-        case AST_INDEX: {
-            ExprType type = check_call(node, USE_EXPRESSION);
-
-            if (type.kind == ET_VOID) {
-
-                ASTNode *name = ast_find_child(node, AST_IDENTIFIER);
-
-                semantic_error(node,
-                               "la funcion '%s' no devuelve valor",
-                               name ? name->text : "");
-
-                return make_type(ET_ERROR);
-            }
-
-            return type;
-        }
-
-        default:
-            break;
-    }
-
-    if (operator_symbol(node->kind) != NULL)
-        return check_operator(node);
-
-    // Cualquier otro nodo no es una expresión con tipo: solo se verifican
-    // los nombres que contiene.
-    ASTNode *child = node->child;
-
-    while (child != NULL) {
-        check_expression(child);
-        child = child->next;
-    }
-
-    return make_type(ET_ERROR);
-}
-
-/* ==========================================================================
- * CONDICIONES Y ASIGNACIONES
- * ======================================================================= */
-
-
-/*
- * check_condition — exige condición bool en C, A o L.
- *
- * Entrada:
- *   node  nodo de control.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: verifica expresión y reporta condición de tipo distinto de bool.
- * Restricciones:
- *   ninguna.
- */
-static void check_condition(ASTNode *node) {
-    ASTNode *condition = find_condition(node);
-
-    expect_type(condition, check_expression(condition), ET_BOOL,
-                "la condicion debe ser de tipo bool");
-}
-
-/*
- * check_target — verifica el destino y su mutabilidad.
- *
- * Entrada:
- *   target  nodo destino o NULL.
- * Salida:
- *   tipo destino o ET_ERROR.
- *   Efectos: resuelve nombres y reporta escritura a Vi.
- * Restricciones:
- *   la mutabilidad incorrecta se reporta sin cambiar necesariamente el
- *   tipo.
- */
-static ExprType check_target(ASTNode *target) {
-    if (target == NULL)
-        return make_type(ET_ERROR);
-
-    if (target->kind == AST_CALL ||
-        target->kind == AST_INDEX) {
-
-        ExprType type = check_call(target, USE_TARGET);
-
-        ASTNode *name = ast_find_child(target, AST_IDENTIFIER);
-        Symbol *symbol = name ? name->symbol : NULL;
-
-        if (symbol != NULL &&
-            symbol->kind != SYMBOL_FUNCTION &&
-            symbol->dimensions > 0 &&
-            symbol->modifier == MODIFIER_VI) {
-
-            semantic_error(target,
-                           "'%s' es inmutable; sus elementos no pueden modificarse",
-                           symbol->name);
-        }
-
-        return type;
-    }
-
-    ExprType type = check_expression(target);
-
-    Symbol *symbol =
-        target->kind == AST_IDENTIFIER ? target->symbol : NULL;
-
-    if (symbol != NULL &&
-        symbol->kind != SYMBOL_FUNCTION &&
-        symbol->modifier == MODIFIER_VI) {
-
-        semantic_error(target,
-                       "'%s' es inmutable y no puede modificarse",
-                       symbol->name);
-    }
-
-    return type;
-}
-
-/*
- * check_assignment — verifica destino y valor de una asignación.
- *
- * Entrada:
- *   statement  nodo AST_ASSIGNMENT no NULL.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: anota nombres y reporta mutabilidad/tipos incompatibles.
- * Restricciones:
- *   ninguna.
- */
-static void check_assignment(ASTNode *statement) {
-    ASTNode *target = statement->child;               // primer hijo
-    ASTNode *value = target ? target->next : NULL;    // segundo hijo
-
-    ExprType destination = check_target(target);
-
-    check_assignable(target, destination, check_expression(value));
-}
-
-/* ==========================================================================
- * LISTAS DE INICIALIZACIÓN
- * ======================================================================= */
-
-
-/*
- * check_list_names — verifica expresiones de una lista sin exigir forma.
- *
- * Entrada:
- *   node  lista, valor o NULL.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: recorre valores y reporta sus errores de expresión.
- * Restricciones:
- *   ninguna.
- */
-static void check_list_names(ASTNode *node) {
-    if (node == NULL)
-        return;
-
-    if (node->kind != AST_INITIALIZER_LIST) {
-        check_expression(node);
-        return;
-    }
-
-    ASTNode *child = node->child;
-
-    while (child != NULL) {
-        check_list_names(child);
-        child = child->next;
-    }
-}
-
-/*
- * report_list_type — reporta el primer tipo incorrecto de un inicializador.
- *
- * Entrada:
- *   wrong  primer tipo incorrecto o ET_ERROR.
- *   symbol  arreglo declarado.
- *   node  nodo de declaración.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: emite diagnóstico salvo wrong=ET_ERROR.
- * Restricciones:
- *   ninguna.
- */
-static void report_list_type(ExprType wrong, Symbol *symbol, ASTNode *node) {
-    if (wrong.kind == ET_ERROR)
-        return;
-
-    char wrong_text[TYPE_TEXT_SIZE];
-    char base_text[TYPE_TEXT_SIZE];
-
-    semantic_error(node,
-                   "no se puede asignar '%s' a una variable '%s'",
-                   type_text(wrong, wrong_text),
-                   type_text(scalar_type(symbol->type), base_text));
-}
-
-/*
- * check_list_values — verifica los valores escalares de una lista o fila.
- *
- * Entrada:
- *   list  lista de inicialización.
- *   symbol  arreglo declarado.
- *   node  nodo para diagnóstico.
- *   wrong  puntero al primer tipo incorrecto, inicialmente ET_ERROR.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: actualiza *wrong, verifica expresiones y reporta listas anidadas inesperadas.
- * Restricciones:
- *   list, symbol y wrong no NULL; forma exterior la verifica el llamador.
- */
-static void check_list_values(ASTNode *list, Symbol *symbol, ASTNode *node,
-                              ExprType *wrong) {
-    ExprType base = scalar_type(symbol->type);
-
-    int nested = 0;
-
-    ASTNode *value = list->child;
-
-    while (value != NULL) {
-
-        if (value->kind == AST_INITIALIZER_LIST) {
-            nested = 1;
-            check_list_names(value);
-        }
-        else {
-
-            ExprType type = check_expression(value);
-
-            if (wrong->kind == ET_ERROR &&
-                type.kind != ET_ERROR &&
-                !same_type(type, base))
-                *wrong = type;
-        }
-
-        value = value->next;
-    }
-
-    if (nested)
-        semantic_error(node,
-                       "se recibio una lista donde se esperaba un valor");
-}
-
-/*
- * check_initializer_list — verifica forma y tipos de un inicializador de arreglo.
- *
- * Entrada:
- *   symbol  símbolo declarado.
- *   list  lista de inicialización.
- *   node  nodo de declaración.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: verifica valores y reporta tamaños/filas/tipos incompatibles.
- * Restricciones:
- *   una o dos dimensiones; también reporta lista aplicada a escalar.
- */
-static void check_initializer_list(Symbol *symbol, ASTNode *list,
-                                   ASTNode *node) {
-
-    // Un escalar no admite lista: solo se verifican los nombres.
-    if (symbol->dimensions == 0) {
-
-        semantic_error(node,
-                       "'%s' no es un arreglo",
-                       symbol->name);
-
-        check_list_names(list);
-
-        return;
-    }
-
-    // Dimensión 0: ya se reportó en la declaración (S-06).
-    for (int i = 0; i < symbol->dimensions; i++) {
-
-        if (symbol->dim_sizes[i] <= 0) {
-            check_list_names(list);
-            return;
-        }
-    }
-
-    int count = ast_count_children(list);
-
-    if (count != symbol->dim_sizes[0])
-        semantic_error(node,
-                       "se recibieron %d valores, se esperaban %d",
-                       count,
-                       symbol->dim_sizes[0]);
-
-    // Primer valor de tipo incorrecto en toda la lista.
-    ExprType wrong = make_type(ET_ERROR);
-
-    // Una dimensión: cada elemento es un valor.
-    if (symbol->dimensions == 1) {
-        check_list_values(list, symbol, node, &wrong);
-        report_list_type(wrong, symbol, node);
-        return;
-    }
-
-    // Dos dimensiones: si el número de filas no coincide, no se revisa cada
-    // fila (solo sus nombres).
-    if (count != symbol->dim_sizes[0]) {
-        check_list_names(list);
-        return;
-    }
-
-    // Cada elemento es una fila de dim_sizes[1] valores.
-    int columns = symbol->dim_sizes[1];
-    int row_number = 0;
-
-    ASTNode *row = list->child;
-
-    while (row != NULL) {
-
-        if (row->kind != AST_INITIALIZER_LIST) {
-
-            semantic_error(node,
-                           "la fila %d debe ser una lista de %d valores",
-                           row_number,
-                           columns);
-
-            check_expression(row);
-        }
-        else {
-
-            int values = ast_count_children(row);
-
-            if (values != columns)
-                semantic_error(node,
-                               "la fila %d tiene %d valores, se esperaban %d",
-                               row_number,
-                               values,
-                               columns);
-
-            check_list_values(row, symbol, node, &wrong);
-        }
-
-        row_number++;
-        row = row->next;
-    }
-
-    report_list_type(wrong, symbol, node);
-}
-
-/* ==========================================================================
  * DECLARACIONES Y PARÁMETROS
  * ======================================================================= */
 
@@ -1978,13 +362,13 @@ static Symbol *find_parameter(Symbol *function, const char *name) {
  *   node  nodo declarador.
  * Salida:
  *   1 si no choca; 0 si reporta colisión.
- *   Efectos: reporta colisión con parámetro de current_function.
+ *   Efectos: reporta colisión con parámetro de la función en análisis.
  * Restricciones:
  *   no restringe declaraciones globales.
  */
 static int check_not_parameter(const char *name, ASTNode *node) {
-    if (current_function == NULL ||
-        find_parameter(current_function, name) == NULL)
+    if (scopes_function() == NULL ||
+        find_parameter(scopes_function(), name) == NULL)
         return 1;
 
     semantic_error(node,
@@ -1992,39 +376,6 @@ static int check_not_parameter(const char *name, ASTNode *node) {
                    name);
 
     return 0;
-}
-
-/*
- * insert_symbol — inserta un símbolo en el ámbito actual.
- *
- * Entrada:
- *   symbol  símbolo nuevo no NULL.
- *   node  nodo declarador.
- * Salida:
- *   1 si transfiere propiedad al ámbito; 0 si rechaza.
- *   Efectos: inserta o reporta redeclaración y libera symbol.
- * Restricciones:
- *   current_scope vigente; el llamador no usa symbol después del rechazo.
- */
-static int insert_symbol(Symbol *symbol, ASTNode *node) {
-    Symbol *existing =
-        symbol_lookup_current(current_scope, symbol->name);
-
-    if (existing != NULL ||
-        !symbol_insert(current_scope, symbol)) {
-
-        semantic_error(node,
-                       "'%s' ya fue declarado en este ambito (linea %d)",
-                       symbol->name,
-                       existing ? existing->line : 0);
-
-        // symbol_insert no tomó propiedad porque la inserción falló.
-        discard_symbol(symbol);
-
-        return 0;
-    }
-
-    return 1;
 }
 
 /*
@@ -2101,16 +452,16 @@ static int analyze_declaration(ASTNode *node) {
     // es su valor inicial).
     if (initializer != NULL &&
         initializer->kind == AST_INITIALIZER_LIST)
-        check_initializer_list(symbol, initializer, node);
+        semantic_check_initializer_list(symbol, initializer, node);
     else if (initializer != NULL)
-        check_assignable(node,
-                         symbol_value_type(symbol),
-                         check_expression(initializer));
+        semantic_check_assignable(node,
+                         semantic_symbol_value_type(symbol),
+                         semantic_check_expression(initializer));
 
     // Un local que oculta un parámetro no se inserta.
     if (!check_not_parameter(symbol->name, node)) {
 
-        discard_symbol(symbol);
+        scopes_discard(symbol);
 
         return 1;
     }
@@ -2122,7 +473,7 @@ static int analyze_declaration(ASTNode *node) {
     symbol->width = type_width(symbol->type) * d1 * d2;   // d = 1 si no aplica
 
     // Una redeclaración no se inserta.
-    if (!insert_symbol(symbol, node))
+    if (!scopes_insert(symbol, node))
         return 1;
 
     identifier->symbol = symbol;
@@ -2244,18 +595,18 @@ static int analyze_statements(ASTNode *block) {
  *   kind  clase del ámbito.
  * Salida:
  *   1 si continúa; 0 ante error interno.
- *   Efectos: crea ámbito, analiza sentencias y restaura current_scope.
+ *   Efectos: crea ámbito, analiza sentencias y restaura el ámbito actual.
  * Restricciones:
  *   ninguna.
  */
 static int analyze_block(ASTNode *block, ScopeKind kind) {
 
     // P-03: la línea del BLOCK es la de la palabra clave que lo abre.
-    enter_scope(kind, block ? block->line : 0);
+    scopes_enter(kind, block ? block->line : 0);
 
     int result = analyze_statements(block);
 
-    exit_scope();
+    scopes_exit();
 
     return result;
 }
@@ -2274,7 +625,7 @@ static int analyze_block(ASTNode *block, ScopeKind kind) {
 static int analyze_conditional(ASTNode *node) {
 
     // Rama inicial  C [cond] ;
-    check_condition(node);
+    semantic_check_condition(node);
 
     if (!analyze_block(ast_find_child(node, AST_BLOCK), SCOPE_C))
         return 0;
@@ -2287,7 +638,7 @@ static int analyze_conditional(ASTNode *node) {
 
         if (alternative->kind == AST_ALTERNATIVE) {
 
-            check_condition(alternative);
+            semantic_check_condition(alternative);
 
             if (!analyze_block(ast_find_child(alternative, AST_BLOCK),
                                SCOPE_A))
@@ -2320,9 +671,107 @@ static int analyze_conditional(ASTNode *node) {
  *   ninguna.
  */
 static int analyze_loop_l(ASTNode *node) {
-    check_condition(node);
+    semantic_check_condition(node);
 
     return analyze_block(ast_find_child(node, AST_BLOCK), SCOPE_L);
+}
+
+/*
+ * check_loop_s_bounds — verifica inicio, fin y paso del ciclo S.
+ *
+ * Entrada:
+ *   node  nodo AST_LOOP_S.
+ *   start  expresión de inicio.
+ *   end  expresión de fin.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: evalúa tipos, exige int, rechaza paso cero y avisa si el ciclo
+ *   nunca se ejecuta.
+ * Restricciones:
+ *   inicio y fin se verifican antes de abrir el ámbito del S:
+ *   S [ i , 0 , i , 1 ]  usa el i de afuera.
+ */
+static void check_loop_s_bounds(ASTNode *node, ASTNode *start, ASTNode *end) {
+    ExprType start_type = semantic_check_expression(start);
+    ExprType end_type = semantic_check_expression(end);
+
+    semantic_expect_type(start, start_type, ET_INT,
+                "el limite de 'S' debe ser de tipo int");
+    semantic_expect_type(end, end_type, ET_INT,
+                "el limite de 'S' debe ser de tipo int");
+
+    // El paso es un NUMBER con su signo ya aplicado.
+    ASTNode *step = end ? end->next : NULL;
+
+    if (step != NULL && step->kind == AST_NUMBER) {
+
+        if (step->number == 0) {
+
+            semantic_error(step, "el paso de 'S' no puede ser cero");
+        }
+        else if (start_type.is_const && end_type.is_const) {
+
+            // Con inicio y fin constantes se conoce el sentido. El fin es
+            // exclusivo: el ciclo solo se ejecuta si el paso se acerca a él.
+            int runs =
+                (step->number > 0 && start_type.value < end_type.value) ||
+                (step->number < 0 && start_type.value > end_type.value);
+
+            if (!runs)
+                semantic_error(node,
+                               "el ciclo 'S' nunca se ejecuta: "
+                               "inicio %ld, fin %ld, paso %ld",
+                               start_type.value,
+                               end_type.value,
+                               step->number);
+        }
+    }
+}
+
+/*
+ * declare_loop_control — crea la variable de control del S y su casilla de límite.
+ *
+ * Entrada:
+ *   node  nodo AST_LOOP_S.
+ *   identifier  nodo del identificador de control.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: crea el control Vi, lo inserta, reserva su casilla y la del
+ *   límite oculto, y anota el identificador.
+ * Restricciones:
+ *   ámbito del S abierto. El orden de las dos reservas (control y luego
+ *   límite) fija las direcciones.
+ */
+static void declare_loop_control(ASTNode *node, ASTNode *identifier) {
+    Symbol *control =
+        symbol_create(identifier->text,
+                      SYMBOL_VARIABLE,
+                      TYPE_INT);
+
+    // el ciclo la controla; el cuerpo no puede modificarla
+    control->modifier = MODIFIER_VI;
+    control->width = type_width(control->type);   // M-1
+    control->line = node->line;
+    control->decl_node = node;
+
+    if (scopes_insert(control, node)) {
+        reserve(control->width,
+                control->name,
+                node,
+                &control->address);
+
+        // Casilla oculta para el fin del ciclo, junto a la variable de
+        // control. El fin se evalúa una sola vez al entrar
+        // (calser_diseno.md §5.8.2) y el generador lo guarda aquí para
+        // no retener un registro durante el cuerpo. No tiene nombre: no
+        // entra a la tabla de ámbitos.
+        reserve(type_width(TYPE_INT),
+                control->name,
+                node,
+                &control->limit_address);
+
+        identifier->symbol = control;
+    }
 }
 
 /*
@@ -2360,310 +809,24 @@ static int analyze_loop_s(ASTNode *node) {
         return 0;
     }
 
-    // Inicio y fin se verifican antes de abrir el ámbito del S:
-    // S [ i , 0 , i , 1 ]  usa el i de afuera.
-    ExprType start_type = check_expression(start);
-    ExprType end_type = check_expression(end);
-
-    expect_type(start, start_type, ET_INT,
-                "el limite de 'S' debe ser de tipo int");
-    expect_type(end, end_type, ET_INT,
-                "el limite de 'S' debe ser de tipo int");
-
-    // El paso es un NUMBER con su signo ya aplicado.
-    ASTNode *step = end ? end->next : NULL;
-
-    if (step != NULL && step->kind == AST_NUMBER) {
-
-        if (step->number == 0) {
-
-            semantic_error(step, "el paso de 'S' no puede ser cero");
-        }
-        else if (start_type.is_const && end_type.is_const) {
-
-            // Con inicio y fin constantes se conoce el sentido. El fin es
-            // exclusivo: el ciclo solo se ejecuta si el paso se acerca a él.
-            int runs =
-                (step->number > 0 && start_type.value < end_type.value) ||
-                (step->number < 0 && start_type.value > end_type.value);
-
-            if (!runs)
-                semantic_error(node,
-                               "el ciclo 'S' nunca se ejecuta: "
-                               "inicio %ld, fin %ld, paso %ld",
-                               start_type.value,
-                               end_type.value,
-                               step->number);
-        }
-    }
+    // Inicio y fin se verifican antes de abrir el ámbito del S.
+    check_loop_s_bounds(node, start, end);
 
     // Si la variable de control oculta un parámetro no se crea: dentro del
     // cuerpo, el nombre se refiere al parámetro.
     int declare = check_not_parameter(identifier->text, node);
 
-    enter_scope(SCOPE_S, node->line);
+    scopes_enter(SCOPE_S, node->line);
 
-    if (declare) {
-
-        Symbol *control =
-            symbol_create(identifier->text,
-                          SYMBOL_VARIABLE,
-                          TYPE_INT);
-
-        // el ciclo la controla; el cuerpo no puede modificarla
-        control->modifier = MODIFIER_VI;
-        control->width = type_width(control->type);   // M-1
-        control->line = node->line;
-        control->decl_node = node;
-
-        if (insert_symbol(control, node)) {
-            reserve(control->width,
-                    control->name,
-                    node,
-                    &control->address);
-
-            // Casilla oculta para el fin del ciclo, junto a la variable de
-            // control. El fin se evalúa una sola vez al entrar
-            // (calser_diseno.md §5.8.2) y el generador lo guarda aquí para
-            // no retener un registro durante el cuerpo. No tiene nombre: no
-            // entra a la tabla de ámbitos.
-            reserve(type_width(TYPE_INT),
-                    control->name,
-                    node,
-                    &control->limit_address);
-
-            identifier->symbol = control;
-        }
-    }
+    if (declare)
+        declare_loop_control(node, identifier);
 
     // El cuerpo comparte el ámbito del S con su variable (no abre otro).
     int result = analyze_statements(ast_find_child(node, AST_BLOCK));
 
-    exit_scope();
+    scopes_exit();
 
     return result;
-}
-
-// CRYPTO
-
-// Zona de datos de la memoria y tamaño de un bloque de cifrado, en bytes.
-#define DATA_ZONE_FIRST    4096
-#define DATA_ZONE_LAST     65535
-#define CRYPTO_BLOCK_BYTES 8
-
-/* ==========================================================================
- * OPERACIONES DE CIFRADO
- * ======================================================================= */
-
-
-/*
- * check_crypto_argument — exige tipo int en un argumento de cifrado.
- *
- * Entrada:
- *   argument  expresión argumento.
- *   position  posición desde 1.
- *   operation  nombre de operación no NULL.
- * Salida:
- *   tipo calculado, incluso si no es int.
- *   Efectos: verifica expresión y reporta incompatibilidad.
- * Restricciones:
- *   ninguna.
- */
-static ExprType check_crypto_argument(ASTNode *argument, int position,
-                                      const char *operation) {
-    ExprType type = check_expression(argument);
-
-    if (type.kind != ET_ERROR &&
-        type.kind != ET_INT) {
-
-        char received_text[TYPE_TEXT_SIZE];
-
-        semantic_error(argument,
-                       "argumento %d de '%s': se esperaba int, se recibio %s",
-                       position,
-                       operation,
-                       type_text(type, received_text));
-    }
-
-    return type;
-}
-
-/*
- * check_crypto_selector — comprueba un selector literal de cifrado.
- *
- * Entrada:
- *   number  nodo NUMBER o NULL.
- *   name  nombre k o w.
- *   operation  nombre de operación.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: reporta valores fuera de 0–3.
- * Restricciones:
- *   la gramática garantiza la forma NUMBER; no evalúa expresiones.
- */
-static void check_crypto_selector(ASTNode *number, const char *name,
-                                  const char *operation) {
-    if (number == NULL || number->kind != AST_NUMBER)
-        return;
-
-    if (number->number < 0 || number->number > 3)
-        semantic_error(number,
-                       "el argumento '%s' de '%s' debe estar entre 0 y 3",
-                       name,
-                       operation);
-}
-
-/*
- * check_crypto_address — verifica zona y alineación de una dirección constante.
- *
- * Entrada:
- *   argument  expresión para diagnóstico.
- *   type  tipo ya calculado.
- *   position  posición desde 1.
- *   operation  nombre de operación.
- * Salida:
- *   1 si la constante int está en zona y alineada; 0 en otro caso.
- *   Efectos: reporta una vez zona o alineación incorrecta.
- * Restricciones:
- *   solo verifica constantes; zona 4096–65535, múltiplos de 4.
- */
-static int check_crypto_address(ASTNode *argument, ExprType type,
-                                int position, const char *operation) {
-    if (type.kind != ET_INT || !type.is_const)
-        return 0;
-
-    if (type.value < DATA_ZONE_FIRST || type.value > DATA_ZONE_LAST) {
-
-        semantic_error(argument,
-                       "argumento %d de '%s': la direccion %ld esta fuera "
-                       "de la zona de datos [%d..%d]",
-                       position,
-                       operation,
-                       type.value,
-                       DATA_ZONE_FIRST,
-                       DATA_ZONE_LAST);
-
-        return 0;
-    }
-
-    if (type.value % 4 != 0) {
-
-        semantic_error(argument,
-                       "argumento %d de '%s': la direccion %ld no es "
-                       "multiplo de 4",
-                       position,
-                       operation,
-                       type.value);
-
-        return 0;
-    }
-
-    return 1;
-}
-
-/*
- * check_crypto_extent — comprueba que los bloques caben desde una dirección.
- *
- * Entrada:
- *   blocks  expresión de bloques.
- *   blocks_type  tipo constante de bloques.
- *   address  tipo constante de dirección validada.
- *   operation  nombre de operación.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: reporta si dirección + 8*bloques excede 65536.
- * Restricciones:
- *   bloques constante positivo; dirección ya verificada.
- */
-static void check_crypto_extent(ASTNode *blocks, ExprType blocks_type,
-                                ExprType address, const char *operation) {
-    long long end =
-        (long long) address.value +
-        (long long) CRYPTO_BLOCK_BYTES * blocks_type.value;
-
-    if (end > DATA_ZONE_LAST + 1)
-        semantic_error(blocks,
-                       "argumento 3 de '%s': %ld bloques desde la direccion "
-                       "%ld se salen de la memoria",
-                       operation,
-                       blocks_type.value,
-                       address.value);
-}
-
-/*
- * analyze_crypto — verifica argumentos y selectores de una operación de cifrado.
- *
- * Entrada:
- *   node  nodo AST_CRYPTO.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: resuelve nombres y tipos de argumentos; puede agregar sus llamadas al grafo.
- * Restricciones:
- *   cantidad y forma garantizadas por gramática; no verifica direcciones
- *   dinámicas.
- */
-static void analyze_crypto(ASTNode *node) {
-    const char *operation = node->text;
-
-    ASTNode *arguments = ast_find_child(node, AST_ARGUMENTS);
-    ASTNode *argument = arguments ? arguments->child : NULL;
-
-    // cerrar_sesion, sellar: sin argumentos.
-    if (argument == NULL)
-        return;
-
-    // cargar_llave [ k , w , valor ]
-    if (strcmp(operation, "cargar_llave") == 0) {
-
-        ASTNode *w = argument->next;
-
-        check_crypto_selector(argument, "k", operation);
-        check_crypto_selector(w, "w", operation);
-
-        if (w != NULL && w->next != NULL)
-            check_crypto_argument(w->next, 3, operation);
-
-        return;
-    }
-
-    // autenticar, cambiar_ancla: una sola expr.
-    if (argument->next == NULL) {
-        check_crypto_argument(argument, 1, operation);
-        return;
-    }
-
-    // cifrar, descifrar [ origen , destino , bloques , k ]
-    ASTNode *origin = argument;
-    ASTNode *destination = origin->next;
-    ASTNode *blocks = destination->next;
-
-    if (blocks == NULL)
-        return;
-
-    ExprType origin_type = check_crypto_argument(origin, 1, operation);
-    int origin_valid =
-        check_crypto_address(origin, origin_type, 1, operation);
-
-    ExprType destination_type =
-        check_crypto_argument(destination, 2, operation);
-    int destination_valid =
-        check_crypto_address(destination, destination_type, 2, operation);
-
-    ExprType blocks_type = check_crypto_argument(blocks, 3, operation);
-
-    if (blocks_type.kind == ET_INT &&
-        blocks_type.is_const &&
-        blocks_type.value > 0) {
-
-        if (origin_valid)
-            check_crypto_extent(blocks, blocks_type, origin_type, operation);
-
-        if (destination_valid)
-            check_crypto_extent(blocks, blocks_type, destination_type,
-                                operation);
-    }
-
-    check_crypto_selector(blocks->next, "k", operation);
 }
 
 /*
@@ -2697,22 +860,22 @@ static int analyze_statement(ASTNode *statement) {
 
         // Destino (primer hijo: IDENTIFIER, CALL o INDEX) y valor (segundo).
         case AST_ASSIGNMENT:
-            check_assignment(statement);
+            semantic_check_assignment(statement);
             return 1;
 
         // El CALL de la sentencia debe ser una llamada.
         case AST_CALL_STATEMENT:
-            check_call(ast_find_child(statement, AST_CALL), USE_STATEMENT);
+            semantic_check_call(ast_find_child(statement, AST_CALL), USE_STATEMENT);
             return 1;
 
         // El nombre debe ser una función; se verifica cada argumento.
         case AST_REWIND:
-            check_call(statement, USE_REWIND);
+            semantic_check_call(statement, USE_REWIND);
             return 1;
 
         // Operación de CRYPTO: se verifican sus argumentos.
         case AST_CRYPTO:
-            analyze_crypto(statement);
+            semantic_analyze_crypto(statement);
             return 1;
 
         // EMIT: nada que verificar.
@@ -2726,6 +889,57 @@ static int analyze_statement(ASTNode *statement) {
  * FIRMAS Y CUERPOS DE FUNCIONES
  * ======================================================================= */
 
+
+/*
+ * register_parameters — crea los parámetros de una firma y los agrega a la función.
+ *
+ * Entrada:
+ *   function  símbolo de la función ya insertado en el global.
+ *   params  nodo AST_PARAMS o NULL.
+ * Salida:
+ *   1 si continúa; 0 ante un parámetro inválido.
+ *   Efectos: llena param_list; reporta parámetros repetidos y los descarta.
+ * Restricciones:
+ *   los parámetros solo quedan en param_list, que no es dueña: pasan a
+ *   pertenecer al ámbito de la función cuando la pasada 2 los inserta.
+ *   La pasada 2 llega a todas las funciones registradas, salvo que un
+ *   error interno (nodo inválido) detenga el análisis: solo en ese camino
+ *   quedarían sin liberar.
+ */
+static int register_parameters(Symbol *function, ASTNode *params) {
+    ASTNode *parameter = params ? params->child : NULL;
+
+    while (parameter != NULL) {
+
+        Symbol *symbol = create_parameter(parameter);
+
+        if (symbol == NULL)
+            return 0;
+
+        // Todos los parámetros comparten el ámbito de la función. Un
+        // parámetro duplicado no se agrega a param_list.
+        Symbol *first = find_parameter(function, symbol->name);
+
+        if (first != NULL) {
+
+            semantic_error(parameter,
+                           "'%s' ya fue declarado en este ambito (linea %d)",
+                           symbol->name,
+                           first->line);
+
+            scopes_discard(symbol);
+        }
+        else {
+
+            // Lista ordenada de parámetros de la función (también lo cuenta).
+            symbol_add_param(function, symbol);
+        }
+
+        parameter = parameter->next;
+    }
+
+    return 1;
+}
 
 /*
  * register_signature — registra una firma antes de analizar cuerpos.
@@ -2757,7 +971,7 @@ static int register_signature(ASTNode *node) {
     // Función repetida: no se inserta ni se registran sus parámetros. Como
     // ningún símbolo apunta a este nodo, la pasada 2 no lo analiza.
     Symbol *existing =
-        symbol_lookup_current(global_scope, identifier->text);
+        symbol_lookup_current(scopes_global(), identifier->text);
 
     if (existing != NULL) {
 
@@ -2783,46 +997,11 @@ static int register_signature(ASTNode *node) {
     function->line = node->line;
     function->decl_node = node;
 
-    symbol_insert(global_scope, function);
+    symbol_insert(scopes_global(), function);
     identifier->symbol = function;
 
-    /*
-     * Los parámetros solo quedan en param_list, que no es dueña: pasan a
-     * pertenecer al ámbito de la función cuando la pasada 2 los inserta.
-     * La pasada 2 llega a todas las funciones registradas, salvo que un
-     * error interno (nodo inválido) detenga el análisis: solo en ese camino
-     * quedarían sin liberar.
-     */
-    ASTNode *parameter = params ? params->child : NULL;
-
-    while (parameter != NULL) {
-
-        Symbol *symbol = create_parameter(parameter);
-
-        if (symbol == NULL)
-            return 0;
-
-        // Todos los parámetros comparten el ámbito de la función. Un
-        // parámetro duplicado no se agrega a param_list.
-        Symbol *first = find_parameter(function, symbol->name);
-
-        if (first != NULL) {
-
-            semantic_error(parameter,
-                           "'%s' ya fue declarado en este ambito (linea %d)",
-                           symbol->name,
-                           first->line);
-
-            discard_symbol(symbol);
-        }
-        else {
-
-            // Lista ordenada de parámetros de la función (también lo cuenta).
-            symbol_add_param(function, symbol);
-        }
-
-        parameter = parameter->next;
-    }
+    if (!register_parameters(function, params))
+        return 0;
 
     // La variable de retorno comparte ese ámbito. En el texto el parámetro
     // aparece primero: el error se marca en la variable de retorno y señala
@@ -2878,10 +1057,10 @@ static int register_signatures(ASTNode *functions) {
  *   ninguna (solo efectos).
  *   Efectos: reporta si falta main o si recibe parámetros/devuelve valor.
  * Restricciones:
- *   firmas ya registradas en global_scope.
+ *   firmas ya registradas en el ámbito global.
  */
 static void check_main(void) {
-    Symbol *main_function = symbol_lookup_current(global_scope, "main");
+    Symbol *main_function = symbol_lookup_current(scopes_global(), "main");
 
     if (main_function == NULL ||
         main_function->kind != SYMBOL_FUNCTION) {
@@ -2901,6 +1080,154 @@ static void check_main(void) {
 }
 
 /*
+ * begin_frame — abre el área estática de una función.
+ *
+ * Entrada:
+ *   function  símbolo de la función.
+ *   node  nodo AST_FUNCTION, para diagnóstico.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: fija area_base y, salvo en main, reserva la casilla +0 de rl.
+ * Restricciones:
+ *   se llama antes de reservar variable de retorno y parámetros.
+ *
+ * Área estática de la función (libro §7.1.1):
+ *
+ * +0  casilla reservada (todas excepto main); rl se salva en la pila
+ * +4  variable de retorno, si no es void
+ * ... parámetros, en orden
+ * ... locales de todos sus bloques, en el orden del recorrido
+ * ... 12 palabras para salvar temporales vivos (también en main)
+ */
+static void begin_frame(Symbol *function, ASTNode *node) {
+    function->area_base = data_area_end();
+
+    // M-5: main no reserva la casilla +0 para rl
+    if (strcmp(function->name, "main") != 0) {
+
+        int rl_address;   // no hay símbolo para rl
+
+        reserve(4, function->name, node, &rl_address);
+    }
+}
+
+/*
+ * declare_return_variable — crea la variable de retorno en el ámbito de la función.
+ *
+ * Entrada:
+ *   function  símbolo de la función.
+ *   return_type  nodo AST_RETURN_TYPE o NULL.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: crea, inserta y reserva la variable; anota el identificador.
+ * Restricciones:
+ *   ámbito de la función abierto; va antes que los parámetros (queda en +4).
+ *   Si se llama como un parámetro (ya reportado en la pasada 1) no se
+ *   crea: el nombre se refiere al parámetro.
+ */
+static void declare_return_variable(Symbol *function, ASTNode *return_type) {
+    ASTNode *ret_type = ast_find_child(return_type, AST_TYPE);
+    ASTNode *ret_id = ast_find_child(return_type, AST_IDENTIFIER);
+
+    if (ret_id != NULL &&
+        find_parameter(function, ret_id->text) == NULL) {
+
+        Symbol *ret = symbol_create(ret_id->text,
+                                    SYMBOL_RETURN,
+                                    get_type(ret_type));
+
+        ret->modifier = MODIFIER_VM;   // el cuerpo la asigna
+        ret->width = type_width(ret->type);   // M-1
+        ret->line = return_type->line;
+        ret->decl_node = return_type;
+
+        if (scopes_insert(ret, return_type)) {
+            ret_id->symbol = ret;
+            reserve(ret->width, ret->name, return_type, &ret->address);
+        }
+    }
+}
+
+/*
+ * declare_parameters — pasa los parámetros al ámbito de la función y los reserva.
+ *
+ * Entrada:
+ *   function  símbolo de la función con su param_list.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: inserta cada parámetro en el ámbito actual y reserva su dirección.
+ * Restricciones:
+ *   los parámetros ya existen en param_list: desde aquí pertenecen al
+ *   ámbito de la función. La inserción no puede fallar (los duplicados se
+ *   descartaron en la pasada 1).
+ */
+static void declare_parameters(Symbol *function) {
+    for (int i = 0; i < function->parameter_count; i++) {
+
+        Symbol *parameter = function->param_list[i];
+
+        if (!symbol_insert(scopes_current(), parameter))
+            continue;
+
+        reserve(parameter->width,
+                parameter->name,
+                parameter->decl_node,
+                &parameter->address);
+    }
+}
+
+/*
+ * check_has_emit — exige al menos una sentencia E en el cuerpo.
+ *
+ * Entrada:
+ *   function  símbolo de la función.
+ *   node  nodo AST_FUNCTION, para diagnóstico.
+ *   body  nodo AST_BLOCK del cuerpo.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: reporta un error si no hay E.
+ * Restricciones:
+ *   cuenta los bloques anidados (también main). Con R y sin E la función
+ *   nunca terminaría.
+ */
+static void check_has_emit(Symbol *function, ASTNode *node, ASTNode *body) {
+    if (!ast_contains_kind(body, AST_EMIT)) {
+
+        if (ast_contains_kind(body, AST_REWIND))
+            semantic_error(node,
+                           "la funcion '%s' usa 'R' pero no contiene ningun 'E'; "
+                           "la recursion nunca terminaria",
+                           function->name);
+        else
+            semantic_error(node,
+                           "la funcion '%s' no contiene ninguna sentencia 'E'",
+                           function->name);
+    }
+}
+
+/*
+ * end_frame — cierra el área estática de una función.
+ *
+ * Entrada:
+ *   function  símbolo de la función.
+ *   node  nodo AST_FUNCTION, para diagnóstico.
+ * Salida:
+ *   ninguna (solo efectos).
+ *   Efectos: reserva las casillas de t0–t11 y fija area_size.
+ * Restricciones:
+ *   se llama después de reservar todas las locales del cuerpo.
+ */
+static void end_frame(Symbol *function, ASTNode *node) {
+    // Reserva al final del área casillas de t0–t11 para expansiones CRYPTO;
+    // las llamadas normales guardan sus temporales vivos en la pila de rx.
+    reserve(TEMP_WORDS * type_width(TYPE_INT), function->name, node,
+            &function->temp_base);
+
+    // El área termina donde quedó el offset, incluidos los temporales.
+    function->area_size = data_area_end() - function->area_base;
+}
+
+/*
  * analyze_function — asigna ámbito, direcciones y cuerpo de una función.
  *
  * Entrada:
@@ -2910,7 +1237,7 @@ static void check_main(void) {
  *   Efectos: inserta parámetros/retorno, reserva área y temporales, verifica cuerpo y E.
  * Restricciones:
  *   firma registrada en pasada 1; +0 reservado fuera de main, rl se salva
- *   en pila al generar.
+ *   en pila al generar. El orden de las reservas fija las direcciones.
  */
 static int analyze_function(ASTNode *node) {
     /*
@@ -2930,7 +1257,7 @@ static int analyze_function(ASTNode *node) {
 
     // La pasada 1 ya creó el símbolo de la función.
     Symbol *function =
-        symbol_lookup_current(global_scope, identifier->text);
+        symbol_lookup_current(scopes_global(), identifier->text);
 
     // Función repetida (ya reportada en la pasada 1): el símbolo con ese
     // nombre no apunta a este nodo, así que no se analiza.
@@ -2938,273 +1265,37 @@ static int analyze_function(ASTNode *node) {
         function->decl_node != node)
         return 1;
 
-    current_function = function;
+    scopes_set_function(function);
 
     // Orden del archivo, para buscar ciclos de llamadas.
-    add_function(function);
+    calls_add_function(function);
 
-    /*
-     * Área estática de la función (libro §7.1.1):
-     *
-     * +0  casilla reservada (todas excepto main); rl se salva en la pila
-     * +4  variable de retorno, si no es void
-     * ... parámetros, en orden
-     * ... locales de todos sus bloques, en el orden del recorrido
-     * ... 12 palabras para salvar temporales vivos (también en main)
-     */
-    function->area_base = next_address;
-
-    // M-5: main no reserva la casilla +0 para rl
-    if (strcmp(function->name, "main") != 0) {
-
-        int rl_address;   // no hay símbolo para rl
-
-        reserve(4, function->name, node, &rl_address);
-    }
+    begin_frame(function, node);
 
     // Crea el ámbito de función.
-    enter_scope(SCOPE_FUNCTION, function->line);
+    scopes_enter(SCOPE_FUNCTION, function->line);
 
-    // La variable de retorno va antes que los parámetros (queda en +4).
-    // Si se llama como un parámetro (ya reportado en la pasada 1) no se
-    // crea: el nombre se refiere al parámetro.
-    ASTNode *ret_type = ast_find_child(return_type, AST_TYPE);
-    ASTNode *ret_id = ast_find_child(return_type, AST_IDENTIFIER);
+    declare_return_variable(function, return_type);
 
-    if (ret_id != NULL &&
-        find_parameter(function, ret_id->text) == NULL) {
-
-        Symbol *ret = symbol_create(ret_id->text,
-                                    SYMBOL_RETURN,
-                                    get_type(ret_type));
-
-        ret->modifier = MODIFIER_VM;   // el cuerpo la asigna
-        ret->width = type_width(ret->type);   // M-1
-        ret->line = return_type->line;
-        ret->decl_node = return_type;
-
-        if (insert_symbol(ret, return_type)) {
-            ret_id->symbol = ret;
-            reserve(ret->width, ret->name, return_type, &ret->address);
-        }
-    }
-
-    // Los parámetros ya existen en param_list: desde aquí pertenecen al
-    // ámbito de la función. La inserción no puede fallar (los duplicados se
-    // descartaron en la pasada 1).
-    for (int i = 0; i < function->parameter_count; i++) {
-
-        Symbol *parameter = function->param_list[i];
-
-        if (!symbol_insert(current_scope, parameter))
-            continue;
-
-        reserve(parameter->width,
-                parameter->name,
-                parameter->decl_node,
-                &parameter->address);
-    }
+    declare_parameters(function);
 
     // S-01: el cuerpo se recorre completo, en el mismo ámbito de la función.
     if (!analyze_statements(body))
         return 0;
 
-    // Toda función debe tener al menos un E en su cuerpo, contando los
-    // bloques anidados (también main). Con R y sin E nunca terminaría.
-    if (!ast_contains_kind(body, AST_EMIT)) {
+    // Toda función debe tener al menos un E en su cuerpo.
+    check_has_emit(function, node, body);
 
-        if (ast_contains_kind(body, AST_REWIND))
-            semantic_error(node,
-                           "la funcion '%s' usa 'R' pero no contiene ningun 'E'; "
-                           "la recursion nunca terminaria",
-                           function->name);
-        else
-            semantic_error(node,
-                           "la funcion '%s' no contiene ninguna sentencia 'E'",
-                           function->name);
-    }
-
-    // Reserva al final del área casillas de t0–t11 para expansiones CRYPTO;
-    // las llamadas normales guardan sus temporales vivos en la pila de rx.
-    reserve(TEMP_WORDS * type_width(TYPE_INT), function->name, node,
-            &function->temp_base);
-
-    // El área termina donde quedó el offset, incluidos los temporales.
-    function->area_size = next_address - function->area_base;
+    end_frame(function, node);
 
     // Regresa al ámbito global.
-    exit_scope();
+    scopes_exit();
 
-    current_function = NULL;
+    scopes_set_function(NULL);
 
     return 1;
 }
 
-
-// Recursión
-
-// Colores del recorrido en profundidad.
-enum { WHITE, GRAY, BLACK };
-
-/* ==========================================================================
- * RETORNO Y RECURSIÓN
- * ======================================================================= */
-
-
-/*
- * function_index — busca una función en la lista del grafo.
- *
- * Entrada:
- *   function  símbolo de función.
- * Salida:
- *   índice desde 0; -1 si no aparece.
- *   Efectos: ninguno.
- * Restricciones:
- *   ninguna.
- */
-static int function_index(Symbol *function) {
-    for (int i = 0; i < function_count; i++) {
-
-        if (function_list[i] == function)
-            return i;
-    }
-
-    return -1;
-}
-
-/*
- * report_cycle — reporta el ciclo que cierra una arista.
- *
- * Entrada:
- *   stack  pila de índices del recorrido.
- *   from  primera posición del ciclo.
- *   depth  posición de la función actual.
- *   call  nodo CALL que cierra el ciclo.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: reserva mensaje, reporta y lo libera.
- * Restricciones:
- *   0 <= from <= depth; índices pertenecen a function_list.
- */
-static void report_cycle(int *stack, int from, int depth, ASTNode *call) {
-    size_t size = 1;
-
-    for (int i = from; i <= depth; i++)
-        size += strlen(function_list[stack[i]]->name) + 4;   // " -> "
-
-    size += strlen(function_list[stack[from]]->name);
-
-    char *text = malloc(size);
-
-    if (text == NULL) {
-        fprintf(stderr, "Error: out of memory\n");
-        exit(EXIT_FAILURE);
-    }
-
-    text[0] = '\0';
-
-    for (int i = from; i <= depth; i++) {
-        strcat(text, function_list[stack[i]]->name);
-        strcat(text, " -> ");
-    }
-
-    strcat(text, function_list[stack[from]]->name);
-
-    semantic_error(call, "ciclo de llamadas: %s", text);
-
-    free(text);
-}
-
-/*
- * visit_function — recorre llamadas con colores blanco, gris y negro.
- *
- * Entrada:
- *   index  índice de función.
- *   colors  arreglo de colores.
- *   stack  arreglo de índices de la pila.
- *   depth  profundidad actual.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: actualiza colores/stack y reporta ciclos.
- * Restricciones:
- *   índice válido; arreglos con function_count entradas; ignora aristas
- *   repetidas.
- */
-static void visit_function(int index, int *colors, int *stack, int depth) {
-    colors[index] = GRAY;
-    stack[depth] = index;
-
-    for (int e = 0; e < call_count; e++) {
-
-        if (call_edges[e].caller != function_list[index])
-            continue;
-
-        // Solo la primera llamada de cada par (quien llama, a quien llama),
-        // para que cada ciclo se reporte una vez.
-        int repeated = 0;
-
-        for (int p = 0; p < e && !repeated; p++)
-            repeated = call_edges[p].caller == call_edges[e].caller &&
-                       call_edges[p].callee == call_edges[e].callee;
-
-        if (repeated)
-            continue;
-
-        int callee = function_index(call_edges[e].callee);
-
-        if (callee < 0)
-            continue;
-
-        if (colors[callee] == GRAY) {
-
-            // La función llamada está en la pila: hay un ciclo.
-            int from = 0;
-
-            while (stack[from] != callee)
-                from++;
-
-            report_cycle(stack, from, depth, call_edges[e].call);
-        }
-        else if (colors[callee] == WHITE) {
-            visit_function(callee, colors, stack, depth + 1);
-        }
-    }
-
-    // Una función negra no se vuelve a recorrer.
-    colors[index] = BLACK;
-}
-
-/*
- * check_cycles — detecta recursión indirecta en el grafo.
- *
- * Entrada: ninguna
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: reserva recorrido, reporta ciclos y libera auxiliares.
- * Restricciones:
- *   cuerpos ya analizados; R no es una arista.
- */
-static void check_cycles(void) {
-    if (function_count == 0)
-        return;
-
-    int *colors = calloc((size_t) function_count, sizeof(int));   // WHITE
-    int *stack = calloc((size_t) function_count, sizeof(int));
-
-    if (colors == NULL || stack == NULL) {
-        fprintf(stderr, "Error: out of memory\n");
-        exit(EXIT_FAILURE);
-    }
-
-    for (int i = 0; i < function_count; i++) {
-
-        if (colors[i] == WHITE)
-            visit_function(i, colors, stack, 0);
-    }
-
-    free(colors);
-    free(stack);
-}
 
 /* ==========================================================================
  * PROGRAMA Y RESERVA DE PILA
@@ -3225,13 +1316,12 @@ int semantic_analyze(ASTNode *root) {
     // Los errores semánticos se acumulan: el resultado sale del contador.
     int errors_before = diag_count();
 
-    enter_global_scope();
+    scopes_open_global();
 
-    next_address = DATA_BASE;
-    memory_reported = 0;
-    current_function = NULL;
+    data_area_reset();
+    scopes_set_function(NULL);
 
-    free_call_graph();
+    calls_reset();
 
     /*
      * PROGRAM
@@ -3270,17 +1360,16 @@ int semantic_analyze(ASTNode *root) {
     }
 
     // Recursión indirecta: después de analizar todos los cuerpos.
-    check_cycles();
+    calls_check_cycles();
 
     // La pila de llamadas ocupa lo que queda libre en la zona de ccom. Si
     // las variables ya se pasaron del límite, ese error ya se reportó.
-    if (!memory_reported &&
-        DATA_LIMIT - next_address < STACK_MIN_BYTES) {
+    if (data_area_stack_short()) {
 
         semantic_error(NULL,
                        "no queda espacio para la pila de llamadas: "
                        "%d bytes libres, se necesitan %d (limite 0x%04X)",
-                       DATA_LIMIT - next_address,
+                       data_area_free(),
                        STACK_MIN_BYTES,
                        (unsigned int) (DATA_LIMIT - 1));
     }
@@ -3293,46 +1382,21 @@ int semantic_analyze(ASTNode *root) {
  * ======================================================================= */
 
 
-/* semantic_data_end — véase el contrato en semantic.h. */
-int semantic_data_end(void) {
-    return next_address;
-}
 
 /* semantic_print_symbols — véase el contrato en semantic.h. */
 void semantic_print_symbols(void) {
-    symbol_table_print(scope_list_head);
+    symbol_table_print(scopes_first());
 }
 
 /* semantic_fprint_symbols — véase el contrato en semantic.h. */
 void semantic_fprint_symbols(FILE *out, const char *prefix) {
-    symbol_table_fprint(out, scope_list_head, prefix, 1);
+    symbol_table_fprint(out, scopes_first(), prefix, 1);
 }
 
 /* semantic_free — véase el contrato en semantic.h. */
 void semantic_free(void)
 {
-    Scope *scope = scope_list_head;
+    scopes_release();
 
-    while (scope != NULL) {
-
-        Scope *next = scope->next;
-
-        /*
-         * Desenlaza el ámbito antes de liberarlo;
-         * la lista se recorre con next guardado.
-         */
-        scope->next = NULL;
-
-        scope_free(scope);
-
-        scope = next;
-    }
-
-    scope_list_head = NULL;
-    scope_list_tail = NULL;
-    global_scope = NULL;
-    current_scope = NULL;
-    current_function = NULL;
-
-    free_call_graph();
+    calls_reset();
 }

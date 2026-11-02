@@ -9,7 +9,7 @@ BUILD_DIR = build
 GEN_DIR = $(BUILD_DIR)/generated
 OBJ_DIR = $(BUILD_DIR)/obj
 
-SOURCES = main ast symbol_table semantic diagnostics label_table isa_table codegen codegen_instruction codegen_schedule codegen_verify generate codegen_crypto codegen_arith codegen_array assembler
+SOURCES = main ast symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table codegen codegen_instruction codegen_schedule codegen_verify generate codegen_crypto codegen_arith codegen_array assembler
 OBJECTS = $(addprefix $(OBJ_DIR)/,$(addsuffix .o,$(SOURCES))) \
           $(OBJ_DIR)/parser.tab.o $(OBJ_DIR)/lex.yy.o
 

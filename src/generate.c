@@ -5,7 +5,8 @@
  * Emite operaciones conservadoras y plantillas fijas; cg_schedule organiza
  * las regiones antes del ensamblado salvo la opción --no-schedule.
  *
- * Usa: tabla de símbolos, tabla de etiquetas y módulos codegen_*.
+ * Usa: tabla de símbolos, tabla de etiquetas, data_area (base de la pila) y
+ * módulos codegen_*.
  * Lo usa: main.c después del análisis semántico.
  * Referencias: libro §6.4, §6.6, §6.7, §7.2; isa.md §6, §9.
  */
@@ -17,7 +18,7 @@
 #include "generate.h"
 #include "codegen.h"
 #include "symbol_table.h"
-#include "semantic.h"
+#include "data_area.h"
 #include "codegen_arith.h"
 #include "codegen_array.h"
 #include "codegen_crypto.h"
@@ -35,7 +36,7 @@
  *
  * Vive en la zona de ccom (0x0000–0x0FFF): empieza en la primera dirección
  * libre después de la última área que asignó el semántico
- * (semantic_data_end) y llega hasta 0x0FFF. No puede estar desde 0x1000,
+ * (data_area_end) y llega hasta 0x0FFF. No puede estar desde 0x1000,
  * que es la zona de los archivos de load_file (la de CRYPTO).
  *
  * Uso por llamada, en palabras: mientras se evalúan los argumentos, una por
@@ -2650,7 +2651,7 @@ int generate_code(ASTNode *root, const LabelTable *labels) {
     // de ccom (ver el comentario de la pila al inicio del archivo).
     cg_op(SLOT_ALU0,
           "mov rx, %d",
-          semantic_data_end());
+          data_area_end());
  
     ASTNode *functions = ast_find_child(root, AST_FUNCTIONS);
     ASTNode *main_function = NULL;

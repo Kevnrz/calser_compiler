@@ -9,7 +9,7 @@ BUILD_DIR = build
 GEN_DIR = $(BUILD_DIR)/generated
 OBJ_DIR = $(BUILD_DIR)/obj
 
-SOURCES = main ast symbol_table semantic diagnostics label_table codegen codegen_instruction codegen_schedule codegen_verify generate codegen_crypto codegen_arith codegen_array assembler
+SOURCES = main ast symbol_table semantic diagnostics label_table isa_table codegen codegen_instruction codegen_schedule codegen_verify generate codegen_crypto codegen_arith codegen_array assembler
 OBJECTS = $(addprefix $(OBJ_DIR)/,$(addsuffix .o,$(SOURCES))) \
           $(OBJ_DIR)/parser.tab.o $(OBJ_DIR)/lex.yy.o
 
@@ -50,7 +50,7 @@ $(BUILD_DIR)/emitir_arreglos: src/codegen_array.c pruebas/arreglos/emitir.c incl
 check-arrays: $(BUILD_DIR)/emitir_arreglos
 	python3 pruebas/arreglos/probar.py $<
 
-$(BUILD_DIR)/emitir_crypto: src/codegen.c src/codegen_instruction.c src/codegen_schedule.c src/codegen_verify.c src/codegen_crypto.c pruebas/crypto/emitir.c include/codegen.h include/codegen_schedule.h include/codegen_crypto.h include/ast.h include/symbol_table.h | $(BUILD_DIR)
+$(BUILD_DIR)/emitir_crypto: src/codegen.c src/codegen_instruction.c src/isa_table.c src/codegen_schedule.c src/codegen_verify.c src/codegen_crypto.c pruebas/crypto/emitir.c include/codegen.h include/isa_table.h include/codegen_schedule.h include/codegen_crypto.h include/ast.h include/symbol_table.h | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
 
 check-crypto: $(BUILD_DIR)/emitir_crypto $(TARGET)
@@ -89,16 +89,16 @@ check-simulador: $(TARGET)
 check-etiquetas: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/etiquetas/probar.py
 
-$(BUILD_DIR)/probar_ir: src/codegen.c src/codegen_instruction.c src/codegen_schedule.c src/codegen_verify.c pruebas/bundles/probar_ir.c include/codegen.h include/codegen_schedule.h | $(BUILD_DIR)
+$(BUILD_DIR)/probar_ir: src/codegen.c src/codegen_instruction.c src/isa_table.c src/codegen_schedule.c src/codegen_verify.c pruebas/bundles/probar_ir.c include/codegen.h include/isa_table.h include/codegen_schedule.h | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
 
 $(BUILD_DIR)/revisar_ir: pruebas/bundles/revisar_ir.c $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-$(BUILD_DIR)/emitir_organizador: src/codegen.c src/codegen_instruction.c src/codegen_schedule.c src/codegen_verify.c pruebas/bundles/emitir_organizador.c include/codegen.h include/codegen_schedule.h | $(BUILD_DIR)
+$(BUILD_DIR)/emitir_organizador: src/codegen.c src/codegen_instruction.c src/isa_table.c src/codegen_schedule.c src/codegen_verify.c pruebas/bundles/emitir_organizador.c include/codegen.h include/isa_table.h include/codegen_schedule.h | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
 
-$(BUILD_DIR)/probar_dependencias: src/codegen.c src/codegen_instruction.c src/codegen_schedule.c src/codegen_verify.c pruebas/bundles/probar_dependencias.c include/codegen.h include/codegen_schedule.h | $(BUILD_DIR)
+$(BUILD_DIR)/probar_dependencias: src/codegen.c src/codegen_instruction.c src/isa_table.c src/codegen_schedule.c src/codegen_verify.c pruebas/bundles/probar_dependencias.c include/codegen.h include/isa_table.h include/codegen_schedule.h | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
 
 check-bundles: $(TARGET) $(BUILD_DIR)/probar_ir $(BUILD_DIR)/revisar_ir $(BUILD_DIR)/emitir_organizador $(BUILD_DIR)/probar_dependencias

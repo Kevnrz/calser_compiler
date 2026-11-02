@@ -113,6 +113,59 @@ ASTNode *ast_list(ASTKind kind, ASTNode *items) {
     return node;
 }
 
+/* ast_find_child — véase el contrato en ast.h. */
+ASTNode *ast_find_child(ASTNode *node, ASTKind kind) {
+    if (node == NULL)
+        return NULL;
+
+    ASTNode *child = node->child;
+
+    while (child != NULL) {
+
+        if (child->kind == kind)
+            return child;
+
+        child = child->next;
+    }
+
+    return NULL;
+}
+
+/* ast_count_children — véase el contrato en ast.h. */
+int ast_count_children(ASTNode *node) {
+    int count = 0;
+
+    ASTNode *child = node ? node->child : NULL;
+
+    while (child != NULL) {
+        count++;
+        child = child->next;
+    }
+
+    return count;
+}
+
+/* ast_contains_kind — véase el contrato en ast.h. */
+int ast_contains_kind(ASTNode *node, ASTKind kind) {
+    if (node == NULL)
+        return 0;
+
+    if (node->kind == kind)
+        return 1;
+
+    ASTNode *child = node->child;
+
+    while (child != NULL) {
+
+        if (ast_contains_kind(child, kind))
+            return 1;
+
+        child = child->next;
+    }
+
+    return 0;
+}
+
 /* ==========================================================================
  * PROGRAMA, TIPOS Y PARÁMETROS
  * ======================================================================= */

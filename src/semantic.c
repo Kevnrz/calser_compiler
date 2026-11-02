@@ -199,35 +199,6 @@ static SymbolModifier get_modifier(ASTNode *node) {
 }
 
 /*
- * find_child — busca el primer hijo de una clase.
- *
- * Entrada:
- *   node  nodo o NULL.
- *   kind  clase buscada.
- * Salida:
- *   hijo prestado o NULL.
- *   Efectos: ninguno.
- * Restricciones:
- *   ninguna.
- */
-static ASTNode *find_child(ASTNode *node, ASTKind kind) {
-    if (node == NULL)
-        return NULL;
-
-    ASTNode *child = node->child;
-
-    while (child != NULL) {
-
-        if (child->kind == kind)
-            return child;
-
-        child = child->next;
-    }
-
-    return NULL;
-}
-
-/*
  * find_condition — busca la condición de C, A o L.
  *
  * Entrada:
@@ -340,7 +311,7 @@ static void semantic_error(ASTNode *node, const char *fmt, ...) {
         ASTNode *name =
             node->kind == AST_IDENTIFIER
                 ? node
-                : find_child(node, AST_IDENTIFIER);
+                : ast_find_child(node, AST_IDENTIFIER);
 
         // Número literal (con o sin signo): el señalador cubre el número.
         ASTNode *number =
@@ -979,30 +950,6 @@ static ExprType check_expression(ASTNode *node);
 
 
 /*
- * count_children — cuenta hijos enlazados de un nodo.
- *
- * Entrada:
- *   node  nodo o NULL.
- * Salida:
- *   cantidad de hijos, cero para NULL.
- *   Efectos: ninguno.
- * Restricciones:
- *   ninguna.
- */
-static int count_children(ASTNode *node) {
-    int count = 0;
-
-    ASTNode *child = node ? node->child : NULL;
-
-    while (child != NULL) {
-        count++;
-        child = child->next;
-    }
-
-    return count;
-}
-
-/*
  * check_identifier — verifica un nombre usado sin corchetes.
  *
  * Entrada:
@@ -1219,12 +1166,12 @@ static void check_operand(ASTNode *operand, Symbol *symbol,
  *   constante.
  */
 static ExprType check_call(ASTNode *node, UseContext context) {
-    ASTNode *arguments = find_child(node, AST_ARGUMENTS);
+    ASTNode *arguments = ast_find_child(node, AST_ARGUMENTS);
 
-    int n_args = count_children(arguments);
+    int n_args = ast_count_children(arguments);
 
     // Si el nombre no existe ya se reportó y no se dice nada más de este uso.
-    Symbol *symbol = resolve_name(find_child(node, AST_IDENTIFIER));
+    Symbol *symbol = resolve_name(ast_find_child(node, AST_IDENTIFIER));
 
     Resolution resolution = RESOLVED_NONE;
     int valid = 0;
@@ -1663,7 +1610,7 @@ static ExprType check_expression(ASTNode *node) {
 
             if (type.kind == ET_VOID) {
 
-                ASTNode *name = find_child(node, AST_IDENTIFIER);
+                ASTNode *name = ast_find_child(node, AST_IDENTIFIER);
 
                 semantic_error(node,
                                "la funcion '%s' no devuelve valor",
@@ -1738,7 +1685,7 @@ static ExprType check_target(ASTNode *target) {
 
         ExprType type = check_call(target, USE_TARGET);
 
-        ASTNode *name = find_child(target, AST_IDENTIFIER);
+        ASTNode *name = ast_find_child(target, AST_IDENTIFIER);
         Symbol *symbol = name ? name->symbol : NULL;
 
         if (symbol != NULL &&
@@ -1933,7 +1880,7 @@ static void check_initializer_list(Symbol *symbol, ASTNode *list,
         }
     }
 
-    int count = count_children(list);
+    int count = ast_count_children(list);
 
     if (count != symbol->dim_sizes[0])
         semantic_error(node,
@@ -1977,7 +1924,7 @@ static void check_initializer_list(Symbol *symbol, ASTNode *list,
         }
         else {
 
-            int values = count_children(row);
+            int values = ast_count_children(row);
 
             if (values != columns)
                 semantic_error(node,
@@ -2202,10 +2149,10 @@ static Symbol *create_parameter(ASTNode *node) {
      *
      * MODIFIER (opcional), TYPE, IDENTIFIER, DIMENSIONS (opcional)
      */
-    ASTNode *modifier = find_child(node, AST_MODIFIER);
-    ASTNode *type = find_child(node, AST_TYPE);
-    ASTNode *identifier = find_child(node, AST_IDENTIFIER);
-    ASTNode *dimensions = find_child(node, AST_DIMENSIONS);
+    ASTNode *modifier = ast_find_child(node, AST_MODIFIER);
+    ASTNode *type = ast_find_child(node, AST_TYPE);
+    ASTNode *identifier = ast_find_child(node, AST_IDENTIFIER);
+    ASTNode *dimensions = ast_find_child(node, AST_DIMENSIONS);
 
     if (identifier == NULL) {
 
@@ -2329,11 +2276,11 @@ static int analyze_conditional(ASTNode *node) {
     // Rama inicial  C [cond] ;
     check_condition(node);
 
-    if (!analyze_block(find_child(node, AST_BLOCK), SCOPE_C))
+    if (!analyze_block(ast_find_child(node, AST_BLOCK), SCOPE_C))
         return 0;
 
     // Ramas alternativas  A [cond] ;
-    ASTNode *alternatives = find_child(node, AST_ALTERNATIVES);
+    ASTNode *alternatives = ast_find_child(node, AST_ALTERNATIVES);
     ASTNode *alternative = alternatives ? alternatives->child : NULL;
 
     while (alternative != NULL) {
@@ -2342,7 +2289,7 @@ static int analyze_conditional(ASTNode *node) {
 
             check_condition(alternative);
 
-            if (!analyze_block(find_child(alternative, AST_BLOCK),
+            if (!analyze_block(ast_find_child(alternative, AST_BLOCK),
                                SCOPE_A))
                 return 0;
         }
@@ -2351,10 +2298,10 @@ static int analyze_conditional(ASTNode *node) {
     }
 
     // Rama residual  A ;
-    ASTNode *residual = find_child(node, AST_RESIDUAL);
+    ASTNode *residual = ast_find_child(node, AST_RESIDUAL);
 
     if (residual != NULL &&
-        !analyze_block(find_child(residual, AST_BLOCK),
+        !analyze_block(ast_find_child(residual, AST_BLOCK),
                        SCOPE_RESIDUAL))
         return 0;
 
@@ -2375,7 +2322,7 @@ static int analyze_conditional(ASTNode *node) {
 static int analyze_loop_l(ASTNode *node) {
     check_condition(node);
 
-    return analyze_block(find_child(node, AST_BLOCK), SCOPE_L);
+    return analyze_block(ast_find_child(node, AST_BLOCK), SCOPE_L);
 }
 
 /*
@@ -2490,7 +2437,7 @@ static int analyze_loop_s(ASTNode *node) {
     }
 
     // El cuerpo comparte el ámbito del S con su variable (no abre otro).
-    int result = analyze_statements(find_child(node, AST_BLOCK));
+    int result = analyze_statements(ast_find_child(node, AST_BLOCK));
 
     exit_scope();
 
@@ -2658,7 +2605,7 @@ static void check_crypto_extent(ASTNode *blocks, ExprType blocks_type,
 static void analyze_crypto(ASTNode *node) {
     const char *operation = node->text;
 
-    ASTNode *arguments = find_child(node, AST_ARGUMENTS);
+    ASTNode *arguments = ast_find_child(node, AST_ARGUMENTS);
     ASTNode *argument = arguments ? arguments->child : NULL;
 
     // cerrar_sesion, sellar: sin argumentos.
@@ -2755,7 +2702,7 @@ static int analyze_statement(ASTNode *statement) {
 
         // El CALL de la sentencia debe ser una llamada.
         case AST_CALL_STATEMENT:
-            check_call(find_child(statement, AST_CALL), USE_STATEMENT);
+            check_call(ast_find_child(statement, AST_CALL), USE_STATEMENT);
             return 1;
 
         // El nombre debe ser una función; se verifica cada argumento.
@@ -2797,9 +2744,9 @@ static int register_signature(ASTNode *node) {
      *
      * IDENTIFIER, PARAMS, RETURN_TYPE, BLOCK
      */
-    ASTNode *identifier = find_child(node, AST_IDENTIFIER);
-    ASTNode *params = find_child(node, AST_PARAMS);
-    ASTNode *return_type = find_child(node, AST_RETURN_TYPE);
+    ASTNode *identifier = ast_find_child(node, AST_IDENTIFIER);
+    ASTNode *params = ast_find_child(node, AST_PARAMS);
+    ASTNode *return_type = ast_find_child(node, AST_RETURN_TYPE);
 
     if (identifier == NULL) {
         fprintf(stderr,
@@ -2824,8 +2771,8 @@ static int register_signature(ASTNode *node) {
     }
 
     // RETURN_TYPE sin hijos es void.
-    ASTNode *ret_type = find_child(return_type, AST_TYPE);
-    ASTNode *ret_id = find_child(return_type, AST_IDENTIFIER);
+    ASTNode *ret_type = ast_find_child(return_type, AST_TYPE);
+    ASTNode *ret_id = ast_find_child(return_type, AST_IDENTIFIER);
 
     // La función pertenece al ámbito global.
     Symbol *function =
@@ -2954,38 +2901,6 @@ static void check_main(void) {
 }
 
 /*
- * contains_kind — busca una clase en un subárbol.
- *
- * Entrada:
- *   node  nodo o NULL.
- *   kind  clase buscada.
- * Salida:
- *   1 si aparece; 0 si no aparece.
- *   Efectos: ninguno.
- * Restricciones:
- *   recorre hijos, sin incluir hermanos del nodo raíz.
- */
-static int contains_kind(ASTNode *node, ASTKind kind) {
-    if (node == NULL)
-        return 0;
-
-    if (node->kind == kind)
-        return 1;
-
-    ASTNode *child = node->child;
-
-    while (child != NULL) {
-
-        if (contains_kind(child, kind))
-            return 1;
-
-        child = child->next;
-    }
-
-    return 0;
-}
-
-/*
  * analyze_function — asigna ámbito, direcciones y cuerpo de una función.
  *
  * Entrada:
@@ -3003,9 +2918,9 @@ static int analyze_function(ASTNode *node) {
      *
      * IDENTIFIER, PARAMS, RETURN_TYPE, BLOCK
      */
-    ASTNode *identifier = find_child(node, AST_IDENTIFIER);
-    ASTNode *return_type = find_child(node, AST_RETURN_TYPE);
-    ASTNode *body = find_child(node, AST_BLOCK);
+    ASTNode *identifier = ast_find_child(node, AST_IDENTIFIER);
+    ASTNode *return_type = ast_find_child(node, AST_RETURN_TYPE);
+    ASTNode *body = ast_find_child(node, AST_BLOCK);
 
     if (identifier == NULL) {
         fprintf(stderr,
@@ -3053,8 +2968,8 @@ static int analyze_function(ASTNode *node) {
     // La variable de retorno va antes que los parámetros (queda en +4).
     // Si se llama como un parámetro (ya reportado en la pasada 1) no se
     // crea: el nombre se refiere al parámetro.
-    ASTNode *ret_type = find_child(return_type, AST_TYPE);
-    ASTNode *ret_id = find_child(return_type, AST_IDENTIFIER);
+    ASTNode *ret_type = ast_find_child(return_type, AST_TYPE);
+    ASTNode *ret_id = ast_find_child(return_type, AST_IDENTIFIER);
 
     if (ret_id != NULL &&
         find_parameter(function, ret_id->text) == NULL) {
@@ -3096,9 +3011,9 @@ static int analyze_function(ASTNode *node) {
 
     // Toda función debe tener al menos un E en su cuerpo, contando los
     // bloques anidados (también main). Con R y sin E nunca terminaría.
-    if (!contains_kind(body, AST_EMIT)) {
+    if (!ast_contains_kind(body, AST_EMIT)) {
 
-        if (contains_kind(body, AST_REWIND))
+        if (ast_contains_kind(body, AST_REWIND))
             semantic_error(node,
                            "la funcion '%s' usa 'R' pero no contiene ningun 'E'; "
                            "la recursion nunca terminaria",
@@ -3323,8 +3238,8 @@ int semantic_analyze(ASTNode *root) {
      *
      * GLOBALS, FUNCTIONS
      */
-    ASTNode *globals = find_child(root, AST_GLOBALS);
-    ASTNode *functions = find_child(root, AST_FUNCTIONS);
+    ASTNode *globals = ast_find_child(root, AST_GLOBALS);
+    ASTNode *functions = ast_find_child(root, AST_FUNCTIONS);
 
     // Declaraciones globales.
     ASTNode *decl = globals ? globals->child : NULL;

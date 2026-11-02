@@ -4,19 +4,19 @@
  * Separa etiquetas y bundles, asigna direcciones y codifica cada slot.
  * Resuelve destinos simbólicos como desplazamientos relativos al PC.
  *
- * Usa: assembler.h; biblioteca C.
+ * Usa: assembler.h, isa_table.h; biblioteca C.
  * Lo usa: main.c, con líneas generadas o entrada -x.
  * Referencias: libro §1.1, §8.1.2; isa.md §3, §4, §6, §11.
  */
 
 #include <ctype.h>
-#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "assembler.h"
+#include "isa_table.h"
 
 /*
  * Ensamblado en dos pasadas sobre la sintaxis de isa.md §11.
@@ -32,74 +32,8 @@
  *             etiqueta − PC (isa.md §6.2, §11.2).
  */
 
-/* ---- UNIDADES Y FORMAS DE LAS INSTRUCCIONES (ISA.MD §6, §11.3) -------- */
-
-typedef enum { UNIT_ALU, UNIT_CRYPTO, UNIT_BRU, UNIT_LSU } Unit;
-
-typedef enum {
-    FORM_R3,       /* rd, rs1, rs2                 ALU formato R            */
-    FORM_IMM,      /* rd, rs1, imm                 saddi, xori              */
-    FORM_MOV,      /* rd, imm                      mov (rs1 = 0)            */
-    FORM_BRANCH,   /* rs1, rs2, destino            beq, bne, blt, bge       */
-    FORM_JEFR,     /* rd, rs1                                               */
-    FORM_JEF,      /* destino                      (rd = 0)                 */
-    FORM_JAS,      /* rd, destino                                           */
-    FORM_LOAD,     /* rd, imm(rs1)                 lw, lb                   */
-    FORM_STORE,    /* rs2, imm(rs1)                sw, sb: fuente en 25..22 */
-    FORM_FEIS,     /* rd, rs1, rs2, k, i                                    */
-    FORM_RS1,      /* rs1                          auth, sanc               */
-    FORM_NONE,     /* sin operandos                logout, kv_lock          */
-    FORM_KV_WRITE  /* rs1, k, w                    w va en el campo i       */
-} Form;
-
-typedef struct {
-    const char *name;
-    Unit unit;
-    unsigned funct;
-    Form form;
-} Instruction;
-
-/* Tablas de funct de isa.md §6.1 (ALU), §6.2 (BRU), §6.3 (LSU), §6.4 (CRYPTO). */
-static const Instruction INSTRUCTIONS[] = {
-    { "add",      UNIT_ALU,    0x01, FORM_R3 },
-    { "sub",      UNIT_ALU,    0x02, FORM_R3 },
-    { "and",      UNIT_ALU,    0x03, FORM_R3 },
-    { "or",       UNIT_ALU,    0x04, FORM_R3 },
-    { "xor",      UNIT_ALU,    0x05, FORM_R3 },
-    { "sll",      UNIT_ALU,    0x06, FORM_R3 },
-    { "srl",      UNIT_ALU,    0x07, FORM_R3 },
-    { "sra",      UNIT_ALU,    0x08, FORM_R3 },
-    { "slt",      UNIT_ALU,    0x09, FORM_R3 },
-    { "sle",      UNIT_ALU,    0x0A, FORM_R3 },
-    { "seq",      UNIT_ALU,    0x0B, FORM_R3 },
-    { "sne",      UNIT_ALU,    0x0C, FORM_R3 },
-    { "ifmov",    UNIT_ALU,    0x0D, FORM_R3 },
-    { "saddi",    UNIT_ALU,    0x10, FORM_IMM },
-    { "xori",     UNIT_ALU,    0x11, FORM_IMM },
-    { "mov",      UNIT_ALU,    0x12, FORM_MOV },
-
-    { "beq",      UNIT_BRU,    0x01, FORM_BRANCH },
-    { "bne",      UNIT_BRU,    0x02, FORM_BRANCH },
-    { "blt",      UNIT_BRU,    0x03, FORM_BRANCH },
-    { "bge",      UNIT_BRU,    0x04, FORM_BRANCH },
-    { "jefR",     UNIT_BRU,    0x05, FORM_JEFR },
-    { "jef",      UNIT_BRU,    0x10, FORM_JEF },
-    { "jas",      UNIT_BRU,    0x11, FORM_JAS },
-
-    { "lw",       UNIT_LSU,    0x01, FORM_LOAD },
-    { "sw",       UNIT_LSU,    0x02, FORM_STORE },
-    { "lb",       UNIT_LSU,    0x03, FORM_LOAD },
-    { "sb",       UNIT_LSU,    0x04, FORM_STORE },
-
-    { "feis",     UNIT_CRYPTO, 0x01, FORM_FEIS },
-    { "auth",     UNIT_CRYPTO, 0x02, FORM_RS1 },
-    { "logout",   UNIT_CRYPTO, 0x03, FORM_NONE },
-    { "kv_write", UNIT_CRYPTO, 0x04, FORM_KV_WRITE },
-    { "kv_lock",  UNIT_CRYPTO, 0x05, FORM_NONE },
-    { "sanc",     UNIT_CRYPTO, 0x06, FORM_RS1 }
-};
-
-#define INSTRUCTION_COUNT (int) (sizeof(INSTRUCTIONS) / sizeof(INSTRUCTIONS[0]))
+/* Unidades, formas y funct de las instrucciones (isa.md §6, §11.3): tabla única
+ * en isa_table.h, compartida con el organizador de bundles. */
 
 /* Rangos de isa.md §4.2. */
 #define IMM_BITS    18
@@ -203,31 +137,6 @@ static void asm_error(Assembler *as, int line, const char *fmt, ...) {
     fprintf(stderr, "\n");
 
     as->errors++;
-}
-
-/*
- * trim — quita espacios de los extremos.
- *
- * Entrada:
- *   text  cadena modificable no NULL.
- * Salida:
- *   puntero prestado al primer carácter restante.
- *   Efectos: escribe NUL al final del texto útil.
- * Restricciones:
- *   ninguna.
- */
-static char *trim(char *text) {
-    while (isspace((unsigned char) *text))
-        text++;
-
-    char *end = text + strlen(text);
-
-    while (end > text && isspace((unsigned char) end[-1]))
-        end--;
-
-    *end = '\0';
-
-    return text;
 }
 
 /*
@@ -376,7 +285,7 @@ static void scan_line(Assembler *as, const char *source, int line) {
     if (comment != NULL)
         *comment = '\0';
 
-    char *text = trim(copy);
+    char *text = isa_trim(copy);
 
     while (*text != '\0') {
 
@@ -386,7 +295,7 @@ static void scan_line(Assembler *as, const char *source, int line) {
             if (close == NULL) {
                 asm_error(as, line, "falta '}' al final del bundle");
             }
-            else if (*trim(close + 1) != '\0') {
+            else if (*isa_trim(close + 1) != '\0') {
                 asm_error(as, line, "texto despues del bundle");
             }
             else {
@@ -407,7 +316,7 @@ static void scan_line(Assembler *as, const char *source, int line) {
 
         *colon = '\0';
 
-        char *name = trim(text);
+        char *name = isa_trim(text);
 
         if (!valid_label(name)) {
             asm_error(as, line, "nombre de etiqueta invalido: '%s'", name);
@@ -416,7 +325,7 @@ static void scan_line(Assembler *as, const char *source, int line) {
 
         add_label(as, name, line);
 
-        text = trim(colon + 1);
+        text = isa_trim(colon + 1);
     }
 
     free(copy);
@@ -428,78 +337,6 @@ static void scan_line(Assembler *as, const char *source, int line) {
  * PASADA 2: OPERANDOS
  * ======================================================================= */
 
-
-/*
- * parse_register — reconoce un registro o su alias.
- *
- * Entrada:
- *   text  operando no NULL.
- * Salida:
- *   número ISA 0–15 o -1 si es inválido.
- *   Efectos: ninguno.
- * Restricciones:
- *   no admite ceros iniciales; t0–t11 equivalen a r4–r15.
- */
-static int parse_register(const char *text) {
-    static const char *const ALIASES[] = { "rz", "rl", "rx", "rg" };
-
-    for (int i = 0; i < 4; i++) {
-
-        if (strcmp(text, ALIASES[i]) == 0)
-            return i;
-    }
-
-    if ((text[0] != 'r' && text[0] != 't') || !isdigit((unsigned char) text[1]))
-        return -1;
-
-    // Sin ceros a la izquierda: r07 no es un registro.
-    if (text[1] == '0' && text[2] != '\0')
-        return -1;
-
-    char *end;
-    long number = strtol(text + 1, &end, 10);
-
-    if (*end != '\0')
-        return -1;
-
-    if (text[0] == 'r')
-        return number <= 15 ? (int) number : -1;
-
-    // tN es el registro N + 4.
-    return number <= 11 ? (int) number + 4 : -1;
-}
-
-/*
- * parse_integer — lee un entero decimal o hexadecimal.
- *
- * Entrada:
- *   text  operando no NULL.
- *   value  puntero no NULL para el valor.
- * Salida:
- *   1 si convierte todo el operando sin error; 0 si falla.
- *   Efectos: escribe *value al intentar strtol.
- * Restricciones:
- *   usa el rango de long del anfitrión.
- */
-static int parse_integer(const char *text, long *value) {
-    const char *digits = text;
-
-    if (*digits == '+' || *digits == '-')
-        digits++;
-
-    int hex = digits[0] == '0' && (digits[1] == 'x' || digits[1] == 'X');
-
-    if (hex ? !isxdigit((unsigned char) digits[2])
-            : !isdigit((unsigned char) digits[0]))
-        return 0;
-
-    char *end;
-
-    errno = 0;
-    *value = strtol(text, &end, hex ? 16 : 10);
-
-    return errno == 0 && *end == '\0';
-}
 
 /*
  * fits_signed — comprueba un rango con signo.
@@ -535,7 +372,7 @@ static int fits_signed(long value, int bits) {
  */
 static int get_register(Assembler *as, int line, const char *text,
                         unsigned *reg) {
-    int number = parse_register(text);
+    int number = isa_parse_register(text);
 
     if (number < 0) {
         asm_error(as, line, "registro invalido: '%s'", text);
@@ -565,7 +402,7 @@ static int get_immediate(Assembler *as, int line, const char *text,
                          unsigned *field) {
     long value;
 
-    if (!parse_integer(text, &value)) {
+    if (!isa_parse_integer(text, &value)) {
         asm_error(as, line, "inmediato invalido: '%s'", text);
         return 0;
     }
@@ -601,7 +438,7 @@ static int get_selector(Assembler *as, int line, const char *what,
                         const char *text, unsigned *field) {
     long value;
 
-    if (!parse_integer(text, &value) || value < 0 || value > 3) {
+    if (!isa_parse_integer(text, &value) || value < 0 || value > 3) {
         asm_error(as, line, "'%s' debe ser un entero de 0 a 3: '%s'",
                   what, text);
         return 0;
@@ -633,7 +470,7 @@ static int get_destination(Assembler *as, int line, const char *text,
                            int pc, int bits, unsigned *field) {
     long offset;
 
-    if (!parse_integer(text, &offset)) {
+    if (!isa_parse_integer(text, &offset)) {
 
         if (!valid_label(text)) {
             asm_error(as, line, "destino de salto invalido: '%s'", text);
@@ -691,8 +528,8 @@ static int get_memory(Assembler *as, int line, char *text,
     text[length - 1] = '\0';
     *open = '\0';
 
-    return get_immediate(as, line, trim(text), imm) &&
-           get_register(as, line, trim(open + 1), base);
+    return get_immediate(as, line, isa_trim(text), imm) &&
+           get_register(as, line, isa_trim(open + 1), base);
 }
 
 /* ---- PASADA 2: CODIFICACIÓN ------------------------------------------- */
@@ -708,11 +545,11 @@ static int get_memory(Assembler *as, int line, char *text,
  * Restricciones:
  *   ninguna.
  */
-static const char *unit_name(Unit unit) {
+static const char *unit_name(IsaUnit unit) {
     switch (unit) {
-        case UNIT_ALU:    return "la ALU (slot 0 o 1)";
-        case UNIT_CRYPTO: return "CRYPTO (slot 1)";
-        case UNIT_BRU:    return "la BRU (slot 2)";
+        case ISA_UNIT_ALU:    return "la ALU (slot 0 o 1)";
+        case ISA_UNIT_CRYPTO: return "CRYPTO (slot 1)";
+        case ISA_UNIT_BRU:    return "la BRU (slot 2)";
         default:          return "la LSU (slot 3)";
     }
 }
@@ -729,42 +566,8 @@ static const char *unit_name(Unit unit) {
  * Restricciones:
  *   ninguna.
  */
-static int unit_fits(Unit unit, int slot) {
-    switch (unit) {
-        case UNIT_ALU:    return slot == 0 || slot == 1;
-        case UNIT_CRYPTO: return slot == 1;
-        case UNIT_BRU:    return slot == 2;
-        default:          return slot == 3;
-    }
-}
-
-/*
- * operand_count — obtiene la cantidad de operandos de una forma.
- *
- * Entrada:
- *   form  forma de instrucción.
- * Salida:
- *   cantidad esperada, entre 0 y 5.
- *   Efectos: ninguno.
- * Restricciones:
- *   ninguna.
- */
-static int operand_count(Form form) {
-    switch (form) {
-        case FORM_R3:       return 3;
-        case FORM_IMM:      return 3;
-        case FORM_MOV:      return 2;
-        case FORM_BRANCH:   return 3;
-        case FORM_JEFR:     return 2;
-        case FORM_JEF:      return 1;
-        case FORM_JAS:      return 2;
-        case FORM_LOAD:     return 2;
-        case FORM_STORE:    return 2;
-        case FORM_FEIS:     return 5;
-        case FORM_RS1:      return 1;
-        case FORM_NONE:     return 0;
-        default:            return 3;
-    }
+static int unit_fits(IsaUnit unit, int slot) {
+    return (isa_unit_slots(unit) >> slot) & 1;
 }
 
 /* Posición de los campos (isa.md §4): sel 31, funct 30..26, rd 25..22,
@@ -781,6 +584,231 @@ static int operand_count(Form form) {
  * PASADA 2: CODIFICACIÓN
  * ======================================================================= */
 
+
+/*
+ * SlotOperands — operandos de un slot ya separados, con lo que hace falta
+ * para diagnosticarlos y resolver destinos.
+ */
+typedef struct {
+    Assembler *as;
+    int line;                      /* línea del .asm, para los errores       */
+    int pc;                        /* índice del bundle, para destinos       */
+    char *operand[MAX_OPERANDS];   /* operandos recortados, en orden         */
+} SlotOperands;
+
+/*
+ * split_operands — separa los operandos de una instrucción por comas.
+ *
+ * Entrada:
+ *   rest  texto modificable posterior al mnemónico, sin espacios en los extremos.
+ *   operand  arreglo de MAX_OPERANDS punteros escribibles.
+ * Salida:
+ *   cantidad de operandos encontrados; puede superar MAX_OPERANDS.
+ *   Efectos: escribe NUL en cada coma y llena operand con los que caben.
+ * Restricciones:
+ *   texto vacío significa cero operandos; el llamador compara la cantidad
+ *   con la que exige la forma antes de leer operand.
+ */
+static int split_operands(char *rest, char **operand) {
+    int count = 0;
+
+    if (*rest == '\0')
+        return 0;
+
+    char *start = rest;
+
+    for (;;) {
+        char *comma = strchr(start, ',');
+
+        if (comma != NULL)
+            *comma = '\0';
+
+        if (count < MAX_OPERANDS)
+            operand[count] = isa_trim(start);
+
+        count++;
+
+        if (comma == NULL)
+            break;
+
+        start = comma + 1;
+    }
+
+    return count;
+}
+
+/*
+ * Codificadores por forma. Cada uno recibe los operandos ya contados y
+ * completa *value con los campos de su forma (isa.md §4 y §6); si la forma
+ * escribe un registro, deja su número en *written. Devuelven 1 si
+ * codifican y 0 si reportaron un error; ante un error no tocan *written.
+ */
+
+/* ISA_FORM_R3: rd, rs1, rs2. */
+static int encode_r3(SlotOperands *ops, uint32_t *value, int *written) {
+    unsigned a, b, c;
+
+    if (!get_register(ops->as, ops->line, ops->operand[0], &a) ||
+        !get_register(ops->as, ops->line, ops->operand[1], &b) ||
+        !get_register(ops->as, ops->line, ops->operand[2], &c))
+        return 0;
+
+    *value |= FIELD_RD(a) | FIELD_RS1(b) | FIELD_RS2(c);
+    *written = (int) a;
+
+    return 1;
+}
+
+/* ISA_FORM_IMM: rd, rs1, imm. */
+static int encode_imm(SlotOperands *ops, uint32_t *value, int *written) {
+    unsigned a, b, c;
+
+    if (!get_register(ops->as, ops->line, ops->operand[0], &a) ||
+        !get_register(ops->as, ops->line, ops->operand[1], &b) ||
+        !get_immediate(ops->as, ops->line, ops->operand[2], &c))
+        return 0;
+
+    *value |= FIELD_RD(a) | FIELD_RS1(b) | c;
+    *written = (int) a;
+
+    return 1;
+}
+
+/* ISA_FORM_MOV: rd, imm. isa.md §6.1: el campo rs1 no se usa y vale cero. */
+static int encode_mov(SlotOperands *ops, uint32_t *value, int *written) {
+    unsigned a, b;
+
+    if (!get_register(ops->as, ops->line, ops->operand[0], &a) ||
+        !get_immediate(ops->as, ops->line, ops->operand[1], &b))
+        return 0;
+
+    *value |= FIELD_RD(a) | b;
+    *written = (int) a;
+
+    return 1;
+}
+
+/* ISA_FORM_BRANCH: rs1, rs2, destino. isa.md §4 (tipo B): rs2 en 25..22 y
+ * rs1 en 21..18. */
+static int encode_branch(SlotOperands *ops, uint32_t *value) {
+    unsigned a, b, c;
+
+    if (!get_register(ops->as, ops->line, ops->operand[0], &a) ||
+        !get_register(ops->as, ops->line, ops->operand[1], &b) ||
+        !get_destination(ops->as, ops->line, ops->operand[2], ops->pc,
+                         OFFSET_BITS, &c))
+        return 0;
+
+    *value |= FIELD_RD(b) | FIELD_RS1(a) | c;
+
+    return 1;
+}
+
+/* ISA_FORM_JEFR: rd, rs1. */
+static int encode_jefr(SlotOperands *ops, uint32_t *value, int *written) {
+    unsigned a, b;
+
+    if (!get_register(ops->as, ops->line, ops->operand[0], &a) ||
+        !get_register(ops->as, ops->line, ops->operand[1], &b))
+        return 0;
+
+    *value |= FIELD_RD(a) | FIELD_RS1(b);
+    *written = (int) a;
+
+    return 1;
+}
+
+/* ISA_FORM_JEF: destino. isa.md §6.2: el campo rd no se usa y vale cero. */
+static int encode_jef(SlotOperands *ops, uint32_t *value) {
+    unsigned a;
+
+    if (!get_destination(ops->as, ops->line, ops->operand[0], ops->pc,
+                         TARGET_BITS, &a))
+        return 0;
+
+    *value |= a;
+
+    return 1;
+}
+
+/* ISA_FORM_JAS: rd, destino. */
+static int encode_jas(SlotOperands *ops, uint32_t *value, int *written) {
+    unsigned a, b;
+
+    if (!get_register(ops->as, ops->line, ops->operand[0], &a) ||
+        !get_destination(ops->as, ops->line, ops->operand[1], ops->pc,
+                         TARGET_BITS, &b))
+        return 0;
+
+    *value |= FIELD_RD(a) | b;
+    *written = (int) a;
+
+    return 1;
+}
+
+/* ISA_FORM_LOAD e ISA_FORM_STORE: registro, imm(rs1). Comparten campos. En
+ * lw y lb el registro es el destino y se escribe. isa.md §6.3: en sw y sb la
+ * fuente ocupa el campo 25..22 y no se escribe ningún registro. */
+static int encode_memory(SlotOperands *ops, uint32_t *value, int *written,
+                         int is_load) {
+    unsigned a, b, c;
+
+    if (!get_register(ops->as, ops->line, ops->operand[0], &a) ||
+        !get_memory(ops->as, ops->line, ops->operand[1], &b, &c))
+        return 0;
+
+    *value |= FIELD_RD(a) | FIELD_RS1(c) | b;
+
+    if (is_load)
+        *written = (int) a;
+
+    return 1;
+}
+
+/* ISA_FORM_FEIS: rd, rs1, rs2, k, i. */
+static int encode_feis(SlotOperands *ops, uint32_t *value, int *written) {
+    unsigned a, b, c, d, e;
+
+    if (!get_register(ops->as, ops->line, ops->operand[0], &a) ||
+        !get_register(ops->as, ops->line, ops->operand[1], &b) ||
+        !get_register(ops->as, ops->line, ops->operand[2], &c) ||
+        !get_selector(ops->as, ops->line, "k", ops->operand[3], &d) ||
+        !get_selector(ops->as, ops->line, "i", ops->operand[4], &e))
+        return 0;
+
+    *value |= FIELD_RD(a) | FIELD_RS1(b) | FIELD_RS2(c) |
+              FIELD_K(d) | FIELD_I(e);
+    *written = (int) a;
+
+    return 1;
+}
+
+/* ISA_FORM_RS1: rs1. auth y sanc: rd, rs2, k, i en cero (isa.md §6.4). */
+static int encode_rs1(SlotOperands *ops, uint32_t *value) {
+    unsigned a;
+
+    if (!get_register(ops->as, ops->line, ops->operand[0], &a))
+        return 0;
+
+    *value |= FIELD_RS1(a);
+
+    return 1;
+}
+
+/* ISA_FORM_KV_WRITE: rs1, k, w. isa.md §6.4: la palabra w va en los bits del
+ * campo i. */
+static int encode_kv_write(SlotOperands *ops, uint32_t *value) {
+    unsigned a, b, c;
+
+    if (!get_register(ops->as, ops->line, ops->operand[0], &a) ||
+        !get_selector(ops->as, ops->line, "k", ops->operand[1], &b) ||
+        !get_selector(ops->as, ops->line, "w", ops->operand[2], &c))
+        return 0;
+
+    *value |= FIELD_RS1(a) | FIELD_K(b) | FIELD_I(c);
+
+    return 1;
+}
 
 /*
  * encode_slot — codifica una instrucción en su slot.
@@ -804,7 +832,7 @@ static int encode_slot(Assembler *as, int line, char *text, int slot, int pc,
     *word = 0;
     *written = -1;
 
-    text = trim(text);
+    text = isa_trim(text);
 
     // isa.md §3.2: la instrucción vacía (nopi) es todo ceros en cualquier
     // slot. Un slot sin texto se codifica igual.
@@ -820,18 +848,12 @@ static int encode_slot(Assembler *as, int line, char *text, int slot, int pc,
     if (*rest != '\0')
         *rest++ = '\0';
 
-    const Instruction *ins = NULL;
+    const IsaInstruction *ins = isa_find(text);
 
-    for (int i = 0; i < INSTRUCTION_COUNT; i++) {
-
-        if (strcmp(INSTRUCTIONS[i].name, text) == 0) {
-            ins = &INSTRUCTIONS[i];
-            break;
-        }
-    }
-
-    // isa.md §11.4: mnemónico desconocido.
-    if (ins == NULL) {
+    // isa.md §11.4: mnemónico desconocido. nopi está en la tabla para el
+    // organizador, pero aquí ya se codificó arriba: con operandos no es una
+    // instrucción válida.
+    if (ins == NULL || ins->unit == ISA_UNIT_NONE) {
         asm_error(as, line, "mnemonico desconocido: '%s'", text);
         return 0;
     }
@@ -844,165 +866,39 @@ static int encode_slot(Assembler *as, int line, char *text, int slot, int pc,
     }
 
     // Operandos separados por comas.
-    char *operand[MAX_OPERANDS];
-    int count = 0;
+    SlotOperands ops = { .as = as, .line = line, .pc = pc };
+    int count = split_operands(isa_trim(rest), ops.operand);
 
-    rest = trim(rest);
-
-    if (*rest != '\0') {
-        char *start = rest;
-
-        for (;;) {
-            char *comma = strchr(start, ',');
-
-            if (comma != NULL)
-                *comma = '\0';
-
-            if (count < MAX_OPERANDS)
-                operand[count] = trim(start);
-
-            count++;
-
-            if (comma == NULL)
-                break;
-
-            start = comma + 1;
-        }
-    }
-
-    if (count != operand_count(ins->form)) {
+    if (count != isa_operand_count(ins->form)) {
         asm_error(as, line, "'%s' espera %d operandos, se recibieron %d",
-                  ins->name, operand_count(ins->form), count);
+                  ins->name, isa_operand_count(ins->form), count);
         return 0;
     }
 
     // isa.md §11.3: en el slot 1, sel = 1 para CRYPTO y 0 para la ALU.
     uint32_t value =
-        FIELD_SEL(ins->unit == UNIT_CRYPTO) | FIELD_FUNCT(ins->funct);
+        FIELD_SEL(ins->unit == ISA_UNIT_CRYPTO) | FIELD_FUNCT(ins->funct);
 
-    unsigned a = 0, b = 0, c = 0, d = 0, e = 0;
+    int ok = 1;
 
     switch (ins->form) {
-
-        case FORM_R3:
-            if (!get_register(as, line, operand[0], &a) ||
-                !get_register(as, line, operand[1], &b) ||
-                !get_register(as, line, operand[2], &c))
-                return 0;
-
-            value |= FIELD_RD(a) | FIELD_RS1(b) | FIELD_RS2(c);
-            *written = (int) a;
-            break;
-
-        case FORM_IMM:
-            if (!get_register(as, line, operand[0], &a) ||
-                !get_register(as, line, operand[1], &b) ||
-                !get_immediate(as, line, operand[2], &c))
-                return 0;
-
-            value |= FIELD_RD(a) | FIELD_RS1(b) | c;
-            *written = (int) a;
-            break;
-
-        // isa.md §6.1: en mov el campo rs1 no se usa y vale cero.
-        case FORM_MOV:
-            if (!get_register(as, line, operand[0], &a) ||
-                !get_immediate(as, line, operand[1], &b))
-                return 0;
-
-            value |= FIELD_RD(a) | b;
-            *written = (int) a;
-            break;
-
-        // isa.md §4 (tipo B): rs2 en 25..22 y rs1 en 21..18.
-        case FORM_BRANCH:
-            if (!get_register(as, line, operand[0], &a) ||
-                !get_register(as, line, operand[1], &b) ||
-                !get_destination(as, line, operand[2], pc, OFFSET_BITS, &c))
-                return 0;
-
-            value |= FIELD_RD(b) | FIELD_RS1(a) | c;
-            break;
-
-        case FORM_JEFR:
-            if (!get_register(as, line, operand[0], &a) ||
-                !get_register(as, line, operand[1], &b))
-                return 0;
-
-            value |= FIELD_RD(a) | FIELD_RS1(b);
-            *written = (int) a;
-            break;
-
-        // isa.md §6.2: en jef el campo rd no se usa y vale cero.
-        case FORM_JEF:
-            if (!get_destination(as, line, operand[0], pc, TARGET_BITS, &a))
-                return 0;
-
-            value |= a;
-            break;
-
-        case FORM_JAS:
-            if (!get_register(as, line, operand[0], &a) ||
-                !get_destination(as, line, operand[1], pc, TARGET_BITS, &b))
-                return 0;
-
-            value |= FIELD_RD(a) | b;
-            *written = (int) a;
-            break;
-
-        case FORM_LOAD:
-            if (!get_register(as, line, operand[0], &a) ||
-                !get_memory(as, line, operand[1], &b, &c))
-                return 0;
-
-            value |= FIELD_RD(a) | FIELD_RS1(c) | b;
-            *written = (int) a;
-            break;
-
-        // isa.md §6.3: en sw y sb la fuente ocupa el campo 25..22 y no se
-        // escribe ningún registro.
-        case FORM_STORE:
-            if (!get_register(as, line, operand[0], &a) ||
-                !get_memory(as, line, operand[1], &b, &c))
-                return 0;
-
-            value |= FIELD_RD(a) | FIELD_RS1(c) | b;
-            break;
-
-        case FORM_FEIS:
-            if (!get_register(as, line, operand[0], &a) ||
-                !get_register(as, line, operand[1], &b) ||
-                !get_register(as, line, operand[2], &c) ||
-                !get_selector(as, line, "k", operand[3], &d) ||
-                !get_selector(as, line, "i", operand[4], &e))
-                return 0;
-
-            value |= FIELD_RD(a) | FIELD_RS1(b) | FIELD_RS2(c) |
-                     FIELD_K(d) | FIELD_I(e);
-            *written = (int) a;
-            break;
-
-        // auth y sanc: rd, rs2, k, i en cero (isa.md §6.4).
-        case FORM_RS1:
-            if (!get_register(as, line, operand[0], &a))
-                return 0;
-
-            value |= FIELD_RS1(a);
-            break;
-
-        case FORM_NONE:
-            break;
-
-        // isa.md §6.4: la palabra w va en los bits del campo i.
-        case FORM_KV_WRITE:
-            if (!get_register(as, line, operand[0], &a) ||
-                !get_selector(as, line, "k", operand[1], &b) ||
-                !get_selector(as, line, "w", operand[2], &c))
-                return 0;
-
-            value |= FIELD_RS1(a) | FIELD_K(b) | FIELD_I(c);
-            break;
+        case ISA_FORM_R3:       ok = encode_r3(&ops, &value, written); break;
+        case ISA_FORM_IMM:      ok = encode_imm(&ops, &value, written); break;
+        case ISA_FORM_MOV:      ok = encode_mov(&ops, &value, written); break;
+        case ISA_FORM_BRANCH:   ok = encode_branch(&ops, &value); break;
+        case ISA_FORM_JEFR:     ok = encode_jefr(&ops, &value, written); break;
+        case ISA_FORM_JEF:      ok = encode_jef(&ops, &value); break;
+        case ISA_FORM_JAS:      ok = encode_jas(&ops, &value, written); break;
+        case ISA_FORM_LOAD:     ok = encode_memory(&ops, &value, written, 1); break;
+        case ISA_FORM_STORE:    ok = encode_memory(&ops, &value, written, 0); break;
+        case ISA_FORM_FEIS:     ok = encode_feis(&ops, &value, written); break;
+        case ISA_FORM_RS1:      ok = encode_rs1(&ops, &value); break;
+        case ISA_FORM_KV_WRITE: ok = encode_kv_write(&ops, &value); break;
+        case ISA_FORM_NONE:     break;
     }
+
+    if (!ok)
+        return 0;
 
     *word = value;
 
@@ -1066,7 +962,7 @@ static void encode_bundle(Assembler *as, const RawBundle *raw, int pc,
     size_t size = sizeof("{  }") + 3 * 3;
 
     for (int i = 0; i < 4; i++) {
-        slot[i] = trim(slot[i]);
+        slot[i] = isa_trim(slot[i]);
         size += strlen(slot[i]) + sizeof("nopi");
     }
 

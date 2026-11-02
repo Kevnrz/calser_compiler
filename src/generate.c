@@ -107,26 +107,6 @@ static void report_error(ASTNode *node, const char *message) {
 }
  
 /*
- * find_child — busca el primer hijo de una clase.
- *
- * Entrada:
- *   node  nodo o NULL.
- *   kind  clase buscada.
- * Salida:
- *   hijo prestado o NULL.
- *   Efectos: ninguno.
- * Restricciones:
- *   ninguna.
- */
-static ASTNode *find_child(ASTNode *node, ASTKind kind) {
-    for (ASTNode *c = node ? node->child : NULL; c != NULL; c = c->next)
-        if (c->kind == kind)
-            return c;
- 
-    return NULL;
-}
- 
-/*
  * function_name — consulta el nombre de una función del AST.
  *
  * Entrada:
@@ -138,7 +118,7 @@ static ASTNode *find_child(ASTNode *node, ASTKind kind) {
  *   ninguna.
  */
 static const char *function_name(ASTNode *function) {
-    ASTNode *id = find_child(function, AST_IDENTIFIER);
+    ASTNode *id = ast_find_child(function, AST_IDENTIFIER);
  
     return id ? id->text : NULL;
 }
@@ -339,13 +319,13 @@ static Symbol *get_return_symbol(Symbol *function_symbol) {
         (ASTNode *)function_symbol->decl_node;
 
     ASTNode *return_type =
-        find_child(function_node, AST_RETURN_TYPE);
+        ast_find_child(function_node, AST_RETURN_TYPE);
 
     if (return_type == NULL)
         return NULL;
 
     ASTNode *return_id =
-        find_child(return_type, AST_IDENTIFIER);
+        ast_find_child(return_type, AST_IDENTIFIER);
 
     if (return_id == NULL)
         return NULL;
@@ -1484,7 +1464,7 @@ static void emit_crypto_statement(ASTNode *node) {
  *   ninguna.
  */
 static ASTNode *declaration_initializer(ASTNode *node) {
-    ASTNode *type = find_child(node, AST_TYPE);
+    ASTNode *type = ast_find_child(node, AST_TYPE);
     ASTNode *init = type ? type->next : NULL;
     return init && init->kind == AST_DIMENSIONS ? init->next : init;
 }
@@ -1598,7 +1578,7 @@ static void initialize_cells(ASTNode *init, Symbol *symbol, int *offset,
  *   símbolo y ancho asignados por el semántico.
  */
 static void initialize_declaration(ASTNode *node, int image, int dynamic_only) {
-    Symbol *symbol = get_symbol(find_child(node, AST_IDENTIFIER));
+    Symbol *symbol = get_symbol(ast_find_child(node, AST_IDENTIFIER));
     if (!symbol || symbol->address < 0) { report_error(node, "declaracion sin direccion"); return; }
     ASTNode *init = declaration_initializer(node);
     int offset = 0;
@@ -2554,7 +2534,7 @@ static void emit_statement(ASTNode *node) {
  *   retorno.
  */
 static void emit_function(ASTNode *function) {
-    ASTNode *id_node = find_child(function, AST_IDENTIFIER);
+    ASTNode *id_node = ast_find_child(function, AST_IDENTIFIER);
     const char *name = id_node ? id_node->text : NULL;
 
     if (name == NULL) {
@@ -2587,7 +2567,7 @@ static void emit_function(ASTNode *function) {
 
     cg_label(body_label);
 
-    ASTNode *body = find_child(function, AST_BLOCK);
+    ASTNode *body = ast_find_child(function, AST_BLOCK);
 
     if (body == NULL) {
         report_error(function, "funcion sin cuerpo");
@@ -2651,7 +2631,7 @@ int generate_code(ASTNode *root, const LabelTable *labels) {
     cg_init();
     crypto_context = (CGCryptoContext) {.eval = emit_crypto_argument, .next_label = 1};
     crypto_context.user = &crypto_context;
-    program_globals = find_child(root, AST_GLOBALS);
+    program_globals = ast_find_child(root, AST_GLOBALS);
 
     arithmetic_context.emit = emit_arith_callback;
     arithmetic_context.user = NULL;
@@ -2672,7 +2652,7 @@ int generate_code(ASTNode *root, const LabelTable *labels) {
           "mov rx, %d",
           semantic_data_end());
  
-    ASTNode *functions = find_child(root, AST_FUNCTIONS);
+    ASTNode *functions = ast_find_child(root, AST_FUNCTIONS);
     ASTNode *main_function = NULL;
  
     for (ASTNode *f = functions ? functions->child : NULL; f != NULL; f = f->next) {

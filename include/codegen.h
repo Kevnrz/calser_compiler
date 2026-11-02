@@ -4,7 +4,7 @@
  * Expone slots, instrucciones, IR, emisión, listados e imagen de datos.
  * Los contratos indican entradas, resultados, efectos y límites de uso.
  *
- * Usa: tipos de la biblioteca C y declaraciones propias.
+ * Usa: isa_table.h (IsaUnit) y declaraciones propias.
  * Lo usa: codegen.c; generate.c, codegen_crypto.c, main.c y codegen_*.
  * Referencias: isa.md §3, §9, §11.
  */
@@ -14,6 +14,8 @@
  
 #include <stdint.h>
 #include <stdio.h>
+
+#include "isa_table.h"
  
 /* Emisor de código de la Fase 4.
  *
@@ -24,11 +26,8 @@
 /* Slots del bundle (isa.md §3). */
 typedef enum { SLOT_ALU0 = 0, SLOT_ALU1 = 1, SLOT_BRU = 2, SLOT_LSU = 3 } Slot;
  
-/* Representación previa al empaquetado de instrucciones. */
-typedef enum {
-    CG_UNIT_NONE, CG_UNIT_ALU, CG_UNIT_BRU, CG_UNIT_LSU,
-    CG_UNIT_CRYPTO, CG_UNIT_UNKNOWN
-} CGUnit;
+/* Representación previa al empaquetado de instrucciones. La unidad es la de
+ * la tabla de la ISA (IsaUnit, isa_table.h). */
 
 typedef enum {
     CG_EFFECT_NONE = 0,
@@ -45,7 +44,7 @@ typedef enum {
 
 typedef struct {
     const char *text;
-    CGUnit unit;
+    IsaUnit unit;
     Slot original_slot;
     unsigned allowed_slots; /* Bit 0..3: ALU normal admite 0 y 1. */
     uint16_t reads, writes; /* Bits ISA 0..15; writes excluye rz. */

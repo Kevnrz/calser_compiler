@@ -9,7 +9,7 @@
  * pública (cg_*, codegen.h) no cambia.
  *
  * Usa: codegen_instruction.c, codegen_schedule.c y codegen_verify.c.
- * Lo usa: generate.c, codegen_crypto.c y main.c.
+ * Lo usa: generate*.c, codegen_crypto.c y main.c.
  * Referencias: isa.md §3, §9, §11.
  */
 

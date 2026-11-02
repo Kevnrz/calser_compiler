@@ -5,7 +5,7 @@
  * de bundles fijos para bóveda, autenticación y cuatro rondas Feistel.
  *
  * Usa: codegen.h, AST anotado y evaluador del llamador.
- * Lo usa: generate.c y pruebas/crypto.
+ * Lo usa: generate_expr.c y pruebas/crypto.
  * Referencias: isa.md §5.5, §6.4, §7, §9.3; docs/crypto_para_ccom.md.
  */
 

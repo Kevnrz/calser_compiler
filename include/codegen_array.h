@@ -5,7 +5,7 @@
  * Los contratos indican entradas, resultados, efectos y límites de uso.
  *
  * Usa: codegen_arith.h, symbol_table.h.
- * Lo usa: codegen_array.c; generate.c y pruebas/arreglos.
+ * Lo usa: codegen_array.c; generate_expr.c, generate_stmt.c y pruebas/arreglos.
  * Referencias: libro §6.4.3, §7.3; isa.md §6.3.
  */
 

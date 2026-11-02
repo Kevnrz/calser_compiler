@@ -5,7 +5,7 @@
  * Los contratos indican entradas, resultados, efectos y límites de uso.
  *
  * Usa: tipos de la biblioteca C y declaraciones propias.
- * Lo usa: codegen_arith.c; generate.c, codegen_array.h y pruebas/aritmetica.
+ * Lo usa: codegen_arith.c; generate_internal.h, codegen_array.h y pruebas/aritmetica.
  * Referencias: isa.md §6.1, §6.2, §8.
  */
 

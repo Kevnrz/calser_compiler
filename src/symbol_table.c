@@ -5,7 +5,7 @@
  * Conserva tipo, forma, direcciones y parámetros ordenados de las funciones.
  *
  * Usa: symbol_table.h; biblioteca C.
- * Lo usa: semantic.c; generate.c y codegen_* leen símbolos anotados.
+ * Lo usa: semantic*.c; generate*.c y codegen_* leen símbolos anotados.
  * Referencias: libro §2.7, §6.3.4, §7.1.1.
  */
 

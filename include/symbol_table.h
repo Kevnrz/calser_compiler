@@ -5,7 +5,7 @@
  * Los contratos indican entradas, resultados, efectos y límites de uso.
  *
  * Usa: tipos de la biblioteca C y declaraciones propias.
- * Lo usa: symbol_table.c; semantic.c, generate.c y codegen_array.c/codegen_crypto.c.
+ * Lo usa: symbol_table.c; semantic*.c, generate*.c y codegen_array.c/codegen_crypto.c.
  * Referencias: libro §2.7, §6.3.4, §7.1.1.
  */
 

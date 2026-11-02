@@ -24,7 +24,7 @@
  * siguen con asignación estática (libro §7.1.1); solo esto usa una pila.
  *
  * rx es un temporal libre según isa.md §8; aquí se usa por convención como
- * puntero de pila. La pila crece hacia arriba (emit_stack_push).
+ * puntero de pila. La pila crece hacia arriba (gen_stack_push).
  *
  * Vive en la zona de ccom (0x0000–0x0FFF): empieza en la primera dirección
  * libre después de la última área que asignó el semántico

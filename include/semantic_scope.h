@@ -7,7 +7,7 @@
  * el resto del semántico consulta por estas funciones.
  *
  * Usa: ast.h, symbol_table.h.
- * Lo usa: semantic_scope.c; semantic.c, semantic_expr.c y semantic_calls.c.
+ * Lo usa: semantic_scope.c; semantic.c y semantic_expr.c.
  * Referencias: libro §1.6.3, §2.7.
  */
 

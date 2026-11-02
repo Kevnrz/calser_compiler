@@ -6,7 +6,7 @@
  * Los contratos indican entradas, resultados, efectos y límites de uso.
  *
  * Usa: tipos de la biblioteca C y declaraciones propias.
- * Lo usa: ast.c; parser.y, semantic.c, label_table.c, generate.c y main.c.
+ * Lo usa: ast.c; lexer.l, parser.y, semantic*.c, label_table.c, generate*.c y main.c.
  * Referencias: libro §2.5, §6.1.
  */
 

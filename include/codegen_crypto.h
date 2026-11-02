@@ -5,7 +5,7 @@
  * Los contratos indican entradas, resultados, efectos y límites de uso.
  *
  * Usa: ast.h, symbol_table.h.
- * Lo usa: codegen_crypto.c; generate.c y pruebas/crypto.
+ * Lo usa: codegen_crypto.c; generate_internal.h y pruebas/crypto.
  * Referencias: isa.md §5.5, §6.4, §7, §9.3; docs/crypto_para_ccom.md.
  */
 

@@ -6,7 +6,7 @@ resultado, ausencia de avisos y uso de dos ALU con menos ciclos y bundles.
 
 Usa: ccom, sim_asm.py y pruebas/p02_factorial.cls.
 Lo usa: make validar-bundles y make check.
-Referencias: isa.md §3, §9; docs/organizacion_bundles.md.
+Referencias: isa.md §3, §9.
 """
 import argparse
 from collections import Counter

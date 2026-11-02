@@ -7,7 +7,7 @@
  * deben estar alineadas y dentro de la zona de datos de CRYPTO. Las
  * direcciones no pasan por la tabla de símbolos.
  *
- * Usa: semantic_internal.h, diagnostics.c.
+ * Usa: semantic_internal.h.
  * Lo usa: semantic.c, al analizar una sentencia de cifrado.
  * Referencias: docs/crypto_para_ccom.md §6; isa.md §6.4.
  */

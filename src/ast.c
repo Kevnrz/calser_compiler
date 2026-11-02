@@ -5,7 +5,7 @@
  * del fuente y enlaces prestados a símbolos para las fases posteriores.
  *
  * Usa: ast.h; biblioteca C.
- * Lo usa: parser.y, semantic.c, label_table.c, generate.c y main.c.
+ * Lo usa: lexer.l, parser.y, semantic*.c, label_table.c, generate*.c y main.c.
  * Referencias: libro §2.5, §6.1.
  */
 

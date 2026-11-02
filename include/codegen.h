@@ -5,7 +5,7 @@
  * Los contratos indican entradas, resultados, efectos y límites de uso.
  *
  * Usa: isa_table.h (IsaUnit) y declaraciones propias.
- * Lo usa: codegen.c; generate.c, codegen_crypto.c, main.c y codegen_*.
+ * Lo usa: codegen.c; generate*.c, codegen_crypto.c, main.c y codegen_*.
  * Referencias: isa.md §3, §9, §11.
  */
 
@@ -235,7 +235,7 @@ void cg_write(FILE *out);
  *   line  línea fuente, valores no positivos indican sin línea.
  * Salida:
  *   ninguna (solo efectos).
- *   Efectos: actualiza current_source_line.
+ *   Efectos: actualiza la línea del fuente que anota lo que se emite.
  * Restricciones:
  *   ninguna.
  */

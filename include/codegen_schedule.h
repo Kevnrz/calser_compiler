@@ -6,7 +6,7 @@
  *
  * Usa: codegen.h.
  * Lo usa: codegen_schedule.c; codegen.c, codegen_schedule.c, codegen_verify.c y pruebas/bundles.
- * Referencias: isa.md §3, §9; docs/organizacion_bundles.md.
+ * Referencias: isa.md §3, §9.
  */
 
 #ifndef CODEGEN_SCHEDULE_H

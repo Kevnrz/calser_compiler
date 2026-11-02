@@ -5,7 +5,7 @@
  * Emite accesos, paso por referencia, copia y puesta en cero mediante callback.
  *
  * Usa: codegen_array.h, symbol_table.h y contrato de CGArithContext.
- * Lo usa: generate.c y pruebas/arreglos.
+ * Lo usa: generate_expr.c, generate_stmt.c y pruebas/arreglos.
  * Referencias: libro §6.4.3, §7.3; isa.md §6.3.
  */
 

@@ -1111,13 +1111,13 @@ static int emit_crypto_argument(void *user, ASTNode *expr, int dst,
         for (slot = 4; slot < 16; slot++)
             if (!(occupied & (1u << slot)))
                 break;
-        if (slot == 16 || ctx->function == NULL || ctx->function->temp_base < 0) {
+        if (slot == 16 || ctx->function == NULL || ctx->function->frame.temp_base < 0) {
             gen_report_error(gen, expr, "sin casillas libres para preservar argumentos crypto");
             return 1;
         }
         occupied |= 1u << slot;
         saved[count] = reg;
-        slots[count++] = ctx->function->temp_base + 4 * (slot - 4);
+        slots[count++] = ctx->function->frame.temp_base + 4 * (slot - 4);
     }
     cg_gap();
     for (int i = 0; i < count; i++)

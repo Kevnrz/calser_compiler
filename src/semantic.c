@@ -1100,7 +1100,7 @@ static void check_main(void) {
  * ... 12 palabras para salvar temporales vivos (también en main)
  */
 static void begin_frame(Symbol *function, ASTNode *node) {
-    function->area_base = data_area_end();
+    function->frame.area_base = data_area_end();
 
     // M-5: main no reserva la casilla +0 para rl
     if (strcmp(function->name, "main") != 0) {
@@ -1221,10 +1221,10 @@ static void end_frame(Symbol *function, ASTNode *node) {
     // Reserva al final del área casillas de t0–t11 para expansiones CRYPTO;
     // las llamadas normales guardan sus temporales vivos en la pila de rx.
     reserve(TEMP_WORDS * type_width(TYPE_INT), function->name, node,
-            &function->temp_base);
+            &function->frame.temp_base);
 
     // El área termina donde quedó el offset, incluidos los temporales.
-    function->area_size = data_area_end() - function->area_base;
+    function->frame.area_size = data_area_end() - function->frame.area_base;
 }
 
 /*

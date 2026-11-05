@@ -1,13 +1,13 @@
 """
 Pruebas de nucleo/tabla.py contra los ejemplos de Aho et al. y contra los
 números de ide/docs/gramatica_ll1.md. Correr desde la raíz del repo:
-    python3 -m unittest discover -s ide/pruebas -t ide
+    make check-ide
 """
 
 import unittest
 
-from nucleo.gramatica import CALSER, EPSILON, FIN, Gramatica
-from nucleo.tabla import construir_tabla
+from ide.nucleo.gramatica import CALSER, EPSILON, FIN, Gramatica
+from ide.nucleo.tabla import construir_tabla
 
 # Aho Ej. 4.28 (gramática de expresiones sin recursión izquierda).
 AHO_428 = Gramatica("""

@@ -1,13 +1,13 @@
 """
 Pruebas de nucleo/lexico.py: cada caso reproduce una regla de
 grammar/lexer.l. Correr desde la raíz del repo:
-    python3 -m unittest discover -s ide/pruebas -t ide
+    make check-ide
 """
 
 import unittest
 
-from nucleo.gramatica import CALSER
-from nucleo.lexico import analizar, tipos_posibles
+from ide.nucleo.gramatica import CALSER
+from ide.nucleo.lexico import analizar, tipos_posibles
 
 
 def tipos(texto):

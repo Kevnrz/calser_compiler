@@ -159,7 +159,7 @@ calser_compiler/
 ├── docs/                # Documentación del compilador
 ├── assets/branding/     # Logo del lenguaje e icono de los programas
 ├── editors/vscode/      # Extensión para Calser, Lex/Flex y Yacc/Bison
-├── ide/                 # IDE de Calser en Python: núcleo (léxico, gramática LL(1), tabla) y pruebas
+├── ide/                 # Núcleo del IDE y pruebas; guía: ide/nucleo/README.md
 ├── build/               # Archivos generados y objetos; ignorados por Git
 ├── makefile
 └── README.md
@@ -291,7 +291,7 @@ pruebas crypto incluyen el recorrido `.cls` → `ccom` → `.asm`/`.mem` →
 simulador; no representan una simulación RTL.
 
 Para probar el núcleo del IDE (no necesita compilar `ccom`; ver
-[ide/README.md](ide/README.md)):
+[ide/nucleo/README.md](ide/nucleo/README.md)):
 
 ```bash
 make check-ide

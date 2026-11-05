@@ -13,17 +13,18 @@ se movió de `ide/README.md` a `ide/nucleo/README.md` para no chocar con tu
 
 ## Traerlo a tu rama
 
-Desde la raíz, con los cambios de `develop` ya incorporados allí:
+Desde la raíz:
 
 ```bash
+git fetch origin
 git checkout feat/calside
-git merge develop
+git merge origin/develop
 ```
 
-Se espera un merge sin conflictos, según el merge de prueba previo informado
-por Luis. El `README.md` de la raíz se mezcla solo; tu `ide/README.md`,
-`makefile` e `ide/__init__.py` quedan como los tenés. Esta adaptación no repite
-el merge de prueba ni ejecuta git.
+Verificado con un merge de prueba de develop y feat/calside (commit 92e0aa7): sin conflictos. Si agregás commits a tu rama antes del merge, el resultado puede cambiar.
+
+El `README.md` de la raíz se mezcla solo; tu `ide/README.md`, `makefile` e
+`ide/__init__.py` quedan como los tenés.
 
 ## API disponible
 
@@ -101,10 +102,10 @@ None
 ## Conexión con tu plan y posiciones
 
 En `ide/docs/plan_ide.md` de tu rama, F09 (resaltado y errores léxicos durante
-la edición) ya puede llamar a `analizar(texto)`. Como proponés en el plan,
-conviene un adaptador de tu lado, como `ide/nucleo.py` o similar. Usá un nombre
-como `ide/adaptador_nucleo.py` para evitar la ambigüedad con el paquete
-existente `ide/nucleo/`; allí podés traducir tokens y errores para Qt.
+la edición) ya puede llamar a `analizar(texto)`. Tu plan propone un adaptador
+`ide/nucleo.py`; ese nombre choca con el paquete `ide/nucleo/`, así que
+conviene otro, por ejemplo `ide/adaptador_nucleo.py`, donde traducir tokens
+y errores al modelo de Qt.
 
 **Pendiente, entrega 2:** parser predictivo y sugerencias, con una API pensada
 para que la interfaz la llame directamente. Habilitará F11 (sugerencias).
@@ -146,3 +147,6 @@ python3 -m unittest discover -s ide/pruebas -v
 
 Resultado esperado: `Ran 20 tests` y `OK`. En `develop`, `make ide` falla
 hasta que entre tu rama; es esperado y no hace falta ejecutarlo aquí.
+
+Después de tu merge, `make check-ide` también corre tus pruebas, que necesitan
+PySide6.

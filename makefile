@@ -113,6 +113,10 @@ check-salidas: $(TARGET)
 validar-bundles: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 tools/validar_bundles.py
 
+# Núcleo del IDE (Python, sin ccom): léxico, gramática LL(1) y tabla M.
+check-ide:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s ide/pruebas -t ide
+
 check: check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 clean:
@@ -122,4 +126,4 @@ clean:
 
 -include $(OBJECTS:.o=.d)
 
-.PHONY: all clean ejercicios check check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+.PHONY: all clean ejercicios check check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles check-ide

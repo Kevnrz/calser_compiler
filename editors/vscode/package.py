@@ -1,4 +1,4 @@
-"""Empaqueta esta extensión declarativa sin dependencias externas."""
+"""Empaqueta este plugin como un archivo .vsix para su instalación en Visual Studio Code."""
 import json
 from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED

@@ -123,3 +123,12 @@ clean:
 -include $(OBJECTS:.o=.d)
 
 .PHONY: all clean ejercicios check check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+
+# Prototipo gráfico CALSIDE (PySide6).
+PYTHON ?= python3
+.PHONY: ide check-ide
+ide:
+	$(PYTHON) -m ide.main
+
+check-ide:
+	PYTHONDONTWRITEBYTECODE=1 QT_QPA_PLATFORM=offscreen $(PYTHON) -m unittest discover -s ide/pruebas -v

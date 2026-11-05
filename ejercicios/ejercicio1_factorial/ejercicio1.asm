@@ -1,4 +1,4 @@
-# ccom: ejercicios/ejercicio1_factorial/ejercicio1.cls
+# ccom: /home/saddygr/Documentos/GitHub/calser_compiler/ejercicios/ejercicio1_factorial/ejercicio1.cls
   { mov rx, 120 | nopi | nopi | nopi }                                   # 0000
   { nopi | nopi | nopi | nopi }                                          # 0001
 .L_func_main:                                                            # bundle 2

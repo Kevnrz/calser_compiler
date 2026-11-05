@@ -341,3 +341,7 @@ por Git. Más detalles en [editors/vscode/README.md](editors/vscode/README.md).
 La extensión conserva una copia del icono para que pueda instalarse de forma
 independiente del repositorio. Los avisos de los recursos Seti están en
 [ThirdPartyNotices.txt](editors/vscode/ThirdPartyNotices.txt).
+
+## CALSIDE · prototipo de IDE
+
+Aplicación de escritorio propia con PySide6: editor, pestañas, manejo de archivos y compilación con `ccom`. Inicio: `make ide`; pruebas: `make check-ide`. Requiere instalar `ide/requirements.txt`. Ver [instalación, funciones y límites](ide/README.md) y [plan del IDE](ide/docs/plan_ide.md). Incluye diagnósticos de `ccom` y clones Tipo I/II entre archivos; la asistencia LL(1) sigue pendiente de integrar.

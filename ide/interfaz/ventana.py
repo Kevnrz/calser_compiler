@@ -17,6 +17,8 @@ from ide import archivos, ccom
 from ide.interfaz.editor import Editor
 from ide.interfaz.terminal import Terminal
 from ide.interfaz.clones import PanelClones
+from ide.interfaz.analisis import CoordinadorAnalisis
+from ide.interfaz.comprobacion import ComprobadorCcom, SolicitudCcom
 
 
 class Esquina(QWidget):
@@ -44,6 +46,7 @@ class Ventana(QMainWindow):
         self.stderr = ""
         self.compilation = None
         self.results = {}
+        self.auto_results = {}
         self.setWindowTitle("CALSIDE · Prototipo")
         self.resize(1250, 800)
         self.setMinimumSize(800, 520)
@@ -56,7 +59,7 @@ class Ventana(QMainWindow):
             QToolButton { border: none; padding: 5px 8px; color: #b7c1cf; }
             QToolButton:hover { background: #393344; color: #efbb65; }
             QLineEdit { background: #222631; border: 1px solid #414957; padding: 7px; color: #e2e7ef; }
-            QPlainTextEdit { background: #191c24; border: none; selection-background-color: #504135; }
+            QPlainTextEdit { background: #191c24; border: none; selection-background-color: #504135; selection-color: #fff2d3; }
             QTabWidget::pane { border: none; }
             QTabBar::tab { padding: 10px 18px; background: #222631; color: #a5afbf; border-top: 2px solid transparent; }
             QTabBar::tab:selected { background: #191c24; color: #efbb65; border-top-color: #efbb65; }
@@ -76,6 +79,13 @@ class Ventana(QMainWindow):
         self.timer = QTimer(self)
         self.timer.setSingleShot(True)
         self.timer.timeout.connect(self.agotar_tiempo)
+        self.analizador = CoordinadorAnalisis(self)
+        self.analizador.resultado.connect(self.recibir_analisis)
+        self.analizador.fallo.connect(self.fallo_analisis)
+        self.comprobador = ComprobadorCcom(self.root, self)
+        self.comprobador.resultado.connect(self.recibir_comprobacion)
+        self.comprobador.fallo.connect(self.fallo_comprobacion)
+        self.comprobador.estado.connect(self.estado_comprobacion)
         self.nuevo()
 
     def crear_interfaz(self):
@@ -92,7 +102,7 @@ class Ventana(QMainWindow):
         brand = QLabel("⬡  CALSIDE")
         brand.setStyleSheet("background: transparent; color: #efbb65; font-size: 15px;")
         bar.addWidget(brand)
-        self.context = QLabel("Diagnósticos de ccom · al compilar")
+        self.context = QLabel("Análisis en vivo · F5 compila")
         self.context.setStyleSheet("background: transparent; color: #a5afbf;")
         bar.addWidget(self.context)
         bar.addStretch()
@@ -184,13 +194,17 @@ class Ventana(QMainWindow):
         self.output = QPlainTextEdit()
         self.output.setReadOnly(True)
         self.output.setPlaceholderText("Aquí aparecerá la salida real de ccom al compilar.")
+        self.auto_output = QPlainTextEdit()
+        self.auto_output.setReadOnly(True)
+        self.auto_output.setPlaceholderText("Estado y mensajes del último análisis automático. No se ha compilado ni guardado el documento.")
         self.clones_panel = PanelClones()
         self.clones_panel.solicitar.connect(self.analizar_clones)
         self.clones_panel.abrirFragmento.connect(self.ir_clone)
         self.panels.addTab(self.problems, "Problemas · 0")
         self.panels.addTab(self.output, "Salida de ccom")
         self.panels.addTab(self.clones_panel, "Clones")
-        for i in range(3):
+        self.panels.addTab(self.auto_output, "Análisis de ccom")
+        for i in range(4):
             from PySide6.QtWidgets import QTabBar
             self.panels.tabBar().setTabButton(i, QTabBar.ButtonPosition.RightSide, None)
             self.panels.tabBar().setTabButton(i, QTabBar.ButtonPosition.LeftSide, None)
@@ -217,6 +231,8 @@ class Ventana(QMainWindow):
         layout.addWidget(horizontal, 1)
         self.setCentralWidget(body)
         self.position = QLabel()
+        self.analysis_state = QLabel()
+        self.statusBar().addPermanentWidget(self.analysis_state)
         self.statusBar().addPermanentWidget(self.position)
         self.statusBar().showMessage("Listo · abre un archivo o crea uno nuevo")
 
@@ -259,6 +275,11 @@ class Ventana(QMainWindow):
         self.accion(view, "Mover panel abajo / derecha", "Ctrl+Alt+J", self.mover_panel)
         self.accion(view, "Nueva terminal", "Ctrl+Shift+T", self.nueva_terminal)
         self.accion(view, "Analizar clones de la carpeta", "Ctrl+Shift+D", self.analizar_clones)
+        self.auto_action = QAction("Análisis sintáctico y semántico automático", self)
+        self.auto_action.setCheckable(True)
+        self.auto_action.setChecked(True)
+        self.auto_action.toggled.connect(self.activar_comprobacion)
+        view.addAction(self.auto_action)
         build = self.menus.addMenu("Compilar")
         self.compile_action = self.accion(build, "Compilar archivo activo", "F5", self.compilar)
         self.accion(build, "Configurar ccom…", None, self.configurar_ccom)
@@ -328,7 +349,10 @@ class Ventana(QMainWindow):
         self.tabs.setCurrentWidget(editor)
         editor.document().modificationChanged.connect(lambda _: self.actualizar_titulo(editor))
         editor.cursorPositionChanged.connect(self.actualizar_estado)
-        editor.textChanged.connect(lambda: self.edicion(editor))
+        editor.contenidoCambiado.connect(lambda: self.edicion(editor))
+        editor.analisisSolicitado.connect(self.analizador.solicitar)
+        editor.estadoAnalisisCambiado.connect(self.actualizar_estado)
+        editor.programar_analisis()
         editor.setFocus()
         return editor
 
@@ -345,32 +369,120 @@ class Ventana(QMainWindow):
             cursor = editor.textCursor()
             self.position.setText(f"Ln {cursor.blockNumber() + 1}, Col {cursor.positionInBlock() + 1}  ·  UTF-8  ·  Calser")
             self.setWindowTitle(f"{editor.path.name if editor.path else 'Sin título'} · CALSIDE")
+            self.analysis_state.setText(f"Léxico: {editor.estado_analisis} · Análisis: {editor.estado_ccom}  ·  ")
+            self.analysis_state.setToolTip(editor.estado_ccom)
             problems = editor.problemas_en_linea(cursor.blockNumber() + 1)
-            self.diagnostic_message.setText("\n".join(f"ccom · {p.categoria}: {p.descripcion}" for p in problems))
+            self.diagnostic_message.setText("\n".join(f"{p.origen} · {p.categoria}: {p.descripcion}" for p in problems))
             self.diagnostic_message.setVisible(bool(problems))
 
     def edicion(self, editor):
+        self.analizador.olvidar(editor.documento_id)
+        self.comprobador.invalidar(editor.documento_id)
+        self.auto_results.pop(editor, None)
+        editor.estado_ccom = "Esperando léxico…" if self.auto_action.isChecked() else "Desactivado"
         self.actualizar_titulo(editor)
         if editor.path and editor.document().isModified():
             self.clones_panel.invalidar(editor.path)
         if editor in self.results:
             self.results.pop(editor)
-            self.actualizar_problemas()
+        self.actualizar_problemas()
         if self.compilation and self.compilation[0] is editor:
             self.statusBar().showMessage("Documento modificado · los resultados anteriores pueden estar desactualizados")
+
+    def recibir_analisis(self, result):
+        editor = next((self.tabs.widget(i) for i in range(self.tabs.count()) if self.tabs.widget(i).documento_id == result.documento), None)
+        if editor and editor.aplicar_analisis(result):
+            self.actualizar_problemas()
+            self.programar_comprobacion(editor)
+
+    def fallo_analisis(self, documento, revision, message):
+        editor = next((self.tabs.widget(i) for i in range(self.tabs.count()) if self.tabs.widget(i).documento_id == documento), None)
+        if editor and editor.revision == revision:
+            editor.estado_analisis = f"No disponible: {message}"
+            self.actualizar_estado()
+
+    def programar_comprobacion(self, editor):
+        if not self.auto_action.isChecked():
+            editor.estado_ccom = "Desactivado"
+        elif not editor.toPlainText().strip():
+            editor.estado_ccom = "Sin contenido"
+        elif editor.analisis_revision != editor.revision:
+            editor.estado_ccom = "Esperando léxico…"
+        elif editor.errores_lexicos:
+            editor.estado_ccom = "Corrige el léxico"
+        else:
+            self.comprobador.configured = self.configured_ccom
+            self.comprobador.programar(SolicitudCcom(editor.documento_id, editor.revision, editor.toPlainText(), editor.path, self.project))
+        self.actualizar_estado()
+
+    def activar_comprobacion(self, enabled):
+        self.comprobador.activar(enabled)
+        self.auto_results.clear()
+        for i in range(self.tabs.count()):
+            self.programar_comprobacion(self.tabs.widget(i))
+        self.actualizar_problemas()
+
+    def editor_solicitud(self, request):
+        return next((self.tabs.widget(i) for i in range(self.tabs.count()) if self.tabs.widget(i).documento_id == request.documento and self.tabs.widget(i).revision == request.revision and self.tabs.widget(i).path == request.fuente), None)
+
+    def estado_comprobacion(self, request, state):
+        editor = self.editor_solicitud(request)
+        if editor:
+            editor.estado_ccom = state
+            self.actualizar_estado()
+
+    def recibir_comprobacion(self, result):
+        editor = self.editor_solicitud(result.solicitud)
+        if editor:
+            self.auto_results[editor] = list(result.problemas)
+            editor.estado_ccom = f"{len(result.problemas)} error(es)" if result.problemas else "Sin errores"
+            self.registro_comprobacion(result.solicitud, editor.estado_ccom, result.salida)
+            self.actualizar_problemas()
+
+    def fallo_comprobacion(self, request, message, log):
+        editor = self.editor_solicitud(request)
+        if editor:
+            self.auto_results.pop(editor, None)
+            editor.estado_ccom = "No disponible"
+            self.registro_comprobacion(request, message, log)
+            self.statusBar().showMessage(message)
+            self.actualizar_problemas()
+
+    def registro_comprobacion(self, request, message, log):
+        name = str(request.fuente or "Sin título")
+        self.auto_output.setPlainText(f"Análisis automático · {name} · revisión {request.revision}\nccom --check [copia temporal]\n{message}\n\n{log}")
 
     def actualizar_problemas(self):
         """Conserva diagnósticos de otros documentos y retira solo los obsoletos."""
         self.problems.clear()
         for index in range(self.tabs.count()):
             editor = self.tabs.widget(index)
-            problems = self.results.get(editor, [])
-            editor.establecer_problemas([p for p in problems if p.archivo == editor.path])
+            manual = self.results.get(editor, [])
+            compiled = list(manual)
+            manual_keys = {(p.linea, p.columna, p.categoria, p.descripcion) for p in manual}
+            compiled.extend(p for p in self.auto_results.get(editor, []) if (p.linea, p.columna, p.categoria, p.descripcion) not in manual_keys)
+            # ccom tiene prioridad si informa el mismo error léxico/rango de
+            # esta revisión. Conservar sus errores semánticos/sintácticos.
+            keys = set()
+            for problem in compiled:
+                if problem.categoria == "Léxico" and problem.archivo == editor.path:
+                    cursor = editor.rango_problema(problem)
+                    if cursor:
+                        keys.add((cursor.selectionStart(), cursor.selectionEnd()))
+            live = []
+            for problem in editor.errores_lexicos:
+                cursor = editor.rango_problema(problem)
+                if cursor is None or (cursor.selectionStart(), cursor.selectionEnd()) not in keys:
+                    live.append(problem)
+            problems = list(compiled) + live
+            editor.establecer_problemas([p for p in problems if p.documento == editor.documento_id or p.archivo == editor.path])
             for problem in problems:
-                item = QTreeWidgetItem([problem.descripcion, problem.archivo.name, str(problem.linea), str(problem.columna), problem.categoria, "ccom"])
+                path = problem.archivo or editor.path
+                name = path.name if path else f"Sin título · pestaña {index + 1}"
+                item = QTreeWidgetItem([problem.descripcion, name, str(problem.linea), str(problem.columna), problem.categoria, problem.origen])
                 item.setData(0, Qt.ItemDataRole.UserRole, problem)
-                item.setToolTip(0, f"<b>ccom · {escape(problem.categoria)}</b><br>{escape(problem.descripcion)}<br>{escape(str(problem.archivo))}:{problem.linea}:{problem.columna}")
-                item.setToolTip(1, str(problem.archivo))
+                item.setToolTip(0, f"<b>{escape(problem.origen)} · {escape(problem.categoria)}</b><br>{escape(problem.descripcion)}<br>{escape(str(path or name))}:{problem.linea}:{problem.columna}")
+                item.setToolTip(1, str(path or name))
                 self.problems.addTopLevelItem(item)
         self.panels.setTabText(0, f"Problemas · {self.problems.topLevelItemCount()}")
         self.actualizar_estado()
@@ -445,12 +557,15 @@ class Ventana(QMainWindow):
             return False
         if editor.path != path:
             self.clones_panel.invalidar()
+            self.comprobador.invalidar(editor.documento_id)
+            self.auto_results.pop(editor, None)
             self.results.pop(editor, None)
             editor.establecer_problemas([])
         editor.path = path
         editor.document().setModified(False)
         self.actualizar_titulo(editor)
         self.actualizar_problemas()
+        self.programar_comprobacion(editor)
         self.statusBar().showMessage(f"Guardado · {path}")
         return True
 
@@ -470,6 +585,10 @@ class Ventana(QMainWindow):
             self.statusBar().showMessage("Cancela la compilación antes de cerrar este documento")
             return
         if self.confirmar_cierre(editor):
+            editor.detener_analisis()
+            self.analizador.olvidar(editor.documento_id)
+            self.comprobador.invalidar(editor.documento_id)
+            self.auto_results.pop(editor, None)
             if editor.path:
                 self.clones_panel.invalidar(editor.path)
             self.results.pop(editor, None)
@@ -493,6 +612,11 @@ class Ventana(QMainWindow):
         filename, _ = QFileDialog.getOpenFileName(self, "Seleccionar ejecutable ccom", str(self.root))
         if filename:
             self.configured_ccom = filename
+            for i in range(self.tabs.count()):
+                editor = self.tabs.widget(i)
+                self.auto_results.pop(editor, None)
+                self.programar_comprobacion(editor)
+            self.actualizar_problemas()
 
     def compilar(self):
         if self.process:
@@ -514,6 +638,10 @@ class Ventana(QMainWindow):
         self.stdout_decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
         self.stderr_decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
         self.compilation = (editor, editor.revision, editor.path)
+        self.comprobador.invalidar(editor.documento_id)
+        self.comprobador.suspender(True)
+        self.auto_results.pop(editor, None)
+        editor.estado_ccom = "Compilando con F5"
         self.results.pop(editor, None)
         self.actualizar_problemas()
         arguments = [str(editor.path), "-o", str(destination / (editor.path.stem + ".bin")), "-s"]
@@ -581,6 +709,12 @@ class Ventana(QMainWindow):
         self.timer.stop()
         self.process.deleteLater()
         self.process = None
+        self.comprobador.suspender(False)
+        if self.compilation:
+            editor, revision, source = self.compilation
+            if self.tabs.indexOf(editor) >= 0 and editor.revision == revision:
+                editor.estado_ccom = "Ver compilación" if self.auto_action.isChecked() else "Desactivado"
+                self.actualizar_estado()
         self.compile_button.setEnabled(True)
         self.compile_action.setEnabled(True)
         self.stop_button.setEnabled(False)
@@ -595,7 +729,11 @@ class Ventana(QMainWindow):
 
     def ir_problema(self, item, column):
         problem = item.data(0, Qt.ItemDataRole.UserRole)
-        editor = self.abrir(problem.archivo)
+        editor = next((self.tabs.widget(i) for i in range(self.tabs.count()) if self.tabs.widget(i).documento_id == problem.documento), None)
+        if editor:
+            self.tabs.setCurrentWidget(editor)
+        elif problem.archivo is not None:
+            editor = self.abrir(problem.archivo)
         if editor:
             cursor = editor.rango_problema(problem)
             if cursor is None:
@@ -623,10 +761,23 @@ class Ventana(QMainWindow):
             if answer != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return
-        for terminal in self.terminals:
-            terminal.detener()
         if not self.clones_panel.detener():
             self.statusBar().showMessage("Cancelando análisis de clones… intenta cerrar de nuevo en un momento")
             event.ignore()
             return
+        if not self.analizador.detener():
+            self.statusBar().showMessage("Terminando análisis léxico… intenta cerrar de nuevo en un momento")
+            event.ignore()
+            return
+        if not self.comprobador.detener():
+            self.analizador.cerrando = False
+            for index in range(self.tabs.count()):
+                self.tabs.widget(index).programar_analisis()
+            self.statusBar().showMessage("Terminando análisis de ccom… intenta cerrar de nuevo")
+            event.ignore()
+            return
+        for index in range(self.tabs.count()):
+            self.tabs.widget(index).detener_analisis()
+        for terminal in self.terminals:
+            terminal.detener()
         event.accept()

@@ -7,6 +7,7 @@ Desde la raíz del repositorio, con Python 3.10 o posterior:
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -r ide/requirements.txt
+make  # construye ccom, incluida la bandera --check
 make ide PYTHON=.venv/bin/python
 ```
 
@@ -18,7 +19,7 @@ Si PySide6 ya está instalado, basta con `make ide`. También se puede abrir un 
 - Editor, números de línea, pestañas, indicador de cambios, estado de cursor y búsqueda.
 - Abrir archivo/carpeta, nuevo, guardar, guardar como y cierre con guardar/descartar/cancelar.
 - Explorador de `.cls` de la carpeta actual (sin subcarpetas en este prototipo).
-- Resaltado visual basado en los patrones de la extensión VS Code, con comentarios multilínea. No valida el programa.
+- Resaltado con tokens reales del núcleo y errores léxicos mientras escribes, incluidos comentarios multilínea y texto sin guardar. El análisis automático sintáctico/semántico usa ccom --check tras otra pausa breve.
 - Compilación real con `ccom`, sin bloquear la ventana; cancelar, límite de 30 s, salida completa y errores navegables (doble clic o Enter).
 - Salidas en `<carpeta del fuente>/build/ide/<identificador de ruta>/`, evitando colisiones entre fuentes.
 
@@ -35,7 +36,34 @@ Al compilar con F5, los errores léxicos, sintácticos y semánticos aparecen co
 - Cada pestaña conserva el resultado de su última compilación válida. Editarla o cambiar su ruta retira sus diagnósticos; las marcas de las otras pestañas permanecen. Los resultados de una revisión anterior se descartan.
 - La conversión de columnas UTF-8 a posiciones UTF-16 conserva tildes y caracteres fuera del BMP. Los mensajes sin posición se mantienen completos en Salida; no se inventa un rango.
 
-Los diagnósticos se actualizan **al compilar**. El análisis automático durante la escritura corresponde al paso 3 y todavía no está implementado.
+Los diagnósticos con origen **ccom** se actualizan al compilar con F5. Los de **núcleo** y **ccom automático** se actualizan durante la escritura mediante E3/E4.
+
+## Léxico en vivo · E3
+
+Después de una pausa de **300 ms**, el lexer de `ide.nucleo` analiza una copia del texto de cada pestaña en segundo plano. No guarda el documento, no ejecuta ccom ni genera archivos. El resaltado usa sus tokens reales; los comentarios se colorean con un recorrido de presentación porque el lexer los omite.
+
+- Errores con origen **núcleo** en Problemas, en el margen y en los subrayados. Funciona también en pestañas **Sin título**; un clic navega al carácter correspondiente.
+- La franja bajo el editor y la descripción al pasar el puntero identifican el origen. La barra de estado indica espera, análisis, errores, resultado o fallo.
+- Cada resultado lleva documento y revisión. Los resultados de texto antiguo o de pestañas cerradas se descartan; la cola mantiene una tarea pendiente por documento y un trabajador activo.
+- El formato no cuenta como edición, no ensucia archivos guardados y no introduce operaciones adicionales de Deshacer.
+- Las posiciones Unicode del núcleo se convierten a UTF-16; las de ccom siguen convirtiéndose desde UTF-8. Un error léxico del mismo rango informado por ambos se presenta una sola vez, con prioridad para ccom.
+- Documentos de más de **2 millones de caracteres** pausan este análisis con un mensaje explícito; todavía se pueden compilar con F5.
+
+Prueba rápida: crea una pestaña e introduce `Vm x : int = 3 ; @`. El error de `@` aparece sin guardar ni compilar; selecciónalo desde Problemas y bórralo. Desaparece tras la pausa. Una declaración sin `;` no se señala por el lexer; después la revisa el análisis sintáctico automático de ccom (E4). El parser predictivo sigue pendiente.
+
+## Sintaxis y semántica en vivo · E4
+
+Tras el lexer (300 ms) y una pausa adicional de **600 ms**, CALSIDE ejecuta **`ccom --check`** en segundo plano sobre una copia temporal del buffer, incluidos los documentos sin nombre. La copia se elimina al terminar, cancelar o fallar. El archivo original y sus artefactos permanecen intactos.
+
+- Los resultados se identifican como **ccom automático** y se presentan en Problemas, subrayados y descripciones, sin cambiar de pestaña ni robar el foco.
+- Las rutas temporales se remapean al documento original o a Sin título. El directorio de trabajo corresponde al del fuente cuando existe; el enlazado de módulos futuro deberá respetar también el contexto de importación.
+- Se omite el proceso si el documento está vacío o el lexer ya encontró errores. Un único proceso atiende la cola; editar/cerrar/cambiar de ruta descarta la revisión anterior y cancela su proceso.
+- **Análisis de ccom** conserva el estado y los mensajes del último análisis, separados de **Salida de ccom**, que pertenece a F5. Un ejecutable antiguo sin `--check`, un fallo de inicio o un error sin posición se explica ahí; no se presenta como un documento correcto.
+- F5 conserva su compilación normal y tiene prioridad: pausa/cancela el análisis automático y reanuda las solicitudes de otras pestañas después. Los diagnósticos equivalentes no se duplican.
+- Puede activarse/desactivarse en **Ver → Análisis sintáctico y semántico automático**. Desactivarlo retira los resultados automáticos y conserva los de compilación manual y del lexer.
+- Límite de tiempo actual: **5 s**; máximo de salida: **1 MB por canal**. Los errores mantienen sus posiciones y mensajes de ccom; E4 no reescribe todavía explicaciones como la sentencia incompleta `vs` seguida de `E`.
+
+Requiere reconstruir ccom con `make`. Prueba: escribe una función con una variable no declarada y espera; aparece el error semántico sin guardar ni pulsar F5. Corrige el nombre y el mensaje desaparece. Quitar un `;` permite probar sintaxis. `ccom --check` ejecuta el front-end completo, pero no genera código ni certifica ejecución.
 
 ## Distribución y terminales
 
@@ -62,9 +90,9 @@ Demostración: abre la carpeta `ide/ejemplos/clones`, pulsa Analizar carpeta con
 
 ## Pendiente
 
-Integración del núcleo LL(1), sugerencias, correcciones automáticas, detección de cambios externos, preferencias persistentes, árbol recursivo, iconos de archivos y empaquetado. El análisis automático de errores mientras escribes sigue pendiente. No hay resultados simulados.
+Parser predictivo/sugerencias (E5), correcciones automáticas (E6), detección de cambios externos, preferencias persistentes, árbol recursivo, iconos de archivos y empaquetado. El lexer ya está conectado al editor. No hay resultados simulados.
 
-El resaltado reutiliza los patrones de `editors/vscode/syntaxes/calser.tmLanguage.json`; no copia el tema Seti. El icono de aplicación usa el recurso Calser existente.
+El resaltado usa el lexer del núcleo; conserva la paleta inicial inspirada en la extensión y el icono Calser existente. No copia el tema Seti.
 
 ## Validación
 

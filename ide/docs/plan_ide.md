@@ -1,335 +1,389 @@
 # Plan de CALSIDE · IDE de Calser
 
-Fecha: 4 de noviembre de 2026. Estado: prototipo inicial PySide6 implementado; integración LL(1) y animaciones pendientes; clones Tipo I/II implementados.
+Versión 2 · actualizado el **5 de noviembre de 2026**.
 
-Este documento es la referencia de trabajo para construir el IDE. Las propuestas se distinguen de las decisiones aceptadas. Los ejemplos visuales representan comportamiento esperado, no funciones implementadas.
+Documento de trabajo para completar el IDE. Sustituye el orden inicial y los anexos de avances de la versión anterior. Los estados describen código existente: una propuesta o una API recibida no equivale a una función conectada al editor.
 
-## 1. Objetivo y fuentes
+## 1. Objetivo, alcance y referencias
 
-Crear una aplicación de escritorio propia para escribir programas Calser, recibir asistencia durante la edición, compilar mediante `ccom` y explorar clones entre archivos.
+Construir una aplicación de escritorio propia para editar Calser, recibir asistencia durante la escritura, compilar con `ccom` y detectar clones entre archivos. Debe poder entregarse como aplicación ejecutable, sin exigir VS Code al usuario final.
 
-Fuentes:
+Referencias:
 
-- Enunciado `proyecto-ii-grupal-perf-cache.pdf`: página 9, punto 4 (IDE); página 13, sección 7.2 (iteraciones); página 18, sección 9.2 (evaluación). El IDE vale 15 % de CE1108.
-- `plan_ide_interfaz.md`, recibido del equipo: reparto y contratos preliminares. Sus fechas y estados son información reportada, pendiente de confirmar contra la rama correspondiente.
-- Repositorio local inspeccionado: `editors/vscode/`, `include/diagnostics.h`, `src/diagnostics.c`, `grammar/lexer.l`, `grammar/parser.y`, `src/main.c` y documentación de `ccom`.
-- Acuerdos de esta conversación: aplicación independiente con PySide6; se permite reutilizar recursos de la extensión y agregar dependencias.
+- Enunciado `proyecto-ii-grupal-perf-cache.pdf`: página 9, punto 4 (sugerencias, correcciones automáticas, errores gráficos con descripción y clones Tipo I/II entre archivos); página 13, §7.2 (iteraciones); página 18, §9.2 (IDE: 15 % de CE1108).
+- [Guía del núcleo](integrar_nucleo.md), [gramática original](gramatica_calser.md), [gramática LL(1)](gramatica_ll1.md) y [API del núcleo](../nucleo/README.md).
+- [Uso, instalación y límites actuales](../README.md), [banderas de ccom](../../docs/ccom_banderas.md) y código de `ide/`, `grammar/` y `src/main.c`.
+- [Mockups](mockups.html): referencias visuales con escenarios simulados; no constituyen la implementación.
+- `plan_ide_interfaz.md` recibido del equipo: antecedente del reparto. Las decisiones posteriores de esta conversación prevalecen cuando cambian biblioteca, arquitectura, responsabilidades o secuencia.
 
-Los documentos de referencia describen requisitos y propuestas; no autorizan por sí solos a instalar, publicar, crear PR o modificar otras partes del proyecto.
+**Separación de objetivos:** completar los requisitos del IDE no equivale a terminar el proyecto completo de Compiladores/Arquitectura. Optimizaciones, IR, cachés y simulador tienen sus propias tareas. Las métricas pueden integrarse después; no son condición para la primera versión completa del IDE.
 
-## 2. Estado verificado y decisiones
+## 2. Estado real al actualizar este documento
 
-| ID | Decisión o dato | Estado |
+Rama: `feat/calside`. El merge de `origin/develop` se completó en `c8b1997`. En esa revisión pasaron **44 pruebas** mediante `make check-ide`: 24 de CALSIDE y 20 del núcleo. Es una referencia de validación de esta revisión, no un conteo que deba mantenerse fijo.
+
+### Implementado y probado
+
+- Aplicación PySide6/Qt Widgets llamada **CALSIDE**, con tema oscuro, acento ámbar y esquina morada estática.
+- Cabecera sobre la barra de menús; menús centrados verticalmente.
+- Editor con números de línea, resaltado basado en tokens reales del núcleo, pestañas, búsqueda y operaciones de edición.
+- Nuevo, abrir, guardar, guardar como, protección de cambios al cerrar y rutas canónicas para evitar pestañas duplicadas.
+- Explorador de `.cls` del primer nivel; ocultar/recuperar con botón o Ctrl+B.
+- Panel de resultados movible abajo/derecha y terminales PTY independientes en Linux, con entrada por líneas.
+- Compilación real asíncrona con `ccom`, salida, cancelación y límite actual de 30 segundos.
+- Análisis automático con `ccom --check` sobre copias temporales, pausa de 600 ms después del lexer y límite de 5 segundos; sin guardar ni generar binarios.
+- Errores léxicos/sintácticos/semánticos de `ccom` al compilar: subrayado, punto en margen, descripción, navegación y selección del fragmento.
+- Diagnósticos por documento y descarte de resultados antiguos al editar o cambiar de ruta.
+- Clones Tipo I/II independientes de LL(1), en segundo plano, con comparación, navegación, buffers sin guardar y ejemplos reproducibles.
+
+### Núcleo incorporado y conexión actual
+
+- `ide.nucleo.lexico.analizar(texto)`: conectado al resaltado y a errores léxicos en vivo (E3). Análisis por pausa, documento y revisión; funciona sin guardar.
+- Gramática Calser transformada a LL(1), PRIMERO/SIGUIENTE y tabla predictiva.
+- Pruebas y documentación de la API.
+
+### Todavía pendiente
+
+- Parser predictivo, sugerencias y reparaciones del compañero; conexión gráfica cuando estén disponibles.
+- Detección de cambios externos y protección al sobrescribir archivos modificados fuera del IDE.
+- Preferencias persistentes, árbol recursivo del explorador y entrega empaquetada.
+- Animación de papel y controles de ventana en la esquina, como mejora posterior.
+
+**Estado actual:** el editor usa el lexer del núcleo. La gramática y la tabla están disponibles como datos; no ejecutan por sí solas un parser predictivo. Sugerencias y reparaciones continúan pendientes.
+
+## 3. Decisiones vigentes
+
+| ID | Decisión | Estado / consecuencia |
 |---|---|---|
-| D00 | Nombre de la aplicación: **CALSIDE**. Descripción: el IDE de Calser | Aceptado por Saddy |
-| D01 | Aplicación independiente, construida con Python y PySide6 / Qt Widgets | Aceptado por Saddy |
-| D02 | Se permite la dependencia externa PySide6 | Aceptado; reemplaza la restricción D5 del plan recibido |
-| D03 | Reutilizar recursos útiles del plugin de VS Code | Aceptado; conservar atribuciones y avisos |
-| D04 | `ccom` sigue siendo el compilador; la interfaz lo ejecuta | Base del plan recibido y propuesta mantenida |
-| D05 | Núcleo LL(1) externo a la interfaz para asistencia durante la edición | Reportado por el equipo; revisar entrega y API |
-| D06 | Usar `QPlainTextEdit` como base del editor | Propuesta técnica |
-| D07 | Usar `QProcess` para `ccom` sin bloquear la ventana | Propuesta técnica |
-| D08 | Distribución principal: proyecto lateral, editor central y resultados abajo | Propuesta; comparar mockups |
-| D09 | Ámbar de Calser como acento principal y esquinita morada como guiño de identidad; tipografía monoespaciada en código | Esquinita morada solicitada por Saddy; tema definitivo pendiente |
-| D10 | Clones en panel navegable y comparación de fragmentos | Implementado: detector léxico independiente de LL(1) |
+| D00 | Nombre **CALSIDE**, el IDE de Calser | Aceptado y aplicado |
+| D01 | Aplicación propia con Python y PySide6/Qt Widgets | Aceptado e implementado; reemplaza Tkinter |
+| D02 | Dependencias externas permitidas | PySide6 aceptado; no añadir otras sin necesidad |
+| D03 | Reutilizar recursos útiles del plugin | Patrones de resaltado e icono existentes; conservar avisos aplicables |
+| D04 | `ccom` es el compilador y se invoca directamente | Implementado; LL(1) no es intermediario obligatorio |
+| D05 | Núcleo para asistencia durante la edición | Lexer conectado al editor; parser/sugerencias/reparaciones pendientes |
+| D06 | `QPlainTextEdit` para código | Implementado |
+| D07 | `QProcess` para ccom, sin bloquear la UI | Implementado |
+| D08 | Distribución clásica adaptable | Implementada; explorador plegable y resultados abajo/derecha |
+| D09 | Ámbar + esquina morada de papel | Esquina estática implementada; animación pospuesta |
+| D10 | Detector de clones independiente del parser | Implementado; motor e interfaz separados correctamente |
+| D11 | Mantener controles nativos de ventana por ahora | Implementado; revisar movilidad y redimensionamiento antes de sustituirlos |
 
-En el checkout inspeccionado, rama `develop`, no existía `ide/`. La extensión actual registra lenguajes, gramáticas e iconos; no tiene un controlador de ejecución de la extensión. El compilador centraliza diagnósticos con posiciones, pero imprime mensajes humanos a stderr. No se verificaron las entregas LL(1) reportadas por el equipo. Existen modificaciones locales ajenas a este plan: preservarlas.
+## 4. Responsabilidades y dependencias
 
-## 3. Alcance y responsabilidades
-
-| Componente | Responsabilidad propuesta | Dependencia |
+| Componente | Responsable según el reparto actual | Dependencia pendiente |
 |---|---|---|
-| Ventana, editor, pestañas, paneles y accesos | Saddy / esta tarea | PySide6 |
-| Documentos, archivos y carpeta de proyecto | Saddy / esta tarea | Ninguna del núcleo |
-| Ejecución y lectura de resultados de `ccom` | Saddy / esta tarea | Ejecutable disponible |
-| Adaptadores y presentación de asistencia | Saddy / esta tarea | Contrato con el núcleo |
-| Léxico, parser LL(1), sugerencias y reparaciones | Compañero / C1.1a, según el plan recibido | Confirmar alcance y entrega |
-| Detector de clones Tipo I y II | Esta tarea, por solicitud de Saddy | Implementado y probado sin parser |
-| Panel de clones y navegación | Saddy / esta tarea | Detector |
+| Interfaz, archivos, paneles, terminales y adaptadores | Saddy / trabajo de CALSIDE | Ninguna para continuar con lexer y protección de archivos |
+| Integración con `ccom` | Saddy / CALSIDE, coordinado con responsable del compilador | Modo --check implementado; coordinar futuras extensiones del compilador |
+| Léxico, gramática y tabla LL(1) | Compañero / C1.1a | Entrega 1 incorporada |
+| Parser predictivo y sugerencias | Compañero / próxima entrega | API y casos de prueba reales |
+| Reparaciones | Compañero / entrega posterior | Contrato de ediciones y casos seguros |
+| Detector y panel de clones | Implementados en CALSIDE por solicitud de Saddy | Mantenimiento y validación final |
 
-No duplicar el parser de Calser en la interfaz. La UI solicita sugerencias y reparaciones; el motor decide su contenido. Una demostración con respuestas simuladas debe identificarse como tal y no cuenta como integración terminada.
+No reimplementar el parser del compañero en los widgets. Las funciones que no dependan de esa entrega pueden avanzar en paralelo lógico: `ccom`, archivos, clones, pruebas y empaquetado. Esto no requiere crear agentes ni chats adicionales.
 
-Primera versión: Linux o entorno gráfico compatible del equipo. Soporte para Windows nativo, distribución empaquetada y versiones concretas de Python/PySide6 se acuerdan después de comprobar los equipos de defensa.
+## 5. Funcionalidades y criterios de aceptación
 
-## 4. Funcionalidades esperadas y criterios de aceptación
+Estados: **implementado** = existe en el prototipo y tiene verificación; **parcial** = falta una parte del criterio; **pendiente** = requiere implementación/integración. P0: base; P1: cierre del IDE; P2: mejoras posteriores. Una función implementada todavía debe pasar el guion final en otra máquina.
 
-Prioridad P0: primera entrega funcional. P1: requisitos completos del IDE. P2: mejoras posteriores. P0 y P1 forman parte del objetivo final; la prioridad indica orden, no opcionalidad.
-
-| ID | Prioridad | Funcionalidad | Criterio de aceptación |
+| ID | Prioridad | Función | Estado actual y criterio para cerrarla |
 |---|---|---|---|
-| F01 | P0 | Abrir carpeta de proyecto | Muestra los `.cls` y permite abrirlos; errores de permisos se explican sin cerrar el IDE. Definir recursividad antes de implementar. |
-| F02 | P0 | Nuevo, abrir y guardar | Lee UTF-8; nuevo solicita ruta al guardar; Guardar como actualiza identidad y pestaña; no crea pestañas duplicadas para una misma ruta canónica. |
-| F03 | P0 | Pestañas y cambios pendientes | Cada documento conserva texto, cursor y cambios propios; cerrar permite guardar, descartar o cancelar; cancelar deja la aplicación abierta. |
-| F04 | P0 | Edición básica | Deshacer/rehacer, cortar/copiar/pegar, selección y búsqueda local; números de línea siguen el desplazamiento. Los atajos funcionan desde el editor. |
-| F05 | P0 | Compilar documento activo | Usa su versión guardada; un documento nuevo solicita ubicación; cancelar el guardado cancela la compilación. Resultado visible sin congelar la UI. |
-| F06 | P0 | Configurar `ccom` | Ruta configurada, ejecutable del repo y PATH, en ese orden; si falta, indica cómo construirlo o configurar su ruta. |
-| F07 | P0 | Mostrar salida | Conserva stdout, stderr, código de salida y errores del proceso; no presenta una falla de inicio como error del programa Calser. |
-| F08 | P0 | Problemas navegables | Muestra origen, archivo, posición, categoría y descripción; activar un diagnóstico abre el archivo y selecciona su rango cuando existe. |
-| F09 | P0* | Resaltado de sintaxis | Usa tokens del núcleo para distinguir palabras, tipos, literales, operadores y comentarios. *Integración sujeta a disponibilidad real de tokens. |
-| F10 | P1 | Análisis durante la escritura | Tras una pausa breve muestra errores léxicos/sintácticos del documento actual sin guardarlo; nunca aplica resultados de una revisión anterior. |
-| F11 | P1 | Sugerencias | Ctrl+Espacio solicita opciones en la posición del cursor; teclado permite elegir, aceptar y cancelar; sustituye únicamente el rango indicado. Activación automática posterior. |
-| F12 | P1 | Correcciones | Soporta reparaciones del núcleo para `;`, `.`, `[]` y `()` donde la gramática lo permita; ediciones agrupadas y deshacibles; no modifica disco silenciosamente. |
-| F13 | P1 | Corrección automática verificable | Acordar casos inequívocos y disparador; demostrar al menos un caso sin confirmación manual y su deshacer. Una acción de “aplicar arreglo” por sí sola no demuestra este requisito. |
-| F14 | P1 | Clones Tipo I | Detector encuentra fragmentos equivalentes ignorando comentarios/formato entre archivos distintos; panel muestra ubicaciones y abre ambos. |
-| F15 | P1 | Clones Tipo II | Detector identifica los cambios de identificadores/literales acordados; resultados incluyen rango y tipo. Documentar límites y negativos para evitar marcar fragmentos triviales. |
-| F16 | P1 | Estado y recuperación | Mensajes claros ante lectura/escritura fallida, archivo eliminado, análisis fallido o proceso terminado; el texto editado se conserva. |
-| F17 | P1 | Cambios externos | Detecta cambios en disco; permite recargar o conservar edición sin perder trabajo ni sobrescribir sin aviso. |
-| F18 | P2 | Preferencias visuales | Tema claro/oscuro, tamaño de fuente y persistencia de paneles. El editor sigue siendo usable con teclado. |
-| F19 | P2 | Artefactos y opciones | Abrir `.asm` generado; opciones documentadas de `ccom`; resultados identificados por compilación y documento. |
-| F20 | P2 | Métricas | Gráficas de optimizaciones cuando exista una fuente de datos acordada. El enunciado permite integrarlas en el IDE, no obliga a que estén dentro de él. |
+| F01 | P0 | Abrir carpeta/proyecto | Parcial: primer nivel funciona. Completar árbol de subcarpetas, exclusiones y errores de acceso sin bloquear. |
+| F02 | P0 | Nuevo/abrir/guardar/guardar como | Implementado: UTF-8, rutas canónicas, identidad actualizada y sin pestañas duplicadas. Protección de cambios externos se sigue en F17. |
+| F03 | P0 | Pestañas y cambios pendientes | Implementado: texto/cursor por documento y guardar/descartar/cancelar al cerrar. |
+| F04 | P0 | Edición y búsqueda | Implementado: deshacer/rehacer, portapapeles, búsqueda y margen sincronizado. |
+| F05 | P0 | Compilar documento activo | Implementado: guarda antes de compilar, cancelar guardado cancela la operación, UI utilizable durante proceso. |
+| F06 | P0 | Resolver/configurar ccom | Implementado durante la sesión. Persistir ruta y comprobar configuración inválida en F18. |
+| F07 | P0 | Salida y estado del proceso | Implementado: stdout/stderr, código, fallo de inicio, cancelación y timeout. Tiempo límite configurable pendiente en F18. |
+| F08 | P0 | Errores gráficos y navegables | Implementado al compilar: origen, categoría, archivo, rango, subrayado, descripción y navegación. Errores sin posición quedan en Salida. |
+| F09 | P1 | Resaltado con lexer del núcleo | Implementado: tokens reales, comentarios coloreados aparte y rangos UTF-16. El formato conserva revisión, estado de guardado y Deshacer. |
+| F10 | P1 | Análisis mientras se escribe | Implementado: lexer en vivo (300 ms) y ccom --check después de 600 ms adicionales. Snapshots por revisión, cancelación, temporales y resultados independientes de F5. Parser predictivo pendiente como motor complementario. |
+| F11 | P1 | Sugerencias | Pendiente: Ctrl+Espacio, teclado, aceptar/cancelar y reemplazo exacto del rango. Activación automática cuando el contexto sea adecuado. |
+| F12 | P1 | Reparaciones propuestas | Pendiente: descripción y edición precisa para terminadores/delimitadores Calser; cada reparación se deshace en una operación. |
+| F13 | P1 | Corrección automática | Pendiente: catálogo de casos inequívocos, disparador definido y pruebas positivas/negativas. Un botón manual no cubre por sí solo este requisito. |
+| F14 | P1 | Clones Tipo I entre archivos | Implementado: ignora formato/comentarios y permite comparar/navegar entre ubicaciones. |
+| F15 | P1 | Clones Tipo II entre archivos | Implementado: renombramiento consistente y literales del mismo tipo; preserva operadores/reservadas; umbral y límites documentados. |
+| F16 | P1 | Recuperación ante fallos | Parcial: lectura/escritura/procesos y cancelación cubiertos; completar fallos del análisis automático y estados de archivo borrado. |
+| F17 | P1 | Cambios externos | Pendiente: detectar cambio/borrado, ofrecer recargar o conservar y evitar sobrescritura silenciosa. |
+| F18 | P2 | Preferencias | Pendiente: ruta de ccom, fuente, tema y distribución persistentes. Mantener teclado y contraste legibles. |
+| F19 | P2 | Artefactos y opciones del compilador | Parcial: genera `.asm` y salidas; falta abrirlas desde la UI y exponer únicamente banderas existentes. |
+| F20 | P2 | Métricas dentro del IDE | Pendiente y opcional para el IDE: depende del contrato de datos de las optimizaciones. |
+| F21 | P0 | Ocultar/recuperar explorador | Implementado: ×, botón Archivos, Ctrl+B y menú Ver sincronizados. |
+| F22 | P0 | Mover resultados abajo/derecha | Implementado: conserva pestañas, contenido y procesos. |
+| F23 | P0 | Varias terminales | Implementado en Linux: PTY, directorios independientes, historial, interrupción y cierre con confirmación. Pantalla completa fuera de esta entrega. |
+| F24 | P0 | Alineación de menús | Implementado: barra bajo cabecera y menús centrados verticalmente. |
+| F25 | P1 producto | Ejecutable de escritorio | Pendiente: abrir desde icono sin VS Code ni comando Python; incluir recursos/dependencias y ccom compatible o configuración guiada. |
+| F26 | P2 | Esquina de papel animada | Pendiente, pospuesta: revelar controles mediante clic/teclado y conservar mover/redimensionar/restaurar/cerrar correctamente. |
 
-Ampliaciones de usabilidad solicitadas e implementadas en el prototipo:
+F09, F10, F17 y F25 son compromisos del producto y del flujo acordado; no todos figuran literalmente en el apartado de IDE del enunciado. Los cuatro requisitos explícitos de ese apartado corresponden a F08, F11, F13 y F14/F15.
 
-| ID | Funcionalidad | Verificación |
-|---|---|---|
-| F21 | Ocultar/recuperar explorador con botón visible y Ctrl+B | Conserva documentos abiertos y sincroniza el menú Ver. |
-| F22 | Mover panel de resultados abajo/derecha | Conserva contenido, pestañas y procesos; permite ampliar la altura del código. |
-| F23 | Varias pestañas de terminal | Sesiones PTY Linux independientes, `cd` persistente por sesión, historial e interrupción. Cierre con confirmación. |
-| F24 | Alineación de menús | Centro vertical de menús alineado con la fila de acciones bajo la cabecera. |
+## 6. Arquitectura existente y cambios propuestos
 
-Terminales: interfaz de comandos por líneas; emulación de pantalla completa, aplicaciones curses y soporte para Windows quedan pendientes. Estas funciones no sustituyen ningún requisito de asistencia del núcleo.
-
-El enunciado usa términos generales para delimitadores; las reparaciones concretas deben seguir la gramática Calser. No introducir sintaxis por semejanza con otros lenguajes.
-
-## 5. Experiencia y mockups
-
-Comparar tres alternativas con el mismo contenido:
-
-1. **Editor clásico:** proyecto a la izquierda, código al centro, problemas/salida/clones abajo. Familiar, buen ancho de código; resultados largos compiten por altura.
-2. **Diagnóstico lateral:** proyecto a la izquierda, código al centro, problemas a la derecha; salida bajo el código. Mantiene errores visibles, necesita más ancho.
-3. **Enfoque y revisión:** código ancho con explorador plegable y una vista de revisión dedicada para clones o diagnósticos. Maximiza edición; requiere cambiar de vista.
-
-Ver `mockups.html` en esta carpeta. Los mockups permiten comparar distribución y estados simulados; no ejecutan Python, no compilan y no usan el núcleo.
-
-Evaluar cada alternativa en 1366×768 y 1920×1080, también con escalado del sistema. Comprobar ancho de código, visibilidad del error, facilidad para llegar a un archivo y comparación entre fragmentos. No decidir por el color solamente.
-
-Detalle de identidad acordado: pequeña esquina morada en la parte superior derecha, como guiño visual. El ámbar sigue siendo el acento principal. La esquina es decorativa, no un control, y no tapa texto ni acciones. Incluida en las tres alternativas para conservarla al elegir distribución.
-
-Estados que debe contemplar el diseño definitivo:
-
-- Sin proyecto; proyecto sin archivos; archivo nuevo sin nombre.
-- Documento limpio, modificado y cambiado externamente.
-- Núcleo no disponible, analizando, sin errores y con errores.
-- Compilador no configurado, compilando, cancelado, exitoso y fallido.
-- Sugerencias visibles o sin resultados; corrección disponible, aplicada y deshecha.
-- Clones analizando, sin coincidencias y con pares entre archivos.
-
-Navegación inicial propuesta: Ctrl+N/O/S, Ctrl+Shift+S, Ctrl+W, Ctrl+Z, Ctrl+Shift+Z, Ctrl+F, Ctrl+Espacio y F5 para compilar. Revisar colisiones y equivalencias en los equipos del grupo. Evitar acciones que dependan únicamente de hover o color.
-
-## 6. Arquitectura propuesta
+Estructura real relevante:
 
 ```text
 ide/
-  main.py                 inicio y composición
-  modelos.py              documentos, rangos, resultados y revisiones
-  archivos.py             lectura, guardado e identidad de archivos
-  ccom.py                 resolución del ejecutable y argumentos
-  adaptadores/
-    nucleo.py             traducción de la API LL(1) al modelo del IDE
-    clones.py             traducción del detector al modelo del IDE
-    diagnosticos_ccom.py   interpretación de stderr
+  main.py                       inicio y composición
+  adaptador_nucleo.py            API real → estilos y errores
+  diagnosticos.py                diagnóstico común con origen/unidad
+  archivos.py                   lectura y guardado atómico
+  ccom.py                       ejecutable, diagnósticos y categorías
+  clones.py                     detector léxico independiente de Qt
   interfaz/
-    ventana.py            QMainWindow, acciones y paneles
-    editor.py             QPlainTextEdit y margen de líneas
-    resaltado.py          presentación de tokens
-    problemas.py          lista de diagnósticos y navegación
-    proceso_ccom.py       QProcess y señales de compilación
-    tareas.py             tareas de análisis y entrega de resultados
-    estilos.py            colores, espaciado y tipografía
-  nucleo/                 entrega del compañero; no recrearla aquí
-  clones/                 detector; responsable pendiente
+    ventana.py                  ventana, acciones, procesos y coordinación
+    editor.py                   editor, margen, resaltado y marcas
+    analisis.py                 cola serial y trabajador léxico
+    comprobacion.py             ccom --check, QProcess y temporales
+    clones.py                   trabajador y panel de clones
+    terminal.py                 terminal de comandos
+    terminal_pty.py             proceso auxiliar Linux
+  nucleo/
+    lexico.py                   tokens y errores léxicos
+    gramatica.py                gramática como datos
+    tabla.py                    PRIMERO/SIGUIENTE y tabla LL(1)
+  ejemplos/clones/
   pruebas/
   docs/
 ```
 
-Los nombres son propuesta, no archivos existentes. Los modelos, argumentos y lectura de diagnósticos se prueban sin ventanas. La UI traduce eventos del usuario a operaciones y presenta resultados. El núcleo y el detector no importan widgets.
+Componentes de E3 ya creados: `adaptador_nucleo.py`, `diagnosticos.py` e `interfaz/analisis.py`. El modelo común explicita origen, unidad de columna e identidad del documento; el coordinador procesa snapshots sin tocar widgets desde el trabajador. La cola reemplaza solicitudes pendientes del mismo documento y rechaza respuestas de revisiones antiguas.
 
-`QProcess` pertenece al adaptador de interfaz: permite leer stdout/stderr de forma asíncrona y recibir finalización sin un hilo extra para el proceso. El análisis de texto puede usar un trabajador si su costo lo requiere. Toda modificación de widgets ocurre en el hilo principal. No agregar LSP de inicio: el adaptador deja abierta una evolución futura.
+No refactorizar todo el IDE solo para igualar un árbol de carpetas. Mantener `ide/clones.py` e `ide/interfaz/clones.py`: uno es motor, otro presentación. No hace falta LSP para completar el alcance.
 
-## 7. Contratos por acordar antes de integrar
+## 7. Contratos para las integraciones pendientes
 
-Estas estructuras son un borrador del IDE, no la API atribuida al compañero. Pedir ejemplos reales y adaptar los límites mediante un solo adaptador.
+### 7.1 Léxico recibido: API comprobada
 
-### 7.1 Documento y posiciones
+```python
+from ide.nucleo.lexico import analizar
+tokens, errores = analizar(texto)
+```
 
-- Documento: identificador estable, ruta opcional, texto, número de revisión, estado modificado y estado conocido del disco.
-- Dentro del modelo del IDE: offsets en caracteres Unicode, inicio inclusivo y fin exclusivo; línea/columna para presentación calculadas a partir del texto.
-- Confirmar cómo cuenta el núcleo. Flex usa `yyleng` y columnas basadas en bytes para UTF-8; Qt usa posiciones UTF-16 en sus cursores. Convertir explícitamente y probar tildes y caracteres fuera del BMP, además de tabulaciones y CRLF.
-- Un diagnóstico sin rango válido se presenta en la lista; no inventar un subrayado sobre código ajeno.
+- `Token`: `tipo`, `lexema`, `linea`, `columna`, `columna_fin` inclusiva y `valor`.
+- `ErrorLexico`: `mensaje`, `linea`, `columna`, `largo`, `fatal`.
+- Líneas/columnas desde 1; columnas en caracteres Python; tabulación cuenta una columna.
+- Comentarios y espacios no producen tokens. Un comentario de bloque abierto produce un error fatal y corta el análisis.
+- `construir_tabla(CALSER)` produce la tabla, no un diagnóstico sintáctico del documento.
 
-### 7.2 Resultado de análisis
+Procedimiento de adaptación:
 
-Documento + revisión + tokens + diagnósticos + estado del análisis. Cada diagnóstico requiere origen, categoría/severidad, mensaje y rango opcional. Solicitudes de sugerencias incluyen posición del cursor; respuestas incluyen texto visible, texto insertable y rango a reemplazar. Reparaciones contienen descripción y lista de ediciones con rango/texto de reemplazo.
+1. Capturar identificador del documento, texto y revisión.
+2. Invocar el lexer sobre esa copia de texto, no sobre el widget desde un trabajador.
+3. Transformar token a categoría de color y error a rango/mensaje/origen `núcleo`.
+4. Mantener el coloreado de comentarios como presentación; no crear otro parser.
+5. Publicar solo si el documento sigue abierto y su revisión coincide.
 
-Acordar: comentarios incluidos en tokens, análisis de texto incompleto, cancelación, parser recuperable, códigos estables de error, límites de tamaño y si el motor es seguro al usar varios trabajadores. No asumir reentrancia. Hasta confirmarla, serializar solicitudes.
+### 7.2 Posiciones y resultados
 
-### 7.3 Clones
-
-Entrada propuesta: colección de rutas/identificadores y sus textos con revisión. Preferir el contenido abierto sin guardar; avisar de esa elección. Salida: grupos o pares de fragmentos con archivo, rango y clasificación I/II. Acordar longitud mínima, normalización, exclusiones y si se comparan archivos en subcarpetas. La UI no normaliza código por su cuenta.
-
-### 7.4 Compilación
-
-- Ejecutable resuelto y argumentos separados; sin shell.
-- Guardar explícitamente el documento activo antes de compilar; no compilar una revisión distinta sin indicarlo.
-- Directorio de trabajo y salidas definidos por proyecto; usar rutas absolutas en argumentos. Definir nombres para evitar colisiones de archivos con el mismo nombre.
-- Bloquear compilación duplicada sobre el mismo destino. Contemplar cancelar y tiempo límite configurable.
-- Resultado: documento/revisión, comando representable, cwd, stdout, stderr, código de salida, duración, diagnósticos y artefactos realmente existentes.
-- Verificar `0/1/2` con la CLI actual; distinguir salida por señal, cancelación y fallo al iniciar.
-- Leer muestras reales de errores; tolerar rutas con espacios y dos puntos, mensajes multilínea, errores sin posición y errores de E/S. No depender de una expresión regular codiciosa sin corpus.
-- Al editar, marcar como antiguos o retirar diagnósticos de compilación; resultados tardíos no sustituyen los actuales. Mantener salida anterior identificada si sirve para consulta.
-- El plan recibido menciona un error con prefijo `ccom:L:C`; comprobarlo antes de aplicar una excepción. Proponer JSON como evolución separada, no como condición para el prototipo.
-
-## 8. Reutilización de la extensión
-
-| Recurso | Uso en el IDE | Precaución |
+| Fuente | Unidad original | Conversión hacia Qt |
 |---|---|---|
-| Iconos Calser y branding | Ventana y archivos | Conservar origen y avisos aplicables |
-| Gramática TextMate | Referencia de categorías y palabras | No se ejecuta directamente en Qt; no crear un lexer rival |
-| Configuración de comentarios y parejas | Comandos de comentar/cierre de parejas | Coordinar con las reparaciones del núcleo |
-| README y programas de prueba | Ayuda y demostración | Verificar vigencia contra la gramática |
-| Empaquetador VSIX | Sigue sirviendo a la extensión | No es el empaquetado de la aplicación PySide6 |
+| ccom/Flex | Columnas y longitudes en bytes UTF-8 | Decodificar prefijo y rango sin partir caracteres; convertir después a UTF-16 |
+| Núcleo | Caracteres Python, fin inclusivo de token | Convertir prefijos con `len(prefijo.encode('utf-16-le')) // 2`; fin exclusivo a partir de `columna_fin` |
+| Detector de clones | Offsets Unicode, inicio inclusivo y fin exclusivo | Convertir ambos prefijos a unidades UTF-16 |
 
-## 9. Secuencia de implementación
+Resultado mínimo del coordinador: documento, revisión, origen, estado, tokens/diagnósticos y duración cuando se mida. Cambiar de pestaña no permite que un resultado termine sobre otra. Los diagnósticos sin rango válido conservan su mensaje; no inventar un token. Los errores al final de línea mantienen su señal de línea.
 
-### E0. Diseño y coordinación
+Separar resultados `núcleo`, `ccom automático` y `ccom compilación`. Definir deduplicación o prioridad para que el mismo error no aparezca varias veces; no sumar mensajes sin identificar su fuente. Editar invalida los resultados de la revisión anterior, pero conserva el historial de salida identificado.
 
-- Revisar este documento, elegir distribución y confirmar equipos de ejecución.
-- Obtener rama/PR del núcleo y muestras de sus resultados; confirmar quién implementa clones.
-- Verificar Python/PySide6 disponibles y fijar una combinación reproducible en un entorno virtual.
-- Salida: decisiones actualizadas y contratos suficientes para empezar. Sin instalar globalmente ni cambiar el compilador como parte de la documentación.
+### 7.3 Sugerencias y reparaciones: contrato todavía por acordar
 
-### E1. Prototipo de interfaz y archivos
+- Sugerencias: texto + revisión + cursor de entrada; lista con etiqueta, contenido insertable, rango a reemplazar y contexto.
+- Reparaciones: descripción + revisión + una o varias ediciones no superpuestas, cada una con inicio/fin y texto nuevo.
+- El motor debe indicar cuándo una reparación es segura para aplicación automática. La interfaz no deduce correcciones estructurales por regex.
+- Acordar cómo responde sobre texto incompleto, comentarios, fin de archivo, varios errores y cancelación. Confirmar comportamiento de concurrencia; serializar solicitudes hasta verificarlo.
+- Ajustar el adaptador a la API real que entregue el compañero; los nombres anteriores son conceptos, no funciones ya existentes.
 
-- Ventana PySide6 con divisores ajustables, editor, pestañas, explorador y panel inferior.
-- Nuevo/abrir/guardar/guardar como/cerrar, identidad canónica y protección de cambios.
-- Deshacer/rehacer, números de línea y estado del cursor.
-- Salida: recorrido de archivos completo; todavía no se considera asistencia implementada.
+### 7.4 Análisis automático con ccom
 
-### E2. Recorrido vertical con `ccom`
+`ccom` y el núcleo son rutas complementarias: CALSIDE puede invocar al compilador directamente, sin atravesar LL(1).
 
-- Resolución del ejecutable, argumentos, QProcess y salida completa.
-- Panel de problemas con navegación; distinción entre problemas de proceso y del fuente.
-- Guardado previo y manejo de resultados antiguos, cancelación y fallos.
-- Salida: abrir un ejemplo, introducir un error, compilar, navegar al error, corregir y volver a compilar con éxito.
+Implementado `ccom --check`: ejecuta léxico/sintaxis/semántica y libera AST/símbolos sin generar código ni escribir artefactos. Solo se combina con -v/--time; las opciones de salida se rechazan antes de abrir archivos. `--ast-json` sigue siendo otra operación: por sí solo termina tras sintaxis y no valida semántica completa.
 
-### E3. Análisis y resaltado
+La copia temporal debe reflejar el buffer sin guardar y conservar contexto de rutas cuando se incorpore enlazado. No sobrescribir el fuente ni generar artefactos de compilación por cada tecla. Mapear los diagnósticos de la copia al documento original. Limpiar temporales al completar/cancelar; limitar concurrencia y tiempo; no competir con Compilar por un mismo destino.
 
-- Adaptador real del núcleo; colorear tokens, marcar errores y mostrar su descripción.
-- Debounce inicial aproximado de 300 ms; medir y ajustar en los equipos del grupo.
-- Resultados por revisión, sin bloqueo de la UI y sin errores de otros documentos.
-- Salida: asistencia real sobre texto sin guardar. Si solo existe lexer, registrar expresamente la ausencia del parser.
+## 8. Procedimiento de implementación, en orden
 
-### E4. Sugerencias y reparaciones
+Cada entrega termina con pruebas y actualización de este documento. Las tareas independientes pueden adelantarse sin bloquearse por APIs que todavía no existen.
 
-- Lista de sugerencias, navegación con teclado y aplicación por rango.
-- Reparaciones propuestas y automáticas según casos acordados.
-- Agrupar cada reparación para deshacer de una vez; no forzarla mientras el usuario completa una construcción válida.
-- Salida: demostraciones de cada requisito del enunciado, con casos negativos y deshacer.
+### E0 · Base y merge — completado
 
-### E5. Clones y revisión
+- [x] PySide6, identidad, distribución y comandos `make ide` / `make check-ide`.
+- [x] Incorporar la entrega 1 del núcleo mediante merge, conservando CALSIDE.
+- [x] Ejecutar pruebas combinadas: 44 correctas en `c8b1997`.
 
-- Conectar detector, lista de pares/grupos y apertura de fragmentos relacionados.
-- Revisar contenido sin guardar, archivos externos y resultados antiguos.
-- Salida: casos Tipo I y Tipo II entre archivos y ejemplos sin coincidencia.
+La presencia del paquete ya está resuelta; no volver a planificar otro merge para esa misma entrega. Futuras entregas se incorporarán por separado cuando existan. Publicar commits/PR queda como operación Git aparte.
 
-### E6. Estabilización y defensa
+### E1 · Editor, compilación y diagnósticos — prototipo completado
 
-- Documentación de instalación, versión soportada, uso, límites y responsabilidades.
-- Incorporar `make ide` y `make check-ide` cuando exista implementación; preservar objetivos actuales del makefile.
-- Instalar en otra máquina del grupo y ejecutar guion de demostración.
-- Métricas dentro del IDE: iteración posterior sujeta a contratos de optimización.
+- [x] Archivos/pestañas, cambios pendientes y edición.
+- [x] Ejecutar ccom, mostrar salida y gestionar proceso.
+- [x] Rangos, subrayados, descripciones, navegación y resultados por documento.
+- [x] Terminales y controles de distribución.
 
-El plan recibido propone 6/11 para la primera versión, 12/11 para asistencia/clones y aproximadamente 17/11 para métricas. Son hitos de referencia, no compromisos confirmados: reestimar tras conocer disponibilidad del núcleo y el tiempo de implementación. No etiquetar una integración simulada como entrega funcional para cumplir una fecha.
+**Salida comprobada:** abrir → editar → guardar → compilar → activar error → corregir → compilar correctamente. Las mejoras de proyecto y cambios externos siguen en E7.
 
-## 10. Pruebas y demostración
+### E2 · Clones — implementado
 
-| Área | Verificación necesaria |
+- [x] Tipo I/II, comparación entre archivos y normalización documentada.
+- [x] Trabajo en segundo plano, cancelación, buffers abiertos y rangos Unicode.
+- [x] Comparación y navegación; invalidación ante cambios.
+- [x] Ejemplos positivos/negativos y límites explícitos.
+
+**Salida comprobada:** `ide/ejemplos/clones` produce tres pares (uno I y dos II) con mínimo 20 tokens. Su detector no depende del núcleo y no necesita esperar otra entrega.
+
+### E3 · Conectar el lexer al editor — completado
+
+1. Crear el adaptador descrito en §7.1 con conversiones de §7.2.
+2. Introducir coordinación por documento y revisión; pausa inicial aproximada de 300 ms, medible y ajustable.
+3. Sustituir el resaltado provisional por categorías de tokens y conservar comentarios coloreados.
+4. Presentar errores léxicos del buffer sin guardar con origen `núcleo`, subrayados y descripción.
+5. Reutilizar navegación y panel Problemas sin mezclar unidades ni duplicar errores.
+6. Gestionar apertura/cierre, texto vacío, comentarios abiertos, edición rápida y respuestas antiguas.
+
+**Criterio cumplido:** escribir `@` produce el error sin guardar ni compilar; quitarlo retira el diagnóstico; tipos, reservadas, comentarios y Unicode se muestran correctamente; editar una pestaña no contamina otra. No se anuncian todavía errores sintácticos del parser LL(1).
+
+Implementación: adaptador puro, comentarios de presentación, timer de 300 ms y cola serial con snapshots por revisión; errores con origen `núcleo`. Desduplicación por rango frente a ccom. Límite explícito de 2 millones de caracteres. Verificación E3: 56 pruebas combinadas, incluidos cierre durante análisis, resultados antiguos, recuperación ante fallos, Unicode y preservación de guardado/Deshacer.
+
+### E4 · Análisis automático con ccom — completado, independiente de LL(1)
+
+1. Coordinar y comprobar el modo de solo análisis del compilador (§7.4), con pruebas que demuestren ausencia de salidas binarias.
+2. Conectar copias temporales del buffer a un proceso separado, con pausa, cancelación y revisión.
+3. Remapear rutas y publicar errores sintácticos/semánticos sobre el documento original.
+4. Deduplicar/priorizar frente a resultados del lexer y conservar la compilación manual como acción diferenciada.
+5. Probar que no cambia el archivo en disco y que temporales/procesos se limpian incluso al fallar.
+
+**Criterio cumplido:** una variable no declarada y una sentencia incompleta se señalan sin pulsar F5; corregirlas retira el mensaje y el archivo original continúa sin guardar. Usa copias temporales eliminadas tras éxito, cancelación o fallo, y orígenes separados. F5 tiene prioridad y reanuda otros documentos.
+
+Verificación E4: 70 pruebas combinadas de CALSIDE/núcleo; `make check-analysis` y `make check` del compilador correctos. Se probaron original/artefactos intactos, errores sintácticos/semánticos, edición/cierre/Guardar como durante el proceso, timeouts, ejecutable antiguo, fallos de inicio, salida excesiva y prioridades entre pestañas. La prioridad es compilación manual sobre ccom automático y, para errores léxicos equivalentes, ccom sobre núcleo. Los mensajes de sintaxis conservan la explicación y posición de Bison; mejorar su contexto sigue pendiente.
+
+### E5 · Parser predictivo y sugerencias — depende de entrega 2
+
+1. Recibir rama/PR, API real y pruebas del parser/sugerencias; revisar diferencias con Bison.
+2. Incorporar la entrega sin reemplazar la integración existente de ccom.
+3. Conectar sugerencias inicialmente a Ctrl+Espacio.
+4. Implementar lista, selección con flechas, aceptar con Enter/Tab, Escape y reemplazo por rango.
+5. Añadir activación al escribir con contexto y pausa apropiados.
+6. Evitar sugerencias en comentarios y conservar selección/cursor cuando el resultado sea antiguo.
+
+**Terminado cuando:** se puede escribir una declaración o construcción Calser apoyándose en opciones válidas; aceptar reemplaza solo el fragmento previsto; cancelar no cambia el texto. Si el parser aporta diagnósticos en vivo, definir su prioridad frente a ccom antes de mostrarlos.
+
+### E6 · Reparaciones y corrección automática — depende de entrega 3
+
+1. Acordar el contrato de ediciones y un catálogo de casos por `;`, `.`, `[]` y `()` conforme a la gramática real.
+2. Mostrar propuestas con explicación y aplicar primero por acción explícita para validar sus rangos.
+3. Agrupar cada reparación como una sola operación de deshacer.
+4. Habilitar automatización únicamente para los casos inequívocos acordados y con disparador definido (no interrumpir una construcción que el usuario sigue escribiendo).
+5. No aplicar respuestas antiguas, no tocar comentarios por error ni guardar automáticamente el documento.
+6. Probar positivos y negativos por categoría; permitir deshacer y desactivar la automatización.
+
+**Terminado cuando:** se demuestran correcciones realmente automáticas, no solo un botón manual, con deshacer y sin cambios incorrectos en casos ambiguos. Si un caso no es seguro, queda como propuesta explicada.
+
+### E7 · Protección de archivos y experiencia de proyecto — independiente del núcleo
+
+1. Registrar el estado conocido del disco al abrir/guardar y detectar cambios, borrado o reemplazo externo.
+2. Ofrecer recargar/conservar; comprobar nuevamente antes de sobrescribir para no perder ediciones ajenas.
+3. Completar árbol de subcarpetas con exclusiones explícitas y sin exploración bloqueante.
+4. Persistir ruta de ccom, fuente, paneles y preferencias que se hayan acordado; recuperarse de configuración inválida.
+5. Revisar teclado, foco, tamaño mínimo, escalado y cierre con terminales/análisis activos.
+6. Verificar que F01–F17 y F21–F24 satisfacen sus criterios, no solo el caso feliz.
+
+**Terminado cuando:** editar un archivo desde fuera del IDE no provoca pérdida silenciosa; las preferencias útiles sobreviven al reinicio y el recorrido funciona con teclado y en el equipo de defensa.
+
+### E8 · Empaquetado y entrega de aplicación — compromiso de producto
+
+1. Confirmar sistema operativo y arquitectura del equipo de defensa. Primera plataforma propuesta: Linux. Windows requiere su propia validación, incluida la terminal que hoy es Linux.
+2. Elegir y documentar herramienta de empaquetado; generar un paquete reproducible desde un entorno definido.
+3. Incluir iconos, recursos y dependencias de la UI. Decidir si ccom se distribuye junto a CALSIDE o se configura; probar su compatibilidad y rutas con espacios.
+4. Abrir desde icono/acceso directo y verificar recursos sin depender del directorio de trabajo del repositorio.
+5. Probar en otra máquina sin VS Code y sin pedir ejecución manual de Python. Documentar bibliotecas del sistema necesarias, instalación y límites reales.
+
+**Terminado cuando:** el paquete abre como aplicación normal, edita/guarda/compila y conserva las funciones entregadas. No afirmar soporte multiplataforma sin probarlo.
+
+### E9 · Validación final, documentación y defensa
+
+1. Ejecutar `make check-ide` tras los cambios pertinentes y comprobar los tests del compilador si se modificó ccom.
+2. Corregir fallos y completar la matriz manual de §9 en la plataforma acordada.
+3. Ejecutar el guion de §10 con un compañero y un conjunto adicional de programas.
+4. Actualizar instalación, arquitectura, funcionalidades, responsabilidades y límites. Preparar los diagramas requeridos por el proyecto; usar la arquitectura final, no un mockup antiguo.
+5. Separar cambios ajenos al IDE al preparar revisión. `.gitignore` no oculta cambios ya versionados; no retirar pruebas compartidas del repo para limpiar un commit.
+6. Preparar revisión/PR y publicación de la entrega cuando el usuario indique esas operaciones.
+
+**Terminado cuando:** se cumple la lista de cierre de §12, el recorrido es reproducible en otra máquina y las limitaciones están declaradas. Un merge o una prueba aislada no sustituye esta validación.
+
+### E10 · Mejoras posteriores, sin bloquear el cierre funcional
+
+- Esquina morada que se dobla y revela minimizar/maximizar/restaurar/cerrar; clic y teclado, animación breve y opción de movimiento reducido. Conservar comportamiento de ventana antes de sustituir controles nativos.
+- Tema claro y refinamientos visuales, iconos de archivos y preferencias adicionales.
+- Abrir artefactos del compilador y exponer opciones nuevas cuando estén realmente implementadas.
+- Métricas por optimización cuando exista contrato de datos; integración con enlazado/IR cuando sus tareas estén listas.
+- Emulación completa de terminal para aplicaciones curses, redimensionamiento PTY y otras plataformas.
+
+## 9. Matriz de pruebas y evidencias
+
+| Área | Evidencia mínima |
 |---|---|
-| Archivos | UTF-8/CRLF, rutas con espacios, Guardar como, archivo nuevo, duplicados, fallo de escritura y cancelación de cierre |
-| Diagnósticos | Corpus real léxico/sintáctico/semántico/E/S, rangos ausentes, varios errores y salida multilínea |
-| Proceso | Ejecutable ausente, éxito, fallo, timeout/cancelación, stdout y stderr, editor usable durante ejecución |
-| Revisiones | Escribir/cambiar de pestaña mientras analiza o compila; ignorar resultados antiguos |
-| Posiciones | ASCII, tabulaciones, tildes en comentarios y carácter fuera del BMP; conversión hacia QTextCursor |
-| Correcciones | Inserción prevista, no cambio ambiguo, deshacer, no modificación de comentarios y no guardado silencioso |
-| Clones | Tipo I/II entre archivos, negativos, rangos correctos y textos sin guardar |
-| Interfaz | Teclado, escalado, paneles redimensionables, foco, lectura de errores sin depender de color |
+| Archivos | UTF-8/CRLF, rutas con espacios, nuevo, guardar como, duplicados, permisos, disco cambiado/borrado y cancelar cierre |
+| Núcleo y adaptador | Tokens/categorías, comentarios, error fatal, texto incompleto, rangos Unicode y resultados por revisión |
+| ccom manual/automático | Válidos, léxicos, sintácticos, semánticos, varios errores, E/S, timeout, cancelación y ausencia de escritura del fuente por análisis automático |
+| Concurrencia | Escribir/cambiar/cerrar pestaña durante análisis; resultados tardíos descartados; widgets modificados solo desde hilo principal |
+| Sugerencias | Contexto, comentarios, aceptar/cancelar, rango correcto y respuesta antigua |
+| Correcciones | Casos positivos/negativos por delimitador, automatismo demostrable, deshacer y conservación de texto/disco |
+| Clones | I/II entre archivos, renombramiento consistente, operadores distintos, negativos, buffers, exclusiones, límites y navegación tras cambio externo |
+| Terminales | Sesiones/directorios independientes, historial, interrupción y cierre; declarar falta de emulación de pantalla completa |
+| Interfaz | 1366×768 y 1920×1080, escalado, teclado, foco, paneles, descripciones y señales que no dependan solo de color |
+| Empaquetado | Arranque desde icono, rutas de recursos, ccom y recorrido en otra máquina de la plataforma acordada |
 
-Usar `unittest` para lógica independiente y comprobación manual para la UI inicial. Añadir pruebas Qt automatizadas cuando un comportamiento de eventos concreto lo justifique. No agregar dependencias de pruebas sin necesidad.
+Usar `unittest` para lógica y eventos relevantes, más revisión manual de la UI. Añadir pruebas que cubran riesgos reales; no duplicar implementación con tests triviales. Una modificación de documentación no exige volver a ejecutar toda la suite si no cambia código.
 
-Guion de defensa:
+## 10. Guion final de demostración
 
-1. Abrir carpeta con dos programas y cambiar entre pestañas.
-2. Escribir un error; mostrar diagnóstico del núcleo sin guardar.
-3. Solicitar una sugerencia y aceptarla con teclado.
-4. Mostrar una reparación automática y deshacerla; reaplicarla cuando corresponda.
-5. Compilar un ejemplo válido y uno con error semántico; navegar desde Problemas.
-6. Detectar clones Tipo I y II entre archivos y abrir sus fragmentos.
-7. Cerrar un documento modificado y demostrar que Cancelar conserva el trabajo.
+1. Abrir CALSIDE desde su icono; abrir carpeta y dos archivos.
+2. Mostrar pestañas, ocultar/recuperar archivos y mover el panel a la derecha.
+3. Escribir un carácter inválido; mostrar diagnóstico en vivo sin guardar y corregirlo.
+4. Mostrar sintaxis/semántica automáticas según E4 y distinguirlas de Compilar/F5.
+5. Solicitar sugerencias, aceptar una con teclado y cancelar otra sin cambios.
+6. Mostrar reparaciones y una corrección automática inequívoca; deshacerla y revisar casos ambiguos.
+7. Compilar un programa válido y uno con error semántico; navegar al fragmento y volver a compilar correctamente.
+8. Analizar `ide/ejemplos/clones`, comparar I/II y abrir ambos fragmentos; mostrar también un caso sin coincidencias.
+9. Mostrar dos terminales independientes e interrumpir un comando de prueba.
+10. Modificar un archivo externamente, conservar o recargar sin pérdida, y cancelar el cierre de un documento editado.
 
-## 11. Riesgos y mitigaciones
+El guion debe ejecutarse contra funciones reales. No presentar datos simulados ni una biblioteca recibida como integración terminada.
 
-- **API del núcleo incompleta:** obtener muestras y aislar el adaptador; avanzar con archivos y compilación.
-- **Fechas cercanas:** entregar primero el recorrido vertical y evitar funciones decorativas que retrasen requisitos.
-- **Desacuerdo entre LL(1) y Bison:** compartir corpus válido/inválido; registrar divergencias y acordar responsable de corrección.
-- **Asistencia sobre texto incompleto:** no confundir estado transitorio con reparación segura; validar casos por construcción.
-- **Posiciones incompatibles:** contrato explícito y pruebas Unicode antes de pintar rangos.
-- **Detector sin responsable:** resolver asignación temprano; panel preparado no cumple detección.
-- **Dependencias en defensa:** versiones documentadas, entorno virtual y verificación en otra máquina.
-- **Alcance creciente:** enlazado `P`, optimizaciones e IR dependen de tareas externas; agregar solo cuando existan contratos reales.
+## 11. Decisiones todavía abiertas y riesgos
 
-## 12. Registro de decisiones pendientes
+| Tema | Resolución necesaria |
+|---|---|
+| Plataforma de entrega | Confirmar equipos, arquitectura y versiones; actualmente comprobados Python 3.14.9/PySide6 6.12.0 en Linux |
+| ccom automático | Implementado y probado con --check. Mantener el contrato de cero artefactos al evolucionar el compilador |
+| API de entregas 2/3 | Recibir y verificar parser, sugerencias y reparaciones; mantener un adaptador |
+| Correcciones seguras | Catálogo, disparadores, deshacer y casos que deben seguir siendo propuestas |
+| Diagnósticos solapados | Lexer/ccom manual/automático ya tienen prioridad. Revisar de nuevo al incorporar el parser predictivo |
+| Mejoras del proyecto 1 | Inventariar observaciones y aclarar qué mejoras exige §7.2 con el equipo/profesor antes de cerrar |
+| Paquete ejecutable | Herramienta, recursos, dependencias del sistema y distribución de ccom |
+| Plazo | El plan recibido proponía 6/11, 12/11 y 17/11 como hitos; reestimar con entregas y trabajo real. No son compromisos nuevos de este documento |
 
-| ID | Pregunta | Propuesta inicial | Evidencia para cerrar |
-|---|---|---|---|
-| A01 | ¿Qué distribución usar? | Editor clásico | Elegir tras comparar los tres mockups |
-| A02 | ¿Qué plataformas/versiones soportar? | Entorno Linux del grupo | Comprobar equipos de desarrollo y defensa |
-| A03 | ¿Cuál es la API real del núcleo? | Adaptador a modelos del IDE | Rama/PR y ejemplos del compañero |
-| A04 | ¿Qué se corrige automáticamente? | Casos inequívocos, deshacibles | Catálogo de casos y acuerdo con núcleo |
-| A05 | ¿Quién hace clones? | Implementado en esta tarea por solicitud de Saddy | Detector y panel entregados |
-| A06 | ¿Qué son las mejoras del proyecto 1? | Inventariarlas antes del cierre | Aclaración del equipo/profesor |
-| A07 | ¿Recorrer subcarpetas? | Sí, con exclusiones explícitas | Tamaño y estructura de proyectos reales |
-| A08 | ¿Datos en disco o buffers para clones? | Preferir buffers abiertos | Contrato del detector y mensaje de alcance |
-| A09 | ¿Destino de artefactos? | Carpeta build del proyecto | Política sin colisiones y ejemplos de CLI |
-| A10 | ¿Tema definitivo? | Oscuro con ámbar discreto | Prueba de contraste y preferencia del usuario |
+Riesgos a vigilar: divergencias entre gramáticas, resultados antiguos, diferencias UTF-8/Unicode/UTF-16, reparación de construcciones aún incompletas y pérdida por cambios externos. Mantener corpus compartido, revisión por documento y separación entre motor y presentación. La ausencia temporal del parser no bloquea el resto del IDE.
 
-Para cada decisión cerrada anotar fecha, razón, consecuencias y estado reemplazado. Actualizar aquí el alcance si cambia; no mantener planes contradictorios.
+## 12. Lista de cierre del IDE
 
-## 13. Estado del prototipo inicial
+- [x] Base de aplicación propia, editor, archivos y paneles.
+- [x] Compilación manual con ccom y diagnósticos gráficos.
+- [x] Clones I/II reales entre archivos.
+- [x] Terminales básicas y distribución adaptable.
+- [x] Núcleo entrega 1 incorporado al repositorio y suite combinada correcta.
+- [x] E3: lexer conectado al resaltado y a errores en vivo.
+- [x] E4: análisis automático de ccom sin guardar ni generar artefactos.
+- [ ] E5: parser/sugerencias recibidos y conectados.
+- [ ] E6: reparaciones y corrección automática verificables.
+- [ ] E7: cambios externos, proyecto y experiencia estabilizados.
+- [ ] E8: paquete ejecutable probado en otra máquina.
+- [ ] E9: corpus, documentación, diagramas y guion final completados.
+- [ ] Aclaradas e incorporadas las mejoras pendientes del proyecto 1.
 
-Implementados: ventana clásica PySide6, esquina morada estática, pestañas, edición/búsqueda, abrir/guardar, carpeta de primer nivel y compilación real asíncrona mediante `ccom`. Resaltado provisional reutilizado de la extensión, reemplazable por tokens del núcleo. Ver `../README.md` para instalación y límites.
+La animación de la esquina y las mejoras de E10 se mantienen separadas de esta lista de cierre funcional.
 
-Se conserva la barra nativa de ventana. La esquina de papel animada y sus controles se posponen por acuerdo con Saddy. Todavía no hay ejecutable empaquetado. La integración con el núcleo y los clones no se simula.
+## 13. Mantenimiento del plan
 
-## 14. Lista de arranque
+Al terminar una etapa: actualizar estado y criterio de aceptación, registrar evidencia relevante y anotar la siguiente tarea disponible. Si cambia la arquitectura, reescribir la sección afectada; no acumular anexos que contradigan tareas anteriores. Conservar IDs F01–F26 para seguir requisitos y revisión.
 
-- [x] Elegir PySide6 y permitir dependencias.
-- [x] Inventariar base del repositorio y requisitos conocidos.
-- [x] Crear plan, criterios de aceptación y alternativas visuales.
-- [ ] Elegir distribución y revisar estados vacíos/error.
-- [ ] Recibir API/entrega del núcleo y confirmar reparto.
-- [ ] Comprobar entorno Python/PySide6.
-- [ ] Implementar E1 y E2; después integrar asistencia.
-- [ ] Completar P0 y P1 y verificar guion de defensa.
-
-## 15. Referencias técnicas
-
-- Qt for Python: https://doc.qt.io/qtforpython-6/gettingstarted.html
-- QPlainTextEdit: https://doc.qt.io/qtforpython-6/PySide6/QtWidgets/QPlainTextEdit.html
-- QProcess: https://doc.qt.io/qtforpython-6/PySide6/QtCore/QProcess.html
-- QTextCursor: https://doc.qt.io/qtforpython-6/PySide6/QtGui/QTextCursor.html
-
-Los contratos y componentes Qt anteriores son propuestas de diseño; confirmar firmas y detalles contra la versión elegida al implementar.
-
-## Avance: diagnósticos de ccom (paso 2)
-
-Implementados subrayados por rango, punto en el margen, descripción al pasar el puntero y detalle para la línea del cursor, navegación con selección del fragmento y categorías léxica/sintáctica/semántica. Los resultados se conservan por documento y se invalidan al editar, renombrar o cerrar; las revisiones antiguas no se aplican.
-
-Se reutiliza stderr y el señalador del compilador sin modificar su interfaz. Los errores sin posición siguen en Salida. Las posiciones de fin de línea se representan con marca de línea, sin atribuirlas a otro token. Este avance sigue ejecutándose con Compilar/F5: el análisis en vivo es un paso posterior y no requiere pasar por LL(1).
-
-Validación: pruebas automáticas sobre corpus real léxico, sintáctico y semántico, varios errores, rango de comentario abierto, Unicode, fin de línea, resultados por pestaña, edición, recompilación correcta y descarte de revisiones antiguas.
-
-## Avance: clones sin dependencia LL(1)
-
-Se implementó `ide/clones.py` como detector léxico y `ide/interfaz/clones.py` como trabajador/panel. Compara `.cls` entre archivos de la carpeta de proyecto, con subcarpetas y buffers abiertos. Presenta pares Tipo I/II con ubicaciones, comparación y selección en el editor; invalida snapshots antiguos y admite cancelación. El detector no analiza gramática ni equivalencia semántica.
-
-Las decisiones de umbral, normalización y límites están documentadas en `../README.md`; los ejemplos reproducibles están en `../ejemplos/clones/`. La dependencia del detector externo propuesta inicialmente queda reemplazada por esta implementación. El análisis automático de errores, sugerencias y reparaciones continúa siendo trabajo pendiente.
+Próxima etapa del orden principal: **E5, incorporar parser predictivo y sugerencias cuando llegue la entrega 2 del compañero**. Mientras se recibe, E7 (cambios externos y experiencia de proyecto) puede avanzar de forma independiente.

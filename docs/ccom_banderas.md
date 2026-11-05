@@ -14,6 +14,7 @@ cualquier bandera.
 | Bandera | Qué hace | Dónde sale | Estado |
 |---|---|---|---|
 | `-h`, `--help` | Muestra todas las banderas, ejemplos y códigos de salida, sin requerir entrada | stdout | Disponible |
+| `--check` | Solo análisis léxico, sintáctico y semántico, sin archivos de salida | diagnósticos en stderr | Disponible |
 | `--time` | Muestra la duración total en milisegundos, con estado completado o fallido | stderr | Disponible |
 | `--no-schedule` | Desactiva el organizador local y conserva la emisión de una operación más separación; útil para comparar | archivos | Disponible |
 | `--ast-json <archivo>` | Exporta el AST sintáctico a JSON para el visor gráfico | archivo JSON | Disponible |
@@ -26,6 +27,21 @@ cualquier bandera.
 | `-x` | Toma un `.asm` y genera el binario, sin compilar Calser | archivos | Disponible |
 
 Se pueden combinar: `ccom -t -m prog.cls` imprime el AST y después las tablas.
+
+## Solo análisis (`--check`)
+
+```bash
+./ccom --check programa.cls
+./ccom --check -v --time programa.cls
+```
+
+Ejecuta las mismas fases léxica, sintáctica y semántica que la compilación normal. No genera código, no ensambla, no exporta AST y no crea ni modifica `.bin`, `.hex`, `.mem`, `.asm` o `.json`. Es el modo usado por CALSIDE para revisar copias temporales de texto sin guardar.
+
+Códigos: **0** análisis correcto; **1** error de análisis o lectura; **2** uso incorrecto. Mantiene el formato de diagnósticos con archivo, línea, columna y señalador. Un análisis correcto no produce salida salvo que se pidan `-v` o `--time`.
+
+Solo se combina con `-v` y `--time`; las opciones de salida, ensamblado y listados (`-o`, `-s`, `-x`, `-p`, `-t`, `-m`, `--ast-json`, `--no-schedule`) se rechazan con código 2 antes de abrir salidas. La medición se identifica como `tiempo de analisis`. Un éxito no certifica generación de código ni ejecución: para eso se usa la compilación normal.
+
+Prueba del contrato y conservación de archivos: `make check-analysis` (también forma parte de `make check`).
 
 ## Ejemplos
 
@@ -87,13 +103,13 @@ compilado. El valor varía entre ejecuciones.
 La línea se escribe al final en stderr. Si falla la compilación se informa
 `(fallido)` y se conserva el código de salida original. Con `-x` se etiqueta
 como `ensamblado`; con `--ast-json` sin `-s`, `-m` ni `-p`, como
-`exportacion AST`, pues ese modo termina después del análisis sintáctico.
+`exportacion AST`, pues ese modo termina después del análisis sintáctico. Con `--check` se identifica como `analisis` e incluye hasta semántica, sin generación.
 Los errores de uso no inician trabajo ni muestran una duración. Si el reloj
 no está disponible se emite un aviso, sin cambiar el resultado del compilador.
 
 ## Archivos de salida
 
-Cuando no hay errores, `ccom` escribe siempre tres archivos con el nombre base
+En compilación normal, cuando no hay errores, `ccom` escribe tres archivos con el nombre base
 de `-o` (o el del fuente): `prog.cls` produce `prog.bin`, `prog.hex` y
 `prog.mem`. Con cualquier error no se escribe ninguno de los tres.
 
@@ -207,7 +223,7 @@ antes del análisis semántico. Con errores léxicos o sintácticos no hay AST.
 Línea de uso que se imprime en los errores de uso:
 
 ```
-uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-p] [-x] [--ast-json <json>] [--no-schedule] [--time] <archivo> [-o <salida>]
+uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-p] [-x] [--check] [--ast-json <json>] [--no-schedule] [--time] <archivo> [-o <salida>]
 ```
 
 ## Pruebas

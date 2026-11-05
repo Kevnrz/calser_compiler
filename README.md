@@ -67,6 +67,7 @@ Una entrada correcta devuelve código `0`. Los errores de análisis devuelven
 | `-p` | Mostrar cada bundle en ensamblador y en binario |
 | `-x` | Ensamblar una entrada `.asm` y generar `.bin`, `.hex` y `.mem`, sin compilar Calser |
 | `--ast-json <archivo>` | Exportar el AST para el visor gráfico |
+| `--check` | Analizar léxico, sintaxis y semántica sin generar archivos; compatible con `-v` y `--time` |
 | `--time` | Mostrar en stderr la duración total del trabajo en milisegundos |
 | `--no-schedule` | Usar emisión conservadora para comparar bundles y ciclos |
 
@@ -352,4 +353,4 @@ independiente del repositorio. Los avisos de los recursos Seti están en
 
 ## CALSIDE · prototipo de IDE
 
-Aplicación de escritorio propia con PySide6: editor, pestañas, manejo de archivos y compilación con `ccom`. Inicio: `make ide`; pruebas: `make check-ide`. Requiere instalar `ide/requirements.txt`. Ver [instalación, funciones y límites](ide/README.md) y [plan del IDE](ide/docs/plan_ide.md). Incluye diagnósticos de `ccom` y clones Tipo I/II entre archivos; la asistencia LL(1) sigue pendiente de integrar.
+Aplicación de escritorio propia con PySide6: editor, pestañas, manejo de archivos y compilación con `ccom`. Inicio: `make ide`; pruebas: `make check-ide`. Requiere instalar `ide/requirements.txt`. Ver [instalación, funciones y límites](ide/README.md) y [plan del IDE](ide/docs/plan_ide.md). Incluye resaltado y léxico en vivo con el núcleo, análisis automático sintáctico/semántico con `ccom --check`, compilación manual y clones Tipo I/II entre archivos. El parser predictivo, las sugerencias y las reparaciones siguen pendientes.

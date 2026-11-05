@@ -1,69 +1,29 @@
-"""Editor Qt: margen, línea activa y resaltado visual reutilizado del plugin.
-
-El resaltado no valida sintaxis ni sustituye al núcleo LL(1).
-"""
-import json
-import re
+"""Editor Qt con resaltado del lexer real, margen y diagnósticos por origen."""
 from html import escape
+from uuid import uuid4
 
-from PySide6.QtCore import QEvent, QRect, QSize, Qt
+from PySide6.QtCore import QEvent, QRect, QSize, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QSyntaxHighlighter, QTextCharFormat, QTextCursor, QTextFormat
 from PySide6.QtWidgets import QPlainTextEdit, QTextEdit, QToolTip, QWidget
 
 
 class Resaltado(QSyntaxHighlighter):
-    def __init__(self, document, root):
+    def __init__(self, document):
         super().__init__(document)
-        self.rules = []
-        grammar = root / "editors/vscode/syntaxes/calser.tmLanguage.json"
-        if grammar.exists():
-            for item in json.loads(grammar.read_text())["patterns"]:
-                if "match" not in item or item["name"].startswith("comment"):
-                    continue
-                name = item["name"]
-                color = "#d6dce7"
-                if name.startswith(("keyword", "storage.modifier")):
-                    color = "#efbb65"
-                elif name.startswith("storage.type"):
-                    color = "#8bd3cc"
-                elif name.startswith("constant"):
-                    color = "#c1a0eb"
-                elif name.startswith("entity"):
-                    color = "#9ac4ee"
-                fmt = QTextCharFormat()
-                fmt.setForeground(QColor(color))
-                self.rules.append((re.compile(item["match"]), fmt))
-        self.comment = QTextCharFormat()
-        self.comment.setForeground(QColor("#909bac"))
+        self.tramos = {}
+        self.formats = {}
+        for category, color in {"reservada": "#efbb65", "tipo": "#8bd3cc", "numero": "#c1a0eb", "booleano": "#c1a0eb", "operador": "#efbb65", "identificador": "#d6dce7", "comentario": "#909bac"}.items():
+            fmt = QTextCharFormat()
+            fmt.setForeground(QColor(color))
+            self.formats[category] = fmt
+
+    def actualizar(self, tramos):
+        self.tramos = tramos
+        self.rehighlight()
 
     def highlightBlock(self, text):
-        # Python counts code points; QTextDocument positions count UTF-16 units.
-        def apply(start, end, fmt):
-            offset = len(text[:start].encode("utf-16-le")) // 2
-            length = len(text[start:end].encode("utf-16-le")) // 2
-            self.setFormat(offset, length, fmt)
-        for pattern, fmt in self.rules:
-            for match in pattern.finditer(text):
-                apply(match.start(), match.end(), fmt)
-        self.setCurrentBlockState(0)
-        pos = 0
-        in_comment = self.previousBlockState() == 1
-        while pos < len(text):
-            start = pos if in_comment else text.find("#", pos)
-            if start < 0:
-                break
-            if in_comment or text.startswith("#[", start):
-                end = text.find("]#", start if in_comment else start + 2)
-                if end < 0:
-                    apply(start, len(text), self.comment)
-                    self.setCurrentBlockState(1)
-                    break
-                apply(start, end + 2, self.comment)
-                pos = end + 2
-                in_comment = False
-            else:
-                apply(start, len(text), self.comment)
-                break
+        for span in self.tramos.get(self.currentBlock().blockNumber(), ()):
+            self.setFormat(span.inicio, span.longitud, self.formats[span.categoria])
 
 
 class Margen(QWidget):
@@ -94,16 +54,30 @@ class Margen(QWidget):
 
 
 class Editor(QPlainTextEdit):
+    contenidoCambiado = Signal()
+    analisisSolicitado = Signal(str, int, str)
+    estadoAnalisisCambiado = Signal()
+
     def __init__(self, root):
         super().__init__()
         self.path = None
         self.revision = 0
+        self.documento_id = uuid4().hex
+        self._texto_actual = ""
+        self.errores_lexicos = []
+        self.analisis_revision = -1
+        self.estado_analisis = "Esperando…"
+        self.estado_ccom = "Esperando léxico…"
         self.problemas = []
+        self.analisis_timer = QTimer(self)
+        self.analisis_timer.setSingleShot(True)
+        self.analisis_timer.setInterval(300)
+        self.analisis_timer.timeout.connect(self.emitir_analisis)
         self.setFont(QFont("monospace", 12))
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self.setTabStopDistance(self.fontMetrics().horizontalAdvance(" ") * 4)
         self.margin = Margen(self)
-        self.highlighter = Resaltado(self.document(), root)
+        self.highlighter = Resaltado(self.document())
         self.blockCountChanged.connect(self.actualizar_margen)
         self.updateRequest.connect(self.actualizar_zona)
         self.cursorPositionChanged.connect(self.linea_actual)
@@ -112,8 +86,44 @@ class Editor(QPlainTextEdit):
         self.linea_actual()
 
     def cambio(self):
+        text = self.toPlainText()
+        # Rehighlight puede emitir textChanged sin que cambie el texto. No
+        # tratar el formato como edición ni reiniciar análisis indefinidamente.
+        if text == self._texto_actual:
+            return
+        self._texto_actual = text
         self.revision += 1
+        self.errores_lexicos = []
+        self.analisis_revision = -1
         self.establecer_problemas([])
+        self.highlighter.actualizar({})
+        self.programar_analisis()
+        self.contenidoCambiado.emit()
+
+    def programar_analisis(self):
+        self.estado_analisis = "Esperando…"
+        self.analisis_timer.start()
+        self.estadoAnalisisCambiado.emit()
+
+    def emitir_analisis(self):
+        self.estado_analisis = "Analizando…"
+        self.estadoAnalisisCambiado.emit()
+        self.analisisSolicitado.emit(self.documento_id, self.revision, self.toPlainText())
+
+    def aplicar_analisis(self, result):
+        if result.documento != self.documento_id or result.revision != self.revision:
+            return False
+        modified = self.document().isModified()
+        self.errores_lexicos = list(result.problemas)
+        self.analisis_revision = result.revision
+        self.highlighter.actualizar(result.tramos)
+        self.document().setModified(modified)
+        self.estado_analisis = f"{len(result.problemas)} error(es)" if result.problemas else "Sin errores léxicos"
+        self.estadoAnalisisCambiado.emit()
+        return True
+
+    def detener_analisis(self):
+        self.analisis_timer.stop()
 
     def establecer_problemas(self, problems):
         self.problemas = list(problems)
@@ -121,7 +131,7 @@ class Editor(QPlainTextEdit):
         self.margin.update()
 
     def rango_problema(self, problem):
-        """Convierte posiciones UTF-8 de ccom a UTF-16 sin partir caracteres.
+        """Convierte bytes ccom o caracteres del núcleo a UTF-16.
 
         Una posición al final de línea queda vacía: se señala la línea y no se
         inventa un token sobre el que dibujar el subrayado.
@@ -130,11 +140,16 @@ class Editor(QPlainTextEdit):
         if not block.isValid():
             return None
         text = block.text()
-        encoded = text.encode("utf-8")
-        start_byte = min(len(encoded), max(0, problem.columna - 1))
-        prefix = encoded[:start_byte].decode("utf-8", errors="ignore")
-        start_cp = len(prefix)
-        end_cp = len(encoded[:start_byte + max(1, problem.longitud)].decode("utf-8", errors="ignore"))
+        if problem.unidad == "unicode":
+            start_cp = min(len(text), max(0, problem.columna - 1))
+            end_cp = min(len(text), start_cp + max(1, problem.longitud))
+            prefix = text[:start_cp]
+        else:
+            encoded = text.encode("utf-8")
+            start_byte = min(len(encoded), max(0, problem.columna - 1))
+            prefix = encoded[:start_byte].decode("utf-8", errors="ignore")
+            start_cp = len(prefix)
+            end_cp = len(encoded[:start_byte + max(1, problem.longitud)].decode("utf-8", errors="ignore"))
         if start_cp < len(text):
             end_cp = max(start_cp + 1, end_cp)
         start = len(prefix.encode("utf-16-le")) // 2
@@ -152,7 +167,7 @@ class Editor(QPlainTextEdit):
             cursor = self.cursorForPosition(event.pos())
             problems = self.problemas_en_linea(cursor.blockNumber() + 1)
             if problems:
-                text = "<br><br>".join(f"<b>ccom · {escape(p.categoria)}</b><br>{escape(p.descripcion)}" for p in problems)
+                text = "<br><br>".join(f"<b>{escape(p.origen)} · {escape(p.categoria)}</b><br>{escape(p.descripcion)}" for p in problems)
                 QToolTip.showText(event.globalPos(), text, self)
                 return True
             QToolTip.hideText()

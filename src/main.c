@@ -39,6 +39,7 @@ extern int lexical_errors;
  *
  *   -h, --help  muestra ayuda y termina sin compilar
  *   --time  muestra la duracion total en stderr
+ *   --check  ejecuta solo análisis léxico/sintáctico/semántico, sin salidas
  *   -t  imprime el AST
  *   -m  imprime la tabla de símbolos con direcciones y la de etiquetas
  *   -v  imprime en stderr el avance de cada fase
@@ -47,13 +48,14 @@ extern int lexical_errors;
  *   -p  muestra los bundles en ensamblador y en binario
  *   -x  la entrada es un .asm y se genera el binario, sin compilar Calser
  *
- * Sin errores siempre se escriben .bin, .hex y .mem con el nombre base de
- * -o.
+ * Sin --check, las compilaciones correctas escriben .bin, .hex y .mem con
+ * el nombre base de -o.
  */
 typedef struct {
     const char *input;         /* archivo fuente (.cls) o, con -x, .asm      */
     char       *output;        /* -o; por defecto: fuente sin extensión .bin */
     int show_time;             /* --time */
+    int check_only;            /* --check: fases léxica, sintáctica y semántica */
     int verbose;               /* -v */
     int emit_asm;              /* -s */
     const char *ast_json;       /* --ast-json archivo */
@@ -66,7 +68,7 @@ typedef struct {
 
 #define EXIT_USAGE 2
 
-#define USAGE "uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-p] [-x] [--ast-json <json>] [--no-schedule] [--time] <archivo> [-o <salida>]"
+#define USAGE "uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-p] [-x] [--check] [--ast-json <json>] [--no-schedule] [--time] <archivo> [-o <salida>]"
 
 /*
  * print_help — describe las opciones sin requerir ni procesar una entrada.
@@ -91,6 +93,8 @@ static void print_help(void) {
          "                       despues del analisis sintactico.\n"
          "  --no-schedule        Desactiva la organizacion de bundles.\n"
          "  --time               Muestra la duracion total en ms en stderr.\n"
+         "  --check              Solo analisis lexico, sintactico y semantico;\n"
+         "                       no genera archivos. Compatible con -v y --time.\n"
          "\nSalidas: .bin, .hex y .mem; con -s tambien .asm.\n"
          "Sin -o se usa el nombre de la entrada con extension .bin.\n"
          "\nEjemplos:\n"
@@ -98,6 +102,7 @@ static void print_help(void) {
          "  ccom --time -s programa.cls -o salida.bin\n"
          "  ccom -x programa.asm\n"
          "  ccom --ast-json arbol.json programa.cls\n"
+         "  ccom --check programa.cls\n"
          "\nCodigos de salida:\n"
          "  0  Trabajo completado o ayuda mostrada.\n"
          "  1  Error de compilacion, ensamblado o archivos.\n"
@@ -122,6 +127,8 @@ static void report_elapsed(const Options *options, const struct timespec *start,
     double milliseconds = (double) (end.tv_sec - start->tv_sec) * 1000.0
                         + (double) (end.tv_nsec - start->tv_nsec) / 1000000.0;
     const char *operation = options->assemble_only ? "ensamblado" : "compilacion";
+    if (options->check_only)
+        operation = "analisis";
     if (!options->assemble_only && options->ast_json && !options->emit_asm &&
         !options->print_memory && !options->print_bundles)
         operation = "exportacion AST";
@@ -943,7 +950,12 @@ static int compile(const Options *options) {
     Compilation compilation = { .options = options };
     int code;
 
-    if (phase_parse(&compilation) &&
+    if (options->check_only) {
+        /* E4: ejecutar exactamente el front-end existente y liberar su AST/
+         * símbolos, sin exportar, generar código ni abrir archivos de salida. */
+        code = phase_parse(&compilation) && phase_semantic(&compilation)
+                   ? 0 : compilation.exit_code;
+    } else if (phase_parse(&compilation) &&
         phase_export_ast(&compilation) &&
         phase_semantic(&compilation) &&
         phase_labels(&compilation) &&
@@ -987,6 +999,7 @@ static int parse_options(int argc, char **argv, Options *options) {
         {"ast-json", required_argument, NULL, 1000},
         {"no-schedule", no_argument, NULL, 1001},
         {"time", no_argument, NULL, 1002},
+        {"check", no_argument, NULL, 1003},
         {NULL, 0, NULL, 0}
     };
     while ((option = getopt_long(argc, argv, "ho:vstmxp", long_options, NULL)) != -1) {
@@ -1012,6 +1025,7 @@ static int parse_options(int argc, char **argv, Options *options) {
             case 1000: options->ast_json = optarg; break;
             case 1001: options->no_schedule = 1; break;
             case 1002: options->show_time = 1; break;
+            case 1003: options->check_only = 1; break;
             case 'v': options->verbose = 1;       break;
             case 's': options->emit_asm = 1;      break;
             case 't': options->print_ast = 1;     break;
@@ -1034,6 +1048,17 @@ static int parse_options(int argc, char **argv, Options *options) {
     }
 
     options->input = argv[optind];
+
+    if (options->check_only) {
+        if (options->output || options->emit_asm || options->ast_json ||
+            options->no_schedule || options->print_ast || options->print_memory ||
+            options->assemble_only || options->print_bundles) {
+            fprintf(stderr, "ccom: --check solo admite -v y --time; no admite opciones de salida o ensamblado\n");
+            free(options->output);
+            return EXIT_USAGE;
+        }
+        return -1;
+    }
 
     if (options->output == NULL) {
         options->output = default_output(options->input);

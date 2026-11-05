@@ -113,7 +113,7 @@ check-salidas: $(TARGET)
 validar-bundles: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 tools/validar_bundles.py
 
-check: check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+check: check-analysis check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 clean:
 	rm -f $(TARGET) $(OBJECTS) $(OBJECTS:.o=.d)
@@ -132,3 +132,8 @@ ide:
 
 check-ide:
 	PYTHONDONTWRITEBYTECODE=1 QT_QPA_PLATFORM=offscreen $(PYTHON) -m unittest discover -s ide/pruebas -v
+
+# Front-end sin generación para el análisis automático del IDE.
+.PHONY: check-analysis
+check-analysis: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/analisis/probar.py

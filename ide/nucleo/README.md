@@ -2,8 +2,8 @@
 
 Núcleo en Python para el IDE propio de Calser (decisiones D4 y D5).
 Solo usa la biblioteca estándar de Python. Implementa el análisis léxico,
-la gramática LL(1) y su tabla predictiva; el parser, las sugerencias y la
-corrección están pendientes.
+la gramática LL(1), su tabla predictiva y el parser con contexto en el cursor.
+Las sugerencias y la corrección están pendientes.
 
 ## Núcleo
 
@@ -13,8 +13,9 @@ corrección están pendientes.
 | `gramatica.py` | Gramática LL(1) de Calser como datos | Aho §4.2, §4.3.3–4.3.4 |
 | `tabla.py` | PRIMERO, SIGUIENTE y tabla predictiva M; detecta conflictos | Aho §4.4.2–4.4.3 (Alg. 4.31) |
 
-Pendientes: `parser` (parser predictivo con pila, Aho §4.4.4), `sugerencias`
-(fila M[tope, ·]) y `correccion` (recuperación a nivel de frase, Aho §4.4.5).
+Implementado: `parser.py`, parser predictivo con pila (Aho §4.4.4), primer error y consulta de prefijos. Ver [API y ejemplos para los motores](../docs/parser_predictivo.md).
+
+Pendientes: `sugerencias` (contexto de la pila completa) y `correccion` (propuestas de reparación; Aho §4.4.5). Ambos los implementará el mismo compañero.
 
 ### Uso
 
@@ -54,9 +55,22 @@ error por byte. Fuera de eso, los tokens, posiciones y errores coinciden con
 Flex en los 110 programas `.cls` del repo y en 4 archivos de casos borde
 (comparación hecha con un volcador de tokens compilado desde `lexer.l`).
 
+## Parser disponible
+
+```python
+from ide.nucleo.parser import analizar_sintaxis, contexto_en
+
+assert analizar_sintaxis("F main [] : void ; E ; .").aceptado
+texto = "F main [] : void ; Vm total : "
+assert contexto_en(texto, len(texto)).esperados == ("bool", "int")
+```
+
+No genera AST ni valida semántica. Se detiene en el primer error; la recuperación queda para después. La integración gráfica de E5/E6 sigue pendiente.
+
 ## Pruebas
 
 ```bash
+make check-parser  # Python puro; prueba diferencial con Bison si existe ccom
 make check-ide
 ```
 

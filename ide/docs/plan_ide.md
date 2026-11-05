@@ -40,16 +40,17 @@ Rama: `feat/calside`. El merge de `origin/develop` se completó en `c8b1997`. En
 
 - `ide.nucleo.lexico.analizar(texto)`: conectado al resaltado y a errores léxicos en vivo (E3). Análisis por pausa, documento y revisión; funciona sin guardar.
 - Gramática Calser transformada a LL(1), PRIMERO/SIGUIENTE y tabla predictiva.
+- Parser predictivo Python implementado por Saddy: análisis completo, primer error y contexto en el cursor, sin árbol/AST. API real en `parser_predictivo.md`.
 - Pruebas y documentación de la API.
 
 ### Todavía pendiente
 
-- Parser predictivo, sugerencias y reparaciones del compañero; conexión gráfica cuando estén disponibles.
+- Motores de sugerencias y reparaciones a cargo del mismo compañero; integración gráfica posterior. El parser ya está implementado por Saddy.
 - Detección de cambios externos y protección al sobrescribir archivos modificados fuera del IDE.
 - Preferencias persistentes, árbol recursivo del explorador y entrega empaquetada.
 - Animación de papel y controles de ventana en la esquina, como mejora posterior.
 
-**Estado actual:** el editor usa el lexer del núcleo. La gramática y la tabla están disponibles como datos; no ejecutan por sí solas un parser predictivo. Sugerencias y reparaciones continúan pendientes.
+**Estado actual:** el editor usa el lexer del núcleo. La gramática y la tabla ya alimentan un parser predictivo disponible como API independiente; todavía no se invoca desde los widgets. Sugerencias y reparaciones continúan pendientes.
 
 ## 3. Decisiones vigentes
 
@@ -60,7 +61,7 @@ Rama: `feat/calside`. El merge de `origin/develop` se completó en `c8b1997`. En
 | D02 | Dependencias externas permitidas | PySide6 aceptado; no añadir otras sin necesidad |
 | D03 | Reutilizar recursos útiles del plugin | Patrones de resaltado e icono existentes; conservar avisos aplicables |
 | D04 | `ccom` es el compilador y se invoca directamente | Implementado; LL(1) no es intermediario obligatorio |
-| D05 | Núcleo para asistencia durante la edición | Lexer conectado al editor; parser/sugerencias/reparaciones pendientes |
+| D05 | Núcleo para asistencia durante la edición | Lexer conectado; parser disponible como API; motores de sugerencias/reparaciones y UI pendientes |
 | D06 | `QPlainTextEdit` para código | Implementado |
 | D07 | `QProcess` para ccom, sin bloquear la UI | Implementado |
 | D08 | Distribución clásica adaptable | Implementada; explorador plegable y resultados abajo/derecha |
@@ -75,11 +76,12 @@ Rama: `feat/calside`. El merge de `origin/develop` se completó en `c8b1997`. En
 | Interfaz, archivos, paneles, terminales y adaptadores | Saddy / trabajo de CALSIDE | Ninguna para continuar con lexer y protección de archivos |
 | Integración con `ccom` | Saddy / CALSIDE, coordinado con responsable del compilador | Modo --check implementado; coordinar futuras extensiones del compilador |
 | Léxico, gramática y tabla LL(1) | Compañero / C1.1a | Entrega 1 incorporada |
-| Parser predictivo y sugerencias | Compañero / próxima entrega | API y casos de prueba reales |
-| Reparaciones | Compañero / entrega posterior | Contrato de ediciones y casos seguros |
+| Parser predictivo | Saddy | Implementado; API, ejemplos y pruebas disponibles |
+| Sugerencias | Compañero (también reparaciones) | Motor sobre la API real del parser |
+| Reparaciones | Mismo compañero de sugerencias | Motor, contrato de ediciones y casos seguros |
 | Detector y panel de clones | Implementados en CALSIDE por solicitud de Saddy | Mantenimiento y validación final |
 
-No reimplementar el parser del compañero en los widgets. Las funciones que no dependan de esa entrega pueden avanzar en paralelo lógico: `ccom`, archivos, clones, pruebas y empaquetado. Esto no requiere crear agentes ni chats adicionales.
+Mantener el parser de Saddy separado de los widgets; los motores del compañero se adaptan a su API implementada. Las funciones que no dependan de esa entrega pueden avanzar en paralelo lógico: `ccom`, archivos, clones, pruebas y empaquetado. Esto no requiere crear agentes ni chats adicionales.
 
 ## 5. Funcionalidades y criterios de aceptación
 
@@ -96,7 +98,7 @@ Estados: **implementado** = existe en el prototipo y tiene verificación; **parc
 | F07 | P0 | Salida y estado del proceso | Implementado: stdout/stderr, código, fallo de inicio, cancelación y timeout. Tiempo límite configurable pendiente en F18. |
 | F08 | P0 | Errores gráficos y navegables | Implementado al compilar: origen, categoría, archivo, rango, subrayado, descripción y navegación. Errores sin posición quedan en Salida. |
 | F09 | P1 | Resaltado con lexer del núcleo | Implementado: tokens reales, comentarios coloreados aparte y rangos UTF-16. El formato conserva revisión, estado de guardado y Deshacer. |
-| F10 | P1 | Análisis mientras se escribe | Implementado: lexer en vivo (300 ms) y ccom --check después de 600 ms adicionales. Snapshots por revisión, cancelación, temporales y resultados independientes de F5. Parser predictivo pendiente como motor complementario. |
+| F10 | P1 | Análisis mientras se escribe | Implementado: lexer en vivo (300 ms) y ccom --check después de 600 ms adicionales. Snapshots por revisión, cancelación, temporales y resultados independientes de F5. Parser predictivo disponible; integración gráfica pendiente como motor complementario. |
 | F11 | P1 | Sugerencias | Pendiente: Ctrl+Espacio, teclado, aceptar/cancelar y reemplazo exacto del rango. Activación automática cuando el contexto sea adecuado. |
 | F12 | P1 | Reparaciones propuestas | Pendiente: descripción y edición precisa para terminadores/delimitadores Calser; cada reparación se deshace en una operación. |
 | F13 | P1 | Corrección automática | Pendiente: catálogo de casos inequívocos, disparador definido y pruebas positivas/negativas. Un botón manual no cubre por sí solo este requisito. |
@@ -140,6 +142,7 @@ ide/
     lexico.py                   tokens y errores léxicos
     gramatica.py                gramática como datos
     tabla.py                    PRIMERO/SIGUIENTE y tabla LL(1)
+    parser.py                   parser con pila, primer error y contexto del cursor
   ejemplos/clones/
   pruebas/
   docs/
@@ -149,7 +152,7 @@ Componentes de E3 ya creados: `adaptador_nucleo.py`, `diagnosticos.py` e `interf
 
 No refactorizar todo el IDE solo para igualar un árbol de carpetas. Mantener `ide/clones.py` e `ide/interfaz/clones.py`: uno es motor, otro presentación. No hace falta LSP para completar el alcance.
 
-## 7. Contratos para las integraciones pendientes
+## 7. Contratos de integración
 
 ### 7.1 Léxico recibido: API comprobada
 
@@ -184,7 +187,9 @@ Resultado mínimo del coordinador: documento, revisión, origen, estado, tokens/
 
 Separar resultados `núcleo`, `ccom automático` y `ccom compilación`. Definir deduplicación o prioridad para que el mismo error no aparezca varias veces; no sumar mensajes sin identificar su fuente. Editar invalida los resultados de la revisión anterior, pero conserva el historial de salida identificado.
 
-### 7.3 Sugerencias y reparaciones: contrato todavía por acordar
+### 7.3 Parser implementado y contratos de los motores
+
+El parser ya expone `analizar_sintaxis` y `contexto_en` en `ide/nucleo/parser.py`. La API real y ejemplos están en [parser_predictivo.md](parser_predictivo.md). Un mismo compañero implementará los dos motores y se adaptará a esa API; las propuestas de sus resultados siguen por definir.
 
 - Sugerencias: texto + revisión + cursor de entrada; lista con etiqueta, contenido insertable, rango a reemplazar y contexto.
 - Reparaciones: descripción + revisión + una o varias ediciones no superpuestas, cada una con inicio/fin y texto nuevo.
@@ -255,18 +260,20 @@ Implementación: adaptador puro, comentarios de presentación, timer de 300 ms y
 
 Verificación E4: 70 pruebas combinadas de CALSIDE/núcleo; `make check-analysis` y `make check` del compilador correctos. Se probaron original/artefactos intactos, errores sintácticos/semánticos, edición/cierre/Guardar como durante el proceso, timeouts, ejecutable antiguo, fallos de inicio, salida excesiva y prioridades entre pestañas. La prioridad es compilación manual sobre ccom automático y, para errores léxicos equivalentes, ccom sobre núcleo. Los mensajes de sintaxis conservan la explicación y posición de Bison; mejorar su contexto sigue pendiente.
 
-### E5 · Parser predictivo y sugerencias — depende de entrega 2
+### E5 · Parser predictivo y sugerencias — parcial
 
-1. Recibir rama/PR, API real y pruebas del parser/sugerencias; revisar diferencias con Bison.
-2. Incorporar la entrega sin reemplazar la integración existente de ccom.
-3. Conectar sugerencias inicialmente a Ctrl+Espacio.
-4. Implementar lista, selección con flechas, aceptar con Enter/Tab, Escape y reemplazo por rango.
-5. Añadir activación al escribir con contexto y pausa apropiados.
-6. Evitar sugerencias en comentarios y conservar selección/cursor cuando el resultado sea antiguo.
+- [x] Parser implementado por Saddy en `ide/nucleo/parser.py`, reutilizando lexer/gramática/tabla existentes.
+- [x] Decisiones 1B, 2A, 3A, 4A y 5B: análisis completo y contexto del cursor; pila explícita; primer error; sin árbol/AST; API fijada después de implementar. Recuperación por sincronización posterior.
+- [x] Contrato real documentado en `parser_predictivo.md`, con posiciones Python, estados, límites y ejemplos para ambos motores.
+- [x] 26 pruebas nuevas; 96 combinadas correctas. Comparación sintáctica con Bison (`--ast-json`): 105 de 110 fuentes sin errores léxicos, sin discrepancias; cinco excluidas por errores léxicos.
+- [ ] Recibir motor de sugerencias del compañero (también responsable de reparaciones), adaptado a la API del parser.
+- [ ] Incorporar el motor sin reemplazar ccom y definir prioridad de diagnósticos antes de mostrar otra fuente en vivo.
+- [ ] Conectar sugerencias a Ctrl+Espacio, luego activación contextual por pausa.
+- [ ] Lista con flechas, Enter/Tab, Escape y reemplazo por rango. Evitar comentarios y descartar resultados antiguos.
 
-**Terminado cuando:** se puede escribir una declaración o construcción Calser apoyándose en opciones válidas; aceptar reemplaza solo el fragmento previsto; cancelar no cambia el texto. Si el parser aporta diagnósticos en vivo, definir su prioridad frente a ccom antes de mostrarlos.
+**Terminado cuando:** se puede escribir una declaración o construcción Calser apoyándose en opciones válidas; aceptar reemplaza solo el fragmento previsto; cancelar no cambia el texto. El parser disponible no equivale todavía a sugerencias integradas.
 
-### E6 · Reparaciones y corrección automática — depende de entrega 3
+### E6 · Reparaciones y corrección automática — depende del motor del compañero
 
 1. Acordar el contrato de ediciones y un catálogo de casos por `;`, `.`, `[]` y `()` conforme a la gramática real.
 2. Mostrar propuestas con explicación y aplicar primero por acción explícita para validar sus rangos.
@@ -355,14 +362,14 @@ El guion debe ejecutarse contra funciones reales. No presentar datos simulados n
 |---|---|
 | Plataforma de entrega | Confirmar equipos, arquitectura y versiones; actualmente comprobados Python 3.14.9/PySide6 6.12.0 en Linux |
 | ccom automático | Implementado y probado con --check. Mantener el contrato de cero artefactos al evolucionar el compilador |
-| API de entregas 2/3 | Recibir y verificar parser, sugerencias y reparaciones; mantener un adaptador |
+| API de los motores | Parser implementado; compañero adapta sugerencias y reparaciones a `parser_predictivo.md`; verificar sus ediciones y mantener adaptadores |
 | Correcciones seguras | Catálogo, disparadores, deshacer y casos que deben seguir siendo propuestas |
 | Diagnósticos solapados | Lexer/ccom manual/automático ya tienen prioridad. Revisar de nuevo al incorporar el parser predictivo |
 | Mejoras del proyecto 1 | Inventariar observaciones y aclarar qué mejoras exige §7.2 con el equipo/profesor antes de cerrar |
 | Paquete ejecutable | Herramienta, recursos, dependencias del sistema y distribución de ccom |
 | Plazo | El plan recibido proponía 6/11, 12/11 y 17/11 como hitos; reestimar con entregas y trabajo real. No son compromisos nuevos de este documento |
 
-Riesgos a vigilar: divergencias entre gramáticas, resultados antiguos, diferencias UTF-8/Unicode/UTF-16, reparación de construcciones aún incompletas y pérdida por cambios externos. Mantener corpus compartido, revisión por documento y separación entre motor y presentación. La ausencia temporal del parser no bloquea el resto del IDE.
+Riesgos a vigilar: divergencias entre gramáticas, resultados antiguos, diferencias UTF-8/Unicode/UTF-16, reparación de construcciones aún incompletas y pérdida por cambios externos. Mantener corpus compartido, revisión por documento y separación entre motor y presentación. La integración pendiente de los motores no bloquea el resto del IDE.
 
 ## 12. Lista de cierre del IDE
 
@@ -373,7 +380,8 @@ Riesgos a vigilar: divergencias entre gramáticas, resultados antiguos, diferenc
 - [x] Núcleo entrega 1 incorporado al repositorio y suite combinada correcta.
 - [x] E3: lexer conectado al resaltado y a errores en vivo.
 - [x] E4: análisis automático de ccom sin guardar ni generar artefactos.
-- [ ] E5: parser/sugerencias recibidos y conectados.
+- [x] E5 (motor base): parser de Saddy implementado, documentado y probado.
+- [ ] E5 (restante): motor de sugerencias recibido y conectado a la interfaz.
 - [ ] E6: reparaciones y corrección automática verificables.
 - [ ] E7: cambios externos, proyecto y experiencia estabilizados.
 - [ ] E8: paquete ejecutable probado en otra máquina.
@@ -386,4 +394,4 @@ La animación de la esquina y las mejoras de E10 se mantienen separadas de esta 
 
 Al terminar una etapa: actualizar estado y criterio de aceptación, registrar evidencia relevante y anotar la siguiente tarea disponible. Si cambia la arquitectura, reescribir la sección afectada; no acumular anexos que contradigan tareas anteriores. Conservar IDs F01–F26 para seguir requisitos y revisión.
 
-Próxima etapa del orden principal: **E5, incorporar parser predictivo y sugerencias cuando llegue la entrega 2 del compañero**. Mientras se recibe, E7 (cambios externos y experiencia de proyecto) puede avanzar de forma independiente.
+Próxima etapa del orden principal: **E5, el compañero implementa sugerencias sobre el parser disponible; después conectar la UI**. El mismo compañero implementará reparaciones para E6. Mientras se recibe, E7 (cambios externos y experiencia de proyecto) puede avanzar de forma independiente.

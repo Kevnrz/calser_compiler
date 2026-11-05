@@ -12,13 +12,13 @@ Proyecto: CALSIDE, IDE nativo de Calser hecho con Python/PySide6. Repositorio de
 
 Ya existen el editor, pestañas, guardado, compilación F5, diagnósticos gráficos, clones Tipo I/II y terminales. E3 conecta el lexer Python al editor. E4 ejecuta `ccom --check` sobre una copia temporal del texto para validar sintaxis y semántica sin guardar ni generar artefactos. El parser LL(1) complementará esa ruta; no sustituirá la semántica ni la compilación de ccom.
 
-El núcleo recibido contiene lexer, gramática LL(1), FIRST/FOLLOW y tabla predictiva. **Todavía no contiene parser predictivo, sugerencias ni reparaciones.** Este documento define trabajo por realizar; los nombres de API que propone no existen aún y deben acordarse entre los tres responsables antes de implementar dependencias.
+El núcleo recibido contenía lexer, gramática LL(1), FIRST/FOLLOW y tabla. **Saddy ya implementó el parser predictivo** en `ide/nucleo/parser.py`; sugerencias y reparaciones siguen pendientes. La API real y sus ejemplos están en [parser_predictivo.md](parser_predictivo.md). Los nombres propuestos para el motor de este documento todavía no están implementados; adaptar ese motor a la API del parser disponible.
 
 Reparto decidido por Saddy:
 
 - Saddy: parser predictivo (completar la ejecución de LL(1)).
-- Compañero de sugerencias: motor de sugerencias.
-- Compañero de reparaciones: motor de reparaciones.
+- Un mismo compañero: motor de sugerencias.
+- Ese mismo compañero: motor de reparaciones.
 - Integración posterior en CALSIDE: adaptadores, coordinación de tareas y widgets de E5/E6.
 
 Los motores deben ser Python puro, sin PySide6, acceso a widgets, lectura obligatoria de archivos, procesos ccom ni escritura del documento. Reciben texto en memoria y devuelven datos. Deben funcionar con documentos sin guardar. No implementar en cada motor otro lexer o una gramática paralela.
@@ -34,21 +34,21 @@ Lecturas del repositorio (rutas desde su raíz):
 
 ### Convenciones que deben compartir los tres módulos
 
-Propuesta de contrato v1: offsets globales en caracteres de Python, desde 0, con rangos `[inicio, fin)`; cursor entre 0 y `len(texto)`. Inserción: `inicio == fin`. Línea/columna de presentación: desde 1; una tabulación cuenta un carácter. El lexer actual usa fin de columna inclusivo: convertir expresamente. Qt usa UTF-16 y ccom bytes UTF-8; esa conversión pertenece al adaptador del IDE, no al motor.
+Contrato del parser implementado: offsets globales en caracteres de Python, desde 0, con rangos `[inicio, fin)`; cursor entre 0 y `len(texto)`. Inserción: `inicio == fin`. Línea/columna de presentación: desde 1; una tabulación cuenta un carácter. El lexer actual usa fin de columna inclusivo: convertir expresamente. Qt usa UTF-16 y ccom bytes UTF-8; esa conversión pertenece al adaptador del IDE, no al motor.
 
 El IDE captura `(documento, revision, texto, cursor)` y asocia ese contexto con cada tarea; descarta resultados antiguos. Los motores pueden recibir solo texto/cursor, pero toda respuesta aplicada debe corresponder al mismo texto y revisión. Ningún módulo decide que una respuesta antigua sigue siendo válida.
 
 No compartir pilas mutables entre llamadas. Límites explícitos de pasos/resultados y estados de cancelación o límite alcanzado, sin presentarlos como análisis correcto. Si se añade cancelación cooperativa, acordar la misma convención en las APIs. Errores del usuario se devuelven como datos; fallos internos o contratos inválidos no deben ocultarse como «sin errores».
 
-Las clases comunes propuestas (`DiagnosticoSintactico`, `ContextoPredictivo`, `EdicionTexto`) pueden vivir en `ide/nucleo/modelos.py`. **Saddy coordina ese archivo** para evitar tres definiciones incompatibles. Acordar campos y fijar ejemplos serializables antes de que los compañeros dependan de ellos; no es necesario generar JSON para uso interno.
+`DiagnosticoSintactico`, `ContextoPredictivo`, `SimboloEntrada` y `ResultadoSintactico` ya existen en `ide/nucleo/parser.py`. Importarlos desde ahí. No se creó `modelos.py`; `EdicionTexto` pertenece al motor de reparaciones. El compañero implementa ambos motores y coordina sus tipos comunes sin duplicar los modelos del parser.
 
 ### Entrega y validación común
 
-Entregar código, pruebas reproducibles y documentación de API con ejemplos de entrada/salida, límites conocidos y cambios respecto al contrato. Ejecutar `make check-ide`; referencia antes de estas entregas: 70 pruebas combinadas. Añadir pruebas en `ide/pruebas/`. Si se toca ccom o su gramática, ejecutar también las comprobaciones del compilador pertinentes. Coordinar cambios compartidos y comunicar rama/commit para integración; estos documentos no autorizan publicar, fusionar ni enviar mensajes automáticamente.
+Entregar código, pruebas reproducibles y documentación de API con ejemplos de entrada/salida, límites conocidos y cambios respecto al contrato. Ejecutar `make check-ide`; referencia después de implementar el parser: 96 pruebas combinadas. Añadir pruebas en `ide/pruebas/`. Si se toca ccom o su gramática, ejecutar también las comprobaciones del compilador pertinentes. Coordinar cambios compartidos y comunicar rama/commit para integración; estos documentos no autorizan publicar, fusionar ni enviar mensajes automáticamente.
 
 ## Dependencia y API propuesta
 
-Crear `ide/nucleo/sugerencias.py`. Depender del contexto del parser que entregará Saddy; acordar con él `contexto_en(texto, cursor, inicio_fragmento=None)` y `ContextoPredictivo`. Mientras tanto usar dobles de prueba explícitos, no otro parser ni resultados simulados en producción.
+Crear `ide/nucleo/sugerencias.py`. Usar `contexto_en(texto, cursor, inicio_fragmento=None)` y `ContextoPredictivo` de `ide.nucleo.parser`, ya implementados. Solo ofrecer propuestas contextuales cuando `contexto.valido`; `comentario`, errores, límites y cancelación no son contexto válido. Los detalles y el primer error están en `contexto.resultado`. Usar pruebas con el parser real y dobles solo para aislar casos unitarios.
 
 ```python
 sugerir(texto: str, cursor: int) -> ResultadoSugerencias

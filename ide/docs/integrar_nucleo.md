@@ -1,5 +1,7 @@
 # Integrar el núcleo en CALSIDE
 
+**Actualización 2026-11-05:** la entrega 1 ya está incorporada. Saddy implementó el parser y la consulta de contexto en `ide/nucleo/parser.py`; la API vigente para los motores está en [parser_predictivo.md](parser_predictivo.md). Un mismo compañero continuará con sugerencias y reparaciones. Los pasos de merge siguientes documentan la entrega original; no requieren repetirse.
+
 Saddy: en `develop` están `ide/nucleo/` (`lexico.py`, `gramatica.py` y
 `tabla.py`), las pruebas `ide/pruebas/test_lexico.py` y `test_tabla.py`, y
 `ide/docs/` con la gramática y esta guía. El núcleo usa Python estándar,
@@ -107,10 +109,8 @@ la edición) ya puede llamar a `analizar(texto)`. Tu plan propone un adaptador
 conviene otro, por ejemplo `ide/adaptador_nucleo.py`, donde traducir tokens
 y errores al modelo de Qt.
 
-**Pendiente, entrega 2:** parser predictivo y sugerencias, con una API pensada
-para que la interfaz la llame directamente. Habilitará F11 (sugerencias).
-**Pendiente, entrega 3:** corrección a nivel de frase, para F12 (correcciones).
-Estas funciones todavía no están implementadas.
+**Parser disponible:** análisis completo y contexto en el cursor implementados por Saddy, sin conexión visual nueva.
+**Pendiente:** motor de sugerencias para F11 y motor de reparaciones para F12, ambos a cargo del compañero. Consumirán la [API real del parser](parser_predictivo.md); la integración gráfica se hará en E5/E6.
 
 El núcleo cuenta caracteres de Python: línea y columna desde 1, tabulación
 igual a una columna. Qt cuenta unidades UTF-16 en sus posiciones de texto;

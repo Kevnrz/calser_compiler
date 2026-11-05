@@ -49,7 +49,11 @@ Después de una pausa de **300 ms**, el lexer de `ide.nucleo` analiza una copia 
 - Las posiciones Unicode del núcleo se convierten a UTF-16; las de ccom siguen convirtiéndose desde UTF-8. Un error léxico del mismo rango informado por ambos se presenta una sola vez, con prioridad para ccom.
 - Documentos de más de **2 millones de caracteres** pausan este análisis con un mensaje explícito; todavía se pueden compilar con F5.
 
-Prueba rápida: crea una pestaña e introduce `Vm x : int = 3 ; @`. El error de `@` aparece sin guardar ni compilar; selecciónalo desde Problemas y bórralo. Desaparece tras la pausa. Una declaración sin `;` no se señala por el lexer; después la revisa el análisis sintáctico automático de ccom (E4). El parser predictivo sigue pendiente.
+Prueba rápida: crea una pestaña e introduce `Vm x : int = 3 ; @`. El error de `@` aparece sin guardar ni compilar; selecciónalo desde Problemas y bórralo. Desaparece tras la pausa. Una declaración sin `;` no se señala por el lexer; después la revisa el análisis sintáctico automático de ccom (E4). El parser predictivo ya está disponible como API Python; su conexión gráfica sigue pendiente en E5.
+
+## Parser predictivo disponible para los motores
+
+`ide.nucleo.parser` ofrece `analizar_sintaxis(texto)` y `contexto_en(texto, cursor, inicio_fragmento=None)`: pila LL(1), primer error, terminales esperados y consulta de prefijos sin exigir un programa completo. No genera AST, no hace semántica ni edita el documento. Ver [API real, ejemplos y límites](docs/parser_predictivo.md). Se verifica con `make check-parser`; los motores y su UI siguen pendientes.
 
 ## Sintaxis y semántica en vivo · E4
 
@@ -90,7 +94,7 @@ Demostración: abre la carpeta `ide/ejemplos/clones`, pulsa Analizar carpeta con
 
 ## Pendiente
 
-Parser predictivo/sugerencias (E5), correcciones automáticas (E6), detección de cambios externos, preferencias persistentes, árbol recursivo, iconos de archivos y empaquetado. El lexer ya está conectado al editor. No hay resultados simulados.
+Motor y UI de sugerencias (E5; parser ya implementado), correcciones automáticas (E6), detección de cambios externos, preferencias persistentes, árbol recursivo, iconos de archivos y empaquetado. El lexer ya está conectado al editor. No hay resultados simulados.
 
 El resaltado usa el lexer del núcleo; conserva la paleta inicial inspirada en la extensión y el icono Calser existente. No copia el tema Seti.
 

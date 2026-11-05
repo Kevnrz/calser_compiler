@@ -126,12 +126,15 @@ clean:
 
 # Prototipo gráfico CALSIDE (PySide6).
 PYTHON ?= python3
-.PHONY: ide check-ide
+.PHONY: ide check-ide check-parser
 ide:
 	$(PYTHON) -m ide.main
 
 check-ide:
 	PYTHONDONTWRITEBYTECODE=1 QT_QPA_PLATFORM=offscreen $(PYTHON) -m unittest discover -s ide/pruebas -v
+
+check-parser:
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s ide/pruebas -p test_parser.py -v
 
 # Front-end sin generación para el análisis automático del IDE.
 .PHONY: check-analysis

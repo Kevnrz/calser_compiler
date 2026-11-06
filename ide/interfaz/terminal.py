@@ -8,18 +8,35 @@ import re
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QProcess, Qt
+from PySide6.QtCore import QEvent, QProcess, Qt, Signal
 from PySide6.QtGui import QFont, QTextCursor
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
 
 
 class Entrada(QLineEdit):
+    interrumpir = Signal()
+
     def __init__(self):
         super().__init__()
         self.history = []
         self.position = 0
 
+    def es_interrupcion(self, event):
+        return (event.key() == Qt.Key.Key_C and
+                event.modifiers() == Qt.KeyboardModifier.ControlModifier and
+                not self.hasSelectedText())
+
+    def event(self, event):
+        if event.type() == QEvent.Type.ShortcutOverride and self.es_interrupcion(event):
+            event.accept()
+            return True
+        return super().event(event)
+
     def keyPressEvent(self, event):
+        if self.es_interrupcion(event):
+            self.interrumpir.emit()
+            event.accept()
+            return
         if event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down):
             self.position = max(0, min(len(self.history), self.position + (-1 if event.key() == Qt.Key.Key_Up else 1)))
             self.setText(self.history[self.position] if self.position < len(self.history) else "")
@@ -35,6 +52,7 @@ class Terminal(QWidget):
         layout.setContentsMargins(8, 6, 8, 6)
         self.screen = QPlainTextEdit()
         self.screen.setReadOnly(True)
+        self.screen.setToolTip("Selecciona texto y usa Ctrl+C o Ctrl+Shift+C para copiar.")
         self.screen.setFont(QFont("monospace", 11))
         self.screen.document().setMaximumBlockCount(10000)
         self.screen.setPlaceholderText("Iniciando sesión…")
@@ -42,7 +60,9 @@ class Terminal(QWidget):
         row = QHBoxLayout()
         self.input = Entrada()
         self.input.setPlaceholderText("Comando · Enter para ejecutar · ↑↓ historial")
+        self.input.setToolTip("Ctrl+C: copiar selección o interrumpir si no hay selección. Ctrl+Shift+C: copiar.")
         self.input.returnPressed.connect(self.enviar)
+        self.input.interrumpir.connect(lambda: self.escribir(b"\x03"))
         row.addWidget(self.input, 1)
         interrupt = QPushButton("Interrumpir")
         interrupt.setToolTip("Enviar Ctrl+C al proceso de esta terminal")

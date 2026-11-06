@@ -15,23 +15,33 @@ def ejecutable(root, configured=""):
 
 
 def diagnosticos(text, source, cwd):
-    """Los mensajes sin posición quedan íntegros en Salida, sin inventar rangos."""
+    """Extrae diagnósticos ubicados o generales; las demás líneas siguen en Salida."""
     result = []
     lines = text.splitlines()
     for index, line in enumerate(lines):
         match = re.match(r"^(.+?):(\d+):(\d+):\s*(.+)$", line)
-        if not match:
-            continue
-        filename, row, column, message = match.groups()
+        general = False
+        if match:
+            filename, row, column, message = match.groups()
+        else:
+            match = re.match(
+                r"^(\S.*?):\s*(error(?: (?:lexico|léxico|sintactico|sintáctico|semantico|semántico))?:\s*.+)$",
+                line, re.IGNORECASE)
+            if not match:
+                continue
+            filename, message = match.groups()
+            row = column = None
+            general = True
         path = Path(source) if filename == "ccom" else Path(filename)
         if not path.is_absolute():
             path = Path(cwd) / path
-        length = 1
+        length = 0 if general else 1
         # ccom imprime primero el fuente y después su señalador. Solo usar
         # longitudes de ese formato; no deducir rangos a partir del mensaje.
-        if index + 2 < len(lines) and re.match(r"^\s*\d+\s*\|", lines[index + 1]):
+        if not general and index + 2 < len(lines) and re.match(r"^\s*\d+\s*\|", lines[index + 1]):
             marker = re.match(r"^\s*\|[ \t]*(\^+)\s*$", lines[index + 2])
             if marker:
                 length = len(marker.group(1))
-        result.append(Problema(path.resolve(), max(1, int(row)), max(1, int(column)), message, length))
+        result.append(Problema(path.resolve(), None if general else max(1, int(row)),
+                               None if general else max(1, int(column)), message, length))
     return result

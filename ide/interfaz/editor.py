@@ -140,6 +140,8 @@ class Editor(QPlainTextEdit):
         Una posición al final de línea queda vacía: se señala la línea y no se
         inventa un token sobre el que dibujar el subrayado.
         """
+        if not problem.tiene_posicion:
+            return None
         block = self.document().findBlockByNumber(problem.linea - 1)
         if not block.isValid():
             return None

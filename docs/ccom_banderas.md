@@ -268,3 +268,14 @@ bundle con memoria o salto, respetando las dependencias de la ISA.
 
 Las plantillas manuales mantienen sus slots. `-x` ensambla el `.asm` externo sin
 reorganizarlo.
+
+## Confirmación de éxito
+
+Las operaciones completadas confirman su éxito en `stderr`, incluso sin `-v`:
+
+- `--check`: «Análisis correcto: sin errores», sin archivos generados.
+- Compilación: «Compilación correcta», con rutas `.bin`, `.hex`, `.mem` y `.asm` solo si se pidió `-s`.
+- `-x`: «Ensamblado correcto», con las tres imágenes de salida; no anuncia un `.asm` nuevo.
+- Exportación AST sola: confirma únicamente la exportación JSON, sin afirmar semántica ni generación de código.
+
+Un JSON combinado con compilación también figura entre los archivos generados. Los errores de análisis, uso o escritura no anuncian éxito; una escritura parcial tampoco se presenta como compilación correcta. La ayuda no añade una confirmación. Los códigos 0/1/2 y el contenido de `stdout` se conservan. Con `--time`, la medición sigue al final de `stderr`.

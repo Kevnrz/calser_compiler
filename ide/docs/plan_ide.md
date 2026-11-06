@@ -96,7 +96,7 @@ Estados: **implementado** = existe en el prototipo y tiene verificación; **parc
 | F05 | P0 | Compilar documento activo | Implementado: guarda antes de compilar, cancelar guardado cancela la operación, UI utilizable durante proceso. |
 | F06 | P0 | Resolver/configurar ccom | Implementado: configuración persistente y recuperación de ruta inválida mediante la búsqueda habitual. |
 | F07 | P0 | Salida y estado del proceso | Implementado: stdout/stderr, código, fallo de inicio, cancelación y timeout. Tiempo límite configurable pendiente en F18. |
-| F08 | P0 | Errores gráficos y navegables | Implementado al compilar: origen, categoría, archivo, rango, subrayado, descripción y navegación. Errores sin posición quedan en Salida. |
+| F08 | P0 | Errores gráficos y navegables | Implementado al compilar: origen, categoría, archivo, rango, subrayado, descripción y navegación. Los diagnósticos generales sin posición se cuentan en Problemas, muestran «—» y abren el archivo sin inventar rangos; la salida completa se conserva. |
 | F09 | P1 | Resaltado con lexer del núcleo | Implementado: tokens reales, comentarios coloreados aparte y rangos UTF-16. El formato conserva revisión, estado de guardado y Deshacer. |
 | F10 | P1 | Análisis mientras se escribe | Implementado: lexer en vivo (300 ms) y ccom --check después de 600 ms adicionales. Snapshots por revisión, cancelación, temporales y resultados independientes de F5. Parser predictivo disponible; integración gráfica pendiente como motor complementario. |
 | F11 | P1 | Sugerencias | Pendiente: Ctrl+Espacio, teclado, aceptar/cancelar y reemplazo exacto del rango. Activación automática cuando el contexto sea adecuado. |

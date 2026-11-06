@@ -10,6 +10,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
 
 from ide import archivos, ccom
 from ide.interfaz.ventana import Ventana
@@ -86,6 +88,44 @@ class Prototipo(unittest.TestCase):
         self.assertTrue(str(problems[0].archivo).endswith("C:/mis fuentes/main.cls"))
         self.assertEqual(problems[1].archivo, self.folder / "main.cls")
 
+    def test_diagnosticos_generales_no_capturan_resumenes_o_fragmentos(self):
+        path = self.folder / 'fuente con espacios.cls'
+        text = (f"{path}: error semantico: el archivo principal debe declarar 'main'\n"
+                "Análisis semántico fallido: 1 error(es).\n"
+                "     1 | # error: comentario\n"
+                "mensaje explicativo\n"
+                "ccom: error: no se pudo completar la operación\n")
+        problems = ccom.diagnosticos(text, path, self.folder)
+        self.assertEqual(len(problems), 2)
+        self.assertEqual(problems[0].archivo, path)
+        self.assertEqual(problems[0].categoria, 'Semántico')
+        self.assertIsNone(problems[0].linea)
+        self.assertIsNone(problems[0].columna)
+        self.assertFalse(problems[0].tiene_posicion)
+        self.assertEqual(problems[1].archivo, path)
+
+    def test_problema_general_abre_archivo_sin_mover_cursor_ni_subrayar(self):
+        path = self.fuente()
+        editor = self.window.abrir(path)
+        cursor = editor.textCursor()
+        cursor.setPosition(3)
+        editor.setTextCursor(cursor)
+        problem = ccom.Problema(path, None, None, "error semantico: falta main")
+        self.window.results[editor] = [problem]
+        self.window.auto_results[editor] = [problem]
+        self.window.actualizar_problemas()
+        self.assertEqual(self.window.problems.topLevelItemCount(), 1)
+        item = self.window.problems.topLevelItem(0)
+        self.assertEqual((item.text(2), item.text(3)), ('—', '—'))
+        self.assertIsNone(editor.rango_problema(problem))
+        self.assertEqual(len(editor.extraSelections()), 1)  # Solo línea del cursor.
+        self.assertIn('falta main', self.window.diagnostic_message.text())
+        self.window.nuevo()
+        self.window.ir_problema(item, 0)
+        self.assertIs(self.window.editor(), editor)
+        self.assertEqual(editor.textCursor().position(), 3)
+        self.assertIn('falta main', self.window.diagnostic_message.text())
+
     def test_navegacion_columna_utf8(self):
         path = self.fuente(text="# café 😀 dato\n")
         from PySide6.QtCore import Qt
@@ -139,6 +179,65 @@ class Prototipo(unittest.TestCase):
         self.assertEqual(len(second.problemas), 1)
         self.assertEqual(self.window.problems.topLevelItemCount(), 1)
         self.assertTrue(self.window.diagnostic_message.isHidden())
+
+    def test_copiar_consolas_usa_foco_y_ambos_atajos(self):
+        self.window.show()
+        self.window.activateWindow()
+        editor = self.window.editor()
+        editor.insertPlainText('# texto del editor')
+        editor.selectAll()
+        for consola in (self.window.output, self.window.auto_output):
+            self.window.panels.setCurrentWidget(consola)
+            consola.setPlainText('resultado = 5')
+            consola.selectAll()
+            consola.setFocus()
+            APP.processEvents()
+            for modificadores in (Qt.KeyboardModifier.ControlModifier,
+                                  Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier):
+                APP.clipboard().setText('anterior')
+                QTest.keyClick(consola, Qt.Key.Key_C, modificadores)
+                self.assertEqual(APP.clipboard().text(), 'resultado = 5')
+            self.assertEqual(editor.toPlainText(), '# texto del editor')
+        editor.setFocus()
+        editor.selectAll()
+        QTest.keyClick(editor, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+        self.assertEqual(APP.clipboard().text(), '# texto del editor')
+
+    @unittest.skipUnless(sys.platform == 'linux', 'PTY Linux')
+    def test_copiar_pegar_terminal_y_ctrl_c_sin_seleccion(self):
+        self.window.show()
+        self.window.activateWindow()
+        editor = self.window.editor()
+        editor.insertPlainText('# conservar')
+        self.window.nueva_terminal()
+        terminal = self.window.terminals[-1]
+        limite = time.monotonic() + 5
+        while 'calser:' not in terminal.screen.toPlainText() and time.monotonic() < limite:
+            APP.processEvents()
+            time.sleep(.005)
+        self.assertIn('calser:', terminal.screen.toPlainText())
+        terminal.screen.setPlainText('resultado = 5')
+        terminal.screen.selectAll()
+        terminal.screen.setFocus()
+        APP.processEvents()
+        QTest.keyClick(terminal.screen, Qt.Key.Key_C,
+                       Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)
+        self.assertEqual(APP.clipboard().text(), 'resultado = 5')
+        terminal.input.setFocus()
+        terminal.input.setText('comando')
+        terminal.input.selectAll()
+        QTest.keyClick(terminal.input, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+        self.assertEqual(APP.clipboard().text(), 'comando')
+        terminal.input.clear()
+        APP.clipboard().setText('printf hola')
+        QTest.keyClick(terminal.input, Qt.Key.Key_V, Qt.KeyboardModifier.ControlModifier)
+        self.assertEqual(terminal.input.text(), 'printf hola')
+        self.assertEqual(editor.toPlainText(), '# conservar')
+        terminal.input.deselect()
+        with patch.object(terminal, 'escribir') as escribir:
+            QTest.keyClick(terminal.input, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+            escribir.assert_called_once_with(b'\x03')
+        self.assertEqual(APP.clipboard().text(), 'printf hola')
 
     def test_panel_movil_y_explorador(self):
         from PySide6.QtCore import Qt

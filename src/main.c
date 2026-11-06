@@ -97,6 +97,8 @@ static void print_help(void) {
          "                       no genera archivos. Compatible con -v y --time.\n"
          "\nSalidas: .bin, .hex y .mem; con -s tambien .asm.\n"
          "Sin -o se usa el nombre de la entrada con extension .bin.\n"
+         "El exito y las rutas generadas se informan en stderr; stdout\n"
+         "se conserva para AST, tablas y bundles.\n"
          "\nEjemplos:\n"
          "  ccom programa.cls\n"
          "  ccom --time -s programa.cls -o salida.bin\n"
@@ -1073,6 +1075,44 @@ static int parse_options(int argc, char **argv, Options *options) {
 }
 
 /*
+ * report_success — confirma una operación completada, sin alterar stdout.
+ *
+ * Solo se llama con código 0 después de cerrar las salidas. El mensaje no
+ * sustituye los códigos de retorno; --time conserva su posición al final.
+ */
+static void report_success(const Options *options) {
+    if (options->check_only) {
+        fprintf(stderr, "ccom: Análisis correcto: sin errores.\n");
+        return;
+    }
+
+    int ast_only = !options->assemble_only && options->ast_json &&
+                   !options->emit_asm && !options->print_memory &&
+                   !options->print_bundles;
+
+    fprintf(stderr, "ccom: %s\n",
+            ast_only ? "AST exportado correctamente." :
+            options->assemble_only ? "Ensamblado correcto." : "Compilación correcta.");
+    fprintf(stderr, "ccom: Archivos generados:\n");
+
+    if (!ast_only) {
+        const char *extensions[] = { ".bin", ".hex", ".mem", ".asm" };
+        int count = options->emit_asm && !options->assemble_only ? 4 : 3;
+        for (int i = 0; i < count; i++) {
+            char *path = with_extension(options->output, extensions[i]);
+            if (path) {
+                fprintf(stderr, "  %s\n", path);
+                free(path);
+            } else {
+                fprintf(stderr, "  (ruta no disponible para %s)\n", extensions[i]);
+            }
+        }
+    }
+    if (options->ast_json && !options->assemble_only)
+        fprintf(stderr, "  %s\n", options->ast_json);
+}
+
+/*
  * main — interpreta banderas y ejecuta compilación o ensamblado.
  *
  * Entrada:
@@ -1111,6 +1151,9 @@ int main(int argc, char **argv) {
     else {
         code = compile(&options);
     }
+
+    if (code == 0)
+        report_success(&options);
 
     if (timed)
         report_elapsed(&options, &start, code);

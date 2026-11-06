@@ -185,7 +185,7 @@ class ComprobadorCcom(QObject):
                     problem = replace(problem, archivo=request.fuente, documento=request.documento)
                 problems.append(replace(problem, origen="ccom automático"))
             if code == 1 and not problems:
-                message = "ccom rechazó el documento sin un diagnóstico con posición; consulta Análisis de ccom."
+                message = "ccom rechazó el documento sin un diagnóstico reconocible; consulta Análisis de ccom."
         cancelled = self.cancelado or self.cerrando or not self.habilitado
         process, self.process = self.process, None
         self.actual = None

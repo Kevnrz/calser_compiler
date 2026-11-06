@@ -9,7 +9,7 @@ from PySide6.QtCore import QProcess, QTimer, Qt
 from PySide6.QtGui import QAction, QColor, QPainter, QPolygon, QTextCursor
 from PySide6.QtCore import QPoint
 from PySide6.QtWidgets import (
-    QFileDialog, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QMainWindow,
+    QFileDialog, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QMainWindow,
     QMenuBar, QMessageBox, QPlainTextEdit, QPushButton, QSplitter, QTabWidget,
     QSizePolicy, QToolButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
@@ -272,7 +272,11 @@ class Ventana(ProyectoVentana, QMainWindow):
         edit = self.menus.addMenu("Editar")
         for text, key, method in [("Deshacer", "Ctrl+Z", "undo"), ("Rehacer", "Ctrl+Shift+Z", "redo"),
                                   ("Cortar", "Ctrl+X", "cut"), ("Copiar", "Ctrl+C", "copy"), ("Pegar", "Ctrl+V", "paste")]:
-            self.accion(edit, text, key, lambda checked=False, m=method: getattr(self.editor(), m)() if self.editor() else None)
+            self.accion(edit, text, key, lambda checked=False, m=method: self.editar_en_foco(m))
+        copiar_consola = QAction("Copiar texto seleccionado", self)
+        copiar_consola.setShortcut("Ctrl+Shift+C")
+        copiar_consola.triggered.connect(lambda: self.editar_en_foco("copy"))
+        self.addAction(copiar_consola)
         self.accion(edit, "Buscar…", "Ctrl+F", self.buscar)
         view = self.menus.addMenu("Ver")
         for text, widget in [("Explorador de archivos", self.sidebar), ("Panel de resultados", self.panels)]:
@@ -300,6 +304,11 @@ class Ventana(ProyectoVentana, QMainWindow):
         build = self.menus.addMenu("Compilar")
         self.compile_action = self.accion(build, "Compilar archivo activo", "F5", self.compilar)
         self.accion(build, "Configurar ccom…", None, self.configurar_ccom)
+
+    def editar_en_foco(self, metodo):
+        widget = self.focusWidget()
+        if isinstance(widget, (QPlainTextEdit, QLineEdit)):
+            getattr(widget, metodo)()
 
     def mover_panel(self):
         right = self.workspace_splitter.orientation() == Qt.Orientation.Vertical
@@ -390,6 +399,7 @@ class Ventana(ProyectoVentana, QMainWindow):
             self.analysis_state.setText(f"Léxico: {editor.estado_analisis} · Análisis: {editor.estado_ccom}  ·  ")
             self.analysis_state.setToolTip(editor.estado_ccom)
             problems = editor.problemas_en_linea(cursor.blockNumber() + 1)
+            problems += [p for p in editor.problemas if not p.tiene_posicion]
             self.diagnostic_message.setText("\n".join(f"{p.origen} · {p.categoria}: {p.descripcion}" for p in problems))
             self.diagnostic_message.setVisible(bool(problems))
         self.actualizar_aviso_externo()
@@ -498,9 +508,10 @@ class Ventana(ProyectoVentana, QMainWindow):
             for problem in problems:
                 path = problem.archivo or editor.path
                 name = path.name if path else f"Sin título · pestaña {index + 1}"
-                item = QTreeWidgetItem([problem.descripcion, name, str(problem.linea), str(problem.columna), problem.categoria, problem.origen])
+                item = QTreeWidgetItem([problem.descripcion, name, str(problem.linea) if problem.tiene_posicion else "—", str(problem.columna) if problem.tiene_posicion else "—", problem.categoria, problem.origen])
                 item.setData(0, Qt.ItemDataRole.UserRole, problem)
-                item.setToolTip(0, f"<b>{escape(problem.origen)} · {escape(problem.categoria)}</b><br>{escape(problem.descripcion)}<br>{escape(str(path or name))}:{problem.linea}:{problem.columna}")
+                ubicacion = f"{path or name}:{problem.linea}:{problem.columna}" if problem.tiene_posicion else f"{path or name} · Sin ubicación específica"
+                item.setToolTip(0, f"<b>{escape(problem.origen)} · {escape(problem.categoria)}</b><br>{escape(problem.descripcion)}<br>{escape(ubicacion)}")
                 item.setToolTip(1, str(path or name))
                 self.problems.addTopLevelItem(item)
         self.panels.setTabText(0, f"Problemas · {self.problems.topLevelItemCount()}")
@@ -787,6 +798,11 @@ class Ventana(ProyectoVentana, QMainWindow):
         elif problem.archivo is not None:
             editor = self.abrir(problem.archivo)
         if editor:
+            if not problem.tiene_posicion:
+                self.actualizar_estado()
+                self.statusBar().showMessage(f"{problem.categoria}: {problem.descripcion}")
+                editor.setFocus()
+                return
             cursor = editor.rango_problema(problem)
             if cursor is None:
                 return

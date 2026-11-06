@@ -113,7 +113,7 @@ check-salidas: $(TARGET)
 validar-bundles: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 tools/validar_bundles.py
 
-check: check-analysis check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+check: check-success check-analysis check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 clean:
 	rm -f $(TARGET) $(OBJECTS) $(OBJECTS:.o=.d)
@@ -140,3 +140,8 @@ check-parser:
 .PHONY: check-analysis
 check-analysis: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/analisis/probar.py
+
+# Confirmación textual y rutas de operaciones correctas de ccom.
+.PHONY: check-success
+check-success: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/exito/probar.py

@@ -6,13 +6,18 @@ from pathlib import Path
 @dataclass(frozen=True)
 class Problema:
     archivo: Path | None
-    linea: int
-    columna: int
+    linea: int | None
+    columna: int | None
     mensaje: str
     longitud: int = 1
     origen: str = "ccom"
     unidad: str = "utf8"
     documento: str | None = None
+
+    @property
+    def tiene_posicion(self):
+        return (self.linea is not None and self.columna is not None
+                and self.linea > 0 and self.columna > 0)
 
     @property
     def categoria(self):

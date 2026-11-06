@@ -27,7 +27,7 @@ def main():
             if category:
                 assert category in result.stderr, result.stderr
             else:
-                assert not result.stderr, result.stderr
+                assert result.stderr == "ccom: Análisis correcto: sin errores.\n", result.stderr
             assert source.read_bytes() == before
             assert set(folder.iterdir()) == set(artifacts) | {source}
             assert all(p.read_bytes() == data for p, data in artifacts.items())

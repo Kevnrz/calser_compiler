@@ -36,7 +36,7 @@ Al compilar con F5, los errores léxicos, sintácticos y semánticos aparecen co
 - Un clic o Enter en Problemas selecciona el fragmento y centra la vista. Se muestra también categoría, archivo, línea y columna.
 - Para terminadores faltantes al final de línea se marca la línea sin subrayar otro token. La longitud se obtiene del señalador que imprime ccom; si no existe, se utiliza una posición mínima.
 - Cada pestaña conserva el resultado de su última compilación válida. Editarla o cambiar su ruta retira sus diagnósticos; las marcas de las otras pestañas permanecen. Los resultados de una revisión anterior se descartan.
-- La conversión de columnas UTF-8 a posiciones UTF-16 conserva tildes y caracteres fuera del BMP. Los mensajes sin posición se mantienen completos en Salida; no se inventa un rango.
+- La conversión de columnas UTF-8 a posiciones UTF-16 conserva tildes y caracteres fuera del BMP. Los diagnósticos generales del archivo (por ejemplo, falta de `main`) aparecen en Problemas, con línea/columna «—» y descripción visible, sin inventar un subrayado. Las demás líneas se conservan en Salida.
 
 Los diagnósticos con origen **ccom** se actualizan al compilar con F5. Los de **núcleo** y **ccom automático** se actualizan durante la escritura mediante E3/E4.
 
@@ -64,7 +64,7 @@ Tras el lexer (300 ms) y una pausa adicional de **600 ms**, CALSIDE ejecuta **`c
 - Los resultados se identifican como **ccom automático** y se presentan en Problemas, subrayados y descripciones, sin cambiar de pestaña ni robar el foco.
 - Las rutas temporales se remapean al documento original o a Sin título. El directorio de trabajo corresponde al del fuente cuando existe; el enlazado de módulos futuro deberá respetar también el contexto de importación.
 - Se omite el proceso si el documento está vacío o el lexer ya encontró errores. Un único proceso atiende la cola; editar/cerrar/cambiar de ruta descarta la revisión anterior y cancela su proceso.
-- **Análisis de ccom** conserva el estado y los mensajes del último análisis, separados de **Salida de ccom**, que pertenece a F5. Un ejecutable antiguo sin `--check`, un fallo de inicio o un error sin posición se explica ahí; no se presenta como un documento correcto.
+- **Análisis de ccom** conserva el estado y los mensajes del último análisis, separados de **Salida de ccom**, que pertenece a F5. Un ejecutable antiguo sin `--check`, un fallo de inicio o una salida de error sin diagnóstico reconocible se explica ahí; no se presenta como un documento correcto.
 - F5 conserva su compilación normal y tiene prioridad: pausa/cancela el análisis automático y reanuda las solicitudes de otras pestañas después. Los diagnósticos equivalentes no se duplican.
 - Puede activarse/desactivarse en **Ver → Análisis sintáctico y semántico automático**. Desactivarlo retira los resultados automáticos y conserva los de compilación manual y del lexer.
 - Límite de tiempo actual: **5 s**; máximo de salida: **1 MB por canal**. Los errores mantienen sus posiciones y mensajes de ccom; E4 no reescribe todavía explicaciones como la sentencia incompleta `vs` seguida de `E`.
@@ -119,3 +119,7 @@ make check-ide
 Comprobación manual: abrir `pruebas/p02_factorial.cls`, compilar y ver el resultado; abrir `pruebas/e01_no_declarado.cls`, compilar y activar el error; editar y verificar el indicador de cambios; cancelar el cierre para conservar el texto. Verificar varias pestañas, búsqueda y redimensionamiento de paneles.
 
 Plan completo y alternativas visuales: [plan](docs/plan_ide.md), [mockups](docs/mockups.html).
+
+### Portapapeles y foco
+
+Copiar, cortar, pegar y Deshacer/Rehacer actúan sobre el campo de texto con foco, incluido el editor, la salida de ccom, el análisis automático y la entrada de terminal. Los paneles de salida siguen siendo de solo lectura. Para copiar una selección de consola sirven **Ctrl+C** y **Ctrl+Shift+C**. En la entrada de terminal, **Ctrl+C sin selección interrumpe el proceso**; con selección copia el texto. También se conserva el botón Interrumpir.

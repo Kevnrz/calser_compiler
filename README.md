@@ -46,6 +46,8 @@ make
 ./ccom -v pruebas/p02_factorial.cls
 ```
 
+Las operaciones correctas muestran una confirmación en `stderr` y enumeran las salidas generadas. `--check` confirma el análisis sin crear archivos; `--ast-json` usado solo confirma la exportación, sin afirmar validación semántica. `stdout` conserva los formatos de AST, tablas y bundles.
+
 Una entrada correcta devuelve código `0`. Los errores de análisis devuelven
 `1`; los errores de uso de la línea de comandos devuelven `2`.
 

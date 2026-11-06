@@ -159,6 +159,39 @@ class ComprobacionAutomatica(unittest.TestCase):
         self.escribir(VALIDO + "\n")
         self.comprobar(editor)
 
+    def test_falta_main_se_muestra_en_automatico_y_f5(self):
+        texto = 'F suma [int a, int b] : int c ; c = a + b ; E ; .\n'
+        path = self.folder / 'sin main.cls'
+        path.write_text(texto)
+        editor = self.window.abrir(path)
+        editor.analisis_timer.setInterval(10)
+        editor.programar_analisis()
+        self.comprobar(editor)
+        problema = self.window.auto_results[editor][0]
+        self.assertEqual(problema.archivo, path)
+        self.assertFalse(problema.tiene_posicion)
+        self.assertIn("debe declarar 'main'", problema.descripcion)
+        self.assertNotEqual(editor.estado_ccom, 'No disponible')
+        self.assertEqual(self.window.problems.topLevelItemCount(), 1)
+        self.window.compilar()
+        self.esperar(lambda: self.window.process is None)
+        self.assertEqual(len(self.window.results[editor]), 1)
+        self.assertEqual(self.window.problems.topLevelItemCount(), 1)
+        item = self.window.problems.topLevelItem(0)
+        self.assertEqual((item.text(2), item.text(3)), ('—', '—'))
+        self.assertIn("debe declarar 'main'", self.window.diagnostic_message.text())
+
+    def test_falta_main_en_documento_sin_guardar(self):
+        editor = self.escribir('F suma [] : void ; E ; .')
+        self.comprobar(editor)
+        problema = self.window.auto_results[editor][0]
+        self.assertIsNone(problema.archivo)
+        self.assertEqual(problema.documento, editor.documento_id)
+        self.assertFalse(problema.tiene_posicion)
+        self.window.ir_problema(self.window.problems.topLevelItem(0), 0)
+        self.assertIs(self.window.editor(), editor)
+        self.assertIsNone(editor.path)
+
     def test_ejecutable_antiguo_y_error_sin_posicion_son_fallos_visibles(self):
         self.fake("import sys\nprint('opcion desconocida --check', file=sys.stderr)\nsys.exit(2)\n")
         editor = self.escribir(VALIDO)
@@ -168,7 +201,7 @@ class ComprobacionAutomatica(unittest.TestCase):
         self.fake("import sys\nprint('error sin posicion', file=sys.stderr)\nsys.exit(1)\n")
         self.escribir(VALIDO + "\n")
         self.esperar(lambda: editor.estado_ccom == "No disponible")
-        self.assertIn("sin un diagnóstico con posición", self.window.auto_output.toPlainText())
+        self.assertIn("sin un diagnóstico reconocible", self.window.auto_output.toPlainText())
         self.assertEqual(editor.problemas, [])
 
     def test_f5_tiene_prioridad_y_generacion_solo_ocurre_manualmente(self):

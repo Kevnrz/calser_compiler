@@ -39,7 +39,9 @@ def main():
         before = check(['-s', '-m', '-p', '-v', source, '-o', plain], 0)
         after = check(['-s', '-m', '-p', '-v', source, '--time', '-o', timed], 0, 'compilacion')
         assert before.stdout == after.stdout
-        assert PATTERN.sub('', after.stderr).rstrip() == before.stderr.rstrip()
+        # Las rutas de las salidas ahora se anuncian; normalizar las bases distintas.
+        messages = PATTERN.sub('', after.stderr).replace(str(timed.with_suffix('')), str(plain.with_suffix('')))
+        assert messages.rstrip() == before.stderr.rstrip()
         for extension in ('.asm', '.bin', '.hex', '.mem'):
             assert plain.with_suffix(extension).read_bytes() == timed.with_suffix(extension).read_bytes()
         check(['--time', '--no-schedule', source, '-o', timed], 0, 'compilacion')

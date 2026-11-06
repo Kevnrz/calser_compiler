@@ -18,7 +18,9 @@ Si PySide6 ya está instalado, basta con `make ide`. También se puede abrir un 
 - Distribución clásica oscura con ámbar Calser y esquina morada.
 - Editor, números de línea, pestañas, indicador de cambios, estado de cursor y búsqueda.
 - Abrir archivo/carpeta, nuevo, guardar, guardar como y cierre con guardar/descartar/cancelar.
-- Explorador de `.cls` de la carpeta actual (sin subcarpetas en este prototipo).
+- Explorador de subcarpetas y `.cls` con carga asíncrona, exclusiones y navegación por teclado.
+- Avisos por cambios/borrado externo, recarga explícita y protección al sobrescribir.
+- Preferencias de proyecto, ccom, fuente y distribución persistentes; fuente configurable desde Ver.
 - Resaltado con tokens reales del núcleo y errores léxicos mientras escribes, incluidos comentarios multilínea y texto sin guardar. El análisis automático sintáctico/semántico usa ccom --check tras otra pausa breve.
 - Compilación real con `ccom`, sin bloquear la ventana; cancelar, límite de 30 s, salida completa y errores navegables (doble clic o Enter).
 - Salidas en `<carpeta del fuente>/build/ide/<identificador de ruta>/`, evitando colisiones entre fuentes.
@@ -92,9 +94,19 @@ El panel **Clones → Analizar carpeta** (o **Ctrl+Shift+D**) compara los `.cls`
 
 Demostración: abre la carpeta `ide/ejemplos/clones`, pulsa Analizar carpeta con mínimo 20. Deben aparecer tres pares: uno Tipo I (`base`/`igual`) y dos Tipo II (cada uno con `renombrado`). Se incluyen archivos `.cls` reales y no se simulan los resultados.
 
+## Protección de archivos y proyecto · E7
+
+Si otro programa cambia o borra una fuente abierta, aparece un aviso con **Recargar**, **Conservar** y **Guardar como**. Tu texto no se reemplaza automáticamente. Guardar vuelve a comprobar la versión del disco; un conflicto requiere decisión explícita y un segundo cambio durante el guardado lo cancela.
+
+El explorador muestra subcarpetas y archivos `.cls`; excluye dependencias/salidas y enlaces simbólicos. **Ctrl+Shift+E** le da foco; flechas y Enter permiten navegar y abrir archivos. **Ctrl+Shift+R** recarga con confirmación si hay ediciones locales.
+
+Al cerrar normalmente se recuerdan carpeta, ccom, fuente, tamaño/visibilidad/distribución de paneles y análisis automático. **Ver → Fuente del editor…** cambia las pestañas actuales y futuras. La configuración reside en el perfil del usuario; no guarda documentos ni sesiones de terminal.
+
+Ver [comportamiento, exclusiones, límites y prueba manual](docs/proyecto_archivos.md). E7 pasa 28 pruebas nuevas y la suite combinada de 124 pruebas. La validación en otra máquina permanece en E8/E9.
+
 ## Pendiente
 
-Motor y UI de sugerencias (E5; parser ya implementado), correcciones automáticas (E6), detección de cambios externos, preferencias persistentes, árbol recursivo, iconos de archivos y empaquetado. El lexer ya está conectado al editor. No hay resultados simulados.
+Motor y UI de sugerencias (E5; parser ya implementado), correcciones automáticas (E6), iconos propios de archivos, preferencias adicionales y empaquetado. El lexer ya está conectado al editor. No hay resultados simulados.
 
 El resaltado usa el lexer del núcleo; conserva la paleta inicial inspirada en la extensión y el icono Calser existente. No copia el tema Seti.
 

@@ -23,7 +23,7 @@ class Prototipo(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.folder = Path(self.directory.name)
-        self.window = Ventana(ROOT)
+        self.window = Ventana(ROOT, preferencias=False)
         self.addCleanup(self.limpiar)
 
     def limpiar(self):

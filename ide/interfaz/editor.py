@@ -61,6 +61,10 @@ class Editor(QPlainTextEdit):
     def __init__(self, root):
         super().__init__()
         self.path = None
+        self.estado_disco = None
+        self.estado_observado = None
+        self.error_disco = ''
+        self.cambio_reconocido = None
         self.revision = 0
         self.documento_id = uuid4().hex
         self._texto_actual = ""

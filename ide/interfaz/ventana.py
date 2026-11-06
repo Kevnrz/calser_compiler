@@ -1,6 +1,7 @@
 """Ventana CALSIDE: archivos, diagnósticos, terminales y clones."""
 from pathlib import Path
 import hashlib
+import os
 import codecs
 from html import escape
 
@@ -15,6 +16,8 @@ from PySide6.QtWidgets import (
 
 from ide import archivos, ccom
 from ide.interfaz.editor import Editor
+from ide.interfaz.explorador import Explorador
+from ide.interfaz.proyecto import ProyectoVentana
 from ide.interfaz.terminal import Terminal
 from ide.interfaz.clones import PanelClones
 from ide.interfaz.analisis import CoordinadorAnalisis
@@ -36,8 +39,8 @@ class Esquina(QWidget):
         painter.drawPolygon(QPolygon([QPoint(0, 0), QPoint(32, 0), QPoint(32, 32)]))
 
 
-class Ventana(QMainWindow):
-    def __init__(self, root):
+class Ventana(ProyectoVentana, QMainWindow):
+    def __init__(self, root, *, preferencias=None):
         super().__init__()
         self.root = Path(root)
         self.project = self.root
@@ -63,9 +66,9 @@ class Ventana(QMainWindow):
             QTabWidget::pane { border: none; }
             QTabBar::tab { padding: 10px 18px; background: #222631; color: #a5afbf; border-top: 2px solid transparent; }
             QTabBar::tab:selected { background: #191c24; color: #efbb65; border-top-color: #efbb65; }
-            QTreeWidget { border: none; background: #20242e; padding: 5px; }
-            QTreeWidget::item { padding: 6px; }
-            QTreeWidget::item:selected { background: #383126; color: #efbb65; }
+            QTreeWidget, QTreeView { border: none; background: #20242e; padding: 5px; }
+            QTreeWidget::item, QTreeView::item { padding: 6px; }
+            QTreeWidget::item:selected, QTreeView::item:selected { background: #383126; color: #efbb65; }
             QHeaderView::section { background: #272c37; padding: 6px; border: none; }
             QPushButton { background: #2c313e; border: 1px solid #424a59; border-radius: 5px; padding: 7px 12px; }
             QPushButton:hover { border-color: #efbb65; }
@@ -86,7 +89,9 @@ class Ventana(QMainWindow):
         self.comprobador.resultado.connect(self.recibir_comprobacion)
         self.comprobador.fallo.connect(self.fallo_comprobacion)
         self.comprobador.estado.connect(self.estado_comprobacion)
+        self.iniciar_proyecto(preferencias)
         self.nuevo()
+        self.restaurar_preferencias()
 
     def crear_interfaz(self):
         body = QWidget()
@@ -137,7 +142,9 @@ class Ventana(QMainWindow):
         tools.addWidget(self.stop_button)
         layout.addWidget(toolbar)
 
+        self.crear_aviso_externo(layout)
         horizontal = QSplitter(Qt.Orientation.Horizontal)
+        self.project_splitter = horizontal
         sidebar = QWidget()
         self.sidebar = sidebar
         side = QVBoxLayout(sidebar)
@@ -154,9 +161,9 @@ class Ventana(QMainWindow):
         close_files.clicked.connect(lambda: self.files_button.setChecked(False))
         project_header.addWidget(close_files)
         side.addLayout(project_header)
-        self.tree = QTreeWidget()
-        self.tree.setHeaderHidden(True)
-        self.tree.itemDoubleClicked.connect(lambda item, _: self.abrir(Path(item.data(0, Qt.ItemDataRole.UserRole))))
+        self.tree = Explorador()
+        self.tree.abrirArchivo.connect(self.abrir)
+        self.tree.errorAcceso.connect(lambda mensaje: self.statusBar().showMessage(mensaje))
         side.addWidget(self.tree)
         horizontal.addWidget(sidebar)
 
@@ -170,6 +177,7 @@ class Ventana(QMainWindow):
         self.tabs.tabCloseRequested.connect(self.cerrar_tab)
         self.tabs.currentChanged.connect(self.actualizar_estado)
         editor_area = QWidget()
+        editor_area.setMinimumSize(200, 160)
         editor_layout = QVBoxLayout(editor_area)
         editor_layout.setContentsMargins(0, 0, 0, 0)
         editor_layout.setSpacing(0)
@@ -182,6 +190,7 @@ class Ventana(QMainWindow):
         editor_layout.addWidget(self.diagnostic_message)
         vertical.addWidget(editor_area)
         self.panels = QTabWidget()
+        self.panels.setMinimumSize(200, 120)
         self.panels.setTabsClosable(True)
         self.panels.setUsesScrollButtons(True)
         self.panels.tabCloseRequested.connect(self.cerrar_panel)
@@ -224,6 +233,8 @@ class Ventana(QMainWindow):
         controls.addWidget(self.move_panel_button)
         self.panels.setCornerWidget(panel_controls, Qt.Corner.TopRightCorner)
         vertical.addWidget(self.panels)
+        vertical.setStretchFactor(0, 1)
+        vertical.setStretchFactor(1, 0)
         vertical.setSizes([500, 180])
         horizontal.addWidget(vertical)
         horizontal.setSizes([230, 1020])
@@ -232,7 +243,10 @@ class Ventana(QMainWindow):
         self.setCentralWidget(body)
         self.position = QLabel()
         self.analysis_state = QLabel()
-        self.statusBar().addPermanentWidget(self.analysis_state)
+        self.analysis_state.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.analysis_state.setContentsMargins(10, 0, 6, 0)
+        self.analysis_state.setMaximumWidth(480)
+        self.statusBar().addPermanentWidget(self.analysis_state, 1)
         self.statusBar().addPermanentWidget(self.position)
         self.statusBar().showMessage("Listo · abre un archivo o crea uno nuevo")
 
@@ -250,6 +264,7 @@ class Ventana(QMainWindow):
             ("Nuevo", "Ctrl+N", self.nuevo), ("Abrir archivo…", "Ctrl+O", self.elegir_archivo),
             ("Abrir carpeta…", "Ctrl+Shift+O", self.elegir_carpeta), ("Guardar", "Ctrl+S", self.guardar),
             ("Guardar como…", "Ctrl+Shift+S", lambda: self.guardar(como=True)),
+            ("Recargar desde disco", "Ctrl+Shift+R", self.recargar),
             ("Cerrar pestaña", "Ctrl+W", lambda: self.cerrar_tab(self.tabs.currentIndex())),
             ("Salir", "Ctrl+Q", self.close),
         ]:
@@ -272,6 +287,8 @@ class Ventana(QMainWindow):
                 action.toggled.connect(self.files_button.setChecked)
             else:
                 self.results_action = action
+        self.accion(view, "Fuente del editor…", None, self.configurar_fuente)
+        self.accion(view, "Enfocar explorador", "Ctrl+Shift+E", self.enfocar_explorador)
         self.accion(view, "Mover panel abajo / derecha", "Ctrl+Alt+J", self.mover_panel)
         self.accion(view, "Nueva terminal", "Ctrl+Shift+T", self.nueva_terminal)
         self.accion(view, "Analizar clones de la carpeta", "Ctrl+Shift+D", self.analizar_clones)
@@ -345,6 +362,7 @@ class Ventana(QMainWindow):
 
     def nuevo(self):
         editor = Editor(self.root)
+        self.aplicar_fuente(editor)
         self.tabs.addTab(editor, "Sin título")
         self.tabs.setCurrentWidget(editor)
         editor.document().modificationChanged.connect(lambda _: self.actualizar_titulo(editor))
@@ -359,7 +377,7 @@ class Ventana(QMainWindow):
     def actualizar_titulo(self, editor):
         index = self.tabs.indexOf(editor)
         if index >= 0:
-            self.tabs.setTabText(index, (editor.path.name if editor.path else "Sin título") + (" ●" if editor.document().isModified() else ""))
+            self.tabs.setTabText(index, (editor.path.name if editor.path else "Sin título") + (" ●" if editor.document().isModified() else "") + (" ⚠" if self.tiene_cambio_externo(editor) else ""))
             self.tabs.setTabToolTip(index, str(editor.path or "Documento sin guardar"))
         self.actualizar_estado()
 
@@ -374,6 +392,7 @@ class Ventana(QMainWindow):
             problems = editor.problemas_en_linea(cursor.blockNumber() + 1)
             self.diagnostic_message.setText("\n".join(f"{p.origen} · {p.categoria}: {p.descripcion}" for p in problems))
             self.diagnostic_message.setVisible(bool(problems))
+        self.actualizar_aviso_externo()
 
     def edicion(self, editor):
         self.analizador.olvidar(editor.documento_id)
@@ -500,7 +519,7 @@ class Ventana(QMainWindow):
                 self.tabs.setCurrentIndex(index)
                 return editor
         try:
-            text = archivos.leer(path)
+            text, version = archivos.cargar(path)
         except (OSError, UnicodeError) as error:
             self.error("No se pudo abrir el archivo", error)
             return None
@@ -508,6 +527,7 @@ class Ventana(QMainWindow):
         if not editor or editor.path or editor.toPlainText() or editor.document().isModified():
             editor = self.nuevo()
         editor.path = path
+        self.establecer_version(editor, version)
         editor.setPlainText(text)
         editor.document().setModified(False)
         self.actualizar_titulo(editor)
@@ -520,28 +540,29 @@ class Ventana(QMainWindow):
 
     def cargar_carpeta(self, directory):
         directory = Path(directory).resolve()
+        if not directory.is_dir() or not os.access(directory, os.R_OK | os.X_OK):
+            self.error("No se pudo abrir el proyecto", "La carpeta no está disponible o no hay permisos para leerla.")
+            return False
         self.clones_panel.invalidar()
-        self.tree.clear()
         self.project = directory
         self.project_label.setText(directory.name)
         self.project_label.setToolTip(str(directory))
-        try:
-            # Prototipo: solo primer nivel; evita bloquear al recorrer repositorios grandes.
-            for path in sorted(directory.glob("*.cls")):
-                item = QTreeWidgetItem(["⬡  " + path.name])
-                item.setData(0, Qt.ItemDataRole.UserRole, str(path))
-                self.tree.addTopLevelItem(item)
-            self.statusBar().showMessage(f"{self.tree.topLevelItemCount()} archivos .cls · carpeta actual, sin subcarpetas")
-        except OSError as error:
-            self.error("No se pudo leer la carpeta", error)
+        self.tree.cargar(directory)
+        self.statusBar().showMessage("Proyecto · carga en segundo plano", 5000)
+        return True
+
+    def enfocar_explorador(self):
+        self.files_button.setChecked(True)
+        self.tree.setFocus()
 
     def guardar(self, checked=False, como=False, editor=None):
         editor = editor or self.editor()
         if not editor:
             return False
         path = editor.path
-        if como or path is None:
-            filename, _ = QFileDialog.getSaveFileName(self, "Guardar programa", str(path or self.project / "programa.cls"), "Calser (*.cls)")
+        elegir = como or path is None
+        if elegir:
+            filename, _ = QFileDialog.getSaveFileName(self, "Guardar programa", str(path or self.project / "programa.cls"), "Calser (*.cls)", options=QFileDialog.Option.DontConfirmOverwrite)
             if not filename:
                 return False
             path = Path(filename).resolve()
@@ -551,9 +572,31 @@ class Ventana(QMainWindow):
                 self.error("Archivo abierto", "Ese archivo ya está abierto en otra pestaña.")
                 return False
         try:
-            archivos.guardar(path, editor.toPlainText())
+            actual = archivos.estado(path)
+            if editor.path == path:
+                esperado = editor.estado_disco
+                if actual != esperado:
+                    editor.estado_observado, editor.error_disco = actual, ''
+                    self.actualizar_titulo(editor)
+                    accion = self.resolver_conflicto(editor, actual)
+                    if accion == 'recargar':
+                        self.recargar(editor=editor)
+                        return False
+                    if accion == 'copia':
+                        return self.guardar(como=True, editor=editor)
+                    if accion != 'sobrescribir':
+                        return False
+                    esperado = actual
+            else:
+                esperado = actual
+                if actual.existe:
+                    respuesta = QMessageBox.question(self, "Reemplazar archivo", f"¿Reemplazar {path}?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+                    if respuesta != QMessageBox.StandardButton.Yes:
+                        return False
+            version = archivos.guardar(path, editor.toPlainText(), esperado=esperado)
         except (OSError, UnicodeError) as error:
-            self.error("No se pudo guardar", error)
+            self.error("No se pudo guardar; tu texto se conserva", error)
+            self.monitor.comprobar()
             return False
         if editor.path != path:
             self.clones_panel.invalidar()
@@ -562,6 +605,7 @@ class Ventana(QMainWindow):
             self.results.pop(editor, None)
             editor.establecer_problemas([])
         editor.path = path
+        self.establecer_version(editor, version)
         editor.document().setModified(False)
         self.actualizar_titulo(editor)
         self.actualizar_problemas()
@@ -629,6 +673,10 @@ class Ventana(QMainWindow):
         if not editor or ((editor.path is None or editor.document().isModified()) and not self.guardar(editor=editor)):
             return
         try:
+            if archivos.estado(editor.path) != editor.estado_disco:
+                if not self.guardar(editor=editor):
+                    return
+            self.compilation_disk = editor.estado_disco
             destination = editor.path.parent / "build" / "ide" / hashlib.sha256(str(editor.path).encode()).hexdigest()[:10]
             destination.mkdir(parents=True, exist_ok=True)
         except OSError as error:
@@ -685,6 +733,10 @@ class Ventana(QMainWindow):
         self.escribir_salida(tail)
         editor, revision, source = self.compilation
         current = self.tabs.indexOf(editor) >= 0 and editor.revision == revision and editor.path == source
+        try:
+            current = current and archivos.estado(source) == self.compilation_disk
+        except OSError:
+            current = False
         crashed = status == QProcess.ExitStatus.CrashExit
         if current:
             self.results[editor] = ccom.diagnosticos(self.stderr, source, source.parent)
@@ -761,15 +813,22 @@ class Ventana(QMainWindow):
             if answer != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return
+        if not self.monitor.detener():
+            self.statusBar().showMessage("Terminando comprobación de archivos… intenta cerrar de nuevo")
+            event.ignore()
+            return
         if not self.clones_panel.detener():
+            self.monitor.timer.start()
             self.statusBar().showMessage("Cancelando análisis de clones… intenta cerrar de nuevo en un momento")
             event.ignore()
             return
         if not self.analizador.detener():
+            self.monitor.timer.start()
             self.statusBar().showMessage("Terminando análisis léxico… intenta cerrar de nuevo en un momento")
             event.ignore()
             return
         if not self.comprobador.detener():
+            self.monitor.timer.start()
             self.analizador.cerrando = False
             for index in range(self.tabs.count()):
                 self.tabs.widget(index).programar_analisis()
@@ -780,4 +839,11 @@ class Ventana(QMainWindow):
             self.tabs.widget(index).detener_analisis()
         for terminal in self.terminals:
             terminal.detener()
+        self.guardar_preferencias()
         event.accept()
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        from PySide6.QtCore import QEvent
+        if event.type() == QEvent.Type.ActivationChange and self.isActiveWindow() and hasattr(self, 'monitor'):
+            self.monitor.comprobar()

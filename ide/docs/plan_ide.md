@@ -28,7 +28,8 @@ Rama: `feat/calside`. El merge de `origin/develop` se completó en `c8b1997`. En
 - Cabecera sobre la barra de menús; menús centrados verticalmente.
 - Editor con números de línea, resaltado basado en tokens reales del núcleo, pestañas, búsqueda y operaciones de edición.
 - Nuevo, abrir, guardar, guardar como, protección de cambios al cerrar y rutas canónicas para evitar pestañas duplicadas.
-- Explorador de `.cls` del primer nivel; ocultar/recuperar con botón o Ctrl+B.
+- Explorador asíncrono de subcarpetas y `.cls`, con exclusiones y sin enlaces simbólicos; ocultar/recuperar con botón o Ctrl+B.
+- E7: versiones de disco con SHA-256, avisos no destructivos y guardado condicionado a la versión confirmada; preferencias de fuente, ccom y distribución persistentes.
 - Panel de resultados movible abajo/derecha y terminales PTY independientes en Linux, con entrada por líneas.
 - Compilación real asíncrona con `ccom`, salida, cancelación y límite actual de 30 segundos.
 - Análisis automático con `ccom --check` sobre copias temporales, pausa de 600 ms después del lexer y límite de 5 segundos; sin guardar ni generar binarios.
@@ -46,8 +47,7 @@ Rama: `feat/calside`. El merge de `origin/develop` se completó en `c8b1997`. En
 ### Todavía pendiente
 
 - Motores de sugerencias y reparaciones a cargo del mismo compañero; integración gráfica posterior. El parser ya está implementado por Saddy.
-- Detección de cambios externos y protección al sobrescribir archivos modificados fuera del IDE.
-- Preferencias persistentes, árbol recursivo del explorador y entrega empaquetada.
+- Entrega empaquetada y validación en otra máquina; preferencias adicionales y mejoras visuales posteriores.
 - Animación de papel y controles de ventana en la esquina, como mejora posterior.
 
 **Estado actual:** el editor usa el lexer del núcleo. La gramática y la tabla ya alimentan un parser predictivo disponible como API independiente; todavía no se invoca desde los widgets. Sugerencias y reparaciones continúan pendientes.
@@ -73,7 +73,7 @@ Rama: `feat/calside`. El merge de `origin/develop` se completó en `c8b1997`. En
 
 | Componente | Responsable según el reparto actual | Dependencia pendiente |
 |---|---|---|
-| Interfaz, archivos, paneles, terminales y adaptadores | Saddy / trabajo de CALSIDE | Ninguna para continuar con lexer y protección de archivos |
+| Interfaz, archivos, paneles, terminales y adaptadores | Saddy / trabajo de CALSIDE | E7 implementado; continuar con empaquetado y validación |
 | Integración con `ccom` | Saddy / CALSIDE, coordinado con responsable del compilador | Modo --check implementado; coordinar futuras extensiones del compilador |
 | Léxico, gramática y tabla LL(1) | Compañero / C1.1a | Entrega 1 incorporada |
 | Parser predictivo | Saddy | Implementado; API, ejemplos y pruebas disponibles |
@@ -89,12 +89,12 @@ Estados: **implementado** = existe en el prototipo y tiene verificación; **parc
 
 | ID | Prioridad | Función | Estado actual y criterio para cerrarla |
 |---|---|---|---|
-| F01 | P0 | Abrir carpeta/proyecto | Parcial: primer nivel funciona. Completar árbol de subcarpetas, exclusiones y errores de acceso sin bloquear. |
+| F01 | P0 | Abrir carpeta/proyecto | Implementado: modelo asíncrono de Qt, subcarpetas, exclusiones, archivos nuevos y errores de acceso. No sigue enlaces simbólicos. |
 | F02 | P0 | Nuevo/abrir/guardar/guardar como | Implementado: UTF-8, rutas canónicas, identidad actualizada y sin pestañas duplicadas. Protección de cambios externos se sigue en F17. |
 | F03 | P0 | Pestañas y cambios pendientes | Implementado: texto/cursor por documento y guardar/descartar/cancelar al cerrar. |
 | F04 | P0 | Edición y búsqueda | Implementado: deshacer/rehacer, portapapeles, búsqueda y margen sincronizado. |
 | F05 | P0 | Compilar documento activo | Implementado: guarda antes de compilar, cancelar guardado cancela la operación, UI utilizable durante proceso. |
-| F06 | P0 | Resolver/configurar ccom | Implementado durante la sesión. Persistir ruta y comprobar configuración inválida en F18. |
+| F06 | P0 | Resolver/configurar ccom | Implementado: configuración persistente y recuperación de ruta inválida mediante la búsqueda habitual. |
 | F07 | P0 | Salida y estado del proceso | Implementado: stdout/stderr, código, fallo de inicio, cancelación y timeout. Tiempo límite configurable pendiente en F18. |
 | F08 | P0 | Errores gráficos y navegables | Implementado al compilar: origen, categoría, archivo, rango, subrayado, descripción y navegación. Errores sin posición quedan en Salida. |
 | F09 | P1 | Resaltado con lexer del núcleo | Implementado: tokens reales, comentarios coloreados aparte y rangos UTF-16. El formato conserva revisión, estado de guardado y Deshacer. |
@@ -104,9 +104,9 @@ Estados: **implementado** = existe en el prototipo y tiene verificación; **parc
 | F13 | P1 | Corrección automática | Pendiente: catálogo de casos inequívocos, disparador definido y pruebas positivas/negativas. Un botón manual no cubre por sí solo este requisito. |
 | F14 | P1 | Clones Tipo I entre archivos | Implementado: ignora formato/comentarios y permite comparar/navegar entre ubicaciones. |
 | F15 | P1 | Clones Tipo II entre archivos | Implementado: renombramiento consistente y literales del mismo tipo; preserva operadores/reservadas; umbral y límites documentados. |
-| F16 | P1 | Recuperación ante fallos | Parcial: lectura/escritura/procesos y cancelación cubiertos; completar fallos del análisis automático y estados de archivo borrado. |
-| F17 | P1 | Cambios externos | Pendiente: detectar cambio/borrado, ofrecer recargar o conservar y evitar sobrescritura silenciosa. |
-| F18 | P2 | Preferencias | Pendiente: ruta de ccom, fuente, tema y distribución persistentes. Mantener teclado y contraste legibles. |
+| F16 | P1 | Recuperación ante fallos | Implementado en las funciones disponibles: errores de lectura/escritura, procesos, cancelación y archivo borrado; texto conservado ante fallos. Los motores pendientes tendrán sus propias pruebas. |
+| F17 | P1 | Cambios externos | Implementado: sondeo de huella en segundo plano, cambio/borrado/reemplazo, recargar/conservar/copia y comprobación al guardar. Ver límite de concurrencia del sistema de archivos en `proyecto_archivos.md`. |
+| F18 | P2 | Preferencias | Parcial: ruta de ccom, fuente, proyecto, paneles y análisis automático persistentes, con configuración validada. Tema y timeout configurables quedan para mejoras posteriores. |
 | F19 | P2 | Artefactos y opciones del compilador | Parcial: genera `.asm` y salidas; falta abrirlas desde la UI y exponer únicamente banderas existentes. |
 | F20 | P2 | Métricas dentro del IDE | Pendiente y opcional para el IDE: depende del contrato de datos de las optimizaciones. |
 | F21 | P0 | Ocultar/recuperar explorador | Implementado: ×, botón Archivos, Ctrl+B y menú Ver sincronizados. |
@@ -127,11 +127,15 @@ ide/
   main.py                       inicio y composición
   adaptador_nucleo.py            API real → estilos y errores
   diagnosticos.py                diagnóstico común con origen/unidad
-  archivos.py                   lectura y guardado atómico
+  archivos.py                   lectura consistente y guardado atómico condicionado
+  preferencias.py               configuración validada
   ccom.py                       ejecutable, diagnósticos y categorías
   clones.py                     detector léxico independiente de Qt
   interfaz/
     ventana.py                  ventana, acciones, procesos y coordinación
+    proyecto.py                 conflictos de disco, recarga, fuente y preferencias
+    disco.py                    sondeo de archivos en segundo plano
+    explorador.py               árbol lazy de Qt y exclusiones
     editor.py                   editor, margen, resaltado y marcas
     analisis.py                 cola serial y trabajador léxico
     comprobacion.py             ccom --check, QProcess y temporales
@@ -284,16 +288,17 @@ Verificación E4: 70 pruebas combinadas de CALSIDE/núcleo; `make check-analysis
 
 **Terminado cuando:** se demuestran correcciones realmente automáticas, no solo un botón manual, con deshacer y sin cambios incorrectos en casos ambiguos. Si un caso no es seguro, queda como propuesta explicada.
 
-### E7 · Protección de archivos y experiencia de proyecto — independiente del núcleo
+### E7 · Protección de archivos y experiencia de proyecto — implementado y verificado localmente
 
-1. Registrar el estado conocido del disco al abrir/guardar y detectar cambios, borrado o reemplazo externo.
-2. Ofrecer recargar/conservar; comprobar nuevamente antes de sobrescribir para no perder ediciones ajenas.
-3. Completar árbol de subcarpetas con exclusiones explícitas y sin exploración bloqueante.
-4. Persistir ruta de ccom, fuente, paneles y preferencias que se hayan acordado; recuperarse de configuración inválida.
-5. Revisar teclado, foco, tamaño mínimo, escalado y cierre con terminales/análisis activos.
-6. Verificar que F01–F17 y F21–F24 satisfacen sus criterios, no solo el caso feliz.
+- [x] Versiones de disco al abrir/guardar: SHA-256, tamaño, fecha y dispositivo/inodo. Detectar cambios, borrados, reemplazos y errores de lectura en un trabajador con pausa de 1,5 s.
+- [x] Aviso no destructivo por pestaña, recargar/conservar/copia y confirmación antes de descartar ediciones. Guardado con comparación fresca y nueva comprobación antes del reemplazo atómico.
+- [x] F5 comprueba la versión de disco antes de compilar; los resultados de una fuente cambiada durante el proceso quedan identificados como antiguos.
+- [x] Explorador de subcarpetas asíncrono con exclusiones, iconos nativos, actualización de archivos y navegación por teclado, sin seguir enlaces simbólicos.
+- [x] Preferencias persistentes: proyecto, ccom, fuente, tamaño/visibilidad/distribución de paneles y análisis automático. Recuperación de JSON/campos inválidos y rutas desaparecidas.
+- [x] Pruebas de foco, atajos, mínimo 800×520, cierre con monitor activo y revisión visual local al 100 % y 150 %. Las pruebas previas de terminales/análisis siguen correctas.
+- [x] 28 pruebas nuevas; **124 combinadas correctas**. Funciones disponibles de F01–F10, F14–F17 y F21–F24 verificadas; F11–F13 dependen de los motores y no se declaran terminadas.
 
-**Terminado cuando:** editar un archivo desde fuera del IDE no provoca pérdida silenciosa; las preferencias útiles sobreviven al reinicio y el recorrido funciona con teclado y en el equipo de defensa.
+Detalle y prueba manual en [proyecto_archivos.md](proyecto_archivos.md). No se promete un bloqueo exclusivo frente a escritores externos entre la última comprobación y el reemplazo: son operaciones distintas del sistema de archivos. La validación del equipo de defensa permanece en E8/E9. Preferencias de tema y timeout quedan fuera de esta entrega.
 
 ### E8 · Empaquetado y entrega de aplicación — compromiso de producto
 
@@ -383,7 +388,7 @@ Riesgos a vigilar: divergencias entre gramáticas, resultados antiguos, diferenc
 - [x] E5 (motor base): parser de Saddy implementado, documentado y probado.
 - [ ] E5 (restante): motor de sugerencias recibido y conectado a la interfaz.
 - [ ] E6: reparaciones y corrección automática verificables.
-- [ ] E7: cambios externos, proyecto y experiencia estabilizados.
+- [x] E7: protección de disco, proyecto y preferencias implementados y verificados localmente; falta validación final en otra máquina.
 - [ ] E8: paquete ejecutable probado en otra máquina.
 - [ ] E9: corpus, documentación, diagramas y guion final completados.
 - [ ] Aclaradas e incorporadas las mejoras pendientes del proyecto 1.
@@ -394,4 +399,4 @@ La animación de la esquina y las mejoras de E10 se mantienen separadas de esta 
 
 Al terminar una etapa: actualizar estado y criterio de aceptación, registrar evidencia relevante y anotar la siguiente tarea disponible. Si cambia la arquitectura, reescribir la sección afectada; no acumular anexos que contradigan tareas anteriores. Conservar IDs F01–F26 para seguir requisitos y revisión.
 
-Próxima etapa del orden principal: **E5, el compañero implementa sugerencias sobre el parser disponible; después conectar la UI**. El mismo compañero implementará reparaciones para E6. Mientras se recibe, E7 (cambios externos y experiencia de proyecto) puede avanzar de forma independiente.
+Próxima etapa del orden principal: **E5, el compañero implementa sugerencias sobre el parser disponible; después conectar la UI**. El mismo compañero implementará reparaciones para E6. E7 ya está implementado; mientras llegan los motores, puede avanzar E8 (empaquetado).

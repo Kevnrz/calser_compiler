@@ -72,7 +72,7 @@ class IntegracionClones(unittest.TestCase):
         self.directory=tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.folder=Path(self.directory.name)
-        self.window=Ventana(Path(__file__).resolve().parents[2])
+        self.window=Ventana(Path(__file__).resolve().parents[2], preferencias=False)
         self.addCleanup(self.cleanup)
 
     def cleanup(self):

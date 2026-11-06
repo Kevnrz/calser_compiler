@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 import importlib
 from PySide6.QtCore import QObject, QThread, QTimer, Qt, Signal
+from ide.politica_asistencia import ReglaAutomatica, evaluar_automatizacion
 from ide.ediciones import MAX_TEXTO, aplicar_ediciones, validar_ediciones
 from ide.nucleo.asistencia import (ContextoDocumento, EstadoAsistencia, ResultadoReparaciones,
                                   ResultadoSugerencias, validar_resultado, Reparacion, Sugerencia)
@@ -15,12 +16,16 @@ class SolicitudAsistencia:
     numero: int
     tipo: str
     contexto: ContextoDocumento
+    origen: str = 'manual'
+    reglas: tuple[ReglaAutomatica, ...] = ()
 
 
 @dataclass(frozen=True)
 class RespuestaAsistencia:
     solicitud: SolicitudAsistencia
     resultado: ResultadoSugerencias | ResultadoReparaciones
+    automatica: Reparacion | None = None
+    motivo_automatico: str = ''
 
 
 def estado_resultado(tipo, estado, explicacion):
@@ -71,6 +76,7 @@ class TareaAsistencia(QThread):
 
     def run(self):
         s = self.solicitud
+        automatica, motivo = None, ''
         try:
             if self.isInterruptionRequested():
                 return
@@ -82,10 +88,13 @@ class TareaAsistencia(QThread):
                 argumentos = (s.contexto.texto, s.contexto.cursor) if s.tipo == 'sugerencias' else (s.contexto.texto,)
                 resultado = motor(*argumentos, cancelar=self.isInterruptionRequested)
                 resultado = validar_respuesta(s, resultado)
+                if s.origen == 'linea_confirmada' and resultado.estado == EstadoAsistencia.OK:
+                    automatica, motivo = evaluar_automatizacion(s.contexto, resultado, s.reglas,
+                                                               cancelar=self.isInterruptionRequested)
         except Exception as error:
             resultado = estado_resultado(s.tipo, EstadoAsistencia.ERROR, f'{type(error).__name__}: {error}')
         if not self.isInterruptionRequested():
-            self.resultado.emit(RespuestaAsistencia(s, resultado))
+            self.resultado.emit(RespuestaAsistencia(s, resultado, automatica, motivo))
 
 
 class CoordinadorAsistencia(QObject):
@@ -108,11 +117,16 @@ class CoordinadorAsistencia(QObject):
         self.invalidar(tipo=tipo)
         self.motores[tipo] = motor  # None recupera el módulo real por importación diferida.
 
-    def solicitar(self, tipo, contexto):
-        if tipo not in MODULOS or not isinstance(contexto, ContextoDocumento):
+    def solicitar(self, tipo, contexto, *, origen='manual', reglas=()):
+        reglas = tuple(reglas)
+        if (tipo not in MODULOS or not isinstance(contexto, ContextoDocumento)
+                or origen not in ('manual', 'escritura', 'linea_confirmada')
+                or (origen == 'escritura' and tipo != 'sugerencias')
+                or (origen == 'linea_confirmada' and tipo != 'reparaciones')
+                or len(reglas) > 64 or any(not isinstance(r, ReglaAutomatica) for r in reglas)):
             raise ValueError('Solicitud de asistencia inválida')
         self.numero += 1
-        solicitud = SolicitudAsistencia(self.numero, tipo, contexto)
+        solicitud = SolicitudAsistencia(self.numero, tipo, contexto, origen, tuple(reglas))
         clave = (contexto.documento, tipo)
         self.ultimas[clave] = solicitud.numero
         self.pendientes.pop(clave, None)

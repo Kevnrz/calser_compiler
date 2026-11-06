@@ -55,6 +55,7 @@ class Margen(QWidget):
 
 class Editor(QPlainTextEdit):
     contenidoCambiado = Signal()
+    entradaAsistencia = Signal(str)
     analisisSolicitado = Signal(str, int, str)
     estadoAnalisisCambiado = Signal()
 
@@ -88,6 +89,23 @@ class Editor(QPlainTextEdit):
         self.textChanged.connect(self.cambio)
         self.actualizar_margen()
         self.linea_actual()
+
+    def keyPressEvent(self, event):
+        cursor = self.textCursor()
+        revision = self.revision
+        sin_seleccion = not cursor.hasSelection()
+        final_linea = cursor.atBlockEnd() and bool(cursor.block().text().strip())
+        mods = event.modifiers()
+        confirmar = (event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+                     and mods == Qt.KeyboardModifier.NoModifier and not event.isAutoRepeat())
+        escribir = (bool(event.text()) and event.text().isprintable()
+                    and mods in (Qt.KeyboardModifier.NoModifier, Qt.KeyboardModifier.ShiftModifier))
+        super().keyPressEvent(event)
+        if self.revision != revision and sin_seleccion:
+            if confirmar and final_linea:
+                self.entradaAsistencia.emit('linea_confirmada')
+            elif escribir:
+                self.entradaAsistencia.emit('escritura')
 
     def contexto_asistencia(self):
         from ide.interfaz.ediciones import capturar_contexto

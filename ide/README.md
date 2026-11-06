@@ -1,5 +1,7 @@
 # CALSIDE · prototipo inicial
 
+Para entender la arquitectura, los flujos y el papel de cada archivo, consulta la [guía unificada del sistema y recorrido de comentarios](docs/guia_sistema_calside.md).
+
 Aplicación de escritorio PySide6. Conserva los controles nativos para mover, minimizar, maximizar y cerrar. La esquina morada es estática; la animación de papel queda para una iteración posterior.
 
 Desde la raíz del repositorio, con Python 3.10 o posterior:
@@ -67,11 +69,11 @@ Después de una pausa de **300 ms**, el lexer de `ide.nucleo` analiza una copia 
 - Las posiciones Unicode del núcleo se convierten a UTF-16; las de ccom siguen convirtiéndose desde UTF-8. Un error léxico del mismo rango informado por ambos se presenta una sola vez, con prioridad para ccom.
 - Documentos de más de **2 millones de caracteres** pausan este análisis con un mensaje explícito; todavía se pueden compilar con F5.
 
-Prueba rápida: crea una pestaña e introduce `Vm x : int = 3 ; @`. El error de `@` aparece sin guardar ni compilar; selecciónalo desde Problemas y bórralo. Desaparece tras la pausa. Una declaración sin `;` no se señala por el lexer; después la revisa el análisis sintáctico automático de ccom (E4). El parser predictivo ya está disponible como API Python; su conexión gráfica sigue pendiente en E5.
+Prueba rápida: crea una pestaña e introduce `Vm x : int = 3 ; @`. El error de `@` aparece sin guardar ni compilar; selecciónalo desde Problemas y bórralo. Desaparece tras la pausa. Una declaración sin `;` no se señala por el lexer; después la revisa el análisis sintáctico automático de ccom (E4). El parser predictivo ya está disponible como API Python; su uso para sugerencias depende del motor de E5; la política automática ya lo usa para validar candidatos en segundo plano.
 
 ## Parser predictivo disponible para los motores
 
-`ide.nucleo.parser` ofrece `analizar_sintaxis(texto)` y `contexto_en(texto, cursor, inicio_fragmento=None)`: pila LL(1), primer error, terminales esperados y consulta de prefijos sin exigir un programa completo. No genera AST, no hace semántica ni edita el documento. Ver [API real, ejemplos y límites](docs/parser_predictivo.md). Se verifica con `make check-parser`; los motores y su UI siguen pendientes.
+`ide.nucleo.parser` ofrece `analizar_sintaxis(texto)` y `contexto_en(texto, cursor, inicio_fragmento=None)`: pila LL(1), primer error, terminales esperados y consulta de prefijos sin exigir un programa completo. No genera AST, no hace semántica ni edita el documento. Ver [API real, ejemplos y límites](docs/parser_predictivo.md). Se verifica con `make check-parser`; los motores siguen pendientes; ambas UI manuales están preparadas.
 
 ## Sintaxis y semántica en vivo · E4
 
@@ -122,7 +124,7 @@ Ver [comportamiento, exclusiones, límites y prueba manual](docs/proyecto_archiv
 
 ## Pendiente
 
-Motor y UI de sugerencias (E5; parser ya implementado), correcciones automáticas (E6), iconos propios de archivos, preferencias adicionales y empaquetado. El lexer ya está conectado al editor. No hay resultados simulados.
+Motores reales de sugerencias/reparaciones (E5/E6; parser y ambas UI manuales ya implementados), correcciones automáticas, preferencias adicionales y empaquetado. El lexer ya está conectado al editor. No hay resultados simulados.
 
 El resaltado usa el lexer del núcleo; conserva la paleta inicial inspirada en la extensión y el icono Calser existente. No copia el tema Seti.
 
@@ -172,7 +174,7 @@ Doble clic o Enter sobre un resultado abre el archivo. Las coincidencias de cód
 
 La búsqueda se realiza en segundo plano con espera breve al escribir y cancelación de solicitudes antiguas. Ignora enlaces simbólicos y carpetas de dependencias/compilación excluidas. Se limita a 500 coincidencias, 20000 entradas recorridas, 2 MB por archivo y 20 MB de contenido, con aviso si hay omisiones, límites o archivos ilegibles. **↻** permite volver a consultar cambios externos, incluso en subcarpetas todavía no cargadas por el árbol.
 
-Ver [detalles y validación de proyecto](docs/proyecto_archivos.md). Suite combinada: **253 pruebas correctas**, incluidas 15 de carpetas, 12 de selección/arrastre, 10 de orden/presentación, 14 de búsqueda, 13 de ejecución, 23 de contratos/ediciones y 26 de coordinación/UI de asistencia.
+Ver [detalles y validación de proyecto](docs/proyecto_archivos.md). Suite combinada: **294 pruebas correctas**, incluidas 26 de preferencias/política de asistencia, 15 de reparaciones, 15 de carpetas, 12 de selección/arrastre, 10 de orden/presentación, 14 de búsqueda, 13 de ejecución, 23 de contratos/ediciones y 26 de coordinación/UI de asistencia.
 
 ## Preparación para los motores de asistencia
 
@@ -180,10 +182,23 @@ El [contrato compartido](docs/contrato_asistencia.md) fija tipos y firmas para s
 
 El aplicador ya está disponible mediante `editor.contexto_asistencia()` y `editor.aplicar_ediciones(...)`, además de `aplicar_sugerencia` / `aplicar_reparacion` en `ide/interfaz/ediciones.py`. Comprueba todo antes de modificar, convierte rangos Python a UTF-16 y conserva el historial con una operación de Deshacer por propuesta. No guarda el documento ni activa correcciones automáticas. Los resultados de documento, revisión, texto, cursor o selección anteriores se rechazan.
 
-Los pasos **1–4** están preparados: contrato, aplicador, coordinador y UI manual de sugerencias. **Ctrl+Espacio dentro del editor** o Editar → Sugerencias de código solicita opciones. La lista muestra etiqueta/categoría/detalle; flechas y RePág/AvPág recorren, Enter/Tab o clic aceptan, y Esc cancela sin modificar. Escribir cierra la lista y deja pasar la tecla; todavía no hay activación por pausa. El foco permanece en el editor y las respuestas se descartan al editar, mover cursor/selección, cambiar pestaña o cerrar.
+Los pasos **1–6** están preparados: contrato, aplicador, coordinador, ambas UI manuales y preferencias/política de asistencia. **Ctrl+Espacio dentro del editor** o Editar → Sugerencias de código solicita opciones. La lista muestra etiqueta/categoría/detalle; flechas y RePág/AvPág recorren, Enter/Tab o clic aceptan, y Esc cancela sin modificar. Escribir cierra la lista y deja pasar la tecla; puede volver a consultar por pausa si se habilita en preferencias. El foco permanece en el editor y las respuestas se descartan al editar, mover cursor/selección, cambiar pestaña o cerrar.
 
 En uso normal no se muestran datos inventados: si falta el motor aparece el mensaje correspondiente en la barra de estado. Al entregar `ide/nucleo/sugerencias.py:sugerir` y `ide/nucleo/correccion.py:proponer_reparaciones` con los tipos y firmas acordados, el coordinador los carga en segundo plano. Sus respuestas pasan validación; los errores de importación/contrato se distinguen de la ausencia de opciones.
 
-El coordinador serializa ambos motores, limita texto/cola/opciones y solicita cancelación después de 3 segundos. Un motor debe atender el callback: no se destruyen hilos por la fuerza ni se abre otro mientras el anterior sigue ejecutándose. El cierre espera hasta 1500 ms y se aplaza si aún trabaja. La API de reparaciones ya puede entregar respuestas al siguiente paso, pero **no se aplican automáticamente**.
+El coordinador serializa ambos motores, limita texto/cola/opciones y solicita cancelación después de 3 segundos. Un motor debe atender el callback: no se destruyen hilos por la fuerza ni se abre otro mientras el anterior sigue ejecutándose. El cierre espera hasta 1500 ms y se aplaza si aún trabaja. Las consultas manuales de reparaciones consumen sus respuestas sin aplicarlas automáticamente.
 
-Siguen **paso 5: UI de reparaciones**, **paso 6: preferencias y política automática**, e integración real de los motores. Verificación actual: **253 pruebas correctas**, incluidas 26 nuevas de coordinador/UI y las 23 anteriores de contratos/ediciones.
+**Alt+Enter dentro del editor** o Editar → Reparaciones de código abre la pestaña **Reparaciones**. También permite Buscar reparaciones desde el panel. Selecciona una propuesta y revisa **Cambios** (texto anterior/posterior por edición) y **Motivo** (razones/validación del motor). **Aplicar reparación** modifica solo el documento vigente, sin guardar, con una operación de Ctrl+Z; **Cancelar/Escape** conserva texto e historial. Consultar o seleccionar no aplica cambios, incluso si el motor marca una propuesta como candidata automática.
+
+Puedes leer/copiar la vista previa sin invalidarla. Editar el código, mover su cursor/selección o cambiar/cerrar pestaña deshabilita la aplicación de propuestas antiguas. El panel se adapta abajo/derecha. Las propuestas con más de 12000 caracteres afectados no se aplican desde esta vista: el cambio completo debe poder revisarse. El panel no añade diagnósticos nuevos a Problemas ni altera sus prioridades.
+
+Sigue el **paso 7: integración real de los motores y revisión del catálogo**. Sin el módulo real se muestra que no está disponible; las propuestas controladas solo se usan en pruebas. Verificación actual: **294 pruebas correctas**, incluidas 26 nuevas de preferencias/política, 15 del panel de reparaciones, 26 de coordinador/UI y las 23 anteriores de contratos/ediciones.
+
+
+## Preferencias de asistencia (paso 6)
+
+**Editar → Preferencias de asistencia…** permite desactivar toda la asistencia, mostrar sugerencias por pausa y ajustar la espera entre 300 y 3000 ms (700 ms por defecto). Los ajustes se guardan en tu perfil y se aplican sin reiniciar. La activación por pausa está desactivada inicialmente; consulta opciones, pero no las acepta sola. Es independiente del análisis automático de ccom.
+
+La corrección automática también está desactivada por defecto. Requiere reglas revisadas y seleccionadas; la marca `automatica_segura` del motor no basta. Su disparador inicial es Enter al final de una línea y una pausa, con una sola inserción local de delimitador, precondiciones y aceptación de todo el texto corregido por el parser en segundo plano. Ctrl+Z revierte la reparación, no guarda ni encadena otra corrección. Las propuestas que no cumplen la política pueden revisarse manualmente.
+
+El catálogo real sigue vacío hasta integrar y probar las reglas del compañero; por eso el control automático aparece deshabilitado. No hay motores ni reglas simuladas en la aplicación normal. Ver [política, límites, cancelación y conexión del catálogo](docs/politica_asistencia.md).

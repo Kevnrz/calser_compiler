@@ -1,5 +1,7 @@
 # Plan de CALSIDE · IDE de Calser
 
+Guía de arquitectura, conexiones e inventario para revisar/comentar el código: [guia_sistema_calside.md](guia_sistema_calside.md).
+
 Versión 2 · actualizado el **5 de noviembre de 2026**.
 
 Documento de trabajo para completar el IDE. Sustituye el orden inicial y los anexos de avances de la versión anterior. Los estados describen código existente: una propuesta o una API recibida no equivale a una función conectada al editor.
@@ -46,11 +48,11 @@ Rama: `feat/calside`. El merge de `origin/develop` se completó en `c8b1997`. En
 
 ### Todavía pendiente
 
-- Motores de sugerencias y reparaciones a cargo del mismo compañero; integración gráfica posterior. El parser ya está implementado por Saddy.
+- Motores de sugerencias y reparaciones a cargo del mismo compañero; UI manual preparada; conexión real posterior. El parser ya está implementado por Saddy.
 - Entrega empaquetada y validación en otra máquina; preferencias adicionales y mejoras visuales posteriores.
 - Animación de papel y controles de ventana en la esquina, como mejora posterior.
 
-**Estado actual:** el editor usa el lexer del núcleo. La gramática y la tabla ya alimentan un parser predictivo disponible como API independiente; todavía no se invoca desde los widgets. Sugerencias y reparaciones continúan pendientes.
+**Estado actual:** el editor usa el lexer del núcleo. La gramática y la tabla ya alimentan un parser predictivo disponible como API independiente; todavía no se invoca desde los widgets. Los motores de sugerencias y reparaciones continúan pendientes; ambas interfaces manuales están preparadas.
 
 ## 3. Decisiones vigentes
 
@@ -61,7 +63,7 @@ Rama: `feat/calside`. El merge de `origin/develop` se completó en `c8b1997`. En
 | D02 | Dependencias externas permitidas | PySide6 aceptado; no añadir otras sin necesidad |
 | D03 | Reutilizar recursos útiles del plugin | Patrones de resaltado e icono existentes; conservar avisos aplicables |
 | D04 | `ccom` es el compilador y se invoca directamente | Implementado; LL(1) no es intermediario obligatorio |
-| D05 | Núcleo para asistencia durante la edición | Lexer conectado; parser disponible como API; motores de sugerencias/reparaciones y UI pendientes |
+| D05 | Núcleo para asistencia durante la edición | Lexer conectado; parser disponible como API; motores de sugerencias/reparaciones pendientes; UI manual preparada |
 | D06 | `QPlainTextEdit` para código | Implementado |
 | D07 | `QProcess` para ccom, sin bloquear la UI | Implementado |
 | D08 | Distribución clásica adaptable | Implementada; explorador plegable y resultados abajo/derecha |
@@ -99,14 +101,14 @@ Estados: **implementado** = existe en el prototipo y tiene verificación; **parc
 | F08 | P0 | Errores gráficos y navegables | Implementado al compilar: origen, categoría, archivo, rango, subrayado, descripción y navegación. Los diagnósticos generales sin posición se cuentan en Problemas, muestran «—» y abren el archivo sin inventar rangos; la salida completa se conserva. |
 | F09 | P1 | Resaltado con lexer del núcleo | Implementado: tokens reales, comentarios coloreados aparte y rangos UTF-16. El formato conserva revisión, estado de guardado y Deshacer. |
 | F10 | P1 | Análisis mientras se escribe | Implementado: lexer en vivo (300 ms) y ccom --check después de 600 ms adicionales. Snapshots por revisión, cancelación, temporales y resultados independientes de F5. Parser predictivo disponible; integración gráfica pendiente como motor complementario. |
-| F11 | P1 | Sugerencias | Parcial: coordinador y UI manual con Ctrl+Espacio, flechas, Enter/Tab, clic, Escape y reemplazo validado. Proveedor real ausente se informa; datos controlados solo en pruebas. Faltan motor real y activación contextual por pausa. |
-| F12 | P1 | Reparaciones propuestas | Parcial: contrato y aplicador con una operación de Deshacer implementados. Faltan motor, catálogo e interfaz de propuestas para terminadores/delimitadores Calser. |
-| F13 | P1 | Corrección automática | Pendiente: catálogo de casos inequívocos, disparador definido y pruebas positivas/negativas. Un botón manual no cubre por sí solo este requisito. |
+| F11 | P1 | Sugerencias | Parcial: coordinador y UI manual con Ctrl+Espacio, flechas, Enter/Tab, clic, Escape y reemplazo validado. Proveedor real ausente se informa; datos controlados solo en pruebas. Pausa configurable preparada; falta motor real. |
+| F12 | P1 | Reparaciones propuestas | Parcial: contrato y aplicador con una operación de Deshacer implementados. Panel manual con explicación, vista previa y aplicar/cancelar implementado. Faltan motor y catálogo para terminadores/delimitadores Calser. |
+| F13 | P1 | Corrección automática | Parcial: permisos persistentes, disparador Enter/pausa, reglas seleccionadas y validación con el parser implementados y probados. Catálogo real vacío hasta revisar positivos/negativos del motor; no se declara completada la función sin esa integración. |
 | F14 | P1 | Clones Tipo I entre archivos | Implementado: ignora formato/comentarios y permite comparar/navegar entre ubicaciones. |
 | F15 | P1 | Clones Tipo II entre archivos | Implementado: renombramiento consistente y literales del mismo tipo; preserva operadores/reservadas; umbral y límites documentados. |
 | F16 | P1 | Recuperación ante fallos | Implementado en las funciones disponibles: errores de lectura/escritura, procesos, cancelación y archivo borrado; texto conservado ante fallos. Los motores pendientes tendrán sus propias pruebas. |
 | F17 | P1 | Cambios externos | Implementado: sondeo de huella en segundo plano, cambio/borrado/reemplazo, recargar/conservar/copia y comprobación al guardar. Ver límite de concurrencia del sistema de archivos en `proyecto_archivos.md`. |
-| F18 | P2 | Preferencias | Parcial: ruta de ccom, fuente, proyecto, paneles y análisis automático persistentes, con configuración validada. Tema y timeout configurables quedan para mejoras posteriores. |
+| F18 | P2 | Preferencias | Parcial: ruta de ccom, fuente, proyecto, paneles, análisis automático y asistencia (control general, pausa, reglas) persistentes, con configuración validada. Tema y timeout configurables quedan para mejoras posteriores. |
 | F19 | P2 | Artefactos y opciones del compilador | Parcial: genera `.asm` y salidas; falta abrirlas desde la UI y exponer únicamente banderas existentes. |
 | F20 | P2 | Métricas dentro del IDE | Pendiente y opcional para el IDE: depende del contrato de datos de las optimizaciones. |
 | F21 | P0 | Ocultar/recuperar explorador | Implementado: ×, botón Archivos, Ctrl+B y menú Ver sincronizados. |
@@ -130,6 +132,7 @@ ide/
   archivos.py                   lectura consistente y guardado atómico condicionado
   ediciones.py                  validación de ediciones y posiciones Python/UTF-16
   preferencias.py               configuración validada
+  politica_asistencia.py        permisos, catálogo revisado y evaluación automática con el parser
   ccom.py                       ejecutable, diagnósticos y categorías
   clones.py                     detector léxico independiente de Qt
   interfaz/
@@ -145,6 +148,8 @@ ide/
     analisis.py                 cola serial y trabajador léxico
     asistencia.py               coordinador serial de ambos motores y validación de respuestas
     sugerencias.py              lista manual junto al cursor y control de interacción
+    reparaciones.py             panel de propuestas, motivos, vista previa y aplicación explícita
+    preferencias_asistencia.py   diálogo de permisos, pausa y reglas automáticas
     comprobacion.py             ccom --check, QProcess y temporales
     clones.py                   trabajador y panel de clones
     terminal.py                 terminal de comandos
@@ -208,7 +213,7 @@ El parser expone `analizar_sintaxis` y `contexto_en` en `ide/nucleo/parser.py`; 
 - Estados explícitos, opciones inmutables, rangos Python `[inicio, fin)` y precondiciones sobre el original. Ambas APIs son Python puro y propagan cancelación al parser.
 - El IDE conserva documento, revisión, texto, cursor y ancla; aplica solo sobre el mismo contexto. La automatización exige política/catálogo/disparador además de un indicador del motor.
 - El aplicador está implementado: rangos, límites, UTF-16, cursor/selección, precondiciones y una operación de Deshacer. No guarda ni crea propuestas.
-- Coordinación en segundo plano y UI manual de sugerencias implementadas; carga diferida de módulos reales y proveedores inyectables para pruebas. Faltan UI de reparaciones, política automática, motores reales y prioridad de diagnósticos frente a ccom.
+- Coordinación en segundo plano y UI manual de sugerencias implementadas; carga diferida de módulos reales y proveedores inyectables para pruebas. Panel manual de reparaciones implementado; preferencias, pausa y política automática preparadas; faltan motores reales, catálogo revisado y prioridad de sus diagnósticos frente a ccom.
 
 ### 7.4 Análisis automático con ccom
 
@@ -283,7 +288,7 @@ Verificación E4: 70 pruebas combinadas de CALSIDE/núcleo; `make check-analysis
 - [ ] Recibir motor de sugerencias del compañero (también responsable de reparaciones), adaptado a la API del parser.
 - [ ] Incorporar el motor sin reemplazar ccom y definir prioridad de diagnósticos antes de mostrar otra fuente en vivo.
 - [x] UI manual con Ctrl+Espacio y coordinador conectados al contrato; sin motor ficticio de producción.
-- [ ] Activación contextual por pausa, tras definir la política del paso 6.
+- [x] Activación por pausa opcional, permisos y cancelación preparados en el paso 6; falta verificar contextos con el motor real.
 - [x] Lista con flechas, Enter/Tab/clic, Escape y reemplazo por rango, con descarte de contexto anterior.
 - [ ] Verificar con el motor real que no proponga dentro de comentarios; los errores/bloqueos se presentan sin lista.
 
@@ -295,18 +300,18 @@ Verificación E4: 70 pruebas combinadas de CALSIDE/núcleo; `make check-analysis
 2. [x] **Aplicador de ediciones:** validación completa previa, rangos del original, precondiciones, Unicode, contexto obsoleto, conservación de selección y Deshacer/Rehacer. Verificado dentro de la ventana; sin guardado ni motores simulados en producción.
 3. [x] **Coordinador de asistencia:** ambos tipos de motor, una tarea activa, pendientes por documento/tipo, cancelación, límites, validación y carga diferida de proveedores reales.
 4. [x] **UI de sugerencias:** Ctrl+Espacio, lista junto al cursor, teclado/ratón, Escape y aceptación mediante el aplicador. Verificada con proveedores controlados solo de prueba.
-5. [ ] **UI de reparaciones:** explicación, propuesta, aplicar/cancelar y prioridad de diagnósticos.
-6. [ ] **Preferencias y política automática:** pausa, desactivación y catálogo/disparadores comprobados.
+5. [x] **UI de reparaciones:** Alt+Enter, explicación, vista previa de cambios, aplicar/cancelar, una operación de Deshacer e invalidación de propuestas antiguas. Conserva la prioridad actual de diagnósticos; el panel no publica una fuente nueva ni modifica el contador de Problemas.
+6. [x] **Preferencias y política automática:** diálogo persistente, pausa opcional, desactivación general, permiso por regla y comprobación real del parser en segundo plano. Disparador conservador: Enter al final de una línea y pausa. Catálogo de producción vacío hasta revisar las reglas de la entrega real; ver [política y conexión](politica_asistencia.md).
 7. [ ] **Integración real:** adaptar/conectar entregas y verificar con el parser y ccom reales.
 
-Preparación 1/2 verificada: **23 pruebas nuevas; 227 combinadas correctas**. Las opciones controladas de las pruebas no son un motor de sugerencias/reparaciones. Los pasos 3/4 también están preparados: **26 pruebas nuevas y 253 combinadas correctas**. La siguiente tarea disponible sin esperar motores es el **paso 5, UI de reparaciones**.
+Preparación 1/2 verificada: **23 pruebas nuevas; 227 combinadas correctas**. Las opciones controladas de las pruebas no son un motor de sugerencias/reparaciones. Los pasos 3/4 también están preparados: **26 pruebas nuevas y 253 combinadas correctas**. El paso 5 añade **15 pruebas; 268 combinadas correctas**. El paso 6 añade **26 pruebas; 294 combinadas correctas**. Sigue el **paso 7, integración real de los motores** y revisión de su catálogo.
 
 ### E6 · Reparaciones y corrección automática — depende del motor del compañero
 
 1. El contrato de ediciones y su aplicador ya están implementados. Falta el catálogo del motor por `;`, `.`, `[]` y `()` conforme a la gramática real.
-2. Mostrar propuestas con explicación y aplicar primero por acción explícita para validar sus rangos.
-3. Agrupar cada reparación como una sola operación de deshacer.
-4. Habilitar automatización únicamente para los casos inequívocos acordados y con disparador definido (no interrumpir una construcción que el usuario sigue escribiendo).
+2. Implementado: panel de propuestas con explicación, vista previa acotada y aplicación explícita mediante el aplicador común.
+3. Implementado: cada reparación aplicada es una sola operación de deshacer; no se guarda automáticamente.
+4. Política y controles implementados: desactivado por defecto, reglas seleccionadas, Enter al final de línea, pausa y aceptación completa por el parser. Falta aprobar el catálogo real; la marca del motor no basta.
 5. No aplicar respuestas antiguas, no tocar comentarios por error ni guardar automáticamente el documento.
 6. Probar positivos y negativos por categoría; permitir deshacer y desactivar la automatización.
 
@@ -322,7 +327,7 @@ Preparación 1/2 verificada: **23 pruebas nuevas; 227 combinadas correctas**. La
 - [x] Pruebas de foco, atajos, mínimo 800×520, cierre con monitor activo y revisión visual local al 100 % y 150 %. Las pruebas previas de terminales/análisis siguen correctas.
 - [x] 28 pruebas nuevas; **124 combinadas correctas**. Funciones disponibles de F01–F10, F14–F17 y F21–F24 verificadas; F11–F13 dependen de los motores y no se declaran terminadas.
 
-Revisión posterior (2026-11-06): creación y operaciones completas de carpetas, árbol expandible por tandas, ramas persistentes, atajos y revelado del archivo activo. Incluye selección con Ctrl/Shift/Ctrl+A, rectángulo desde el fondo, arrastre interno y operaciones de lotes que conservan buffers. Incluye tarjeta de arrastre con alfa, inserción visual entre hermanos, orden persistente y restauración alfabética. La barra lateral reemplaza Abrir carpeta y busca archivos .cls, carpetas y código con filtros, buffers, tareas cancelables y navegación. Ejecutar F6 está conectado al simulador, separado de F5, con validación de fuente/artefactos, copias por corrida y traza/variables finales. Contrato y aplicador de asistencia también implementados, con tipos compartidos y documentación para ambos motores. Coordinador y UI manual de sugerencias también preparados; los motores reales y la activación automática siguen pendientes. Suite combinada actual: **253 pruebas correctas**.
+Revisión posterior (2026-11-06): creación y operaciones completas de carpetas, árbol expandible por tandas, ramas persistentes, atajos y revelado del archivo activo. Incluye selección con Ctrl/Shift/Ctrl+A, rectángulo desde el fondo, arrastre interno y operaciones de lotes que conservan buffers. Incluye tarjeta de arrastre con alfa, inserción visual entre hermanos, orden persistente y restauración alfabética. La barra lateral reemplaza Abrir carpeta y busca archivos .cls, carpetas y código con filtros, buffers, tareas cancelables y navegación. Ejecutar F6 está conectado al simulador, separado de F5, con validación de fuente/artefactos, copias por corrida y traza/variables finales. Contrato y aplicador de asistencia también implementados, con tipos compartidos y documentación para ambos motores. Coordinador y UI manuales de sugerencias y reparaciones también preparados; preferencias y política automática también preparadas; los motores reales y su catálogo revisado siguen pendientes. Suite combinada actual: **294 pruebas correctas**.
 
 Detalle y prueba manual en [proyecto_archivos.md](proyecto_archivos.md). No se promete un bloqueo exclusivo frente a escritores externos entre la última comprobación y el reemplazo: son operaciones distintas del sistema de archivos. La validación del equipo de defensa permanece en E8/E9. Preferencias de tema y timeout quedan fuera de esta entrega.
 
@@ -444,4 +449,4 @@ La animación de la esquina y las mejoras de E10 se mantienen separadas de esta 
 
 Al terminar una etapa: actualizar estado y criterio de aceptación, registrar evidencia relevante y anotar la siguiente tarea disponible. Si cambia la arquitectura, reescribir la sección afectada; no acumular anexos que contradigan tareas anteriores. Conservar IDs F01–F26 para seguir requisitos y revisión.
 
-Próxima tarea de preparación disponible: **E5/E6, paso 5 de UI de reparaciones**; los pasos 1–4 de contrato, aplicador, coordinador y UI manual de sugerencias están completos. En paralelo, el compañero implementa sugerencias sobre el parser disponible y el contrato compartido; la conexión real sigue pendiente. El mismo compañero implementará reparaciones para E6. E7 ya está implementado; mientras llegan los motores, puede avanzar E8 (empaquetado).
+Siguiente tarea de integración: **E5/E6, paso 7, conectar motores reales y revisar su catálogo**; los pasos 1–6 del IDE están preparados, incluidas preferencias, pausa y política automática. Sin catálogo revisado no hay reglas automáticas habilitadas en producción. En paralelo, el compañero implementa sugerencias sobre el parser disponible y el contrato compartido; la conexión real sigue pendiente. El mismo compañero implementará reparaciones para E6. E7 ya está implementado; mientras llegan los motores, puede avanzar E8 (empaquetado).

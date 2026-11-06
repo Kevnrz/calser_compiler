@@ -1,12 +1,15 @@
 """Validación de preferencias de presentación. Nunca restaura buffers o procesos."""
 import json
 from pathlib import Path
+from ide.politica_asistencia import validar_preferencias
 
 
 def validar(datos):
     if not isinstance(datos, dict) or type(datos.get('version')) is not int or datos.get('version') != 1:
         return {}
     limpio = {'version': 1}
+    if 'asistencia' in datos:
+        limpio['asistencia'] = validar_preferencias(datos['asistencia'])
     for campo in ('proyecto', 'ccom', 'familia'):
         valor = datos.get(campo)
         if isinstance(valor, str) and len(valor) <= 4096 and '\x00' not in valor:

@@ -179,8 +179,18 @@ class ProyectoVentana:
             for i in range(self.tabs.count()):
                 self.aplicar_fuente(self.tabs.widget(i))
 
+    def configurar_asistencia(self):
+        from ide.interfaz.preferencias_asistencia import PreferenciasAsistencia
+        dialogo = PreferenciasAsistencia(self.asistencia.configuracion, self.asistencia.reglas, self)
+        if dialogo.exec() == dialogo.DialogCode.Accepted:
+            self.asistencia.configurar(dialogo.datos())
+            self.guardar_preferencias()
+            self.statusBar().showMessage('Preferencias de asistencia actualizadas')
+        dialogo.deleteLater()
+
     def guardar_preferencias(self):
         if not preferencias.guardar(self.settings, {
+            'asistencia': self.asistencia.configuracion,
             'version': 1, 'proyecto': str(self.project), 'ccom': self.configured_ccom,
             'carpetas_abiertas': self.tree.carpetas_abiertas(),
             'orden_explorador': self.tree.orden_presentacion(),

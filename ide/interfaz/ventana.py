@@ -22,6 +22,7 @@ from ide.interfaz.busqueda import BusquedaProyecto
 from ide.interfaz.acciones_archivos import AccionesArchivos
 from ide.interfaz.ejecucion import EjecucionVentana
 from ide.interfaz.sugerencias import AsistenciaEditor
+from ide.interfaz.reparaciones import PanelReparaciones, ReparacionesVentana
 from ide.interfaz.proyecto import ProyectoVentana
 from ide.interfaz.terminal import Terminal
 from ide.interfaz.clones import PanelClones
@@ -44,7 +45,7 @@ class Esquina(QWidget):
         painter.drawPolygon(QPolygon([QPoint(0, 0), QPoint(32, 0), QPoint(32, 32)]))
 
 
-class Ventana(EjecucionVentana, AccionesArchivos, ProyectoVentana, QMainWindow):
+class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoVentana, QMainWindow):
     def __init__(self, root, *, preferencias=None):
         super().__init__()
         self.root = Path(root)
@@ -98,6 +99,8 @@ class Ventana(EjecucionVentana, AccionesArchivos, ProyectoVentana, QMainWindow):
         self.comprobador.estado.connect(self.estado_comprobacion)
         self.iniciar_proyecto(preferencias)
         self.asistencia = AsistenciaEditor(self)
+        self.asistencia.reparacionesRecibidas.connect(self.recibir_reparaciones)
+        self.asistencia.contextoInvalidado.connect(self.reparaciones_panel.invalidar)
         self.nuevo()
         self.restaurar_preferencias()
 
@@ -237,7 +240,12 @@ class Ventana(EjecucionVentana, AccionesArchivos, ProyectoVentana, QMainWindow):
         self.run_output.setMaximumBlockCount(12000)
         self.run_output.setPlaceholderText("F5 compila el programa; F6 lo ejecuta y muestra la traza y los valores finales.")
         self.panels.addTab(self.run_output, "Ejecución")
-        for i in range(5):
+        self.reparaciones_panel = PanelReparaciones()
+        self.reparaciones_panel.solicitar.connect(self.solicitar_reparaciones)
+        self.reparaciones_panel.cancelar.connect(self.cancelar_reparaciones)
+        self.reparaciones_panel.aplicar.connect(self.aplicar_reparacion_propuesta)
+        self.panels.addTab(self.reparaciones_panel, "Reparaciones")
+        for i in range(6):
             from PySide6.QtWidgets import QTabBar
             self.panels.tabBar().setTabButton(i, QTabBar.ButtonPosition.RightSide, None)
             self.panels.tabBar().setTabButton(i, QTabBar.ButtonPosition.LeftSide, None)
@@ -303,7 +311,9 @@ class Ventana(EjecucionVentana, AccionesArchivos, ProyectoVentana, QMainWindow):
         self.addAction(copiar_consola)
         self.cancelar_carpeta_action = self.accion(menu, "Cancelar copia de carpeta", None, self.cancelar_copia_carpeta)
         self.cancelar_carpeta_action.setEnabled(False)
-        self.accion(edit, "Sugerencias de código\tCtrl+Espacio", None, self.solicitar_sugerencias)
+        self.sugerencias_action = self.accion(edit, "Sugerencias de código\tCtrl+Espacio", None, self.solicitar_sugerencias)
+        self.reparaciones_action = self.accion(edit, "Reparaciones de código\tAlt+Enter", None, self.solicitar_reparaciones)
+        self.accion(edit, "Preferencias de asistencia…", None, self.configurar_asistencia)
         self.accion(edit, "Buscar…", "Ctrl+F", self.buscar)
         self.accion(edit, "Buscar en el proyecto…", "Ctrl+Shift+F", self.enfocar_busqueda_proyecto)
         view = self.menus.addMenu("Ver")

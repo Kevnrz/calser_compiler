@@ -82,6 +82,6 @@ def aplicar_reparacion(editor, contexto, reparacion):
     if not isinstance(reparacion, Reparacion):
         return ResultadoAplicacion('invalida', 'Se esperaba Reparacion')
     # automatica_segura no dispara nada: esta función solo aplica una propuesta
-    # elegida por el llamador. El permiso/disparador automático se añade en E6.
+    # elegida por el llamador. La política del IDE controla el disparador automático.
     return aplicar_ediciones_editor(editor, contexto, reparacion.ediciones,
                                    cursor_final=reparacion.cursor_final, precondiciones=reparacion.precondiciones)

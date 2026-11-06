@@ -44,7 +44,7 @@ No compartir pilas mutables entre llamadas. Límites explícitos de pasos/result
 
 ### Entrega y validación común
 
-Entregar código, pruebas reproducibles y documentación de API con ejemplos de entrada/salida, límites conocidos y cambios respecto al contrato. Ejecutar `make check-ide`; referencia histórica del parser: 96 pruebas; preparación actual de contrato/aplicador/coordinador/UI manual de sugerencias: 253 pruebas combinadas. Añadir pruebas en `ide/pruebas/`. Si se toca ccom o su gramática, ejecutar también las comprobaciones del compilador pertinentes. Coordinar cambios compartidos y comunicar rama/commit para integración; estos documentos no autorizan publicar, fusionar ni enviar mensajes automáticamente.
+Entregar código, pruebas reproducibles y documentación de API con ejemplos de entrada/salida, límites conocidos y cambios respecto al contrato. Ejecutar `make check-ide`; referencia histórica del parser: 96 pruebas; preparación actual del IDE, incluidas preferencias/política de asistencia: 294 pruebas combinadas. Añadir pruebas en `ide/pruebas/`. Si se toca ccom o su gramática, ejecutar también las comprobaciones del compilador pertinentes. Coordinar cambios compartidos y comunicar rama/commit para integración; estos documentos no autorizan publicar, fusionar ni enviar mensajes automáticamente.
 
 ## Dependencia y API fijada
 
@@ -96,4 +96,4 @@ API y tipos estables, ejemplos completos de entrada/salida y catálogo de sugere
 
 ## Conexión preparada en CALSIDE (pasos 3/4)
 
-El coordinador ya invoca la API real mediante importación diferida de los módulos y firmas de este documento. Devuelve errores de contrato explícitos y valida rangos antes de publicar opciones. Respetar `cancelar` y los tipos compartidos permite conectar la entrega sin reescribir los widgets. La UI de sugerencias manual está lista; la de reparaciones y la activación automática siguen pendientes. Ver [contrato_asistencia.md](contrato_asistencia.md) para límites, formatos, estados y verificación actual.
+El coordinador ya invoca la API real mediante importación diferida de los módulos y firmas de este documento. Devuelve errores de contrato explícitos y valida rangos antes de publicar opciones. Respetar `cancelar` y los tipos compartidos permite conectar la entrega sin reescribir los widgets. Las UI manuales, las preferencias, la pausa y la política automática están listas. Falta integrar el motor real y revisar su catálogo. Ver [política y aprobación de reglas](politica_asistencia.md). El motor solo entrega los tipos compartidos; no necesita implementar widgets. Ver [contrato_asistencia.md](contrato_asistencia.md) para límites, formatos, estados y verificación actual.

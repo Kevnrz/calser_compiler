@@ -89,6 +89,15 @@ class Editor(QPlainTextEdit):
         self.actualizar_margen()
         self.linea_actual()
 
+    def contexto_asistencia(self):
+        from ide.interfaz.ediciones import capturar_contexto
+        return capturar_contexto(self)
+
+    def aplicar_ediciones(self, contexto, ediciones, *, cursor_final=None, precondiciones=()):
+        from ide.interfaz.ediciones import aplicar_ediciones_editor
+        return aplicar_ediciones_editor(self, contexto, ediciones, cursor_final=cursor_final,
+                                        precondiciones=precondiciones)
+
     def cambio(self):
         text = self.toPlainText()
         # Rehighlight puede emitir textChanged sin que cambie el texto. No

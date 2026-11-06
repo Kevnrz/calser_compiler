@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Qt, Signal
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QHBoxLayout, QHeaderView, QLabel, QPlainTextEdit, QPushButton, QSpinBox, QSplitter, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QHeaderView, QLabel, QPlainTextEdit, QPushButton, QSizePolicy, QSpinBox, QSplitter, QToolButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
 
 from ide.archivos import leer
 from ide.clones import Cancelado, LimiteAnalisis, detectar
@@ -94,31 +94,58 @@ class PanelClones(QWidget):
         self.list = QTreeWidget()
         self.list.setHeaderLabels(["Tipo", "Fragmento A", "Fragmento B", "Tokens"])
         self.list.setRootIsDecorated(False)
-        self.list.setMinimumHeight(115)
+        self.list.setMinimumHeight(65)
         self.list.header().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.list.header().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.list.itemSelectionChanged.connect(self.comparar)
-        layout.addWidget(self.list, 1)
+        self.details = QSplitter(Qt.Orientation.Vertical)
+        self.details.setObjectName("detalleClones")
+        self.details.setHandleWidth(6)
+        self.details.setChildrenCollapsible(False)
+        self.details.setStyleSheet("QSplitter#detalleClones::handle:hover { background: #665137; }")
+        self.details.addWidget(self.list)
+        self.detail_sizes = None
+        self.details.splitterMoved.connect(lambda *_: self.recordar_distribucion())
         self.comparison = QSplitter(Qt.Orientation.Horizontal)
         self.previews = []
         self.open_buttons = []
-        for label in ("Abrir A", "Abrir B"):
+        self.preview_labels = []
+        for label in ("Fragmento A", "Fragmento B"):
             side = QWidget()
             column = QVBoxLayout(side)
             column.setContentsMargins(0, 0, 0, 0)
-            button = QPushButton(label)
+            column.setSpacing(3)
+            header = QHBoxLayout()
+            header.setContentsMargins(4, 0, 0, 0)
+            name = QLabel(label)
+            name.setTextFormat(Qt.TextFormat.PlainText)
+            name.setMinimumWidth(0)
+            name.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            name.setStyleSheet("color: #efbb65;")
+            header.addWidget(name, 1)
+            button = QToolButton()
+            button.setText("Abrir ↗")
+            button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             button.clicked.connect(lambda checked=False, i=len(self.previews): self.abrir(i))
-            column.addWidget(button)
+            header.addWidget(button)
+            self.preview_labels.append(name)
+            column.addLayout(header)
             preview = QPlainTextEdit()
             preview.setReadOnly(True)
             preview.setFont(QFont("monospace", 10))
-            preview.setMinimumSize(100, 120)
+            preview.setMinimumSize(80, 65)
             column.addWidget(preview)
             self.previews.append(preview)
             self.open_buttons.append(button)
             self.comparison.addWidget(side)
         self.comparison.hide()
-        layout.addWidget(self.comparison, 1)
+        self.details.addWidget(self.comparison)
+        self.details.setStretchFactor(0, 0)
+        self.details.setStretchFactor(1, 1)
+        handle = self.details.handle(1)
+        handle.setCursor(Qt.CursorShape.SplitVCursor)
+        handle.setToolTip("Arrastra para repartir el espacio entre resultados y comparación")
+        layout.addWidget(self.details, 1)
 
     def analizar(self, directory, buffers):
         if self.task and self.task.isRunning():
@@ -163,8 +190,19 @@ class PanelClones(QWidget):
         for index, fragment in enumerate((pair.primero, pair.segundo)):
             text = self.sources[fragment.archivo]
             self.previews[index].setPlainText(text[fragment.inicio:fragment.fin])
-            self.open_buttons[index].setText(f"Abrir {fragment.archivo.name} · L{fragment.linea_inicio}")
+            titulo = f"{fragment.archivo.name} · L{fragment.linea_inicio}–{fragment.linea_fin}"
+            self.preview_labels[index].setText(titulo)
+            self.preview_labels[index].setToolTip(f"{fragment.archivo}:{fragment.linea_inicio}–{fragment.linea_fin}")
+            self.open_buttons[index].setToolTip(f"Abrir {titulo} en el editor")
+            self.open_buttons[index].setAccessibleName(f"Abrir {titulo}")
+        estaba_oculta = self.comparison.isHidden()
         self.comparison.show()
+        if estaba_oculta:
+            self.details.setSizes(self.detail_sizes or [85, 240])
+
+    def recordar_distribucion(self):
+        if not self.comparison.isHidden():
+            self.detail_sizes = self.details.sizes()
 
     def abrir(self, index):
         items = self.list.selectedItems()

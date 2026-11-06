@@ -275,8 +275,10 @@ class Proyecto(unittest.TestCase):
         self.assertEqual(set(nombres), {'ejemplos', 'fuente.cls'})
         carpeta = next(tree.filtro.index(i, 0, tree.rootIndex()) for i, n in enumerate(nombres) if n == 'ejemplos')
         tree.expand(carpeta)
-        self.esperar(lambda: tree.filtro.rowCount(carpeta) == 1)
-        archivo = tree.filtro.index(0, 0, carpeta)
+        # QFileSystemModel puede reordenar al completar la carga asíncrona.
+        # Resolver la ruta de nuevo evita retener un QModelIndex invalidado.
+        self.esperar(lambda: tree.filtro.rowCount(tree.indice_ruta(sub)) == 1)
+        archivo = tree.filtro.index(0, 0, tree.indice_ruta(sub))
         tree.abrir(archivo)
         self.assertEqual(self.window.editor().path, nested)
         self.assertEqual(self.editor.toPlainText(), TEXTO)

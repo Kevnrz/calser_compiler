@@ -7,7 +7,7 @@ from html import escape
 
 from PySide6.QtCore import QProcess, QTimer, Qt
 from PySide6.QtGui import QAction, QColor, QPainter, QPolygon, QTextCursor
-from PySide6.QtCore import QPoint
+from PySide6.QtCore import QPoint, QSize
 from PySide6.QtWidgets import (
     QFileDialog, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QMainWindow,
     QMenuBar, QMessageBox, QPlainTextEdit, QPushButton, QSplitter, QTabWidget,
@@ -16,7 +16,12 @@ from PySide6.QtWidgets import (
 
 from ide import archivos, ccom
 from ide.interfaz.editor import Editor
+from ide.interfaz.iconos import icono_archivo
 from ide.interfaz.explorador import Explorador
+from ide.interfaz.busqueda import BusquedaProyecto
+from ide.interfaz.acciones_archivos import AccionesArchivos
+from ide.interfaz.ejecucion import EjecucionVentana
+from ide.interfaz.sugerencias import AsistenciaEditor
 from ide.interfaz.proyecto import ProyectoVentana
 from ide.interfaz.terminal import Terminal
 from ide.interfaz.clones import PanelClones
@@ -39,13 +44,15 @@ class Esquina(QWidget):
         painter.drawPolygon(QPolygon([QPoint(0, 0), QPoint(32, 0), QPoint(32, 32)]))
 
 
-class Ventana(ProyectoVentana, QMainWindow):
+class Ventana(EjecucionVentana, AccionesArchivos, ProyectoVentana, QMainWindow):
     def __init__(self, root, *, preferencias=None):
         super().__init__()
         self.root = Path(root)
         self.project = self.root
         self.configured_ccom = ""
         self.process = None
+        self.operacion_carpetas = None
+        self.iniciar_ejecucion()
         self.stderr = ""
         self.compilation = None
         self.results = {}
@@ -90,6 +97,7 @@ class Ventana(ProyectoVentana, QMainWindow):
         self.comprobador.fallo.connect(self.fallo_comprobacion)
         self.comprobador.estado.connect(self.estado_comprobacion)
         self.iniciar_proyecto(preferencias)
+        self.asistencia = AsistenciaEditor(self)
         self.nuevo()
         self.restaurar_preferencias()
 
@@ -107,7 +115,7 @@ class Ventana(ProyectoVentana, QMainWindow):
         brand = QLabel("⬡  CALSIDE")
         brand.setStyleSheet("background: transparent; color: #efbb65; font-size: 15px;")
         bar.addWidget(brand)
-        self.context = QLabel("Análisis en vivo · F5 compila")
+        self.context = QLabel("Análisis en vivo · F5 compila · F6 ejecuta")
         self.context.setStyleSheet("background: transparent; color: #a5afbf;")
         bar.addWidget(self.context)
         bar.addStretch()
@@ -136,6 +144,10 @@ class Ventana(ProyectoVentana, QMainWindow):
         self.compile_button.setObjectName("compilar")
         self.compile_button.clicked.connect(self.compilar)
         tools.addWidget(self.compile_button)
+        self.run_button = QPushButton("▶  Ejecutar  F6")
+        self.run_button.setToolTip("Ejecutar la compilación vigente en el simulador")
+        self.run_button.clicked.connect(self.ejecutar)
+        tools.addWidget(self.run_button)
         self.stop_button = QPushButton("Cancelar")
         self.stop_button.setEnabled(False)
         self.stop_button.clicked.connect(self.cancelar)
@@ -149,9 +161,10 @@ class Ventana(ProyectoVentana, QMainWindow):
         self.sidebar = sidebar
         side = QVBoxLayout(sidebar)
         side.setContentsMargins(8, 10, 4, 4)
-        project_button = QPushButton("Abrir carpeta…")
-        project_button.clicked.connect(self.elegir_carpeta)
-        side.addWidget(project_button)
+        self.tree = Explorador()
+        self.busqueda_proyecto = BusquedaProyecto(self.tree, self.fuentes_busqueda, self)
+        self.busqueda_proyecto.abrirResultado.connect(self.ir_resultado_busqueda)
+        side.addWidget(self.busqueda_proyecto)
         project_header = QHBoxLayout()
         self.project_label = QLabel("PROYECTO")
         project_header.addWidget(self.project_label, 1)
@@ -161,10 +174,15 @@ class Ventana(ProyectoVentana, QMainWindow):
         close_files.clicked.connect(lambda: self.files_button.setChecked(False))
         project_header.addWidget(close_files)
         side.addLayout(project_header)
-        self.tree = Explorador()
         self.tree.abrirArchivo.connect(self.abrir)
+        self.tree.menuSolicitado.connect(self.menu_archivo)
+        self.tree.operacionSolicitada.connect(self.atajo_explorador)
+        self.tree.trasladoSolicitado.connect(self.trasladar_seleccion)
         self.tree.errorAcceso.connect(lambda mensaje: self.statusBar().showMessage(mensaje))
-        side.addWidget(self.tree)
+        side.addWidget(self.busqueda_proyecto.paginas, 1)
+        self.tree.archivos.rowsInserted.connect(self.busqueda_proyecto.actualizar_si_activa, Qt.ConnectionType.QueuedConnection)
+        self.tree.archivos.rowsRemoved.connect(self.busqueda_proyecto.actualizar_si_activa, Qt.ConnectionType.QueuedConnection)
+        self.tree.archivos.dataChanged.connect(self.busqueda_proyecto.actualizar_si_activa, Qt.ConnectionType.QueuedConnection)
         horizontal.addWidget(sidebar)
 
         vertical = QSplitter(Qt.Orientation.Vertical)
@@ -172,6 +190,7 @@ class Ventana(ProyectoVentana, QMainWindow):
         self.terminals = []
         self.terminal_number = 0
         self.tabs = QTabWidget()
+        self.tabs.setIconSize(QSize(18, 18))
         self.tabs.setTabsClosable(True)
         self.tabs.setMovable(True)
         self.tabs.tabCloseRequested.connect(self.cerrar_tab)
@@ -213,7 +232,12 @@ class Ventana(ProyectoVentana, QMainWindow):
         self.panels.addTab(self.output, "Salida de ccom")
         self.panels.addTab(self.clones_panel, "Clones")
         self.panels.addTab(self.auto_output, "Análisis de ccom")
-        for i in range(4):
+        self.run_output = QPlainTextEdit()
+        self.run_output.setReadOnly(True)
+        self.run_output.setMaximumBlockCount(12000)
+        self.run_output.setPlaceholderText("F5 compila el programa; F6 lo ejecuta y muestra la traza y los valores finales.")
+        self.panels.addTab(self.run_output, "Ejecución")
+        for i in range(5):
             from PySide6.QtWidgets import QTabBar
             self.panels.tabBar().setTabButton(i, QTabBar.ButtonPosition.RightSide, None)
             self.panels.tabBar().setTabButton(i, QTabBar.ButtonPosition.LeftSide, None)
@@ -277,7 +301,11 @@ class Ventana(ProyectoVentana, QMainWindow):
         copiar_consola.setShortcut("Ctrl+Shift+C")
         copiar_consola.triggered.connect(lambda: self.editar_en_foco("copy"))
         self.addAction(copiar_consola)
+        self.cancelar_carpeta_action = self.accion(menu, "Cancelar copia de carpeta", None, self.cancelar_copia_carpeta)
+        self.cancelar_carpeta_action.setEnabled(False)
+        self.accion(edit, "Sugerencias de código\tCtrl+Espacio", None, self.solicitar_sugerencias)
         self.accion(edit, "Buscar…", "Ctrl+F", self.buscar)
+        self.accion(edit, "Buscar en el proyecto…", "Ctrl+Shift+F", self.enfocar_busqueda_proyecto)
         view = self.menus.addMenu("Ver")
         for text, widget in [("Explorador de archivos", self.sidebar), ("Panel de resultados", self.panels)]:
             action = QAction(text, self)
@@ -293,6 +321,7 @@ class Ventana(ProyectoVentana, QMainWindow):
                 self.results_action = action
         self.accion(view, "Fuente del editor…", None, self.configurar_fuente)
         self.accion(view, "Enfocar explorador", "Ctrl+Shift+E", self.enfocar_explorador)
+        self.accion(view, "Revelar archivo activo en el explorador", None, self.revelar_archivo_activo)
         self.accion(view, "Mover panel abajo / derecha", "Ctrl+Alt+J", self.mover_panel)
         self.accion(view, "Nueva terminal", "Ctrl+Shift+T", self.nueva_terminal)
         self.accion(view, "Analizar clones de la carpeta", "Ctrl+Shift+D", self.analizar_clones)
@@ -303,6 +332,7 @@ class Ventana(ProyectoVentana, QMainWindow):
         view.addAction(self.auto_action)
         build = self.menus.addMenu("Compilar")
         self.compile_action = self.accion(build, "Compilar archivo activo", "F5", self.compilar)
+        self.run_action = self.accion(build, "Ejecutar archivo activo", "F6", self.ejecutar)
         self.accion(build, "Configurar ccom…", None, self.configurar_ccom)
 
     def editar_en_foco(self, metodo):
@@ -371,12 +401,14 @@ class Ventana(ProyectoVentana, QMainWindow):
 
     def nuevo(self):
         editor = Editor(self.root)
+        self.asistencia.conectar_editor(editor)
         self.aplicar_fuente(editor)
         self.tabs.addTab(editor, "Sin título")
         self.tabs.setCurrentWidget(editor)
         editor.document().modificationChanged.connect(lambda _: self.actualizar_titulo(editor))
         editor.cursorPositionChanged.connect(self.actualizar_estado)
         editor.contenidoCambiado.connect(lambda: self.edicion(editor))
+        editor.textChanged.connect(self.busqueda_proyecto.actualizar_si_activa)
         editor.analisisSolicitado.connect(self.analizador.solicitar)
         editor.estadoAnalisisCambiado.connect(self.actualizar_estado)
         editor.programar_analisis()
@@ -386,6 +418,7 @@ class Ventana(ProyectoVentana, QMainWindow):
     def actualizar_titulo(self, editor):
         index = self.tabs.indexOf(editor)
         if index >= 0:
+            self.tabs.setTabIcon(index, icono_archivo(editor.path))
             self.tabs.setTabText(index, (editor.path.name if editor.path else "Sin título") + (" ●" if editor.document().isModified() else "") + (" ⚠" if self.tiene_cambio_externo(editor) else ""))
             self.tabs.setTabToolTip(index, str(editor.path or "Documento sin guardar"))
         self.actualizar_estado()
@@ -524,6 +557,9 @@ class Ventana(ProyectoVentana, QMainWindow):
 
     def abrir(self, path):
         path = Path(path).resolve()
+        if self.ruta_ocupada(path):
+            self.error("Operación en curso", "Espera a que termine la operación en esa ubicación.")
+            return None
         for index in range(self.tabs.count()):
             editor = self.tabs.widget(index)
             if editor.path == path:
@@ -559,10 +595,12 @@ class Ventana(ProyectoVentana, QMainWindow):
         self.project_label.setText(directory.name)
         self.project_label.setToolTip(str(directory))
         self.tree.cargar(directory)
+        self.busqueda_proyecto.cambiar_proyecto(directory)
         self.statusBar().showMessage("Proyecto · carga en segundo plano", 5000)
         return True
 
     def enfocar_explorador(self):
+        self.busqueda_proyecto.campo.clear()
         self.files_button.setChecked(True)
         self.tree.setFocus()
 
@@ -582,6 +620,9 @@ class Ventana(ProyectoVentana, QMainWindow):
             if any(self.tabs.widget(i) is not editor and self.tabs.widget(i).path == path for i in range(self.tabs.count())):
                 self.error("Archivo abierto", "Ese archivo ya está abierto en otra pestaña.")
                 return False
+        if self.ruta_ocupada(path):
+            self.error("Operación en curso", "El guardado espera a que termine la operación de carpetas. Podés guardar una copia fuera de esa ubicación.")
+            return False
         try:
             actual = archivos.estado(path)
             if editor.path == path:
@@ -621,6 +662,7 @@ class Ventana(ProyectoVentana, QMainWindow):
         self.actualizar_titulo(editor)
         self.actualizar_problemas()
         self.programar_comprobacion(editor)
+        self.busqueda_proyecto.actualizar_si_activa()
         self.statusBar().showMessage(f"Guardado · {path}")
         return True
 
@@ -636,6 +678,9 @@ class Ventana(ProyectoVentana, QMainWindow):
         if index < 0:
             return
         editor = self.tabs.widget(index)
+        if self.run_process and self.run_editor is editor:
+            self.statusBar().showMessage("Cancela la ejecución antes de cerrar este documento")
+            return
         if self.process and self.compilation[0] is editor:
             self.statusBar().showMessage("Cancela la compilación antes de cerrar este documento")
             return
@@ -647,11 +692,56 @@ class Ventana(ProyectoVentana, QMainWindow):
             if editor.path:
                 self.clones_panel.invalidar(editor.path)
             self.results.pop(editor, None)
+            self.compilados.pop(editor, None)
+            self.asistencia.olvidar(editor.documento_id)
             self.tabs.removeTab(index)
             self.actualizar_problemas()
             editor.deleteLater()
+            self.busqueda_proyecto.actualizar_si_activa()
             if not self.tabs.count():
                 self.nuevo()
+
+    def fuentes_busqueda(self):
+        return {e.path: e.toPlainText() for e in (self.tabs.widget(i) for i in range(self.tabs.count()))
+                if e.path and e.path.is_relative_to(self.project) and e.path.suffix == '.cls'}
+
+    def enfocar_busqueda_proyecto(self):
+        self.files_button.setChecked(True)
+        self.busqueda_proyecto.enfocar()
+
+    def ir_resultado_busqueda(self, hit):
+        if self.ruta_ocupada(hit.archivo):
+            self.statusBar().showMessage('Espera a que termine la operación en esa ubicación')
+            return
+        if hit.tipo == 'carpeta':
+            if not hit.archivo.is_dir():
+                self.busqueda_proyecto.programar()
+                return
+            self.busqueda_proyecto.campo.clear()
+            self.tree.expandir_ruta(hit.archivo)
+            self.tree.revelar_ruta(hit.archivo)
+            self.tree.setFocus()
+            return
+        editor = self.abrir(hit.archivo)
+        if editor is None:
+            return
+        if hit.tipo == 'codigo':
+            bloque = editor.document().findBlockByNumber(hit.linea - 1)
+            if not bloque.isValid() or bloque.text() != hit.texto:
+                self.busqueda_proyecto.programar()
+                self.statusBar().showMessage('El código cambió; se están actualizando los resultados')
+                return
+            cursor = QTextCursor(bloque)
+            inicio = len(hit.texto[:hit.columna - 1].encode('utf-16-le')) // 2
+            longitud = len(hit.texto[hit.columna - 1:hit.columna - 1 + hit.longitud].encode('utf-16-le')) // 2
+            cursor.setPosition(bloque.position() + inicio)
+            cursor.setPosition(bloque.position() + inicio + longitud, QTextCursor.MoveMode.KeepAnchor)
+            editor.setTextCursor(cursor)
+            editor.centerCursor()
+        editor.setFocus()
+
+    def solicitar_sugerencias(self):
+        return self.asistencia.solicitar('sugerencias')
 
     def buscar(self):
         text, ok = QInputDialog.getText(self, "Buscar", "Texto:")
@@ -674,9 +764,12 @@ class Ventana(ProyectoVentana, QMainWindow):
             self.actualizar_problemas()
 
     def compilar(self):
-        if self.process:
+        if self.process or self.run_process:
             return
         editor = self.editor()
+        if editor and editor.path and self.ruta_ocupada(editor.path):
+            self.error("Operación en curso", "Espera a que termine la operación de carpetas antes de compilar.")
+            return
         executable = ccom.ejecutable(self.root, self.configured_ccom)
         if not executable:
             self.error("ccom no disponible", "Ejecuta make en el repositorio o selecciona el ejecutable en Compilar → Configurar ccom.")
@@ -693,6 +786,8 @@ class Ventana(ProyectoVentana, QMainWindow):
         except OSError as error:
             self.error("No se pudo crear la carpeta de salida", error)
             return
+        self.compilados.pop(editor, None)
+        self.compilation_destination = destination
         self.stderr = ""
         self.stdout_decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
         self.stderr_decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
@@ -714,6 +809,8 @@ class Ventana(ProyectoVentana, QMainWindow):
         self.process.errorOccurred.connect(self.error_proceso)
         self.compile_button.setEnabled(False)
         self.compile_action.setEnabled(False)
+        self.run_button.setEnabled(False)
+        self.run_action.setEnabled(False)
         self.stop_button.setEnabled(True)
         self.statusBar().showMessage("Compilando… puedes seguir editando")
         self.timer.start(30000)
@@ -754,6 +851,8 @@ class Ventana(ProyectoVentana, QMainWindow):
             self.actualizar_problemas()
             if self.problems.topLevelItemCount():
                 self.panels.setCurrentWidget(self.problems)
+        if current and code == 0 and not crashed:
+            self.registrar_compilacion_ejecutable(editor)
         message = "Proceso interrumpido" if crashed else ("Compilación correcta" if code == 0 else f"Compilación fallida · código {code}")
         if not current:
             message += " · resultado de una versión anterior; vuelve a compilar"
@@ -780,9 +879,13 @@ class Ventana(ProyectoVentana, QMainWindow):
                 self.actualizar_estado()
         self.compile_button.setEnabled(True)
         self.compile_action.setEnabled(True)
+        self.run_button.setEnabled(True)
+        self.run_action.setEnabled(True)
         self.stop_button.setEnabled(False)
 
     def cancelar(self):
+        if self.run_process:
+            self.cancelar_ejecucion()
         if self.process:
             self.process.kill()
 
@@ -814,6 +917,14 @@ class Ventana(ProyectoVentana, QMainWindow):
         QMessageBox.warning(self, title, str(error))
 
     def closeEvent(self, event):
+        if self.run_process:
+            self.statusBar().showMessage("Cancela la ejecución antes de cerrar el IDE")
+            event.ignore()
+            return
+        if self.operacion_carpetas is not None:
+            self.statusBar().showMessage("Espera a que termine la operación de carpetas; las copias se pueden cancelar desde Archivo.")
+            event.ignore()
+            return
         if self.process:
             self.statusBar().showMessage("Cancela la compilación antes de cerrar el IDE")
             event.ignore()
@@ -829,6 +940,14 @@ class Ventana(ProyectoVentana, QMainWindow):
             if answer != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return
+        if not self.asistencia.detener():
+            self.statusBar().showMessage("Cancelando la asistencia… el motor debe atender la cancelación antes de cerrar")
+            event.ignore()
+            return
+        if not self.busqueda_proyecto.detener():
+            self.statusBar().showMessage("Cancelando la búsqueda… intenta cerrar de nuevo en un momento")
+            event.ignore()
+            return
         if not self.monitor.detener():
             self.statusBar().showMessage("Terminando comprobación de archivos… intenta cerrar de nuevo")
             event.ignore()

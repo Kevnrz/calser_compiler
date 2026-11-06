@@ -22,10 +22,26 @@ Si PySide6 ya está instalado, basta con `make ide`. También se puede abrir un 
 - Avisos por cambios/borrado externo, recarga explícita y protección al sobrescribir.
 - Preferencias de proyecto, ccom, fuente y distribución persistentes; fuente configurable desde Ver.
 - Resaltado con tokens reales del núcleo y errores léxicos mientras escribes, incluidos comentarios multilínea y texto sin guardar. El análisis automático sintáctico/semántico usa ccom --check tras otra pausa breve.
-- Compilación real con `ccom`, sin bloquear la ventana; cancelar, límite de 30 s, salida completa y errores navegables (doble clic o Enter).
+- Compilación real con `ccom` (F5), sin bloquear la ventana; cancelar, límite de 30 s, salida completa y errores navegables (doble clic o Enter).
+- Ejecutar (F6) mediante `tools/sim_asm.py`, separado de Compilar, con traza, registros y estado final de variables en la pestaña Ejecución.
 - Salidas en `<carpeta del fuente>/build/ide/<identificador de ruta>/`, evitando colisiones entre fuentes.
 
 El compilador se busca en la ruta elegida en Compilar → Configurar ccom, después en la raíz del repositorio y finalmente en PATH. Ejecutar `make` si hace falta construirlo. Compilar guarda antes el documento activo; los diagnósticos se retiran al editar y las compilaciones de versiones anteriores se identifican.
+
+## Compilar y ejecutar
+
+1. **Compilar (F5)** guarda y compila el documento activo con ccom, generando `.asm` y `.mem` además de las otras salidas. No ejecuta el programa.
+2. **Ejecutar (F6)** ejecuta la última compilación vigente de ese documento en el simulador del repositorio. No guarda ni recompila automáticamente. Si no existe una compilación correcta de esta sesión, hay cambios pendientes/externos o faltan/cambiaron los artefactos, solicita compilar otra vez.
+
+La pestaña **Ejecución** muestra stdout/stderr del simulador (registros, memoria y resumen), la traza y el estado final de las variables. Por ejemplo, el programa de suma de 2 y 3 muestra `resultado = 5`. Las salidas de ccom permanecen en su pestaña independiente.
+
+Cada corrida crea un subdirectorio `ejecucion-…` dentro de la carpeta de compilación y copia allí el `.asm` y el `.mem`, comprobando sus huellas. `traza.txt` queda en ese mismo subdirectorio; su ruta aparece al terminar. No reutiliza la traza de una corrida anterior.
+
+**Cancelar** detiene el proceso. Se usan los límites existentes del simulador: 100000 bundles y 5000 eventos de traza, además de 30 s de tiempo. Los avisos/límite de bundles y los errores se distinguen del éxito. La vista conserva hasta 12000 bloques y presenta como máximo 2 MB de traza; el archivo guardado mantiene la traza generada por el simulador.
+
+Durante la ejecución se puede editar y usar la interfaz; Compilar y Ejecutar quedan deshabilitados para evitar procesos superpuestos. Mover/eliminar el fuente, cerrar su pestaña o salir requiere detener primero la corrida. Si se modifica el código mientras corre, el resultado se identifica como correspondiente a la versión compilada anterior. El análisis automático de ccom se suspende durante la corrida y luego se reanuda.
+
+La ejecución requiere `tools/sim_asm.py` y el Python con el que se abrió CALSIDE. Al reiniciar se necesita volver a compilar: los artefactos permanecen en disco, pero no se recuperan como compilaciones confiables. Las opciones avanzadas como `--load-data` siguen disponibles mediante la terminal; todavía no se configuran desde el botón.
 
 ## Diagnósticos de ccom · paso 2
 
@@ -123,3 +139,51 @@ Plan completo y alternativas visuales: [plan](docs/plan_ide.md), [mockups](docs/
 ### Portapapeles y foco
 
 Copiar, cortar, pegar y Deshacer/Rehacer actúan sobre el campo de texto con foco, incluido el editor, la salida de ccom, el análisis automático y la entrada de terminal. Los paneles de salida siguen siendo de solo lectura. Para copiar una selección de consola sirven **Ctrl+C** y **Ctrl+Shift+C**. En la entrada de terminal, **Ctrl+C sin selección interrumpe el proceso**; con selección copia el texto. También se conserva el botón Interrumpir.
+
+El panel de clones permite arrastrar el separador entre la tabla y la comparación para dar más altura al código. Cada fragmento tiene una cabecera con archivo/líneas y un botón compacto «Abrir ↗»; la ruta completa aparece al colocar el puntero. El reparto elegido se conserva durante la sesión al cambiar de par o volver a analizar.
+
+## Archivos, carpetas y jerarquía
+
+Click derecho permite **Nuevo archivo**, **Nueva carpeta**, Renombrar, Enviar a la papelera, Copiar, Cortar, Pegar, Copiar ubicación, Abrir ubicación y Propiedades. Sobre una carpeta también permite Expandir/Contraer y Expandir/Contraer todo. El fondo del árbol usa la raíz del proyecto como destino para crear o pegar.
+
+Las carpetas se copian con todo su contenido en segundo plano, incluidos archivos que el filtro del explorador no muestra. Los enlaces internos se conservan como enlaces, sin recorrer sus destinos. Hay una operación de carpeta a la vez; las copias se pueden cancelar desde **Archivo → Cancelar copia de carpeta** o desde el menú contextual. Si una copia falla o se cancela, informa dónde quedó el destino incompleto y conserva el origen; no borra automáticamente los parciales.
+
+Renombrar o mover una carpeta actualiza todas sus pestañas sin perder texto, cursor, Deshacer ni cambios pendientes. Se conservan los conflictos externos previos. Copiar usa la versión guardada en disco; Cortar mueve al pegar. Los destinos existentes no se fusionan ni se sobrescriben: para una entrada se pide otro nombre; en lotes se rechaza la operación antes de iniciarla. El portapapeles admite varios archivos y carpetas locales. El traslado de carpetas funciona en el mismo sistema de archivos; entre discos se permite copiar y el traslado se deriva al gestor del sistema.
+
+Eliminar envía toda la carpeta a la papelera con confirmación y conserva los buffers abiertos como cambios sin guardar. No hay borrado permanente alternativo si falla la papelera. La raíz del proyecto y sus ancestros están protegidos; no se mueve ni elimina una carpeta que contiene la fuente de una compilación activa. Mientras una carpeta se procesa se bloquean guardados, recargas y compilaciones sobre esas rutas; se puede seguir editando o guardar una copia fuera de ellas. El cierre espera la operación para aplicar las nuevas rutas antes de salir.
+
+El árbol recuerda las ramas abiertas durante la sesión y al reiniciar normalmente. Expandir todo carga por tandas sin recorrido recursivo bloqueante; limita a 1000 carpetas y avisa si se alcanza ese límite. Las ramas guardadas se limitan también por el tamaño de configuración. **Ver → Revelar archivo activo en el explorador** muestra su posición si pertenece al proyecto.
+
+La selección admite **Ctrl+clic** para añadir/quitar entradas, **Shift+clic** para seleccionar un rango y **Ctrl+A** para seleccionar todo. Se puede dibujar un rectángulo empezando con el botón izquierdo sobre el espacio vacío. El clic derecho sobre una entrada seleccionada conserva el grupo: Copiar, Cortar y Papelera se aplican al conjunto. Renombrar y Propiedades requieren una sola entrada.
+
+Al arrastrar aparece una tarjeta semitransparente junto al cursor, con hasta tres nombres y el recuento adicional. Para mover, suelta una o varias entradas en el centro de una carpeta (recuadro de destino); soltar sobre el espacio vacío las mueve a la raíz del proyecto. Al mantener el cursor en el centro, la carpeta se despliega tras una breve espera. Los bordes superior/inferior de una fila muestran una línea de inserción: ahí se cambia el orden visual entre entradas de la misma carpeta, sin cambiar ubicaciones. El orden se conserva al cambiar de proyecto durante la sesión y al reiniciar normalmente el último proyecto. El menú de la carpeta contenedora ofrece **Restablecer orden alfabético**. El arrastre es interno al explorador; mover desde otro programa todavía no está habilitado. Si se selecciona una carpeta y uno de sus descendientes, se procesa la carpeta una sola vez. Los lotes se validan antes de comenzar y las carpetas se procesan secuencialmente. Si aparece un fallo durante la operación, se detiene el resto y se informa cuántas entradas se completaron; no se deshacen las ya completadas. Cortar limpia el portapapeles únicamente tras completar todo el lote.
+
+Atajos con el foco en el explorador:
+
+- **F2:** renombrar.
+- **Supr:** enviar a la papelera, con confirmación.
+- **Ctrl+C / Ctrl+X / Ctrl+V:** copiar, cortar y pegar archivos o carpetas.
+- **Ctrl+Shift+N:** nueva carpeta.
+- **Alt+Enter:** propiedades.
+
+La barra superior del lateral reemplaza el botón Abrir carpeta; esa acción permanece en **Archivo → Abrir carpeta…** (Ctrl+Shift+O). **Ctrl+Shift+F** enfoca la búsqueda del proyecto. Al escribir muestra resultados y habilita filtros **Todo / Archivos / Carpetas / Código**, el botón **Aa** para distinguir mayúsculas y **↻** para actualizar. Busca texto literal en nombres/rutas de archivos `.cls`, carpetas y contenido `.cls`. Incluye cambios sin guardar de documentos con ruta dentro del proyecto; los documentos sin nombre no se incluyen. La búsqueda del documento actual sigue en Ctrl+F.
+
+Doble clic o Enter sobre un resultado abre el archivo. Las coincidencias de código seleccionan el texto en su línea/columna; si esa línea cambió, se actualizan los resultados. Abrir una carpeta encontrada vuelve al árbol y la despliega. Flecha abajo desde la barra enfoca el primer resultado; **Esc** o limpiar el campo vuelve al explorador. Enfocar explorador y Revelar archivo activo también limpian la consulta para mostrar el árbol.
+
+La búsqueda se realiza en segundo plano con espera breve al escribir y cancelación de solicitudes antiguas. Ignora enlaces simbólicos y carpetas de dependencias/compilación excluidas. Se limita a 500 coincidencias, 20000 entradas recorridas, 2 MB por archivo y 20 MB de contenido, con aviso si hay omisiones, límites o archivos ilegibles. **↻** permite volver a consultar cambios externos, incluso en subcarpetas todavía no cargadas por el árbol.
+
+Ver [detalles y validación de proyecto](docs/proyecto_archivos.md). Suite combinada: **253 pruebas correctas**, incluidas 15 de carpetas, 12 de selección/arrastre, 10 de orden/presentación, 14 de búsqueda, 13 de ejecución, 23 de contratos/ediciones y 26 de coordinación/UI de asistencia.
+
+## Preparación para los motores de asistencia
+
+El [contrato compartido](docs/contrato_asistencia.md) fija tipos y firmas para sugerencias/reparaciones en `ide/nucleo/asistencia.py`, sin Qt. Los compañeros deben importarlos desde ahí. Los motores todavía no están implementados ni conectados.
+
+El aplicador ya está disponible mediante `editor.contexto_asistencia()` y `editor.aplicar_ediciones(...)`, además de `aplicar_sugerencia` / `aplicar_reparacion` en `ide/interfaz/ediciones.py`. Comprueba todo antes de modificar, convierte rangos Python a UTF-16 y conserva el historial con una operación de Deshacer por propuesta. No guarda el documento ni activa correcciones automáticas. Los resultados de documento, revisión, texto, cursor o selección anteriores se rechazan.
+
+Los pasos **1–4** están preparados: contrato, aplicador, coordinador y UI manual de sugerencias. **Ctrl+Espacio dentro del editor** o Editar → Sugerencias de código solicita opciones. La lista muestra etiqueta/categoría/detalle; flechas y RePág/AvPág recorren, Enter/Tab o clic aceptan, y Esc cancela sin modificar. Escribir cierra la lista y deja pasar la tecla; todavía no hay activación por pausa. El foco permanece en el editor y las respuestas se descartan al editar, mover cursor/selección, cambiar pestaña o cerrar.
+
+En uso normal no se muestran datos inventados: si falta el motor aparece el mensaje correspondiente en la barra de estado. Al entregar `ide/nucleo/sugerencias.py:sugerir` y `ide/nucleo/correccion.py:proponer_reparaciones` con los tipos y firmas acordados, el coordinador los carga en segundo plano. Sus respuestas pasan validación; los errores de importación/contrato se distinguen de la ausencia de opciones.
+
+El coordinador serializa ambos motores, limita texto/cola/opciones y solicita cancelación después de 3 segundos. Un motor debe atender el callback: no se destruyen hilos por la fuerza ni se abre otro mientras el anterior sigue ejecutándose. El cierre espera hasta 1500 ms y se aplaza si aún trabaja. La API de reparaciones ya puede entregar respuestas al siguiente paso, pero **no se aplican automáticamente**.
+
+Siguen **paso 5: UI de reparaciones**, **paso 6: preferencias y política automática**, e integración real de los motores. Verificación actual: **253 pruebas correctas**, incluidas 26 nuevas de coordinador/UI y las 23 anteriores de contratos/ediciones.

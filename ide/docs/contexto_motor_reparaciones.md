@@ -12,7 +12,7 @@ Proyecto: CALSIDE, IDE nativo de Calser hecho con Python/PySide6. Repositorio de
 
 Ya existen el editor, pestañas, guardado, compilación F5, diagnósticos gráficos, clones Tipo I/II y terminales. E3 conecta el lexer Python al editor. E4 ejecuta `ccom --check` sobre una copia temporal del texto para validar sintaxis y semántica sin guardar ni generar artefactos. El parser LL(1) complementará esa ruta; no sustituirá la semántica ni la compilación de ccom.
 
-El núcleo recibido contenía lexer, gramática LL(1), FIRST/FOLLOW y tabla. **Saddy ya implementó el parser predictivo** en `ide/nucleo/parser.py`; sugerencias y reparaciones siguen pendientes. La API real y sus ejemplos están en [parser_predictivo.md](parser_predictivo.md). Los nombres propuestos para el motor de este documento todavía no están implementados; adaptar ese motor a la API del parser disponible.
+El núcleo recibido contenía lexer, gramática LL(1), FIRST/FOLLOW y tabla. **Saddy ya implementó el parser predictivo** en `ide/nucleo/parser.py`; sugerencias y reparaciones siguen pendientes. La API real y sus ejemplos están en [parser_predictivo.md](parser_predictivo.md). Los motores siguen pendientes, pero sus tipos y firmas ya están fijados en [contrato_asistencia.md](contrato_asistencia.md). Usar los tipos implementados en `ide/nucleo/asistencia.py`; no duplicarlos en el motor.
 
 Reparto decidido por Saddy:
 
@@ -38,33 +38,33 @@ Contrato del parser implementado: offsets globales en caracteres de Python, desd
 
 El IDE captura `(documento, revision, texto, cursor)` y asocia ese contexto con cada tarea; descarta resultados antiguos. Los motores pueden recibir solo texto/cursor, pero toda respuesta aplicada debe corresponder al mismo texto y revisión. Ningún módulo decide que una respuesta antigua sigue siendo válida.
 
-No compartir pilas mutables entre llamadas. Límites explícitos de pasos/resultados y estados de cancelación o límite alcanzado, sin presentarlos como análisis correcto. Si se añade cancelación cooperativa, acordar la misma convención en las APIs. Errores del usuario se devuelven como datos; fallos internos o contratos inválidos no deben ocultarse como «sin errores».
+No compartir pilas mutables entre llamadas. Límites explícitos de pasos/resultados y estados de cancelación o límite alcanzado, sin presentarlos como análisis correcto. Ambas APIs aceptan `cancelar=None` como argumento opcional por nombre; consultar el callback en bucles y propagarlo al parser. Errores del usuario se devuelven como datos; fallos internos o contratos inválidos no deben ocultarse como «sin errores».
 
-`DiagnosticoSintactico`, `ContextoPredictivo`, `SimboloEntrada` y `ResultadoSintactico` ya existen en `ide/nucleo/parser.py`. Importarlos desde ahí. No se creó `modelos.py`; `EdicionTexto` pertenece al motor de reparaciones. El compañero implementa ambos motores y coordina sus tipos comunes sin duplicar los modelos del parser.
+`DiagnosticoSintactico`, `ContextoPredictivo`, `SimboloEntrada` y `ResultadoSintactico` ya existen en `ide/nucleo/parser.py`. Importarlos desde ahí. Los tipos compartidos de asistencia, incluido `EdicionTexto`, están implementados en `ide/nucleo/asistencia.py`; importarlos desde allí. No crear otra definición en los motores ni duplicar los modelos del parser. El aplicador del IDE está listo; su interfaz y sus tareas se detallan en [contrato_asistencia.md](contrato_asistencia.md).
 
 ### Entrega y validación común
 
-Entregar código, pruebas reproducibles y documentación de API con ejemplos de entrada/salida, límites conocidos y cambios respecto al contrato. Ejecutar `make check-ide`; referencia después de implementar el parser: 96 pruebas combinadas. Añadir pruebas en `ide/pruebas/`. Si se toca ccom o su gramática, ejecutar también las comprobaciones del compilador pertinentes. Coordinar cambios compartidos y comunicar rama/commit para integración; estos documentos no autorizan publicar, fusionar ni enviar mensajes automáticamente.
+Entregar código, pruebas reproducibles y documentación de API con ejemplos de entrada/salida, límites conocidos y cambios respecto al contrato. Ejecutar `make check-ide`; referencia histórica del parser: 96 pruebas; preparación actual de contrato/aplicador/coordinador/UI manual de sugerencias: 253 pruebas combinadas. Añadir pruebas en `ide/pruebas/`. Si se toca ccom o su gramática, ejecutar también las comprobaciones del compilador pertinentes. Coordinar cambios compartidos y comunicar rama/commit para integración; estos documentos no autorizan publicar, fusionar ni enviar mensajes automáticamente.
 
-## Dependencia y API propuesta
+## Dependencia y API fijada
 
 Crear `ide/nucleo/correccion.py`. Consumir `analizar_sintaxis(texto)` de `ide.nucleo.parser`, ya implementado. Revisar `estado`, `diagnosticos`, `errores_lexicos`, `pila` y `esperados`; los diagnósticos exponen rangos y el símbolo encontrado. Reanalizar cada candidato desde el texto modificado: la API actual no reanuda una pila ni aplica sincronización. No implementar otra gramática ni deducir todas las correcciones mediante regex.
 
 ```python
-proponer_reparaciones(texto: str) -> ResultadoReparaciones
+proponer_reparaciones(texto: str, *, cancelar=None) -> ResultadoReparaciones
 ```
 
 Primera versión centrada en el primer error fiable; ampliar después con un mecanismo explícito para evitar propuestas incompatibles sobre múltiples errores.
 
-`ResultadoReparaciones`: estado, propuestas y límites encontrados. Cada `Reparacion`:
+`ResultadoReparaciones(estado, propuestas=(), explicacion="")`: usar `EstadoAsistencia` y una tupla de `Reparacion`; ver campos exactos en el contrato compartido. Cada `Reparacion`:
 
 - `codigo` estable, `descripcion` y explicación del error objetivo.
 - Una o varias `EdicionTexto(inicio, fin, texto)` sobre **el texto original**, no sobre posiciones desplazadas por ediciones anteriores.
-- `automatica_segura: bool`, razones y precondiciones verificables. Por defecto, falso.
-- Resultado de validación del candidato: qué error resolvió y hasta dónde se reanalizó.
+- `automatica_segura: bool`, `razones` como tupla de texto y `precondiciones` como tupla de `PrecondicionTexto(inicio, fin, texto_esperado)`. Por defecto, falso. El indicador no autoriza por sí mismo automatización.
+- `validacion`: texto que documenta qué error resolvió el candidato y hasta dónde se reanalizó. `cursor_final`, si se proporciona, es un offset absoluto sobre el texto resultante.
 - Contexto que permita al IDE asociarla al diagnóstico y verificar texto/revisión antes de usarla.
 
-Ediciones no superpuestas; definir también el orden o fusión de inserciones que coinciden en un offset. Para aplicarlas sobre una copia, ordenar de derecha a izquierda. No ejecutar cambios sobre archivos o widgets.
+Ediciones no superpuestas; fusionar inserciones coincidentes o compartidas con el inicio/fin de otro rango, pues el aplicador las rechaza por ambiguas. Para aplicarlas sobre una copia, ordenar de derecha a izquierda. No ejecutar cambios sobre archivos o widgets.
 
 ## Alcance y seguridad de la propuesta
 
@@ -97,3 +97,7 @@ El IDE mostrará explicación y propuesta, validará documento/revisión/texto, 
 ## Entrega esperada
 
 API, catálogo de reglas, pruebas, ejemplos antes/después y motivos de seguridad. Coordinar con Saddy el diagnóstico/contexto necesario y con sugerencias únicamente las estructuras compartidas: sugerir cómo continuar y reparar un error son operaciones distintas.
+
+## Conexión preparada en CALSIDE (pasos 3/4)
+
+El coordinador ya invoca la API real mediante importación diferida de los módulos y firmas de este documento. Devuelve errores de contrato explícitos y valida rangos antes de publicar opciones. Respetar `cancelar` y los tipos compartidos permite conectar la entrega sin reescribir los widgets. La UI de sugerencias manual está lista; la de reparaciones y la activación automática siguen pendientes. Ver [contrato_asistencia.md](contrato_asistencia.md) para límites, formatos, estados y verificación actual.

@@ -88,6 +88,9 @@ class ProyectoVentana:
         editor = editor or self.editor()
         if not editor or editor.path is None:
             return False
+        if self.ruta_ocupada(editor.path):
+            self.error('Operación en curso', 'Espera a que termine la operación de carpetas antes de recargar.')
+            return False
         if editor.document().isModified():
             answer = QMessageBox.question(self, 'Recargar desde disco',
                 'Se descartarán los cambios de esta pestaña para leer el archivo del disco. ¿Continuar?',
@@ -158,6 +161,8 @@ class ProyectoVentana:
             self.workspace_splitter.setSizes(d['paneles'])
         proyecto = Path(d.get('proyecto') or self.root)
         self.cargar_carpeta(proyecto if proyecto.is_dir() else self.root)
+        self.tree.restaurar_ramas(d.get('carpetas_abiertas', []))
+        self.tree.restaurar_orden(d.get('orden_explorador', {}))
         if invalido:
             self.statusBar().showMessage('La ruta guardada de ccom ya no está disponible; se usará la búsqueda habitual')
 
@@ -177,6 +182,8 @@ class ProyectoVentana:
     def guardar_preferencias(self):
         if not preferencias.guardar(self.settings, {
             'version': 1, 'proyecto': str(self.project), 'ccom': self.configured_ccom,
+            'carpetas_abiertas': self.tree.carpetas_abiertas(),
+            'orden_explorador': self.tree.orden_presentacion(),
             'familia': self.fuente_editor.family(), 'puntos': self.fuente_editor.pointSize(),
             'ancho': self.width(), 'alto': self.height(),
             'explorador': self.files_button.isChecked(), 'resultados': self.results_action.isChecked(),

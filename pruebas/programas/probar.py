@@ -34,6 +34,14 @@ CASES = [
     ('p10', ROOT / 'pruebas/p10_llamadas_anidadas.cls', {'sum': 30}),
     ('sumar', HERE / 'sumar.cls', {'x': 5}),
     ('factorial con R', HERE / 'factorial_r.cls', {'f': 6}),
+    # R cambia de a a b despues de leer a[0]: 1 + 20 + 30 = 51.
+    ('R arreglo global', HERE / 'r_arreglos.cls', {'s': 51}),
+    # b es local a suma; se lee a[0] antes de cambiar: 2 + 20 + 30 = 52.
+    ('R arreglo local', HERE / 'r_arreglos_local.cls', {'s': 52}),
+    # Primera fila de a y segunda de b: (1 + 2) + (30 + 40) = 73.
+    ('R arreglo 2D', HERE / 'r_arreglos_2d.cls', {'s': 73}),
+    # R reenvia el mismo v, sin cambiar de arreglo: 4 + 5 + 6 = 15.
+    ('R parametro arreglo', HERE / 'r_arreglos_parametro.cls', {'s': 15}),
     # La segunda llamada no asigna el retorno: debe valer 0, no el 9 anterior.
     ('retorno en 0', HERE / 'retorno_cero.cls', {'x': 9, 'y': 0}),
     ('lectura 1D', HERE / 'lectura_1d.cls', {'y': 7, 's': 10, 'z': 4, 'q': 6}),

@@ -71,3 +71,10 @@ incorrectos y 130 si se interrumpe con Ctrl+C.
 
 `make check` sigue disponible e incluye las pruebas del ejecutor mediante
 `make check-runner`. El uso del script es opcional durante la presentación.
+
+La representación intermedia de tres direcciones tiene además `make check-tac`,
+incluido en `make check`: arma cinco casos en C y compara su impresión estable,
+además de comprobar definiciones/usos y rechazar formas inválidas. Este target
+usa el binario C y `diff`, sin Python; las otras suites conservan sus ejecutores.
+La construcción habitual con `make` tampoco requiere Python. Ver
+[representacion_intermedia.md](representacion_intermedia.md).

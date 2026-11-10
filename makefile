@@ -113,16 +113,26 @@ check-salidas: $(TARGET)
 validar-bundles: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 tools/validar_bundles.py
 
-check: check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+# Representación intermedia de tres direcciones independiente del compilador.
+$(BUILD_DIR)/probar_tac: src/tac.c src/tac_print.c pruebas/tac/probar.c include/tac.h include/symbol_table.h | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
+
+check-tac: $(BUILD_DIR)/probar_tac
+	$< > $(BUILD_DIR)/tac_obtenido.txt
+	diff -u pruebas/tac/esperado.txt $(BUILD_DIR)/tac_obtenido.txt
+	@echo "check-tac: 5 casos de impresión, consultas y validación: OK"
+
+check: check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 clean:
+	rm -f $(BUILD_DIR)/tac_obtenido.txt
 	rm -f $(TARGET) $(OBJECTS) $(OBJECTS:.o=.d)
 	rm -f $(GEN_DIR)/parser.tab.c $(GEN_DIR)/parser.tab.h $(GEN_DIR)/lex.yy.c
-	rm -f $(BUILD_DIR)/emitir_aritmetica $(BUILD_DIR)/emitir_arreglos $(BUILD_DIR)/emitir_crypto $(BUILD_DIR)/probar_ir $(BUILD_DIR)/revisar_ir $(BUILD_DIR)/emitir_organizador $(BUILD_DIR)/probar_dependencias
+	rm -f $(BUILD_DIR)/probar_tac $(BUILD_DIR)/emitir_aritmetica $(BUILD_DIR)/emitir_arreglos $(BUILD_DIR)/emitir_crypto $(BUILD_DIR)/probar_ir $(BUILD_DIR)/revisar_ir $(BUILD_DIR)/emitir_organizador $(BUILD_DIR)/probar_dependencias
 
 -include $(OBJECTS:.o=.d)
 
-.PHONY: all clean ejercicios check check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+.PHONY: all clean ejercicios check check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 # Prototipo gráfico CALSIDE (PySide6).
 PYTHON ?= python3

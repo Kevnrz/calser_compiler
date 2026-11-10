@@ -192,9 +192,9 @@ tiene cabecera; `semantic_expr`, `semantic_crypto` y los `generate_*` comparten
 | | `generate_internal` | Cabecera interna: `GenCtx`, el estado de una generación |
 | | `codegen_arith` / `codegen_array` / `codegen_crypto` | Rutinas de aritmética, arreglos y CRYPTO, con pruebas independientes |
 | Salida | `codegen` | Emisor: IR, líneas, bundles e imagen de datos |
-| | `codegen_instruction` | Descripción de cada instrucción (unidad, registros, efectos) para las dependencias |
+| | `codegen_instruction` | Parseo y validación del texto; describe dependencias con la semántica de `isa_table` |
 | | `codegen_schedule` / `codegen_verify` | Organizador de bundles y verificación de su calendario |
-| | `isa_table` | Tabla única de instrucciones de la ISA y lectura de registros y enteros |
+| | `isa_table` | Tabla única del ISA: formatos, unidad, lecturas, escrituras, preservación y efectos; lectura de registros y enteros |
 | | `assembler` | Ensamblador de dos pasadas: etiquetas y codificación de bundles |
 
 Las cabeceras están en `include/` y las implementaciones en `src/`. Flex y
@@ -262,6 +262,7 @@ make check-arith
 make check-arrays
 make check-matrices
 make check-crypto
+make check-semantica-isa
 make check-bundles
 make check-salidas
 # O ejecutar todas:

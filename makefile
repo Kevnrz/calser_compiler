@@ -101,7 +101,14 @@ $(BUILD_DIR)/emitir_organizador: src/codegen.c src/codegen_instruction.c src/isa
 $(BUILD_DIR)/probar_dependencias: src/codegen.c src/codegen_instruction.c src/isa_table.c src/codegen_schedule.c src/codegen_verify.c pruebas/bundles/probar_dependencias.c include/codegen.h include/isa_table.h include/codegen_schedule.h | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
 
-check-bundles: $(TARGET) $(BUILD_DIR)/probar_ir $(BUILD_DIR)/revisar_ir $(BUILD_DIR)/emitir_organizador $(BUILD_DIR)/probar_dependencias
+# Semántica ISA compartida, independiente del parseo textual y del organizador.
+$(BUILD_DIR)/probar_semantica_isa: src/isa_table.c pruebas/bundles/probar_semantica_isa.c include/isa_table.h | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
+
+check-semantica-isa: $(BUILD_DIR)/probar_semantica_isa
+	$<
+
+check-bundles: check-semantica-isa $(TARGET) $(BUILD_DIR)/probar_ir $(BUILD_DIR)/revisar_ir $(BUILD_DIR)/emitir_organizador $(BUILD_DIR)/probar_dependencias
 	$(BUILD_DIR)/probar_ir
 	$(BUILD_DIR)/probar_dependencias
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/bundles/probar.py
@@ -125,6 +132,7 @@ check-tac: $(BUILD_DIR)/probar_tac
 check: check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 clean:
+	rm -f $(BUILD_DIR)/probar_semantica_isa
 	rm -f $(BUILD_DIR)/tac_obtenido.txt
 	rm -f $(TARGET) $(OBJECTS) $(OBJECTS:.o=.d)
 	rm -f $(GEN_DIR)/parser.tab.c $(GEN_DIR)/parser.tab.h $(GEN_DIR)/lex.yy.c
@@ -132,7 +140,7 @@ clean:
 
 -include $(OBJECTS:.o=.d)
 
-.PHONY: all clean ejercicios check check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+.PHONY: all clean ejercicios check check-semantica-isa check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 # Prototipo gráfico CALSIDE (PySide6).
 PYTHON ?= python3

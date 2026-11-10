@@ -2,6 +2,7 @@
  * codegen.h — Fase 4: interfaz de emisión del IR, bundles e imagen de datos.
  *
  * Expone slots, instrucciones, IR, emisión, listados e imagen de datos.
+ * La semántica de dependencias se toma de isa_table, sin cambiar el organizador.
  * Los contratos indican entradas, resultados, efectos y límites de uso.
  *
  * Usa: isa_table.h (IsaUnit) y declaraciones propias.
@@ -30,16 +31,16 @@ typedef enum { SLOT_ALU0 = 0, SLOT_ALU1 = 1, SLOT_BRU = 2, SLOT_LSU = 3 } Slot;
  * la tabla de la ISA (IsaUnit, isa_table.h). */
 
 typedef enum {
-    CG_EFFECT_NONE = 0,
-    CG_EFFECT_MEMORY_READ = 1u << 0,
-    CG_EFFECT_MEMORY_WRITE = 1u << 1,
-    CG_EFFECT_CONTROL = 1u << 2,
-    CG_EFFECT_CALL = 1u << 3,
-    CG_EFFECT_CRYPTO_STATE = 1u << 4,
-    CG_EFFECT_CONDITIONAL_WRITE = 1u << 5,
-    CG_EFFECT_PIPELINE_STALL = 1u << 6,
-    CG_EFFECT_PC_RELATIVE = 1u << 7,
-    CG_EFFECT_BARRIER = 1u << 8
+    CG_EFFECT_NONE = ISA_EFFECT_NONE,
+    CG_EFFECT_MEMORY_READ = ISA_EFFECT_MEMORY_READ,
+    CG_EFFECT_MEMORY_WRITE = ISA_EFFECT_MEMORY_WRITE,
+    CG_EFFECT_CONTROL = ISA_EFFECT_CONTROL,
+    CG_EFFECT_CALL = ISA_EFFECT_CALL,
+    CG_EFFECT_CRYPTO_STATE = ISA_EFFECT_CRYPTO_STATE,
+    CG_EFFECT_CONDITIONAL_WRITE = ISA_EFFECT_CONDITIONAL_WRITE,
+    CG_EFFECT_PIPELINE_STALL = ISA_EFFECT_PIPELINE_STALL,
+    CG_EFFECT_PC_RELATIVE = ISA_EFFECT_PC_RELATIVE,
+    CG_EFFECT_BARRIER = ISA_EFFECT_BARRIER
 } CGEffect;
 
 typedef struct {

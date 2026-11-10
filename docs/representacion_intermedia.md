@@ -375,6 +375,43 @@ B2: successors []
 
 `make check-tac-build` verifica memoria y esperados de 22 programas, incluido R
 con arreglos globales, locales, matrices y parámetros reenviados. Estas pruebas
-no ejecutan TAC ni prueban valores finales: el intérprete corresponde a C2.
+de C1 no ejecutan TAC; las pruebas de valores de C2 usan el intérprete descrito abajo.
 El `.tac` sigue siendo un listado diagnóstico, no un formato deserializable ni
 un archivo para entregar entero a `cg_op`.
+
+## Intérprete de pruebas de alto nivel (C2)
+
+`make check-tac-values` ejecuta `pruebas/tac_build/probar_valores.py` y el auxiliar
+`build/interpretar_tac`. Importa la tabla CASES de `pruebas/programas/probar.py`,
+sin duplicar sus valores, y compara las variables finales de los 22 programas
+sin CRYPTO. P09 y P11 se listan como omitidos, sin sumarlos a aprobados.
+
+`pruebas/tac_build/interpretar.h` recibe un TacBuildResult en memoria, nunca el
+texto `.tac`. Carga su imagen en una memoria estática compartida de 64 KiB y
+accede a variables mediante Symbol.address. No crea locales nuevas al llamar;
+solo temporales y capturas PARAM pertenecen a cada invocación. La pila explícita
+permite CALL/RETURN, mientras R conserva temporales y vuelve por el GOTO del TAC.
+LOAD/STORE/ADDRESS usan bytes; COPY de parámetro arreglo lee/escribe su dirección.
+
+La aritmética se trunca a 32 bits. Comparaciones y DIV/MOD usan signo; DIV trunca
+hacia cero y MOD conserva el signo del dividendo. División/módulo por cero,
+exponente negativo, límite de pasos y forma inválida tienen estados distintos
+de la finalización normal. El presupuesto de pasos es global para las llamadas.
+CRYPTO se rechaza explícitamente antes de ejecutar el programa, incluso si no
+se alcanzaría; no se simula AUTH, bóveda, ancla, cifrado ni pipeline. Los errores
+no publican valores como si fueran resultados normales.
+
+Para comprobar una optimización de alto nivel, ejecutar `tac_interpret(build,
+limite)` antes de la pasada y conservar el resultado. Aplicar la pasada,
+reconstruir aristas y validar; ejecutar de nuevo y comparar estado terminal y
+las variables/memoria observables seleccionadas por el caso de prueba. Cada
+invocación del intérprete parte de una memoria nueva con la misma imagen; no
+reutiliza el estado de la ejecución anterior ni modifica el programa. No hace
+falta que coincidan el número de pasos o los temporales internos: el presupuesto
+debe ser suficiente para ambas versiones. Liberar ambos resultados con
+`tac_run_free`, y liberar TacBuildResult antes del semántico.
+
+Esto permite detectar diferencias de traducción o de optimización sin generar
+ISA desde TAC. El intérprete solo se enlaza con el auxiliar de pruebas, no con
+ccom. Los controles adicionales verifican orden de evaluación, signos y desborde,
+errores aritméticos, rechazo de CRYPTO y detención por presupuesto.

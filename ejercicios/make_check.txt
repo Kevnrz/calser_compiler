@@ -1,6 +1,41 @@
 $ make -s check
 check-tac: 6 casos de alto nivel, ISA virtual/fisica, consultas y validacion: OK
 PASS construccion TAC: 22 esperados, memoria, CLI y artefactos identicos
+PASS TAC p02: f = 120
+PASS TAC p03: r = 15
+PASS TAC p05: r = 15, w = [6, 0, 7], t = [1, 2, 3, 4, 5, 6]
+PASS TAC p06: t = 10, copia = [2, 5, 8], ok = 1
+PASS TAC p10: sum = 30
+PASS TAC sumar: x = 5
+PASS TAC factorial con R: f = 6
+PASS TAC R arreglo global: s = 51
+PASS TAC R arreglo local: s = 52
+PASS TAC R arreglo 2D: s = 73
+PASS TAC R parametro arreglo: s = 15
+PASS TAC retorno en 0: x = 9, y = 0
+PASS TAC lectura 1D: y = 7, s = 10, z = 4, q = 6
+PASS TAC copia de arreglos: t = 15, y = [4, 5, 6], x = [4, 5, 6]
+PASS TAC S paso 1: x = 10
+PASS TAC S paso -1: x = 15
+PASS TAC S paso 3: x = 18
+PASS TAC S paso 200000: x = 200000
+PASS TAC S anidados: x = 18
+PASS TAC E dentro de S: a = 2, b = -1, c = 6
+PASS TAC corto circuito: r1 = 0, g1 = 0, r2 = 1, g2 = 0, r3 = 1, g3 = 1, r4 = 1, g4 = 2, and_ff = 0, and_fv = 0, and_vf = 0, and_vv = 1, or_ff = 0, or_fv = 1, or_vf = 1, or_vv = 1, mix1 = 1, mix2 = 1, en_c = 0, g5 = 2, n = 2, g = 4
+PASS TAC p12: ok = 1, p = [1, 1]
+OMITIDO TAC p09: CRYPTO no soportado
+OMITIDO TAC p11: CRYPTO no soportado
+PASS TAC control valor antes de indices: ok
+PASS TAC control argumentos izquierda a derecha: ok
+PASS TAC control lectura antes de llamada: ok
+PASS TAC control 32 bits y signos: ok
+PASS TAC control corto circuito evita error: ok
+PASS TAC control division por cero: division_by_zero
+PASS TAC control modulo por cero: division_by_zero
+PASS TAC control exponente negativo: negative_exponent
+PASS TAC control CRYPTO rechazado: unsupported_crypto
+PASS TAC control limite de pasos: step_limit
+TAC valores: 22 programas aprobados, 2 omitidos, 10 controles aprobados, 0 fallos
 PASS contrato y fallo del emisor
 PASS mul: 450 casos, dos expansiones por caso
 PASS div: 450 casos, dos expansiones por caso

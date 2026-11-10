@@ -147,4 +147,30 @@ listados, JSON temprano y tiempo, el aviso con `-x`, errores sin TAC y borrado
 de un parcial mediante un enlace temporal a `/dev/full` donde está disponible.
 Compara ASM/BIN/HEX/MEM con y sin `-i`, y TAC con/sin `--no-schedule`.
 `check-tac` comprueba además COPY hacia parámetros arreglo y sus definiciones.
-No hay intérprete ni comprobaciones de valores finales: corresponden a C2.
+La construcción C1 se verifica por separado del intérprete y los valores de C2.
+
+## Valores del TAC en memoria
+
+`make check-tac-values`, incluido en `make check`, construye únicamente el
+auxiliar `build/interpretar_tac` con `pruebas/tac_build/interpretar.c` y
+`ejecutar.c`. No incorpora el intérprete a ccom. El auxiliar parsea, analiza y
+construye TAC, lo ejecuta dos veces con memoria nueva para comprobar independencia
+del estado, y publica estado y valores de los símbolos sin homónimos.
+
+`pruebas/tac_build/probar_valores.py` importa CASES de
+`pruebas/programas/probar.py`; sus esperados no se copian. Ejecuta los 22 casos
+sin CRYPTO, incluidos los cuatro R con arreglos (51, 52, 73 y 15). Los dos casos
+especiales CRYPTO (p09/p11) se listan como omitidos y no cuentan como aprobados.
+Diez controles temporales comprueban valor antes que índices, argumentos de
+izquierda a derecha, captura antes de llamada, 32 bits y signos, corto circuito,
+división/módulo por cero, exponente negativo, rechazo CRYPTO y límite de pasos.
+Los fallos de ejecución tienen estado propio y no se aceptan como retornos.
+
+Para un fuente concreto: `build/interpretar_tac archivo.cls [limite_de_pasos]`.
+El JSON contiene `status`, `steps`, `diagnostic` y `values`; el código 0 indica
+que se pudo informar el estado, no necesariamente ejecución normal. Solo `ok`
+publica valores. Para comprobar otro build, incluso sanitizado:
+`python3 pruebas/tac_build/probar_valores.py --binario /ruta/interpretar_tac`.
+Las fuentes de los controles y las salidas son temporales. No se modifican el
+constructor ni el generador cuando aparece una diferencia; la prueba informa
+caso, valor obtenido y esperado y termina con fallo.

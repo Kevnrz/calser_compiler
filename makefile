@@ -155,9 +155,17 @@ $(BUILD_DIR)/probar_tac_build: pruebas/tac_build/probar.c $(filter-out $(OBJ_DIR
 check-tac-build: $(TARGET) $(BUILD_DIR)/probar_tac_build
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/tac_build/probar_cli.py
 
-check: check-tac check-tac-build check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+# El intérprete solo se enlaza con este auxiliar de pruebas, nunca con ccom.
+$(BUILD_DIR)/interpretar_tac: pruebas/tac_build/ejecutar.c pruebas/tac_build/interpretar.c pruebas/tac_build/interpretar.h $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $(filter %.c %.o,$^) $(LDLIBS)
+
+check-tac-values: $(BUILD_DIR)/interpretar_tac
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/tac_build/probar_valores.py --binario $(BUILD_DIR)/interpretar_tac
+
+check: check-tac check-tac-build check-tac-values check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 clean:
+	rm -f $(BUILD_DIR)/interpretar_tac
 	rm -f $(BUILD_DIR)/probar_tac_build
 	rm -f $(BUILD_DIR)/probar_constantes
 	rm -f $(BUILD_DIR)/probar_semantica_isa
@@ -169,7 +177,7 @@ clean:
 
 -include $(OBJECTS:.o=.d)
 
-.PHONY: all clean ejercicios check check-tac-build check-semantica-isa check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+.PHONY: all clean ejercicios check check-tac-values check-tac-build check-semantica-isa check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 # Prototipo gráfico CALSIDE (PySide6).
 PYTHON ?= python3

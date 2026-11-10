@@ -1,0 +1,33 @@
+function isa_virtual (entry B0)
+B0: successors [B2, B1]
+  mov v0, 3
+  saddi v1, v0, 1
+  sll v2, v0, v1
+  slt v1, v0, v2
+  ifmov v2, v0, v1
+  lw v0, 4(rx)
+  sw v0, 8(rx)
+  kv_write v0, 0, 1
+  feis v2, v0, v1, 0, 2
+  jas rl, .L_func_aux
+  add v1, v0, v2
+  bge v1, v0, B2
+B1: successors [B2]
+  auth v0
+  jef B2
+B2: successors []
+  jefR rz, rl
+
+function isa_fisica (entry B0)
+B0: successors []
+  mov t0, 3
+  xori t1, t0, 7
+  lb t2, -4(t0)
+  sb t2, 0(t0)
+  ifmov t2, t0, t1
+  logout
+  kv_lock
+  sanc t0
+  nopi
+  jefR rz, rl
+

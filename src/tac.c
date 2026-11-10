@@ -1,251 +1,739 @@
 /*
- * tac.c — armado y consulta de representación intermedia de tres direcciones.
- * Usa: tac.h y biblioteca C. Lo usan pruebas y futuras pasadas.
- * Referencias: Aho §6.2.2, §8.4; enunciado §4.1.
+ * tac.c — propiedad y consultas de representación intermedia de tres direcciones.
+ * Usa: tac_internal.h, biblioteca C. Lo usan pruebas y futuras pasadas.
+ * Referencias: Aho §6.2.1-2, §10.2.3; enunciado §4.1.
  */
-#include "tac.h"
+#include "tac_internal.h"
 #include <stdarg.h>
 #include <stdlib.h>
-#include <string.h>
 
-#define K(k) (1u << (k))
-#define N K(TAC_NONE)
-#define V (K(TAC_TEMP) | K(TAC_VARIABLE))
-#define R (V | K(TAC_INTEGER))
-#define L K(TAC_LABEL)
-#define S K(TAC_VARIABLE)
-#define B(op, text) [op] = {text,TAC_DEST,TAC_SRC1|TAC_SRC2,0,0,0,0,TAC_FLOW_NEXT,TAC_FMT_BINARY,{V,R,R}}
-#define U(op, text) [op] = {text,TAC_DEST,TAC_SRC1,0,0,0,0,TAC_FLOW_NEXT,TAC_FMT_UNARY,{V,R,N}}
-#define J(op, text) [op] = {text,0,TAC_SRC1|TAC_SRC2,0,0,1,1,TAC_FLOW_IF,TAC_FMT_IF,{L,R,R}}
-/* Única tabla de propiedades, inmutable y sin estado de generación.
- * STORE/CRYPTO leen dest como dirección, sin definir el valor de la base.
- * CALL conserva efectos aun cuando su resultado esté muerto (Aho §6.2.1).
- */
-static const TacOpInfo operations[TAC_OP_COUNT] = {
-    [TAC_COPY] = {"=",TAC_DEST,TAC_SRC1,0,0,0,0,TAC_FLOW_NEXT,TAC_FMT_COPY,{V,R,N}},
-    B(TAC_ADD,"+"), B(TAC_SUB,"-"), B(TAC_AND,"and"), B(TAC_OR,"or"),
-    B(TAC_XOR,"xor"), B(TAC_EQ,"=="), B(TAC_NE,"!="), B(TAC_LT,"<"),
-    B(TAC_LE,"<="), B(TAC_GT,">"), B(TAC_GE,">="),
-    U(TAC_NEG,"neg"), U(TAC_NOT,"not"),
-    B(TAC_MUL,"*"), B(TAC_DIV,"/"), B(TAC_MOD,"%"), B(TAC_POW,"^"),
-    [TAC_LOAD] = {"load",TAC_DEST,TAC_SRC1|TAC_SRC2,1,0,0,0,TAC_FLOW_NEXT,TAC_FMT_LOAD,{V,V,R}},
-    [TAC_STORE] = {"store",0,TAC_DEST|TAC_SRC1|TAC_SRC2,0,1,0,1,TAC_FLOW_NEXT,TAC_FMT_STORE,{V,R,R}},
-    [TAC_CRYPTO] = {"crypto",0,TAC_DEST|TAC_SRC1|TAC_SRC2,1,1,1,1,TAC_FLOW_NEXT,TAC_FMT_CRYPTO,{V,V,R}},
-    [TAC_PARAM] = {"param",0,TAC_SRC1,0,0,0,1,TAC_FLOW_NEXT,TAC_FMT_PARAM,{N,R,N}},
-    [TAC_CALL] = {"call",TAC_DEST,0,1,1,1,1,TAC_FLOW_NEXT,TAC_FMT_CALL,{V|N,S,K(TAC_INTEGER)}},
-    [TAC_RETURN] = {"return",0,TAC_SRC1,0,0,1,1,TAC_FLOW_RETURN,TAC_FMT_RETURN,{N,R|N,N}},
-    [TAC_GOTO] = {"goto",0,0,0,0,1,1,TAC_FLOW_GOTO,TAC_FMT_GOTO,{L,N,N}},
-    J(TAC_IF_EQ,"=="), J(TAC_IF_NE,"!="), J(TAC_IF_LT,"<"),
-    J(TAC_IF_LE,"<="), J(TAC_IF_GT,">"), J(TAC_IF_GE,">=")
+#define VALUE_DEST (TAC_KIND(TAC_TEMP) | TAC_KIND(TAC_VARIABLE))
+#define VALUE_SOURCE (VALUE_DEST | TAC_KIND(TAC_INTEGER))
+
+/* Propiedades de alto nivel; ISA se consulta en isa_table, sin otra tabla. */
+static const TacOpInfo operations[TAC_ISA] = {
+    [TAC_COPY] = {
+        .text = "=",
+        .writes = TAC_DEST,
+        .reads = TAC_SRC1,
+        .format = TAC_FMT_COPY,
+        .allowed = {VALUE_DEST, VALUE_SOURCE, TAC_KIND(TAC_NONE)},
+    },
+    [TAC_ADDRESS] = {
+        .text = "address",
+        .writes = TAC_DEST,
+        .address_bases = TAC_SRC1,
+        .format = TAC_FMT_ADDRESS,
+        .allowed = {VALUE_DEST, TAC_KIND(TAC_VARIABLE), TAC_KIND(TAC_NONE)},
+    },
+    [TAC_ADD] = {
+        .text = "+",
+        .writes = TAC_DEST,
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .format = TAC_FMT_BINARY,
+        .allowed = {VALUE_DEST, VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_SUB] = {
+        .text = "-",
+        .writes = TAC_DEST,
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .format = TAC_FMT_BINARY,
+        .allowed = {VALUE_DEST, VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_AND] = {
+        .text = "and",
+        .writes = TAC_DEST,
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .format = TAC_FMT_BINARY,
+        .allowed = {VALUE_DEST, VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_OR] = {
+        .text = "or",
+        .writes = TAC_DEST,
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .format = TAC_FMT_BINARY,
+        .allowed = {VALUE_DEST, VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_XOR] = {
+        .text = "xor",
+        .writes = TAC_DEST,
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .format = TAC_FMT_BINARY,
+        .allowed = {VALUE_DEST, VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_EQ] = {
+        .text = "==",
+        .writes = TAC_DEST,
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .format = TAC_FMT_BINARY,
+        .allowed = {VALUE_DEST, VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_NE] = {
+        .text = "!=",
+        .writes = TAC_DEST,
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .format = TAC_FMT_BINARY,
+        .allowed = {VALUE_DEST, VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_LT] = {
+        .text = "<",
+        .writes = TAC_DEST,
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .format = TAC_FMT_BINARY,
+        .allowed = {VALUE_DEST, VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_LE] = {
+        .text = "<=",
+        .writes = TAC_DEST,
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .format = TAC_FMT_BINARY,
+        .allowed = {VALUE_DEST, VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_GT] = {
+        .text = ">",
+        .writes = TAC_DEST,
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .format = TAC_FMT_BINARY,
+        .allowed = {VALUE_DEST, VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_GE] = {
+        .text = ">=",
+        .writes = TAC_DEST,
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .format = TAC_FMT_BINARY,
+        .allowed = {VALUE_DEST, VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_NEG] = {
+        .text = "neg",
+        .writes = TAC_DEST,
+        .reads = TAC_SRC1,
+        .format = TAC_FMT_UNARY,
+        .allowed = {VALUE_DEST, VALUE_SOURCE, TAC_KIND(TAC_NONE)},
+    },
+    [TAC_NOT] = {
+        .text = "not",
+        .writes = TAC_DEST,
+        .reads = TAC_SRC1,
+        .format = TAC_FMT_UNARY,
+        .allowed = {VALUE_DEST, VALUE_SOURCE, TAC_KIND(TAC_NONE)},
+    },
+    [TAC_MUL] = {
+        .text = "*",
+        .writes = TAC_DEST,
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .format = TAC_FMT_BINARY,
+        .may_create_blocks = 1,
+        .allowed = {VALUE_DEST, VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_DIV] = {
+        .text = "/",
+        .writes = TAC_DEST,
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .format = TAC_FMT_BINARY,
+        .may_create_blocks = 1,
+        .may_trap = 1,
+        .allowed = {VALUE_DEST, VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_MOD] = {
+        .text = "%",
+        .writes = TAC_DEST,
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .format = TAC_FMT_BINARY,
+        .may_create_blocks = 1,
+        .may_trap = 1,
+        .allowed = {VALUE_DEST, VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_POW] = {
+        .text = "^",
+        .writes = TAC_DEST,
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .format = TAC_FMT_BINARY,
+        .may_create_blocks = 1,
+        .may_trap = 1,
+        .allowed = {VALUE_DEST, VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_LOAD] = {
+        .text = "load",
+        .writes = TAC_DEST,
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .address_bases = TAC_SRC1,
+        .memory_read = 1,
+        .format = TAC_FMT_LOAD,
+        .allowed = {VALUE_DEST, VALUE_DEST, VALUE_SOURCE},
+    },
+    [TAC_STORE] = {
+        .text = "store",
+        .reads = TAC_DEST | TAC_SRC1 | TAC_SRC2,
+        .address_bases = TAC_DEST,
+        .memory_write = 1,
+        .nonremovable = 1,
+        .format = TAC_FMT_STORE,
+        .allowed = {VALUE_DEST, VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_AUTH] = {
+        .text = "autenticar",
+        .barrier = 1,
+        .nonremovable = 1,
+        .crypto_state = 1,
+        .format = TAC_FMT_CRYPTO,
+        .reads = TAC_SRC1,
+        .allowed = {TAC_KIND(TAC_NONE), VALUE_SOURCE, TAC_KIND(TAC_NONE)},
+    },
+    [TAC_LOGOUT] = {
+        .text = "cerrar_sesion",
+        .barrier = 1,
+        .nonremovable = 1,
+        .crypto_state = 1,
+        .format = TAC_FMT_CRYPTO,
+        .allowed = {TAC_KIND(TAC_NONE), TAC_KIND(TAC_NONE), TAC_KIND(TAC_NONE)},
+    },
+    [TAC_KV_WRITE] = {
+        .text = "cargar_llave",
+        .barrier = 1,
+        .nonremovable = 1,
+        .crypto_state = 1,
+        .format = TAC_FMT_CRYPTO,
+        .reads = TAC_SRC1,
+        .selectors = TAC_SELECT_K | TAC_SELECT_W,
+        .allowed = {TAC_KIND(TAC_NONE), VALUE_SOURCE, TAC_KIND(TAC_NONE)},
+    },
+    [TAC_KV_LOCK] = {
+        .text = "sellar",
+        .barrier = 1,
+        .nonremovable = 1,
+        .crypto_state = 1,
+        .format = TAC_FMT_CRYPTO,
+        .allowed = {TAC_KIND(TAC_NONE), TAC_KIND(TAC_NONE), TAC_KIND(TAC_NONE)},
+    },
+    [TAC_SANC] = {
+        .text = "cambiar_ancla",
+        .barrier = 1,
+        .nonremovable = 1,
+        .crypto_state = 1,
+        .format = TAC_FMT_CRYPTO,
+        .reads = TAC_SRC1,
+        .allowed = {TAC_KIND(TAC_NONE), VALUE_SOURCE, TAC_KIND(TAC_NONE)},
+    },
+    [TAC_CIFRAR] = {
+        .text = "cifrar",
+        .barrier = 1,
+        .nonremovable = 1,
+        .crypto_state = 1,
+        .format = TAC_FMT_CRYPTO,
+        .reads = TAC_DEST | TAC_SRC1 | TAC_SRC2,
+        .selectors = TAC_SELECT_K,
+        .memory_read = 1,
+        .memory_write = 1,
+        .may_create_blocks = 1,
+        .allowed = {VALUE_SOURCE, VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_DESCIFRAR] = {
+        .text = "descifrar",
+        .barrier = 1,
+        .nonremovable = 1,
+        .crypto_state = 1,
+        .format = TAC_FMT_CRYPTO,
+        .reads = TAC_DEST | TAC_SRC1 | TAC_SRC2,
+        .selectors = TAC_SELECT_K,
+        .memory_read = 1,
+        .memory_write = 1,
+        .may_create_blocks = 1,
+        .allowed = {VALUE_SOURCE, VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_PARAM] = {
+        .text = "param",
+        .reads = TAC_SRC1,
+        .nonremovable = 1,
+        .format = TAC_FMT_PARAM,
+        .allowed = {TAC_KIND(TAC_NONE), VALUE_SOURCE, TAC_KIND(TAC_INTEGER)},
+    },
+    [TAC_CALL] = {
+        .text = "call",
+        .writes = TAC_DEST,
+        .memory_read = 1,
+        .memory_write = 1,
+        .barrier = 1,
+        .nonremovable = 1,
+        .uses_globals = 1,
+        .defines_globals = 1,
+        .implicit_phys_reads = (1u << TAC_P1_RL) | (1u << TAC_P1_RX),
+        .implicit_phys_writes = (1u << TAC_P1_RL) | (1u << TAC_P1_RX),
+        .call_clobbers = TAC_P1_CALL_CLOBBERS,
+        .format = TAC_FMT_CALL,
+        .allowed = {VALUE_DEST | TAC_KIND(TAC_NONE), TAC_KIND(TAC_FUNCTION), TAC_KIND(TAC_INTEGER)},
+    },
+    [TAC_RETURN] = {
+        .text = "return",
+        .reads = TAC_SRC1,
+        .barrier = 1,
+        .nonremovable = 1,
+        .uses_globals = 1,
+        .flow = TAC_FLOW_RETURN,
+        .format = TAC_FMT_RETURN,
+        .allowed = {TAC_KIND(TAC_NONE), VALUE_SOURCE | TAC_KIND(TAC_NONE), TAC_KIND(TAC_NONE)},
+    },
+    [TAC_GOTO] = {
+        .text = "goto",
+        .barrier = 1,
+        .nonremovable = 1,
+        .flow = TAC_FLOW_GOTO,
+        .format = TAC_FMT_GOTO,
+        .allowed = {TAC_KIND(TAC_LABEL), TAC_KIND(TAC_NONE), TAC_KIND(TAC_NONE)},
+    },
+    [TAC_IF_EQ] = {
+        .text = "==",
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .barrier = 1,
+        .nonremovable = 1,
+        .flow = TAC_FLOW_IF,
+        .format = TAC_FMT_IF,
+        .allowed = {TAC_KIND(TAC_LABEL), VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_IF_NE] = {
+        .text = "!=",
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .barrier = 1,
+        .nonremovable = 1,
+        .flow = TAC_FLOW_IF,
+        .format = TAC_FMT_IF,
+        .allowed = {TAC_KIND(TAC_LABEL), VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_IF_LT] = {
+        .text = "<",
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .barrier = 1,
+        .nonremovable = 1,
+        .flow = TAC_FLOW_IF,
+        .format = TAC_FMT_IF,
+        .allowed = {TAC_KIND(TAC_LABEL), VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_IF_LE] = {
+        .text = "<=",
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .barrier = 1,
+        .nonremovable = 1,
+        .flow = TAC_FLOW_IF,
+        .format = TAC_FMT_IF,
+        .allowed = {TAC_KIND(TAC_LABEL), VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_IF_GT] = {
+        .text = ">",
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .barrier = 1,
+        .nonremovable = 1,
+        .flow = TAC_FLOW_IF,
+        .format = TAC_FMT_IF,
+        .allowed = {TAC_KIND(TAC_LABEL), VALUE_SOURCE, VALUE_SOURCE},
+    },
+    [TAC_IF_GE] = {
+        .text = ">=",
+        .reads = TAC_SRC1 | TAC_SRC2,
+        .barrier = 1,
+        .nonremovable = 1,
+        .flow = TAC_FLOW_IF,
+        .format = TAC_FMT_IF,
+        .allowed = {TAC_KIND(TAC_LABEL), VALUE_SOURCE, VALUE_SOURCE},
+    },
 };
 
-/* allocate — reserva e inicializa; sin memoria termina con diagnóstico. */
-static void *allocate(size_t bytes) {
-    void *p = calloc(1, bytes);
-    if (!p) { fputs("tac: sin memoria\n", stderr); exit(EXIT_FAILURE); }
-    return p;
+/* Reserva inicializada; termina si falta memoria. */
+void *tac_allocate(size_t bytes) {
+    void *memory = calloc(1, bytes);
+    if (!memory) {
+        fputs("tac: sin memoria\n", stderr);
+        exit(EXIT_FAILURE);
+    }
+    return memory;
 }
-/* identifier — entrega un identificador y evita desbordamiento. */
-static size_t identifier(size_t *next) {
-    if (*next == SIZE_MAX) { fputs("tac: identificadores agotados\n", stderr); exit(EXIT_FAILURE); }
-    return (*next)++;
+
+/* Los contadores virtuales nunca envuelven ni se limitan al banco físico. */
+size_t tac_next_identifier(size_t *counter) {
+    if (*counter == SIZE_MAX) {
+        fputs("tac: identificadores agotados\n", stderr);
+        exit(EXIT_FAILURE);
+    }
+    size_t id = *counter;
+    (*counter)++;
+    return id;
 }
-/* tac_none — produce la posición ausente sin reservar memoria. */
-TacOperand tac_none(void) { TacOperand o = {0}; return o; }
-/* tac_variable — conserva referencia prestada, no copia ni posee el símbolo. */
-TacOperand tac_variable(const Symbol *s) {
-    TacOperand o = {.kind = TAC_VARIABLE}; o.value.symbol = s; return o;
+
+/* Diagnóstico acotado: capacity=0 permite error=NULL. */
+int tac_error(char *error, size_t capacity, const char *format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    if (capacity) {
+        vsnprintf(error, capacity, format, arguments);
+    }
+    va_end(arguments);
+    return 0;
 }
-/* tac_integer — conserva la constante sin truncarla al ancho del ISA. */
-TacOperand tac_integer(int64_t n) {
-    TacOperand o = {.kind = TAC_INTEGER}; o.value.integer = n; return o;
+
+/*
+ * tac_none — crea una posición ausente.
+ *
+ * Entrada:
+ *   ninguna.
+ * Salida:
+ *   operando NONE por valor.
+ * Efectos:
+ *   ninguno.
+ * Restricciones:
+ *   ninguna.
+ */
+TacOperand tac_none(void) {
+    TacOperand operand = {0};
+    return operand;
 }
-/* tac_label — toma la etiqueta local de un bloque vivo. */
-TacOperand tac_label(const TacBlock *b) {
-    TacOperand o = {.kind = TAC_LABEL}; o.value.id = b->label; return o;
+
+/*
+ * tac_variable — referencia un símbolo de datos prestado.
+ *
+ * Entrada:
+ *   symbol: símbolo de datos prestado.
+ * Salida:
+ *   operando VARIABLE por valor.
+ * Efectos:
+ *   no copia ni libera el símbolo.
+ * Restricciones:
+ *   symbol debe sobrevivir al programa; la forma se valida después.
+ */
+TacOperand tac_variable(const Symbol *symbol) {
+    TacOperand operand = {.kind = TAC_VARIABLE};
+    operand.value.symbol = symbol;
+    return operand;
 }
-/* tac_temp_new — reserva identidad virtual, sin escoger registro físico. */
-TacOperand tac_temp_new(TacFunction *f) {
-    TacOperand o = {.kind = TAC_TEMP}; o.value.id = identifier(&f->next_temp); return o;
+
+/*
+ * tac_integer — conserva una constante sin truncarla.
+ *
+ * Entrada:
+ *   value: constante entera de 64 bits.
+ * Salida:
+ *   operando INTEGER sin truncar.
+ * Efectos:
+ *   ninguno.
+ * Restricciones:
+ *   el rango ISA se comprueba en la etapa ISA.
+ */
+TacOperand tac_integer(int64_t value) {
+    TacOperand operand = {.kind = TAC_INTEGER};
+    operand.value.integer = value;
+    return operand;
 }
-/* tac_op_info — consulta segura de la tabla inmutable. */
+
+/*
+ * tac_label — referencia un bloque vivo.
+ *
+ * Entrada:
+ *   block: referencia prestada a un bloque.
+ * Salida:
+ *   operando LABEL por referencia.
+ * Efectos:
+ *   ninguno.
+ * Restricciones:
+ *   debe pertenecer a la misma función cuando se valide (Aho §8.4.1).
+ */
+TacOperand tac_label(const TacBlock *block) {
+    TacOperand operand = {.kind = TAC_LABEL};
+    operand.value.block = block;
+    return operand;
+}
+
+/*
+ * tac_function_operand — referencia el símbolo de una función.
+ *
+ * Entrada:
+ *   symbol: símbolo de función prestado.
+ * Salida:
+ *   operando FUNCTION por identidad.
+ * Efectos:
+ *   ninguno.
+ * Restricciones:
+ *   symbol debe sobrevivir al programa (Aho §6.2.1).
+ */
+TacOperand tac_function_operand(const Symbol *symbol) {
+    TacOperand operand = {.kind = TAC_FUNCTION};
+    operand.value.symbol = symbol;
+    return operand;
+}
+
+/*
+ * tac_physical — distingue registro arquitectónico de temporal virtual.
+ *
+ * Entrada:
+ *   register_number: número arquitectónico.
+ * Salida:
+ *   operando PHYS, distinto de TEMP.
+ * Efectos:
+ *   ninguno.
+ * Restricciones:
+ *   validación posterior exige 0..15 y la etapa correspondiente.
+ */
+TacOperand tac_physical(unsigned register_number) {
+    TacOperand operand = {.kind = TAC_PHYS};
+    operand.value.id = register_number;
+    return operand;
+}
+
+/*
+ * tac_temp_new — reserva identidad virtual local a la función.
+ *
+ * Entrada:
+ *   function: función viva no NULL.
+ * Salida:
+ *   temporal virtual nuevo, local a function.
+ * Efectos:
+ *   avanza next_temp; termina si se agotan identificadores.
+ * Restricciones:
+ *   no asigna registro físico ni impone límite de doce (Aho §10.2.3).
+ */
+TacOperand tac_temp_new(TacFunction *function) {
+    TacOperand operand = {.kind = TAC_TEMP};
+    operand.value.id = tac_next_identifier(&function->next_temp);
+    return operand;
+}
+
+/*
+ * tac_is_global — clasifica por identidad y clase, nunca por nombre.
+ *
+ * Entrada:
+ *   program: programa o NULL; operand: operando por valor.
+ * Salida:
+ *   1 solo para VARIABLE global de clase SYMBOL_VARIABLE; 0 si no.
+ * Efectos:
+ *   ninguno.
+ * Restricciones:
+ *   compara punteros en global_scope; ignora funciones y homónimos.
+ */
+int tac_is_global(const TacProgram *program, TacOperand operand) {
+    if (!program || !program->global_scope || operand.kind != TAC_VARIABLE ||
+        !operand.value.symbol || operand.value.symbol->kind != SYMBOL_VARIABLE) {
+        return 0;
+    }
+    for (const Symbol *symbol = program->global_scope->symbols;
+         symbol; symbol = symbol->next) {
+        if (symbol == operand.value.symbol) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/*
+ * tac_op_info — consulta propiedades inmutables de alto nivel.
+ *
+ * Entrada:
+ *   op: código de operación.
+ * Salida:
+ *   fila inmutable; NULL para TAC_ISA o código inválido.
+ * Efectos:
+ *   ninguno.
+ * Restricciones:
+ *   ISA se consulta por instrucción, no por opcode (Aho §6.2.2).
+ */
 const TacOpInfo *tac_op_info(TacOpcode op) {
-    return (unsigned)op < TAC_OP_COUNT ? &operations[op] : NULL;
+    return (unsigned)op < TAC_ISA ? &operations[op] : NULL;
 }
-/* same_value — identidad de un pseudorregistro o símbolo, no su nombre. */
-static int same_value(TacOperand a, TacOperand b) {
-    return a.kind == b.kind && (a.kind == TAC_TEMP ? a.value.id == b.value.id :
-                               a.value.symbol == b.value.symbol);
+
+/*
+ * tac_instruction_info — resuelve propiedades de cualquiera de los niveles.
+ *
+ * Entrada:
+ *   instruction: instrucción o NULL; out: salida escribible o NULL.
+ * Salida:
+ *   1 si obtiene propiedades; 0 si es inválida.
+ * Efectos:
+ *   inicializa out; incorpora resúmenes de globales y ABI.
+ * Restricciones:
+ *   no valida la forma completa; ISA usa isa_table (Aho §10.2.3).
+ */
+int tac_instruction_info(const TacInstruction *instruction, TacOpInfo *out) {
+    if (!out) {
+        return 0;
+    }
+    *out = (TacOpInfo){0};
+    if (!instruction) {
+        return 0;
+    }
+    if (instruction->op == TAC_ISA) {
+        return tac_isa_info(instruction, out);
+    }
+    const TacOpInfo *info = tac_op_info(instruction->op);
+    if (!info) {
+        return 0;
+    }
+    *out = *info;
+    return 1;
 }
-/* values — proyecta una máscara a los valores explícitos, sin duplicados. */
-static size_t values(const TacInstruction *i, unsigned mask, TacOperand out[3]) {
-    TacOperand operands[3] = {i->dest, i->src1, i->src2};
+
+/* Identidad de un valor explícito, independiente de su nombre impreso. */
+static int same_value(TacOperand left, TacOperand right) {
+    if (left.kind != right.kind) {
+        return 0;
+    }
+    if (left.kind == TAC_VARIABLE) {
+        return left.value.symbol == right.value.symbol;
+    }
+    return left.value.id == right.value.id;
+}
+
+/* Proyecta posiciones sin duplicar valores; memoria/globales quedan implícitas. */
+static size_t instruction_values(const TacInstruction *instruction,
+                                  TacOperand out[3], int definitions) {
+    TacOpInfo info;
+    if (!tac_instruction_info(instruction, &info)) {
+        return 0;
+    }
+    unsigned mask = definitions ? info.writes : info.reads;
+    TacOperand operands[3] = {
+        instruction->dest, instruction->src1, instruction->src2
+    };
     size_t count = 0;
-    for (size_t k = 0; k < 3; ++k) {
-        TacOperand o = operands[k];
-        if (!(mask & (1u << k)) || (o.kind != TAC_TEMP && o.kind != TAC_VARIABLE)) continue;
-        size_t j;
-        for (j = 0; j < count; ++j) if (same_value(o, out[j])) break;
-        if (j == count) out[count++] = o;
+    for (unsigned position = 0; position < 3; position++) {
+        TacOperand operand = operands[position];
+        if (!(mask & (1u << position))) {
+            continue;
+        }
+        if (operand.kind != TAC_VARIABLE && operand.kind != TAC_TEMP &&
+            operand.kind != TAC_PHYS) {
+            continue;
+        }
+        if (operand.kind == TAC_VARIABLE &&
+            (info.address_bases & (1u << position))) {
+            continue;
+        }
+        if (definitions && operand.kind == TAC_PHYS &&
+            operand.value.id == TAC_P1_RZ) {
+            continue;
+        }
+        size_t index = 0;
+        while (index < count && !same_value(operand, out[index])) {
+            index++;
+        }
+        if (index == count) {
+            out[count] = operand;
+            count++;
+        }
     }
     return count;
 }
-/* tac_definitions — proyecta los destinos escritos según la tabla. */
-size_t tac_definitions(const TacInstruction *i, TacOperand out[3]) {
-    const TacOpInfo *p = i ? tac_op_info(i->op) : NULL;
-    return p ? values(i, p->writes, out) : 0;
-}
-/* tac_uses — proyecta las posiciones leídas según la tabla. */
-size_t tac_uses(const TacInstruction *i, TacOperand out[3]) {
-    const TacOpInfo *p = i ? tac_op_info(i->op) : NULL;
-    return p ? values(i, p->reads, out) : 0;
-}
-/* tac_program_new — crea propietario vacío. */
-TacProgram *tac_program_new(void) { return allocate(sizeof(TacProgram)); }
-/* tac_function_new — copia nombre y agrega en orden de inserción. */
-TacFunction *tac_function_new(TacProgram *p, const char *name) {
-    TacFunction *f = allocate(sizeof *f);
-    f->name = allocate(strlen(name) + 1);
-    strcpy(f->name, name);
-    if (p->last) p->last->next = f; else p->first = f;
-    p->last = f;
-    return f;
-}
-/* tac_block_new — etiqueta local única; el primer bloque es la entrada. */
-TacBlock *tac_block_new(TacFunction *f) {
-    TacBlock *b = allocate(sizeof *b);
-    b->function = f; b->label = identifier(&f->next_label);
-    if (f->last) f->last->next = b; else f->first = f->entry = b;
-    f->last = b;
-    return b;
-}
-/* tac_append — copia cuádrupla; permite forma incompleta hasta validar. */
-TacInstruction *tac_append(TacBlock *b, TacOpcode op, TacOperand d, TacOperand a, TacOperand c) {
-    TacInstruction *i = allocate(sizeof *i);
-    i->op = op; i->dest = d; i->src1 = a; i->src2 = c;
-    if (b->last) b->last->next = i; else b->first = i;
-    b->last = i;
-    return i;
-}
-/* contains — consulta pertenencia de una arista por identidad. */
-static int contains(TacBlock *const *list, size_t n, const TacBlock *b) {
-    for (size_t k = 0; k < n; ++k) if (list[k] == b) return 1;
-    return 0;
-}
-/* edge_add — amplía vector de aristas o termina sin memoria. */
-static void edge_add(TacBlock ***list, size_t *n, TacBlock *b) {
-    if (*n >= SIZE_MAX / sizeof **list - 1) {
-        fputs("tac: demasiadas aristas\n", stderr); exit(EXIT_FAILURE);
-    }
-    TacBlock **v = realloc(*list, (*n + 1) * sizeof *v);
-    if (!v) { fputs("tac: sin memoria\n", stderr); exit(EXIT_FAILURE); }
-    *list = v; v[(*n)++] = b;
-}
-/* tac_connect — mantiene ambos sentidos, también para aristas a sí mismo. */
-int tac_connect(TacBlock *from, TacBlock *to) {
-    if (!from || !to || from->function != to->function) return 0;
-    if (!contains(from->successors, from->successor_count, to))
-        edge_add(&from->successors, &from->successor_count, to);
-    if (!contains(to->predecessors, to->predecessor_count, from))
-        edge_add(&to->predecessors, &to->predecessor_count, from);
-    return 1;
-}
-/* fail — diagnóstico acotado, útil aun sin buffer. */
-static int fail(char *error, size_t cap, const char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    if (cap) vsnprintf(error, cap, fmt, ap);
-    va_end(ap);
-    return 0;
-}
-/* member — comprueba pertenencia sin desreferenciar punteros de aristas. */
-static int member(const TacFunction *f, const TacBlock *b) {
-    for (const TacBlock *p = f->first; p; p = p->next) if (p == b) return 1;
-    return 0;
-}
-/* target — resuelve etiquetas únicamente dentro de la función (Aho §8.4). */
-static TacBlock *target(const TacFunction *f, size_t label) {
-    for (TacBlock *b = f->first; b; b = b->next) if (b->label == label) return b;
-    return NULL;
-}
-/* tac_validate — comprueba forma y grafo; no exige SSA ni analiza tipos CLS.
- * Las listas deben ser acíclicas y sus nodos memoria viva del constructor.
+
+/*
+ * tac_definitions — obtiene definiciones explícitas en orden de posiciones.
+ *
+ * Entrada:
+ *   instruction: instrucción o NULL; out: capacidad para tres operandos.
+ * Salida:
+ *   0..3 definiciones explícitas, sin duplicados.
+ * Efectos:
+ *   escribe out; no modifica instruction.
+ * Restricciones:
+ *   agregar globales/registros implícitos y call_clobbers (Aho §10.2.3).
  */
-int tac_validate(const TacProgram *p, char *error, size_t cap) {
-    if (cap) error[0] = '\0';
-    if (!p) return fail(error, cap, "programa NULL");
-    const TacFunction *last_f = NULL;
-    for (const TacFunction *f = p->first; f; f = f->next) {
-        last_f = f;
-        if (!f->name || !*f->name || !f->entry || f->entry != f->first)
-            return fail(error, cap, "función sin nombre o entrada inicial válida");
-        const TacBlock *last_b = NULL;
-        for (const TacBlock *b = f->first; b; b = b->next) {
-            last_b = b;
-            if (b->function != f || target(f, b->label) != b)
-                return fail(error, cap, "%s: B%zu etiqueta duplicada o dueño incorrecto", f->name, b->label);
-            const TacInstruction *last_i = NULL;
-            for (const TacInstruction *i = b->first; i; i = i->next) {
-                last_i = i;
-                const TacOpInfo *info = tac_op_info(i->op);
-                if (!info) return fail(error, cap, "%s B%zu: operación inválida", f->name, b->label);
-                TacOperand os[3] = {i->dest,i->src1,i->src2};
-                for (size_t k = 0; k < 3; ++k) {
-                    TacOperand o = os[k];
-                    if ((unsigned)o.kind > TAC_LABEL || !(info->allowed[k] & K(o.kind)) ||
-                        (o.kind == TAC_VARIABLE && (!o.value.symbol || !o.value.symbol->name)) ||
-                        (o.kind == TAC_TEMP && o.value.id >= f->next_temp) ||
-                        (o.kind == TAC_LABEL && !target(f, o.value.id)))
-                        return fail(error, cap, "%s B%zu: operando %zu o etiqueta inválida", f->name, b->label, k);
-                }
-                if (i->op == TAC_CALL && (i->src1.value.symbol->kind != SYMBOL_FUNCTION || i->src2.value.integer < 0))
-                    return fail(error, cap, "%s B%zu: call requiere función y aridad no negativa", f->name, b->label);
-                if (info->flow != TAC_FLOW_NEXT && i->next)
-                    return fail(error, cap, "%s B%zu: salto/return no está al final", f->name, b->label);
-            }
-            if (last_i != b->last) return fail(error, cap, "%s B%zu: last incorrecto", f->name, b->label);
-            TacFlow flow = b->last ? tac_op_info(b->last->op)->flow : TAC_FLOW_NEXT;
-            TacBlock *expected[2];
-            size_t n = 0;
-            if (flow == TAC_FLOW_GOTO || flow == TAC_FLOW_IF)
-                expected[n++] = target(f, b->last->dest.value.id);
-            if (flow == TAC_FLOW_IF && !b->next)
-                return fail(error, cap, "%s B%zu: if sin bloque de caída", f->name, b->label);
-            if ((flow == TAC_FLOW_NEXT || flow == TAC_FLOW_IF) && b->next &&
-                (n == 0 || expected[0] != b->next)) expected[n++] = b->next;
-            if (b->successor_count != n)
-                return fail(error, cap, "%s B%zu: sucesores no coinciden con terminador", f->name, b->label);
-            for (size_t k = 0; k < n; ++k) {
-                if (b->successors[k] != expected[k] ||
-                    !contains(expected[k]->predecessors, expected[k]->predecessor_count, b))
-                    return fail(error, cap, "%s B%zu: sucesor/recíproca incorrectos", f->name, b->label);
-            }
-            for (size_t k = 0; k < b->predecessor_count; ++k) {
-                TacBlock *pred = b->predecessors[k];
-                if (!member(f, pred) || !contains(pred->successors, pred->successor_count, b))
-                    return fail(error, cap, "%s B%zu: predecesor inválido", f->name, b->label);
-                for (size_t j = 0; j < k; ++j) if (pred == b->predecessors[j])
-                    return fail(error, cap, "%s B%zu: predecesor duplicado", f->name, b->label);
-            }
-        }
-        if (last_b != f->last) return fail(error, cap, "%s: last incorrecto", f->name);
-    }
-    return last_f == p->last ? 1 : fail(error, cap, "last de programa incorrecto");
+size_t tac_definitions(const TacInstruction *instruction, TacOperand out[3]) {
+    return instruction_values(instruction, out, 1);
 }
-/* tac_program_free — libera propietarios y aristas; conserva símbolos ajenos. */
-void tac_program_free(TacProgram *p) {
-    if (!p) return;
-    TacFunction *f = p->first;
-    while (f) {
-        TacFunction *fn = f->next;
-        TacBlock *b = f->first;
-        while (b) {
-            TacBlock *bn = b->next;
-            TacInstruction *i = b->first;
-            while (i) { TacInstruction *in = i->next; free(i); i = in; }
-            free(b->successors); free(b->predecessors); free(b); b = bn;
-        }
-        free(f->name); free(f); f = fn;
+
+/*
+ * tac_uses — obtiene usos explícitos, incluido el destino preservado ISA.
+ *
+ * Entrada:
+ *   instruction: instrucción o NULL; out: capacidad para tres operandos.
+ * Salida:
+ *   0..3 usos explícitos, sin duplicados, incluido destino preservado ISA.
+ * Efectos:
+ *   escribe out; omite la base VARIABLE estática de LOAD/STORE.
+ * Restricciones:
+ *   agregar usos implícitos de TacOpInfo (Aho §6.2.1, §10.2.3).
+ */
+size_t tac_uses(const TacInstruction *instruction, TacOperand out[3]) {
+    return instruction_values(instruction, out, 0);
+}
+
+/*
+ * tac_program_new — crea un propietario en etapa de alto nivel.
+ *
+ * Entrada:
+ *   global_scope: ámbito GLOBAL prestado, obligatorio aunque esté vacío.
+ * Salida:
+ *   programa vacío en TAC_STAGE_HIGH.
+ * Efectos:
+ *   reserva memoria; ámbito NULL/no GLOBAL o sin memoria: diagnóstico y termina.
+ * Restricciones:
+ *   el ámbito y los símbolos sobreviven al programa. El caso NULL no se
+ *   prueba en el mismo proceso porque termina; no devuelve NULL.
+ */
+TacProgram *tac_program_new(const Scope *global_scope) {
+    if (!global_scope || global_scope->kind != SCOPE_GLOBAL) {
+        fputs("tac: se requiere un ámbito SCOPE_GLOBAL no NULL\n", stderr);
+        exit(EXIT_FAILURE);
     }
-    free(p);
+    TacProgram *program = tac_allocate(sizeof *program);
+    program->global_scope = global_scope;
+    program->stage = TAC_STAGE_HIGH;
+    return program;
+}
+
+/*
+ * tac_function_new — agrega una función identificada por su Symbol.
+ *
+ * Entrada:
+ *   program: programa vivo; symbol: símbolo FUNCTION prestado.
+ * Salida:
+ *   función nueva al final de program.
+ * Efectos:
+ *   reserva y enlaza; sin memoria termina.
+ * Restricciones:
+ *   no posee symbol; el primer bloque será entrada (Aho §8.4.1).
+ */
+TacFunction *tac_function_new(TacProgram *program, const Symbol *symbol) {
+    TacFunction *function = tac_allocate(sizeof *function);
+    function->symbol = symbol;
+    function->program = program;
+    if (program->last) {
+        program->last->next = function;
+    } else {
+        program->first = function;
+    }
+    program->last = function;
+    return function;
+}
+
+/*
+ * tac_program_free — libera propietarios, conservando todas las referencias prestadas.
+ *
+ * Entrada:
+ *   program: programa propietario o NULL.
+ * Salida:
+ *   ninguna.
+ * Efectos:
+ *   libera funciones, bloques, instrucciones y vectores de aristas.
+ * Restricciones:
+ *   conserva símbolos, ámbito global y filas ISA prestados.
+ */
+void tac_program_free(TacProgram *program) {
+    if (!program) {
+        return;
+    }
+    TacFunction *function = program->first;
+    while (function) {
+        TacFunction *next_function = function->next;
+        TacBlock *block = function->first;
+        while (block) {
+            TacBlock *next_block = block->next;
+            TacInstruction *instruction = block->first;
+            while (instruction) {
+                TacInstruction *next_instruction = instruction->next;
+                free(instruction);
+                instruction = next_instruction;
+            }
+            free(block->successors);
+            free(block->predecessors);
+            free(block);
+            block = next_block;
+        }
+        free(function);
+        function = next_function;
+    }
+    free(program);
 }

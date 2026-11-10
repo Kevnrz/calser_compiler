@@ -1,5 +1,5 @@
 $ make -s check
-check-tac: 5 casos de impresión, consultas y validación: OK
+check-tac: 6 casos de alto nivel, ISA virtual/fisica, consultas y validacion: OK
 PASS contrato y fallo del emisor
 PASS mul: 450 casos, dos expansiones por caso
 PASS div: 450 casos, dos expansiones por caso
@@ -80,9 +80,9 @@ PASS calendario rechazado: diagnóstico y ningún callback de emisión ejecutado
 PASS organizador: 143 ejecuciones equivalentes, fallback y protección de entrada fija
 PASS anotaciones: almacenamiento y salto comparten bundle y conservan sus líneas individuales
 PASS factorial: ciclos 337 → 231; bundles 110 → 80; dos ALU ejecutadas 14 veces; f=120
-PASS compilador: 28 programas equivalentes con y sin organizador, cero avisos
-PASS salidas: 28 programas × 2 modos; ASM, BIN, HEX, MEM, -m, -p y reensamblado coherentes
-PASS BRU: 814 instrucciones codificadas con destinos/registros finales correctos
+PASS compilador: 29 programas equivalentes con y sin organizador, cero avisos
+PASS salidas: 29 programas × 2 modos; ASM, BIN, HEX, MEM, -m, -p y reensamblado coherentes
+PASS BRU: 830 instrucciones codificadas con destinos/registros finales correctos
 PASS reubicación factorial: .L_func_factorial 38 → 28; bundles 110 → 80
 PASS factorial: 120; ciclos 337 → 231 (31.45% menos)
 PASS paralelismo: ambas ALU ejecutadas 14 veces; cero avisos

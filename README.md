@@ -257,7 +257,7 @@ calendario antes de emitirlo. Su uso y la comparación de factorial con
 Para verificar las rutinas de generación de código:
 
 ```bash
-make check-tac
+make check-tac  # 6 casos de alto nivel, ISA virtual/física y ejemplo .cls; sin Python
 make check-arith
 make check-arrays
 make check-matrices

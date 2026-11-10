@@ -89,8 +89,10 @@ WAW de dos bundles; si el destino es también fuente textual, exige RAW de tres.
 Este target no necesita Python. Las pruebas completas conservan sus ejecutores.
 
 La representación intermedia de tres direcciones tiene además `make check-tac`,
-incluido en `make check`: arma cinco casos en C y compara su impresión estable,
-además de comprobar definiciones/usos y rechazar formas inválidas. Este target
-usa el binario C y `diff`, sin Python; las otras suites conservan sus ejecutores.
-La construcción habitual con `make` tampoco requiere Python. Ver
+incluido en `make check`: ejecuta `probar_tac` (seis casos de alto nivel) y
+`probar_tac_isa` (ISA virtual/física), y compara dos salidas esperadas con `diff`.
+Los binarios C comprueban definiciones/usos, globales, ABI, argumentos, memoria,
+edición, reconstrucción y rechazos. El target también compila
+`pruebas/tac/ejemplo.cls` con ccom. No usa Python; la construcción habitual con
+`make` tampoco lo necesita. Ver
 [representacion_intermedia.md](representacion_intermedia.md).

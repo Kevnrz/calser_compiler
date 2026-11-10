@@ -33,11 +33,11 @@ B1: successors [B2]
   t2 = w[t1]
   y = t2
   goto B2
-B2: successors [B3, B4]
+B2: successors [B4, B3]
   t3 = i
   t4 = t3 < 4
-  if t4 == 0 goto B3
-B4: successors [B2]
+  if t4 == 0 goto B4
+B3: successors [B2]
   t5 = s
   t6 = i
   t7 = t6 * 4
@@ -48,7 +48,7 @@ B4: successors [B2]
   t11 = t10 + 1
   i = t11
   goto B2
-B3: successors []
+B4: successors []
   t12 = 2 * 4
   t13 = v[t12]
   param t13, 0

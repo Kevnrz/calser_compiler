@@ -8,6 +8,33 @@
 #include <string.h>
 
 /*
+ * tac_block_presentation_number — numera por posición sin cambiar el CFG.
+ *
+ * Entrada:
+ *   block: bloque vivo; su función, si existe, tiene una lista viva y acíclica.
+ * Salida:
+ *   posición en la lista de su función, empezando en cero.
+ * Efectos:
+ *   ninguno; listados y diagnósticos comparten esta numeración (Aho §8.4.1).
+ * Restricciones:
+ *   si falta la función o la pertenencia, devuelve el ID interno: los diagnósticos
+ *   de estructuras inconsistentes no siempre disponen de una posición válida.
+ */
+size_t tac_block_presentation_number(const TacBlock *block) {
+    if (block->function) {
+        size_t number = 0;
+        for (const TacBlock *current = block->function->first; current;
+             current = current->next) {
+            if (current == block) {
+                return number;
+            }
+            number++;
+        }
+    }
+    return block->label;
+}
+
+/*
  * tac_has_edge — busca un bloque por identidad en un vector de aristas.
  *
  * Entrada:
@@ -113,28 +140,30 @@ int tac_expected_successors(const TacBlock *block, TacBlock *out[2],
          instruction = instruction->next) {
         TacOpInfo info;
         if (!tac_instruction_info(instruction, &info)) {
-            return tac_error(error, cap, "B%zu: operación inválida", block->label);
+            return tac_error(error, cap, "B%zu: operación inválida",
+                             tac_block_presentation_number(block));
         }
         if (info.flow != TAC_FLOW_NEXT && instruction->next) {
             return tac_error(error, cap, "B%zu: terminador no está al final",
-                             block->label);
+                             tac_block_presentation_number(block));
         }
         flow = info.flow;
         last = instruction;
     }
     if (last != block->last) {
-        return tac_error(error, cap, "B%zu: last incorrecto", block->label);
+        return tac_error(error, cap, "B%zu: last incorrecto",
+                         tac_block_presentation_number(block));
     }
     if (!block->next && (flow == TAC_FLOW_NEXT || flow == TAC_FLOW_IF)) {
         return tac_error(error, cap, "B%zu: último bloque sin RETURN/GOTO o caída",
-                         block->label);
+                         tac_block_presentation_number(block));
     }
     if (flow == TAC_FLOW_GOTO || flow == TAC_FLOW_IF) {
         TacOperand label = last->op == TAC_ISA ? last->isa.target : last->dest;
         if (label.kind != TAC_LABEL ||
             !tac_has_block(block->function, label.value.block)) {
             return tac_error(error, cap, "B%zu: etiqueta fuera de la función",
-                             block->label);
+                             tac_block_presentation_number(block));
         }
         out[(*count)++] = (TacBlock *)label.value.block;
     }

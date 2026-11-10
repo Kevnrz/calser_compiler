@@ -5,6 +5,7 @@ Usa: ccom, probar_tac_build y biblioteca estándar. Lo usa make check-tac-build.
 Referencias: Aho §6.4, §6.6, §8.4.1; enunciado §4.1. El intérprete es C2.
 """
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
@@ -48,6 +49,19 @@ def run(*args, cwd=None, code=0):
     return result
 
 
+def consecutive_blocks(text):
+    """Comprueba números de presentación consecutivos por función, sin leer operandos."""
+    number = None
+    for line in text.splitlines():
+        if line.startswith('function '):
+            assert line.endswith('(entry B0)'), line
+            number = 0
+        match = re.fullmatch(r'B(\d+): successors \[.*\]', line)
+        if match:
+            assert number is not None and int(match[1]) == number, line
+            number += 1
+
+
 def cases(folder):
     """Compara estructura en memoria y CLI con los esperados de cada fuente.
 
@@ -62,6 +76,7 @@ def cases(folder):
                                 capture_output=True, text=True, timeout=30)
         assert memory.returncode == 0, (name, memory.stderr)
         assert memory.stdout == expected, name
+        consecutive_blocks(memory.stdout)
         assert memory.stderr == '', memory.stderr
         for mode in ([], ['--no-schedule']):
             plain = folder / 'plain.bin'
@@ -72,6 +87,7 @@ def cases(folder):
             for extension in ('.asm', '.bin', '.hex', '.mem'):
                 assert plain.with_suffix(extension).read_bytes() == tac.with_suffix(extension).read_bytes(), (name, extension)
             assert tac.with_suffix('.tac').read_text() == expected, (name, mode)
+            consecutive_blocks(tac.with_suffix('.tac').read_text())
 
 
 def combinations(folder):

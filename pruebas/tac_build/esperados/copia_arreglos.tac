@@ -12,26 +12,26 @@ B1: successors [B2]
   t1 = address loc
   t2 = 0
   goto B2
-B2: successors [B3, B4]
-  if t2 >= 12 goto B3
-B4: successors [B2]
+B2: successors [B4, B3]
+  if t2 >= 12 goto B4
+B3: successors [B2]
   t3 = t0[t2]
   t1[t2] = t3
   t2 = t2 + 4
   goto B2
-B3: successors [B5]
+B4: successors [B5]
   t4 = address loc
   t5 = b
   t6 = 0
   goto B5
-B5: successors [B6, B7]
-  if t6 >= 12 goto B6
-B7: successors [B5]
+B5: successors [B7, B6]
+  if t6 >= 12 goto B7
+B6: successors [B5]
   t7 = t4[t6]
   t5[t6] = t7
   t6 = t6 + 4
   goto B5
-B6: successors []
+B7: successors []
   t8 = 0 * 4
   t9 = loc[t8]
   t10 = 1 * 4

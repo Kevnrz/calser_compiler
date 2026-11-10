@@ -4,16 +4,16 @@ function nada (entry B0)
 B0: successors [B1]
   r = 0
   goto B1
-B1: successors [B3, B4]
+B1: successors [B3, B2]
   t0 = a
   t1 = t0 > 0
   if t1 == 0 goto B3
-B4: successors [B2]
+B2: successors [B4]
   r = 9
-  goto B2
-B3: successors [B2]
-  goto B2
-B2: successors []
+  goto B4
+B3: successors [B4]
+  goto B4
+B4: successors []
   return r
 
 function main (entry B0)

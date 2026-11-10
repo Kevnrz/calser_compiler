@@ -8,15 +8,15 @@ B1: successors [B2]
   i = 0
   $limite_S0 = 400000
   goto B2
-B2: successors [B3, B4]
-  if i >= $limite_S0 goto B3
-B4: successors [B2]
+B2: successors [B4, B3]
+  if i >= $limite_S0 goto B4
+B3: successors [B2]
   t0 = x
   t1 = i
   t2 = t0 + t1
   x = t2
   i = i + 200000
   goto B2
-B3: successors []
+B4: successors []
   return
 

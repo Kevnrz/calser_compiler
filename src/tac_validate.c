@@ -222,25 +222,30 @@ static int valid_edges(const TacBlock *block, char *error, size_t cap) {
     }
     if ((block->successor_count && !block->successors) ||
         (block->predecessor_count && !block->predecessors)) {
-        return tac_error(error, cap, "B%zu: vector de aristas ausente", block->label);
+        return tac_error(error, cap, "B%zu: vector de aristas ausente",
+                         tac_block_presentation_number(block));
     }
     if (count != block->successor_count) {
-        return tac_error(error, cap, "B%zu: sucesores incorrectos", block->label);
+        return tac_error(error, cap, "B%zu: sucesores incorrectos",
+                         tac_block_presentation_number(block));
     }
     for (size_t k = 0; k < count; k++) {
         if (block->successors[k] != expected[k] ||
             !tac_has_edge(expected[k]->predecessors, expected[k]->predecessor_count, block)) {
-            return tac_error(error, cap, "B%zu: orden/recíproca incorrectos", block->label);
+            return tac_error(error, cap, "B%zu: orden/recíproca incorrectos",
+                             tac_block_presentation_number(block));
         }
     }
     for (size_t k = 0; k < block->predecessor_count; k++) {
         TacBlock *previous = block->predecessors[k];
         if (!tac_has_block(block->function, previous) ||
             !tac_has_edge(previous->successors, previous->successor_count, block)) {
-            return tac_error(error, cap, "B%zu: predecesor inválido", block->label);
+            return tac_error(error, cap, "B%zu: predecesor inválido",
+                             tac_block_presentation_number(block));
         }
         if (tac_has_edge(block->predecessors, k, previous)) {
-            return tac_error(error, cap, "B%zu: predecesor duplicado", block->label);
+            return tac_error(error, cap, "B%zu: predecesor duplicado",
+                             tac_block_presentation_number(block));
         }
     }
     return 1;

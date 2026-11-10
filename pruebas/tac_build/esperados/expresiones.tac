@@ -3,7 +3,7 @@ initial_data bytes=0
 function main (entry B0)
 B0: successors [B1]
   goto B1
-B1: successors [B2, B3]
+B1: successors [B3, B2]
   t0 = neg 3
   x = t0
   y = 2
@@ -60,17 +60,17 @@ B1: successors [B2, B3]
   b = t38
   t39 = b
   t40 = t39
-  if t40 == 0 goto B2
-B3: successors [B2]
+  if t40 == 0 goto B3
+B2: successors [B3]
   t40 = 1
-  goto B2
-B2: successors [B4, B5]
+  goto B3
+B3: successors [B5, B4]
   t41 = t40
-  if t41 != 0 goto B4
-B5: successors [B4]
+  if t41 != 0 goto B5
+B4: successors [B5]
   t41 = 0
-  goto B4
-B4: successors []
+  goto B5
+B5: successors []
   b = t41
   return
 

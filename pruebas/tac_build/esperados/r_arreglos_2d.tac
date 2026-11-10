@@ -12,11 +12,11 @@ function suma (entry B0)
 B0: successors [B1]
   r = 0
   goto B1
-B1: successors [B3, B4]
+B1: successors [B3, B2]
   t0 = i
   t1 = t0 >= 2
   if t1 == 0 goto B3
-B4: successors []
+B2: successors []
   t2 = acc
   r = t2
   return r
@@ -43,7 +43,7 @@ B3: successors [B1]
   i = t5
   acc = t20
   goto B1
-B2: successors []
+B4: successors []
   return r
 
 function main (entry B0)

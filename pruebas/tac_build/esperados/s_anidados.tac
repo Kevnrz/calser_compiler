@@ -8,15 +8,15 @@ B1: successors [B2]
   i = 0
   $limite_S0 = 3
   goto B2
-B2: successors [B3, B4]
-  if i >= $limite_S0 goto B3
-B4: successors [B5]
+B2: successors [B7, B3]
+  if i >= $limite_S0 goto B7
+B3: successors [B4]
   j = 0
   $limite_S1 = 4
-  goto B5
-B5: successors [B6, B7]
+  goto B4
+B4: successors [B6, B5]
   if j >= $limite_S1 goto B6
-B7: successors [B5]
+B5: successors [B4]
   t0 = x
   t1 = i
   t2 = j
@@ -24,10 +24,10 @@ B7: successors [B5]
   t4 = t0 + t3
   x = t4
   j = j + 1
-  goto B5
+  goto B4
 B6: successors [B2]
   i = i + 1
   goto B2
-B3: successors []
+B7: successors []
   return
 

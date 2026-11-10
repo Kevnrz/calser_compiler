@@ -494,8 +494,66 @@ static void array_errors(void) {
     tac_program_free(fixture.program);
 }
 
+/* Numeración por lista, sin modificar identidades ni aristas; Aho §8.4.1. */
+static void presentation_numbers(void) {
+    Fixture fixture;
+    fixture_init(&fixture);
+    TacFunction *function = fixture.function;
+    TacBlock *end = fixture.block;
+    TacBlock *entry = tac_block_insert_after(function, NULL);
+    TacBlock *middle = tac_block_insert_after(function, entry);
+    TacOperand none = tac_none();
+    tac_append(entry, TAC_IF_EQ, tac_label(end), tac_integer(1), tac_integer(0));
+    tac_append(middle, TAC_GOTO, tac_label(end), none, none);
+    rebuild(function);
+    valid(fixture.program);
+    assert(entry->label == 1 && middle->label == 2 && end->label == 0);
+    unsigned char saved[3][sizeof *entry];
+    memcpy(saved[0], entry, sizeof *entry);
+    memcpy(saved[1], middle, sizeof *middle);
+    memcpy(saved[2], end, sizeof *end);
+    size_t next_label = function->next_label;
+    FILE *out = tmpfile();
+    assert(out);
+    tac_print(out, fixture.program);
+    assert(!ferror(out));
+    rewind(out);
+    char text[512] = {0};
+    size_t length = fread(text, 1, sizeof text - 1, out);
+    assert(!ferror(out) && feof(out) && length > 0);
+    assert(!strcmp(text,
+        "function contratos (entry B0)\n"
+        "B0: successors [B2, B1]\n"
+        "  if 1 == 0 goto B2\n"
+        "B1: successors [B2]\n"
+        "  goto B2\n"
+        "B2: successors []\n"
+        "  return\n\n"));
+    assert(fclose(out) == 0);
+    assert(function->next_label == next_label);
+    assert(function->entry == entry && function->first == entry && function->last == end);
+    assert(!memcmp(entry, saved[0], sizeof *entry));
+    assert(!memcmp(middle, saved[1], sizeof *middle));
+    assert(!memcmp(end, saved[2], sizeof *end));
+    assert(entry->successors[0] == end && entry->successors[1] == middle);
+    assert(middle->successors[0] == end && middle->predecessors[0] == entry);
+    assert(end->predecessors[0] == entry && end->predecessors[1] == middle);
+    char error[256];
+    middle->successor_count = 0;
+    assert(!tac_validate(fixture.program, error, sizeof error));
+    assert(!strcmp(error, "B1: sucesores incorrectos"));
+    middle->successor_count = 1;
+    TacInstruction *extra = tac_append(middle, TAC_RETURN, none, none, none);
+    assert(!tac_rebuild_edges(function, error, sizeof error));
+    assert(!strcmp(error, "B1: terminador no está al final"));
+    assert(tac_remove(middle, extra));
+    valid(fixture.program);
+    tac_program_free(fixture.program);
+}
+
 /* Las pruebas de contratos no alteran las seis impresiones de referencia. */
 int main(void) {
+    presentation_numbers();
     globals_and_properties();
     crypto_errors();
     parameter_errors();

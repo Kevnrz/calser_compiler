@@ -27,7 +27,13 @@ internas siguen siendo tipos distintos y no se comparan por texto.
 El resto de `TacOperand` distingue NONE, VARIABLE (Symbol prestado), INTEGER
 (entero de 64 bits), LABEL (referencia prestada al bloque) y FUNCTION (Symbol de
 función prestado). Los símbolos se comparan por puntero, no por nombre. Las
-etiquetas deben pertenecer a la función; el número impreso B0/B1 es local.
+etiquetas deben pertenecer a la función. `block->label` es un ID interno estable,
+independiente del orden de la lista; `next_label` reserva IDs sin reutilizarlos.
+El número de presentación B0, B1, B2… es la posición del bloque en la lista
+de cada función, tanto en listados como en diagnósticos. Imprimir no modifica
+IDs, punteros ni aristas; los sucesores conservan el orden [destino tomado, caída].
+Si un diagnóstico encuentra un bloque sin función o fuera de su lista, usa su
+ID interno porque no hay una posición válida.
 Las constantes de alto nivel no se truncan: C2.3 deberá aplicar la semántica de
 32 bits y materializar las que no caben en un inmediato de 18 bits con signo.
 
@@ -336,9 +342,9 @@ CONDITIONAL: condición LESS_EQUAL(n,1), rama ASSIGNMENT(r,acc) y EMIT,
 y RESIDUAL con REWIND factorial(n-1,acc*n).
 
 1. B0 inicializa r a cero y salta a B1, entrada del cuerpo.
-2. B1 captura n y calcula la condición; la caída B4 devuelve acc.
+2. B1 captura n y calcula la condición; la caída B2 devuelve acc.
 3. B3 captura n-1 y acc*n antes de escribir n y acc, y vuelve a B1.
-4. B2 conserva el RETURN implícito del final, aunque aquí no tiene predecesores.
+4. B4 conserva el RETURN implícito del final, aunque aquí no tiene predecesores.
 5. main inicializa f, pasa 3/1 y conserva el resultado inmediato del CALL.
 
 El esperado completo está en `pruebas/tac_build/esperados/factorial_r.tac`.
@@ -351,11 +357,11 @@ function factorial (entry B0)
 B0: successors [B1]
   r = 0
   goto B1
-B1: successors [B3, B4]
+B1: successors [B3, B2]
   t0 = n
   t1 = t0 <= 1
   if t1 == 0 goto B3
-B4: successors []
+B2: successors []
   t2 = acc
   r = t2
   return r
@@ -368,7 +374,7 @@ B3: successors [B1]
   n = t4
   acc = t7
   goto B1
-B2: successors []
+B4: successors []
   return r
 
 ```

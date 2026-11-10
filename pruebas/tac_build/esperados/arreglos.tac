@@ -8,9 +8,9 @@ B1: successors [B2]
   j = 0
   $limite_S0 = 3
   goto B2
-B2: successors [B3, B4]
-  if j >= $limite_S0 goto B3
-B4: successors [B2]
+B2: successors [B4, B3]
+  if j >= $limite_S0 goto B4
+B3: successors [B2]
   t0 = s
   t1 = f
   t2 = j
@@ -23,7 +23,7 @@ B4: successors [B2]
   s = t8
   j = j + 1
   goto B2
-B3: successors []
+B4: successors []
   return s
 
 function poner (entry B0)

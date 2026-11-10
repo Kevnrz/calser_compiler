@@ -26,13 +26,13 @@ B1: successors [B2]
   t7 = address copia
   t8 = 0
   goto B2
-B2: successors [B3, B4]
-  if t8 >= 12 goto B3
-B4: successors [B2]
+B2: successors [B4, B3]
+  if t8 >= 12 goto B4
+B3: successors [B2]
   t9 = t6[t8]
   t7[t8] = t9
   t8 = t8 + 4
   goto B2
-B3: successors []
+B4: successors []
   return
 

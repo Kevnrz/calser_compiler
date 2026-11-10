@@ -10,26 +10,26 @@ B1: successors [B2]
   i = 0
   $limite_S0 = 5
   goto B2
-B2: successors [B3, B4]
-  if i >= $limite_S0 goto B3
-B4: successors [B6, B7]
+B2: successors [B7, B3]
+  if i >= $limite_S0 goto B7
+B3: successors [B5, B4]
   t1 = i
   t2 = t1 * 4
   t3 = v
   t4 = t3[t2]
   t5 = x
   t6 = t4 == t5
-  if t6 == 0 goto B6
-B7: successors []
+  if t6 == 0 goto B5
+B4: successors []
   t7 = i
   pos = t7
   return pos
-B6: successors [B5]
-  goto B5
-B5: successors [B2]
+B5: successors [B6]
+  goto B6
+B6: successors [B2]
   i = i + 1
   goto B2
-B3: successors []
+B7: successors []
   return pos
 
 function main (entry B0)
@@ -57,15 +57,15 @@ B1: successors [B2]
   k = 0
   $limite_S1 = 3
   goto B2
-B2: successors [B3, B4]
-  if k >= $limite_S1 goto B3
-B4: successors [B2]
+B2: successors [B4, B3]
+  if k >= $limite_S1 goto B4
+B3: successors [B2]
   t4 = c
   t5 = a
   t6 = t4 + t5
   c = t6
   k = k + 1
   goto B2
-B3: successors []
+B4: successors []
   return
 

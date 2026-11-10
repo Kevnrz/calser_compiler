@@ -213,16 +213,6 @@ int tac_validate_function_form(const TacFunction *function, char *error, size_t 
     return last == function->last ? 1 : tac_error(error, cap, "last de función inválido");
 }
 
-/* Identidad de una arista, sin desreferenciar extremos ajenos. */
-static int has_edge(TacBlock *const *edges, size_t count, const TacBlock *block) {
-    for (size_t k = 0; k < count; k++) {
-        if (edges[k] == block) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
 /* Valida sucesores canónicos, predecesores únicos y reciprocidad. */
 static int valid_edges(const TacBlock *block, char *error, size_t cap) {
     TacBlock *expected[2];
@@ -239,17 +229,17 @@ static int valid_edges(const TacBlock *block, char *error, size_t cap) {
     }
     for (size_t k = 0; k < count; k++) {
         if (block->successors[k] != expected[k] ||
-            !has_edge(expected[k]->predecessors, expected[k]->predecessor_count, block)) {
+            !tac_has_edge(expected[k]->predecessors, expected[k]->predecessor_count, block)) {
             return tac_error(error, cap, "B%zu: orden/recíproca incorrectos", block->label);
         }
     }
     for (size_t k = 0; k < block->predecessor_count; k++) {
         TacBlock *previous = block->predecessors[k];
         if (!tac_has_block(block->function, previous) ||
-            !has_edge(previous->successors, previous->successor_count, block)) {
+            !tac_has_edge(previous->successors, previous->successor_count, block)) {
             return tac_error(error, cap, "B%zu: predecesor inválido", block->label);
         }
-        if (has_edge(block->predecessors, k, previous)) {
+        if (tac_has_edge(block->predecessors, k, previous)) {
             return tac_error(error, cap, "B%zu: predecesor duplicado", block->label);
         }
     }

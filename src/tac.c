@@ -642,7 +642,8 @@ size_t tac_definitions(const TacInstruction *instruction, TacOperand out[3]) {
  * Salida:
  *   0..3 usos explícitos, sin duplicados, incluido destino preservado ISA.
  * Efectos:
- *   escribe out; omite la base VARIABLE estática de LOAD/STORE.
+ *   escribe out; no cuenta direcciones simbólicas de ADDRESS/LOAD/STORE como
+ *   valores leídos.
  * Restricciones:
  *   agregar usos implícitos de TacOpInfo (Aho §6.2.1, §10.2.3).
  */

@@ -7,8 +7,20 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Identidad de una arista; nunca desreferencia el bloque buscado. */
-static int has_edge(TacBlock *const *edges, size_t count, const TacBlock *block) {
+/*
+ * tac_has_edge — busca un bloque por identidad en un vector de aristas.
+ *
+ * Entrada:
+ *   edges: vector con count elementos; puede ser NULL si count es cero.
+ *   block: puntero buscado, que no se desreferencia.
+ * Salida:
+ *   1 si aparece; 0 si no.
+ * Efectos:
+ *   ninguno.
+ * Restricciones:
+ *   el vector debe tener count elementos legibles.
+ */
+int tac_has_edge(TacBlock *const *edges, size_t count, const TacBlock *block) {
     for (size_t k = 0; k < count; k++) {
         if (edges[k] == block) {
             return 1;
@@ -61,10 +73,10 @@ int tac_connect(TacBlock *from, TacBlock *to) {
     if (!from || !to || from->function != to->function) {
         return 0;
     }
-    if (!has_edge(from->successors, from->successor_count, to)) {
+    if (!tac_has_edge(from->successors, from->successor_count, to)) {
         add_edge(&from->successors, &from->successor_count, to);
     }
-    if (!has_edge(to->predecessors, to->predecessor_count, from)) {
+    if (!tac_has_edge(to->predecessors, to->predecessor_count, from)) {
         add_edge(&to->predecessors, &to->predecessor_count, from);
     }
     return 1;

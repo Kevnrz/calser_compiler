@@ -71,7 +71,10 @@ static void print_crypto(FILE *out, TacStage stage, const TacInstruction *instru
     fputc(']', out);
 }
 
-/* La forma ISA solo decide sintaxis; propiedades permanecen en isa_table. */
+/*
+ * La forma ISA decide sintaxis. La semántica de máquina viene de isa_table;
+ * tac_isa_info agrega restricciones y resúmenes de la ABI de Calser.
+ */
 static void print_isa(FILE *out, TacStage stage, const TacInstruction *instruction) {
     const IsaInstruction *isa = instruction->isa.instruction;
     fputs(isa->name, out);

@@ -6,6 +6,7 @@
 void *tac_allocate(size_t bytes);
 size_t tac_next_identifier(size_t *counter);
 int tac_error(char *error, size_t capacity, const char *format, ...);
+int tac_has_edge(TacBlock *const *edges, size_t count, const TacBlock *block);
 int tac_has_block(const TacFunction *function, const TacBlock *block);
 int tac_has_instruction(const TacBlock *block, const TacInstruction *instruction);
 int tac_isa_info(const TacInstruction *instruction, TacOpInfo *out);

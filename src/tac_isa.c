@@ -1,6 +1,7 @@
 /*
  * tac_isa.c — nivel ISA de representación intermedia de tres direcciones.
- * Usa: tac_internal.h; la semántica es exclusivamente la de isa_table (etapa A).
+ * Usa: tac_internal.h; la semántica de máquina proviene de isa_table (etapa A).
+ * Agrega restricciones y resúmenes de la ABI de Calser.
  * Lo usan consultas, validación e impresión. Referencias: Aho §10.2.3; isa.md §6.
  */
 #include "tac_internal.h"
@@ -71,7 +72,10 @@ int tac_isa_info(const TacInstruction *instruction, TacOpInfo *out) {
     return 1;
 }
 
-/* Solo se aceptan las llamadas y retornos directos usados por ccom P1. */
+/*
+ * Restringe llamadas a jas rl, FUNCTION y retornos a jefR rz, rl; valida
+ * objetivos y rangos ISA.
+ */
 int tac_isa_validate(const TacInstruction *instruction, char *error, size_t cap) {
     const IsaInstruction *isa = instruction->isa.instruction;
     TacOperand target = instruction->isa.target;

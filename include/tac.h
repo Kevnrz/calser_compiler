@@ -43,20 +43,27 @@ typedef struct TacBlock TacBlock;
 typedef struct TacInstruction TacInstruction;
 
 typedef enum {
-    TAC_STAGE_HIGH, TAC_STAGE_ISA_VIRTUAL, TAC_STAGE_ISA_PHYSICAL
+    TAC_STAGE_HIGH,          /* Operaciones Calser; TEMP se imprime tN. */
+    TAC_STAGE_ISA_VIRTUAL,   /* Solo ISA; TEMP vN y PHYS rz/rl/rx. */
+    TAC_STAGE_ISA_PHYSICAL   /* Solo ISA con registros físicos; sin TEMP. */
 } TacStage;
 typedef enum {
-    TAC_NONE, TAC_TEMP, TAC_VARIABLE, TAC_INTEGER, TAC_LABEL,
-    TAC_FUNCTION, TAC_PHYS
+    TAC_NONE,               /* Posición ausente; la validación comprueba su uso. */
+    TAC_TEMP,               /* Identidad virtual local a la función; para asignación. */
+    TAC_VARIABLE,           /* Symbol de variable, parámetro o resultado; alto nivel. */
+    TAC_INTEGER,
+    TAC_LABEL,              /* Referencia a un bloque, no dirección ni texto. */
+    TAC_FUNCTION,           /* Symbol de función llamado por CALL/jas. */
+    TAC_PHYS                /* Registro arquitectónico 0..15, distinto de TEMP. */
 } TacOperandKind;
 typedef struct {
-    TacOperandKind kind;
+    TacOperandKind kind;              /* Selecciona el miembro de value; consultas y validación. */
     union {
-        size_t id;
-        int64_t integer;
-        const Symbol *symbol;
-        const TacBlock *block;
-    } value;
+        size_t id;                    /* ID de TEMP o número PHYS; asignación y renombramiento. */
+        int64_t integer;              /* Constante sin truncar; C2.3 materializa el valor ISA. */
+        const Symbol *symbol;         /* VARIABLE/FUNCTION prestado; globales y llamadas. */
+        const TacBlock *block;        /* LABEL prestado; validación y construcción del CFG. */
+    } value;                          /* Contenido según kind; todas las consultas. */
 } TacOperand;
 typedef enum {
     TAC_COPY, TAC_ADDRESS,
@@ -70,56 +77,113 @@ typedef enum {
 } TacOpcode;
 enum { TAC_DEST = 1u, TAC_SRC1 = 2u, TAC_SRC2 = 4u };
 enum { TAC_SELECT_K = 1u, TAC_SELECT_W = 2u, TAC_SELECT_ROUND = 4u };
-typedef struct { int k, w, round; } TacSelectors;
+/* Cada selector ausente vale -1. */
+typedef struct {
+    int k;                            /* Selector de llave 0..3; validación e impresión CRYPTO. */
+    int w;                            /* Selector de palabra 0..3; validación de kv_write. */
+    int round;                        /* Selector de ronda 0..3; validación de feis. */
+} TacSelectors;
 typedef enum {
-    TAC_FLOW_NEXT, TAC_FLOW_GOTO, TAC_FLOW_IF, TAC_FLOW_RETURN
+    TAC_FLOW_NEXT,          /* Continúa; CALL/jas tampoco terminan el bloque. */
+    TAC_FLOW_GOTO,          /* Termina con un sucesor explícito. */
+    TAC_FLOW_IF,            /* Termina con destino tomado y caída al bloque siguiente. */
+    TAC_FLOW_RETURN         /* Termina sin sucesores locales. */
 } TacFlow;
 typedef enum {
     TAC_FMT_COPY, TAC_FMT_ADDRESS, TAC_FMT_BINARY, TAC_FMT_UNARY,
     TAC_FMT_LOAD, TAC_FMT_STORE, TAC_FMT_CRYPTO, TAC_FMT_PARAM, TAC_FMT_CALL,
     TAC_FMT_RETURN, TAC_FMT_GOTO, TAC_FMT_IF, TAC_FMT_ISA
 } TacFormat;
+/*
+ * reads/writes/address_bases usan TAC_DEST, TAC_SRC1 y TAC_SRC2.
+ * allowed[i] usa bits 1u << TacOperandKind, en orden dest/src1/src2.
+ * selectors usa TAC_SELECT_*.
+ * Las máscaras físicas usan el bit N para el registro arquitectónico N.
+ */
 typedef struct {
-    const char *text;
-    unsigned reads, writes, address_bases, allowed[3], selectors;
-    int memory_read, memory_write, barrier, nonremovable, crypto_state;
-    int may_trap, may_create_blocks, uses_globals, defines_globals;
-    uint16_t implicit_phys_reads, implicit_phys_writes, call_clobbers;
+    const char *text;                 /* Operador o mnemónico; impresión y diagnósticos. */
+    unsigned reads;                   /* Posiciones leídas, incluido preserves ISA; usos y DCE. */
+    unsigned writes;                  /* Posiciones escritas; definiciones y renombramiento. */
+    /* Bases VARIABLE que son dirección, no valor; usos y spilling. */
+    unsigned address_bases;
+    unsigned allowed[3];              /* Clases admitidas por posición; validación de operandos. */
+    /* Selectores obligatorios; validación de los demás como -1. */
+    unsigned selectors;
+    /* Puede leer memoria implícita; dependencias y reordenamiento. */
+    int memory_read;
+    int memory_write;                 /* Puede escribir memoria implícita; DCE y dependencias. */
+    int barrier;                      /* Impide cruzar la operación al reordenar. */
+    int nonremovable;                 /* Prohíbe eliminar por resultado muerto; DCE. */
+    int crypto_state;                 /* Afecta estado CRYPTO oculto; DCE y orden de operaciones. */
+    int may_trap;                     /* Puede fallar; DCE necesita prueba para eliminarla. */
+    /* La expansión puede crear bloques; C2.3 reconstruye el CFG. */
+    int may_create_blocks;
+    int uses_globals;                 /* Lee implícitamente todas las globales; vivacidad y DCE. */
+    int defines_globals;              /* Puede modificar todas las globales; dependencias y DCE. */
+    uint16_t implicit_phys_reads;     /* Registros leídos fuera de D/A/B; vivacidad y asignación. */
+    /* Registros escritos fuera de D/A/B; dependencias y asignación. */
+    uint16_t implicit_phys_writes;
+    /* Registros que puede destruir el llamado; conservación y spilling. */
+    uint16_t call_clobbers;
+    /* Continuación o terminador; construcción y validación del CFG. */
     TacFlow flow;
-    TacFormat format;
+    TacFormat format;                 /* Selecciona la sintaxis del listado; tac_print. */
 } TacOpInfo;
+
 typedef struct {
+    /* Fila ISA prestada; consultas de semántica y validación. */
     const IsaInstruction *instruction;
-    int64_t displacement;
-    TacOperand target;
+    int64_t displacement;             /* Desplazamiento en bytes de LOAD/STORE; C2.3 e impresión. */
+    TacOperand target;                /* LABEL de salto o FUNCTION de jas; validación y CFG. */
 } TacIsaData;
+
 struct TacInstruction {
-    TacOpcode op;
-    TacOperand dest, src1, src2;
-    TacSelectors selectors;              /* -1 cuando no aplica */
-    TacIsaData isa;                       /* solo para TAC_ISA */
-    int source_line;
-    TacInstruction *next;
+    TacOpcode op;                     /* Operación abstracta o TAC_ISA; consultas y pasadas. */
+    TacOperand dest;                  /* Posición D; reads/writes determinan si define o usa. */
+    TacOperand src1;                  /* Posición A; su función depende de la operación. */
+    TacOperand src2;                  /* Posición B; su función depende de la operación. */
+    /* Literales CRYPTO, -1 si ausentes; validación e impresión. */
+    TacSelectors selectors;
+    TacIsaData isa;                   /* Datos exclusivos de TAC_ISA; C2.3 y consultas ISA. */
+    int source_line;                  /* Línea de origen, 0 si desconocida; futuros diagnósticos. */
+    TacInstruction *next;             /* Siguiente en orden de lista; recorrido y reordenamiento. */
 };
+
 struct TacBlock {
-    size_t label;
-    TacFunction *function;
-    TacInstruction *first, *last;
-    TacBlock **successors, **predecessors;
-    size_t successor_count, predecessor_count;
+    size_t label;                     /* Identidad local estable; etiquetas e impresión del CFG. */
+    TacFunction *function;            /* Función propietaria; validación de pertenencia. */
+    /* Primera instrucción poseída, o NULL; recorrido y edición. */
+    TacInstruction *first;
+    TacInstruction *last;             /* Última instrucción, o NULL; inserción y terminadores. */
+    TacBlock **successors;            /* Vector propio de destinos prestados; CFG y análisis. */
+    TacBlock **predecessors;          /* Vector propio de orígenes prestados; CFG y análisis. */
+    size_t successor_count;           /* Cantidad de sucesores; recorrido y validación del CFG. */
+    /* Cantidad de predecesores; recorrido y validación del CFG. */
+    size_t predecessor_count;
+    /* Siguiente bloque; determina la caída y el orden de impresión. */
     TacBlock *next;
 };
+
 struct TacFunction {
-    const Symbol *symbol;
-    TacProgram *program;
-    size_t next_temp, next_label;
-    TacBlock *first, *last, *entry;
-    TacFunction *next;
+    const Symbol *symbol;             /* Symbol FUNCTION prestado; identidad y llamadas de C2.3. */
+    TacProgram *program;              /* Programa propietario; acceso a etapa y ámbito global. */
+    /* Próximo ID virtual sin reutilizar; expansión y renombramiento. */
+    size_t next_temp;
+    /* Próxima etiqueta local sin reutilizar; creación de bloques. */
+    size_t next_label;
+    TacBlock *first;                  /* Primer bloque poseído; recorrido y orden de caída. */
+    /* Último bloque poseído; inserción y validación del cierre. */
+    TacBlock *last;
+    TacBlock *entry;                  /* Entrada, igual a first; raíz del CFG para los análisis. */
+    TacFunction *next;                /* Siguiente función del programa; recorrido e impresión. */
 };
+
 struct TacProgram {
-    TacStage stage;
+    TacStage stage;                   /* Nivel común de las instrucciones; validación y pasadas. */
+    /* SCOPE_GLOBAL obligatorio y prestado; efectos globales de DCE. */
     const Scope *global_scope;
-    TacFunction *first, *last;
+    TacFunction *first;               /* Primera función poseída, o NULL; recorrido del programa. */
+    TacFunction *last;                /* Última función poseída, o NULL; inserción y validación. */
 };
 enum {
     TAC_P1_RZ = 0, TAC_P1_RL = 1, TAC_P1_RX = 2, TAC_P1_RG = 3,
@@ -128,10 +192,11 @@ enum {
 #define TAC_P1_CALL_CLOBBERS UINT16_C(0xfff0)
 
 /* Contratos completos por función en las implementaciones.
- * Constructores: argumentos vivos/no NULL; global_scope debe ser SCOPE_GLOBAL.
- * tac_program_new con NULL/no GLOBAL termina con diagnóstico, nunca devuelve
- * NULL; no probar ese caso en el mismo proceso.
- * Sin memoria o IDs size_t: diagnóstico y termina; nunca limita a doce TEMP.
+ * Las precondiciones y rechazos están en el contrato de cada constructor.
+ * tac_program_new exige SCOPE_GLOBAL no NULL y termina con diagnóstico si no
+ * se cumple; nunca devuelve NULL. No probar ese caso en el mismo proceso.
+ * Ante agotamiento de memoria o identificadores size_t: diagnóstico y termina;
+ * nunca limita a doce TEMP.
  * Las instrucciones nuevas tienen selectores {-1,-1,-1} y línea cero.
  */
 TacOperand tac_none(void);

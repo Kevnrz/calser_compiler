@@ -23,6 +23,8 @@
 #include "label_table.h"
 #include "codegen.h"
 #include "generate.h"
+#include "tac_build.h"
+#include "semantic_scope.h"
 #include "assembler.h"
 
 extern int yyparse(void);
@@ -56,6 +58,7 @@ typedef struct {
     int show_time;             /* --time */
     int verbose;               /* -v */
     int emit_asm;              /* -s */
+    int emit_tac;              /* -i / --tac */
     const char *ast_json;       /* --ast-json archivo */
     int no_schedule;           /* --no-schedule: comparación conservadora */
     int print_ast;             /* -t */
@@ -66,7 +69,7 @@ typedef struct {
 
 #define EXIT_USAGE 2
 
-#define USAGE "uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-p] [-x] [--ast-json <json>] [--no-schedule] [--time] <archivo> [-o <salida>]"
+#define USAGE "uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-i|--tac] [-p] [-x] [--ast-json <json>] [--no-schedule] [--time] <archivo> [-o <salida>]"
 
 /*
  * print_help — describe las opciones sin requerir ni procesar una entrada.
@@ -85,16 +88,18 @@ static void print_help(void) {
          "  -v                   Muestra el avance de las fases en stderr.\n"
          "  -o <salida>          Nombre del .bin y base de las demas salidas.\n"
          "  -s                   Escribe ademas el ensamblador .asm.\n"
+         "  -i, --tac            Escribe ademas la representacion de alto nivel .tac.\n"
          "  -p                   Muestra los bundles en ensamblador y binario.\n"
-         "  -x                   Ensambla la entrada .asm; ignora -s, -t y -m.\n"
-         "  --ast-json <json>    Exporta el AST; sin -s, -m ni -p termina\n"
+         "  -x                   Ensambla la entrada .asm; ignora -s, -i, -t y -m.\n"
+         "  --ast-json <json>    Exporta el AST; sin -s, -i, -m ni -p termina\n"
          "                       despues del analisis sintactico.\n"
          "  --no-schedule        Desactiva la organizacion de bundles.\n"
          "  --time               Muestra la duracion total en ms en stderr.\n"
-         "\nSalidas: .bin, .hex y .mem; con -s tambien .asm.\n"
+         "\nSalidas: .bin, .hex y .mem; con -s tambien .asm; con -i tambien .tac.\n"
          "Sin -o se usa el nombre de la entrada con extension .bin.\n"
          "\nEjemplos:\n"
          "  ccom programa.cls\n"
+         "  ccom -i programa.cls -o salida.bin\n"
          "  ccom --time -s programa.cls -o salida.bin\n"
          "  ccom -x programa.asm\n"
          "  ccom --ast-json arbol.json programa.cls\n"
@@ -123,7 +128,7 @@ static void report_elapsed(const Options *options, const struct timespec *start,
                         + (double) (end.tv_nsec - start->tv_nsec) / 1000000.0;
     const char *operation = options->assemble_only ? "ensamblado" : "compilacion";
     if (!options->assemble_only && options->ast_json && !options->emit_asm &&
-        !options->print_memory && !options->print_bundles)
+        !options->print_memory && !options->print_bundles && !options->emit_tac)
         operation = "exportacion AST";
 
     fprintf(stderr, "ccom: tiempo de %s (%s): %.3f ms\n", operation,
@@ -532,6 +537,7 @@ typedef struct {
     const Options *options;
     ASTNode *root;         /* AST entregado por el parser; NULL si no hubo   */
     LabelTable *labels;    /* tabla de etiquetas; NULL hasta construirla     */
+    TacBuildResult *tac;   /* construcción opcional; posee imagen y auxiliares */
     int semantic_started;  /* hay tabla de símbolos que liberar              */
     int codegen_started;   /* hay código generado que liberar                */
     int exit_code;         /* código de salida cuando una fase corta el paso */
@@ -550,6 +556,8 @@ typedef struct {
  *   que va antes de ast_free; diag_free va al final y siempre se ejecuta.
  */
 static void compile_release(Compilation *compilation) {
+    tac_build_free(compilation->tac);
+
     if (compilation->labels != NULL) {
         label_table_destroy(compilation->labels);
 
@@ -649,7 +657,7 @@ static int phase_parse(Compilation *compilation) {
  *   Efectos: imprime el AST o escribe el JSON.
  * Restricciones:
  *   --ast-json solo exporta y termina después del análisis sintáctico, salvo
- *   que se combine con -s, -m o -p; permite inspeccionar construcciones que
+ *   que se combine con -s, -i, -m o -p; permite inspeccionar construcciones que
  *   el semántico o el generador rechazarían.
  */
 static int phase_export_ast(Compilation *compilation) {
@@ -677,7 +685,7 @@ static int phase_export_ast(Compilation *compilation) {
             if (failed) fprintf(stderr, "ccom: error al escribir AST JSON\n");
         }
         /* Exportación sola: inspeccionar incluso construcciones sin codegen. */
-        if (failed || (!options->emit_asm && !options->print_memory && !options->print_bundles)) {
+        if (failed || (!options->emit_asm && !options->print_memory && !options->print_bundles && !options->emit_tac)) {
             compilation->exit_code = failed ? 1 : 0;
 
             return 0;
@@ -768,6 +776,26 @@ static int phase_labels(Compilation *compilation) {
 }
 
 /*
+ * phase_tac — construye solo por pedido, después del semántico (enunciado §4.1).
+ * Entrada: compilation con AST y símbolos válidos. Salida: 1 éxito, 0 ante error.
+ * Efectos: reserva TAC opcional; no toca estado del generador ni direcciones.
+ * Restricciones: compile_release libera TAC antes del ámbito prestado.
+ */
+static int phase_tac(Compilation *compilation) {
+    if (!compilation->options->emit_tac)
+        return 1;
+    char error[256];
+    compilation->tac = tac_build(compilation->root, scopes_global(), error, sizeof error);
+    if (!compilation->tac) {
+        fprintf(stderr, "%s: error de representacion intermedia: %s\n",
+                compilation->options->input, error);
+        compilation->exit_code = 1;
+        return 0;
+    }
+    return 1;
+}
+
+/*
  * phase_codegen — fase 4: generación, organización de bundles y direcciones.
  *
  * Entrada:
@@ -785,7 +813,7 @@ static int phase_codegen(Compilation *compilation) {
 
     compilation->codegen_started = 1;
 
-    int gen_failed = generate_code(compilation->root, compilation->labels);
+    int gen_failed = generate_code(compilation->root, compilation->labels, options->input);
     report_phase(options, "fase 4: generacion de codigo", !gen_failed);
     if (!gen_failed && !options->no_schedule) {
         gen_failed = cg_schedule();
@@ -876,6 +904,46 @@ static int assemble_generated(const Options *options, const char *header) {
 }
 
 /*
+ * write_tac — escribe imagen y listado al completar la generación actual.
+ * Entrada: compilation con TAC válido. Salida: 0 éxito; 1 ante error de archivo.
+ * Efectos: crea .tac; ante error de escritura/cierre elimina el archivo parcial.
+ * Restricciones: no puede sobrescribir el fuente, tampoco por enlace al mismo inode.
+ */
+static int write_tac(const Compilation *compilation) {
+    const Options *options = compilation->options;
+    char *path = with_extension(options->output, ".tac");
+    if (!path) {
+        report_oom();
+        return 1;
+    }
+    struct stat source;
+    struct stat target;
+    if (stat(options->input, &source) == 0 && stat(path, &target) == 0 &&
+        source.st_dev == target.st_dev && source.st_ino == target.st_ino) {
+        fprintf(stderr, "ccom: el TAC no puede sobrescribir el fuente\n");
+        free(path);
+        return 1;
+    }
+    FILE *out = fopen(path, "w");
+    if (!out) {
+        perror(path);
+        free(path);
+        return 1;
+    }
+    tac_build_print(out, compilation->tac);
+    int failed = ferror(out);
+    if (fclose(out) != 0)
+        failed = 1;
+    if (failed) {
+        fprintf(stderr, "ccom: error al escribir %s\n", path);
+        if (remove(path) != 0)
+            perror(path);
+    }
+    free(path);
+    return failed;
+}
+
+/*
  * phase_emit — escribe el .asm (-s) y los binarios de una compilación exitosa.
  *
  * Entrada:
@@ -912,6 +980,9 @@ static int phase_emit(const Compilation *compilation) {
     if (assemble_generated(options, header) != 0)
         output_failed = 1;
 
+    if (!output_failed && options->emit_tac)
+        output_failed = write_tac(compilation);
+
     free(header);
 
     print_labels(compilation);
@@ -947,6 +1018,7 @@ static int compile(const Options *options) {
         phase_export_ast(&compilation) &&
         phase_semantic(&compilation) &&
         phase_labels(&compilation) &&
+        phase_tac(&compilation) &&
         phase_codegen(&compilation))
         code = phase_emit(&compilation);
     else
@@ -987,9 +1059,10 @@ static int parse_options(int argc, char **argv, Options *options) {
         {"ast-json", required_argument, NULL, 1000},
         {"no-schedule", no_argument, NULL, 1001},
         {"time", no_argument, NULL, 1002},
+        {"tac", no_argument, NULL, 'i'},
         {NULL, 0, NULL, 0}
     };
-    while ((option = getopt_long(argc, argv, "ho:vstmxp", long_options, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "ho:vstmxpi", long_options, NULL)) != -1) {
 
         switch (option) {
 
@@ -1014,6 +1087,7 @@ static int parse_options(int argc, char **argv, Options *options) {
             case 1002: options->show_time = 1; break;
             case 'v': options->verbose = 1;       break;
             case 's': options->emit_asm = 1;      break;
+            case 'i': options->emit_tac = 1;      break;
             case 't': options->print_ast = 1;     break;
             case 'm': options->print_memory = 1;  break;
             case 'x': options->assemble_only = 1; break;
@@ -1080,6 +1154,9 @@ int main(int argc, char **argv) {
         // La entrada ya es el .asm: -s lo sobrescribiría.
         if (options.emit_asm)
             fprintf(stderr, "ccom: aviso: -s se ignora con -x\n");
+
+        if (options.emit_tac)
+            fprintf(stderr, "ccom: aviso: -i se ignora con -x\n");
 
         code = assemble_file(&options);
     }

@@ -9,7 +9,7 @@ BUILD_DIR = build
 GEN_DIR = $(BUILD_DIR)/generated
 OBJ_DIR = $(BUILD_DIR)/obj
 
-SOURCES = main ast symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler
+SOURCES = main tac tac_edit tac_cfg tac_validate tac_isa tac_print tac_build tac_build_expr tac_build_stmt tac_build_flow tac_build_init ast ast_constant symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler
 OBJECTS = $(addprefix $(OBJ_DIR)/,$(addsuffix .o,$(SOURCES))) \
           $(OBJ_DIR)/parser.tab.o $(OBJ_DIR)/lex.yy.o
 
@@ -78,6 +78,16 @@ check-matrices: $(TARGET)
 check-programas: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/programas/probar.py
 
+check-diagnosticos-generacion: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/diagnosticos_generacion/probar.py
+
+# Evaluación constante sin dependencias del generador ni del emisor.
+$(BUILD_DIR)/probar_constantes: src/ast.c src/ast_constant.c pruebas/constantes/probar.c include/ast.h include/ast_constant.h include/symbol_table.h | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
+
+check-constantes: $(BUILD_DIR)/probar_constantes
+	$<
+
 # Entregables de los tres ejercicios (enunciado CE1108 §10.4 y §10.5). No
 # forma parte de check: es para generar los archivos de ejercicios/.
 ejercicios: $(TARGET)
@@ -138,9 +148,26 @@ check-tac: $(BUILD_DIR)/probar_tac $(BUILD_DIR)/probar_tac_isa $(TARGET)
 	./$(TARGET) pruebas/tac/ejemplo.cls -o $(BUILD_DIR)/tac_ejemplo.bin
 	@echo "check-tac: 6 casos de alto nivel, ISA virtual/fisica, consultas y validacion: OK"
 
-check: check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+# Construcción desde AST: prueba de memoria, CLI y listados esperados; sin intérprete.
+$(BUILD_DIR)/probar_tac_build: pruebas/tac_build/probar.c $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+check-tac-build: $(TARGET) $(BUILD_DIR)/probar_tac_build
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/tac_build/probar_cli.py
+
+# El intérprete solo se enlaza con este auxiliar de pruebas, nunca con ccom.
+$(BUILD_DIR)/interpretar_tac: pruebas/tac_build/ejecutar.c pruebas/tac_build/interpretar.c pruebas/tac_build/interpretar.h $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $(filter %.c %.o,$^) $(LDLIBS)
+
+check-tac-values: $(BUILD_DIR)/interpretar_tac
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/tac_build/probar_valores.py --binario $(BUILD_DIR)/interpretar_tac
+
+check: check-tac check-tac-build check-tac-values check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 clean:
+	rm -f $(BUILD_DIR)/interpretar_tac
+	rm -f $(BUILD_DIR)/probar_tac_build
+	rm -f $(BUILD_DIR)/probar_constantes
 	rm -f $(BUILD_DIR)/probar_semantica_isa
 	rm -f $(BUILD_DIR)/tac_obtenido.txt $(BUILD_DIR)/tac_obtenido_isa.txt
 	rm -f $(BUILD_DIR)/probar_tac_isa $(BUILD_DIR)/tac_ejemplo.bin $(BUILD_DIR)/tac_ejemplo.hex $(BUILD_DIR)/tac_ejemplo.mem
@@ -150,7 +177,7 @@ clean:
 
 -include $(OBJECTS:.o=.d)
 
-.PHONY: all clean ejercicios check check-semantica-isa check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+.PHONY: all clean ejercicios check check-tac-values check-tac-build check-semantica-isa check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 # Prototipo gráfico CALSIDE (PySide6).
 PYTHON ?= python3

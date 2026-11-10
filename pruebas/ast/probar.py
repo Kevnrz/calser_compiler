@@ -56,4 +56,11 @@ with tempfile.TemporaryDirectory() as folder:
     result = run('--ast-json', target, '-s', source, '-o', folder/'combinado.bin')
     assert result.returncode == 0, result.stderr
     assert (folder/'combinado.asm').exists() and (folder/'combinado.mem').exists()
+    result = run('--ast-json', target, '-i', source, '-o', folder/'tac.bin')
+    assert result.returncode == 0, result.stderr
+    assert target.exists() and (folder/'tac.tac').exists()
+    result = run('--ast-json', target, '-i', ROOT/'pruebas/e58_crypto_k_rango.cls',
+                 '-o', folder/'tac_fallido.bin')
+    assert result.returncode == 1 and target.exists()
+    assert not (folder/'tac_fallido.tac').exists()
 print('PASS AST JSON: estructura, orden, IDs, ubicación, escapes, modo sintáctico, errores y combinación con -s')

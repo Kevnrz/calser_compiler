@@ -34,6 +34,7 @@
  * crea en generate_code y vive mientras dura la generación.
  */
 typedef struct GenCtx {
+    const char *source_name;              // nombre prestado para diagnósticos; NULL usa ccom
     const LabelTable *label_table;        // tabla de la Fase 3 (solo se consulta)
 
     // Etiquetas globales (nodo NULL en la tabla), leídas al empezar.
@@ -67,7 +68,7 @@ typedef struct GenCtx {
  *   ninguna (solo efectos).
  *   Efectos: escribe en stderr e incrementa generation_errors.
  * Restricciones:
- *   ninguna.
+ *   source_name, si existe, debe vivir durante la generación; NULL usa ccom.
  */
 void gen_report_error(GenCtx *gen, ASTNode *node, const char *message);
 

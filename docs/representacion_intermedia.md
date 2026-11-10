@@ -1,7 +1,8 @@
 # Representación intermedia de tres direcciones
 
-C2.1a define y permite construir a mano una forma independiente del AST y del
-generador actual. No introduce banderas ni optimizaciones. Referencias: Aho
+C2.1a define la forma construible a mano; C2.1 agrega su construcción desde el
+AST validado y la bandera `-i` / `--tac`. El generador actual sigue produciendo
+los binarios, sin consumir TAC. No se introducen optimizaciones. Referencias: Aho
 §6.2 (cuádruplas), §8.4.1 (bloques) y §10.2.3 (registros virtuales).
 La lista de instrucciones del organizador existente sigue siendo independiente.
 
@@ -26,7 +27,13 @@ internas siguen siendo tipos distintos y no se comparan por texto.
 El resto de `TacOperand` distingue NONE, VARIABLE (Symbol prestado), INTEGER
 (entero de 64 bits), LABEL (referencia prestada al bloque) y FUNCTION (Symbol de
 función prestado). Los símbolos se comparan por puntero, no por nombre. Las
-etiquetas deben pertenecer a la función; el número impreso B0/B1 es local.
+etiquetas deben pertenecer a la función. `block->label` es un ID interno estable,
+independiente del orden de la lista; `next_label` reserva IDs sin reutilizarlos.
+El número de presentación B0, B1, B2… es la posición del bloque en la lista
+de cada función, tanto en listados como en diagnósticos. Imprimir no modifica
+IDs, punteros ni aristas; los sucesores conservan el orden [destino tomado, caída].
+Si un diagnóstico encuentra un bloque sin función o fuera de su lista, usa su
+ID interno porque no hay una posición válida.
 Las constantes de alto nivel no se truncan: C2.3 deberá aplicar la semántica de
 32 bits y materializar las que no caben en un inmediato de 18 bits con signo.
 
@@ -123,6 +130,7 @@ linealización. TAC_ADDRESS permite `t0 = address a`, también útil al pasar a.
 
 Un parámetro arreglo guarda una dirección recibida: primero se lee a TEMP,
 `t0 = p`, y luego `t1 = t0[i]`. No puede usarse directamente como base simbólica.
+R también admite COPY con el parámetro arreglo como destino para redefinir su dirección.
 Es coherente con `cg_array_base`/`cg_array_pass`: para un arreglo declarado se
 materializa su dirección; para un parámetro se carga el puntero de su casilla;
 al pasar un arreglo se escribe la dirección, no sus elementos.
@@ -233,8 +241,8 @@ bloques que requiera la expansión. Reordenamiento/renombramiento y spilling
 trabajan sobre ISA; la asignación deja ISA física y la calendarización forma
 bundles. El spilling puede agregar cargas/almacenamientos antes de calendarizar.
 `-O0` seguirá usando el generador actual; `-O1/-O2` usarán este camino cuando
-se implementen. Aquí no se agregan banderas, conexión con main.c, expansión,
-asignación, optimizaciones ni adaptador al organizador.
+se implementen. C2.1 construye e imprime alto nivel, pero todavía no implementa
+expansión, asignación, optimizaciones ni adaptador al organizador.
 
 ## Guía y sexto ejemplo, paso a paso
 
@@ -280,3 +288,136 @@ B2: successors [B1]
 casos ISA virtual/física contra esperado_isa.txt. Los binarios C incluyen
 aserciones de consultas, mutación y rechazos de formas inválidas. Make usa
 solo esos binarios, diff y ccom; no Python. La suite forma parte de make check.
+
+## Construcción desde el AST validado (C2.1, enunciado §4.1)
+
+`include/tac_build.h` recibe un AST que ya pasó el semántico y el ámbito real
+`scopes_global()`. Usa los Symbol anotados, nunca vuelve a resolver nombres.
+`TacBuildResult` posee el TacProgram, la imagen inicial y los Symbol auxiliares;
+se libera antes de `semantic_free`. No modifica AST, ámbitos, direcciones,
+etiquetas ni estado del generador. La construcción solo ocurre con `-i` o `--tac`.
+
+La imagen inicial se imprime como `initial_data bytes=N`, seguida de palabras
+`@desplazamiento = valor` en hexadecimal. Conserva el mismo tamaño y palabras
+que la imagen de globales del generador. `ast_constant` decide qué es constante,
+con la política compartida. Las celdas globales no constantes empiezan en cero
+y se asignan al entrar al cuerpo de main. Las declaraciones locales se evalúan
+cada vez que se ejecutan; los elementos sin inicializador se ponen en cero.
+R main vuelve al cuerpo y repite las inicializaciones globales dinámicas,
+pero no vuelve a aplicar la imagen inicial.
+
+Los bloques se crean durante la traducción (Aho §8.4.1), con caída según el
+orden de lista. Cada función termina con RETURN implícito si queda un camino
+abierto; `tac_rebuild_edges` y `tac_validate` comprueban el resultado. Puede haber
+bloques sin predecesores: esta etapa no elimina código muerto.
+
+Cada lectura escalar se captura en un temporal antes de evaluar el operando
+siguiente (Aho §6.4). En asignaciones, el valor derecho se evalúa antes que los
+índices del destino. Los índices se capturan de izquierda a derecha; una matriz
+usa `(fila * columnas + columna) * 4` bytes (Aho §6.4.3). Las llamadas capturan
+sus argumentos antes de formar el grupo PARAM; los CALL anidados se resuelven
+primero. Arreglos declarados pasan por ADDRESS; parámetros arreglo leen la
+dirección recibida mediante COPY.
+
+`&` y `|` crean saltos y una unión con el temporal del resultado: el lado
+derecho solo se ejecuta cuando corresponde (Aho §6.6). No se traducen a
+TAC_AND/TAC_OR de evaluación plena. C/A/residual prueba las ramas en orden;
+L reevalúa la condición. S captura inicio y fin antes de escribir el control,
+compara con extremo exclusivo según el signo del paso y conserva el fin en un
+Symbol auxiliar `$limite_SN`, en la dirección `limit_address` que ya reservó el
+semántico. Ese Symbol pertenece al resultado, no a los ámbitos prestados.
+
+Una llamada entra por el bloque que inicializa el retorno a cero. R captura
+todos sus argumentos antes de escribir parámetros mediante COPY, incluidos los
+parámetros arreglo, y salta al cuerpo sin reiniciar el retorno ni crear CALL.
+La copia completa de arreglos se traduce como lazo ascendente de LOAD/STORE;
+el unrolling la verá como otro lazo del CFG. Las siete CRYPTO conservan una
+operación por sentencia y los selectores literales, sin expansión al ISA.
+
+### Factorial desde el AST hasta los bloques
+
+`pruebas/programas/factorial_r.cls` contiene el factorial con dos acumuladores.
+Su AST tiene FUNCTION factorial, PARAMS n/acc, RETURN_TYPE r y un BLOCK con
+CONDITIONAL: condición LESS_EQUAL(n,1), rama ASSIGNMENT(r,acc) y EMIT,
+y RESIDUAL con REWIND factorial(n-1,acc*n).
+
+1. B0 inicializa r a cero y salta a B1, entrada del cuerpo.
+2. B1 captura n y calcula la condición; la caída B2 devuelve acc.
+3. B3 captura n-1 y acc*n antes de escribir n y acc, y vuelve a B1.
+4. B4 conserva el RETURN implícito del final, aunque aquí no tiene predecesores.
+5. main inicializa f, pasa 3/1 y conserva el resultado inmediato del CALL.
+
+El esperado completo está en `pruebas/tac_build/esperados/factorial_r.tac`.
+Su función factorial se imprime así:
+
+```text
+initial_data bytes=0
+
+function factorial (entry B0)
+B0: successors [B1]
+  r = 0
+  goto B1
+B1: successors [B3, B2]
+  t0 = n
+  t1 = t0 <= 1
+  if t1 == 0 goto B3
+B2: successors []
+  t2 = acc
+  r = t2
+  return r
+B3: successors [B1]
+  t3 = n
+  t4 = t3 - 1
+  t5 = acc
+  t6 = n
+  t7 = t5 * t6
+  n = t4
+  acc = t7
+  goto B1
+B4: successors []
+  return r
+
+```
+
+`make check-tac-build` verifica memoria y esperados de 22 programas, incluido R
+con arreglos globales, locales, matrices y parámetros reenviados. Estas pruebas
+de C1 no ejecutan TAC; las pruebas de valores de C2 usan el intérprete descrito abajo.
+El `.tac` sigue siendo un listado diagnóstico, no un formato deserializable ni
+un archivo para entregar entero a `cg_op`.
+
+## Intérprete de pruebas de alto nivel (C2)
+
+`make check-tac-values` ejecuta `pruebas/tac_build/probar_valores.py` y el auxiliar
+`build/interpretar_tac`. Importa la tabla CASES de `pruebas/programas/probar.py`,
+sin duplicar sus valores, y compara las variables finales de los 22 programas
+sin CRYPTO. P09 y P11 se listan como omitidos, sin sumarlos a aprobados.
+
+`pruebas/tac_build/interpretar.h` recibe un TacBuildResult en memoria, nunca el
+texto `.tac`. Carga su imagen en una memoria estática compartida de 64 KiB y
+accede a variables mediante Symbol.address. No crea locales nuevas al llamar;
+solo temporales y capturas PARAM pertenecen a cada invocación. La pila explícita
+permite CALL/RETURN, mientras R conserva temporales y vuelve por el GOTO del TAC.
+LOAD/STORE/ADDRESS usan bytes; COPY de parámetro arreglo lee/escribe su dirección.
+
+La aritmética se trunca a 32 bits. Comparaciones y DIV/MOD usan signo; DIV trunca
+hacia cero y MOD conserva el signo del dividendo. División/módulo por cero,
+exponente negativo, límite de pasos y forma inválida tienen estados distintos
+de la finalización normal. El presupuesto de pasos es global para las llamadas.
+CRYPTO se rechaza explícitamente antes de ejecutar el programa, incluso si no
+se alcanzaría; no se simula AUTH, bóveda, ancla, cifrado ni pipeline. Los errores
+no publican valores como si fueran resultados normales.
+
+Para comprobar una optimización de alto nivel, ejecutar `tac_interpret(build,
+limite)` antes de la pasada y conservar el resultado. Aplicar la pasada,
+reconstruir aristas y validar; ejecutar de nuevo y comparar estado terminal y
+las variables/memoria observables seleccionadas por el caso de prueba. Cada
+invocación del intérprete parte de una memoria nueva con la misma imagen; no
+reutiliza el estado de la ejecución anterior ni modifica el programa. No hace
+falta que coincidan el número de pasos o los temporales internos: el presupuesto
+debe ser suficiente para ambas versiones. Liberar ambos resultados con
+`tac_run_free`, y liberar TacBuildResult antes del semántico.
+
+Esto permite detectar diferencias de traducción o de optimización sin generar
+ISA desde TAC. El intérprete solo se enlaza con el auxiliar de pruebas, no con
+ccom. Los controles adicionales verifican orden de evaluación, signos y desborde,
+errores aritméticos, rechazo de CRYPTO y detención por presupuesto.

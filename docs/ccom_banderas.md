@@ -22,6 +22,7 @@ cualquier bandera.
 | `-v` | Muestra el avance de cada fase (`ok` o `con errores`), incluido el ensamblado | stderr | Disponible |
 | `-o <archivo>` | Nombre del binario de salida. Sin `-o`: el nombre del fuente con `.bin` (`prog.cls` → `prog.bin`). Es también el nombre base de las demás salidas | archivos | Disponible |
 | `-s` | Escribe además el ensamblador (`.asm`) | archivo | Disponible |
+| `-i`, `--tac` | Construye y escribe la representación de alto nivel (`.tac`); continúa la compilación normal | archivo | Disponible |
 | `-p` | Muestra cada bundle en ensamblador y en binario | stdout | Disponible |
 | `-x` | Toma un `.asm` y genera el binario, sin compilar Calser | archivos | Disponible |
 
@@ -86,7 +87,7 @@ compilado. El valor varía entre ejecuciones.
 
 La línea se escribe al final en stderr. Si falla la compilación se informa
 `(fallido)` y se conserva el código de salida original. Con `-x` se etiqueta
-como `ensamblado`; con `--ast-json` sin `-s`, `-m` ni `-p`, como
+como `ensamblado`; con `--ast-json` sin `-s`, `-i`, `-m` ni `-p`, como
 `exportacion AST`, pues ese modo termina después del análisis sintáctico.
 Los errores de uso no inician trabajo ni muestran una duración. Si el reloj
 no está disponible se emite un aviso, sin cambiar el resultado del compilador.
@@ -207,7 +208,7 @@ antes del análisis semántico. Con errores léxicos o sintácticos no hay AST.
 Línea de uso que se imprime en los errores de uso:
 
 ```
-uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-p] [-x] [--ast-json <json>] [--no-schedule] [--time] <archivo> [-o <salida>]
+uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-i|--tac] [-p] [-x] [--ast-json <json>] [--no-schedule] [--time] <archivo> [-o <salida>]
 ```
 
 ## Pruebas
@@ -234,7 +235,7 @@ No requiere servidor, paquetes ni conexión. Ver [visor_ast.md](visor_ast.md).
 no comprueba la semántica ni genera ensamblador. Su código 0 significa que el
 AST se pudo construir y exportar, no que el programa completo sea válido.
 Permite inspeccionar el árbol de un programa sin ejecutar el resto de las fases.
-Con `-s`, `-m` o `-p`, exporta el AST y continúa el recorrido normal; puede
+Con `-s`, `-i`, `-m` o `-p`, exporta el AST y continúa el recorrido normal; puede
 conservar un JSON válido aunque las fases siguientes fallen. Si falla el
 análisis léxico o sintáctico, no escribe un JSON nuevo. Un archivo de una
 exportación anterior puede seguir existiendo; revisar siempre el código de salida.
@@ -252,3 +253,27 @@ bundle con memoria o salto, respetando las dependencias de la ISA.
 
 Las plantillas manuales mantienen sus slots. `-x` ensambla el `.asm` externo sin
 reorganizarlo.
+
+## Representación intermedia (`-i`, `--tac`)
+
+```sh
+./ccom -i programa.cls
+./ccom --tac -s programa.cls -o salida.bin
+```
+
+Genera `programa.tac` sin `-o`, o `salida.tac` junto a las demás salidas con
+`-o salida.bin`. Incluye la imagen inicial y el listado de alto nivel desde el
+AST validado. `.bin`, `.hex`, `.mem` y `.asm` siguen saliendo del generador
+actual; `--no-schedule` no cambia el TAC. `-t`, `-m` y `-p` conservan sus listados.
+
+`--ast-json archivo -i` escribe el JSON durante la fase sintáctica y continúa
+la compilación. Si después falla el semántico, puede quedar el JSON, pero no
+se escribe un `.tac` nuevo. Sin `-i` se conserva el modo sintáctico existente.
+`--time` incluye construcción y escritura y reporta compilación. Con `-x`, `-i`
+se ignora y avisa `ccom: aviso: -i se ignora con -x`.
+
+El `.tac` se escribe al completar la generación; si falla la escritura o el
+cierre se informa error, se elimina el parcial y se devuelve 1. No puede
+sobrescribir el fuente, tampoco mediante enlaces al mismo archivo. Los errores
+anteriores no borran un `.tac` preexistente. El listado no genera binarios ni
+incluye calendarización: ver [representacion_intermedia.md](representacion_intermedia.md).

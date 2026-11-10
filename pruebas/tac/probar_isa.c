@@ -331,8 +331,63 @@ static void printed_names(TacStage stage) {
     tac_program_free(program);
 }
 
+/* Saltos ISA usan posiciones y conservan IDs, contadores y CFG (Aho §8.4.1). */
+static void presentation_numbers(TacStage stage) {
+    Symbol symbol = {.name = "numeros_isa", .kind = SYMBOL_FUNCTION};
+    Scope scope = {.kind = SCOPE_GLOBAL};
+    TacProgram *program = tac_program_new(&scope);
+    program->stage = stage;
+    TacFunction *function = tac_function_new(program, &symbol);
+    TacBlock *end = tac_block_new(function);
+    TacBlock *entry = tac_block_insert_after(function, NULL);
+    TacBlock *middle = tac_block_insert_after(function, entry);
+    TacOperand none = tac_none();
+    TacOperand rz = tac_physical(TAC_P1_RZ);
+    TacOperand rl = tac_physical(TAC_P1_RL);
+    emit(end, "jefR", rz, rl, none);
+    emit(entry, "bne", none, rl, rz)->isa.target = tac_label(end);
+    emit(middle, "jef", none, none, none)->isa.target = tac_label(end);
+    rebuild(function);
+    valid(program);
+    assert(entry->label == 1 && middle->label == 2 && end->label == 0);
+    unsigned char saved[3][sizeof *entry];
+    memcpy(saved[0], entry, sizeof *entry);
+    memcpy(saved[1], middle, sizeof *middle);
+    memcpy(saved[2], end, sizeof *end);
+    size_t next_label = function->next_label;
+    FILE *out = tmpfile();
+    assert(out);
+    tac_print(out, program);
+    assert(!ferror(out));
+    rewind(out);
+    char text[512] = {0};
+    size_t length = fread(text, 1, sizeof text - 1, out);
+    assert(!ferror(out) && feof(out) && length > 0);
+    assert(!strcmp(text,
+        "function numeros_isa (entry B0)\n"
+        "B0: successors [B2, B1]\n"
+        "  bne rl, rz, B2\n"
+        "B1: successors [B2]\n"
+        "  jef B2\n"
+        "B2: successors []\n"
+        "  jefR rz, rl\n\n"));
+    assert(fclose(out) == 0);
+    assert(function->next_label == next_label);
+    assert(function->entry == entry && function->first == entry && function->last == end);
+    assert(!memcmp(entry, saved[0], sizeof *entry));
+    assert(!memcmp(middle, saved[1], sizeof *middle));
+    assert(!memcmp(end, saved[2], sizeof *end));
+    assert(entry->successors[0] == end && entry->successors[1] == middle);
+    assert(middle->successors[0] == end && middle->predecessors[0] == entry);
+    assert(end->predecessors[0] == entry && end->predecessors[1] == middle);
+    valid(program);
+    tac_program_free(program);
+}
+
 /* Imprime solo casos válidos; el resto se verifica con aserciones. */
 int main(void) {
+    presentation_numbers(TAC_STAGE_ISA_VIRTUAL);
+    presentation_numbers(TAC_STAGE_ISA_PHYSICAL);
     printed_names(TAC_STAGE_ISA_VIRTUAL);
     printed_names(TAC_STAGE_ISA_PHYSICAL);
     invalid_forms();

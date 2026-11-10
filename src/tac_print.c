@@ -1,9 +1,9 @@
 /*
  * tac_print.c — impresión estable de representación intermedia de tres direcciones.
- * Usa: tac.h y biblioteca C. Lo usan pruebas y la futura bandera de impresión.
+ * Usa: tac_internal.h y biblioteca C. Lo usan pruebas y la bandera de impresión.
  * Referencias: Aho §6.2.1, §8.4.1; sintaxis ISA según isa_table y isa.md §11.
  */
-#include "tac.h"
+#include "tac_internal.h"
 #include <inttypes.h>
 
 /* Alias físicos del ISA; solo recibe registros válidos (0..15). */
@@ -35,7 +35,7 @@ static void print_operand(FILE *out, TacStage stage, TacOperand operand) {
             fprintf(out, "%" PRId64, operand.value.integer);
             break;
         case TAC_LABEL:
-            fprintf(out, "B%zu", operand.value.block->label);
+            fprintf(out, "B%zu", tac_block_presentation_number(operand.value.block));
             break;
     }
 }
@@ -224,11 +224,12 @@ static void print_instruction(FILE *out, TacStage stage, const TacInstruction *i
 void tac_print(FILE *out, const TacProgram *program) {
     for (const TacFunction *function = program->first; function; function = function->next) {
         fprintf(out, "function %s (entry B%zu)\n", function->symbol->name,
-                function->entry->label);
+                tac_block_presentation_number(function->entry));
         for (const TacBlock *block = function->first; block; block = block->next) {
-            fprintf(out, "B%zu: successors [", block->label);
+            fprintf(out, "B%zu: successors [", tac_block_presentation_number(block));
             for (size_t k = 0; k < block->successor_count; k++) {
-                fprintf(out, "%sB%zu", k ? ", " : "", block->successors[k]->label);
+                fprintf(out, "%sB%zu", k ? ", " : "",
+                        tac_block_presentation_number(block->successors[k]));
             }
             fputs("]\n", out);
             for (const TacInstruction *instruction = block->first; instruction;

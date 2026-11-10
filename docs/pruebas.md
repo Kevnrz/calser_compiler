@@ -83,6 +83,25 @@ incorrectos y 130 si se interrumpe con Ctrl+C.
 `make check` sigue disponible e incluye las pruebas del ejecutor mediante
 `make check-runner`. El uso del script es opcional durante la presentación.
 
+`make check-diagnosticos-generacion`, incluido en `make check`, ejecuta
+`pruebas/diagnosticos_generacion/probar.py`. Crea en una carpeta temporal un
+fuente semánticamente válido que agota los doce temporales del generador.
+Comprueba el nombre del archivo con ruta y espacios, línea, columna, texto
+exacto, código de salida 1 y ausencia de salidas, con y sin `--no-schedule`.
+`gen_report_error` recibe el nombre prestado mediante `GenCtx.source_name`,
+pasado a `generate_code`; sin nombre usa `ccom`. Conserva el contador y el
+formato de posición del diagnóstico. Este target usa Python; la compilación
+habitual con `make` sigue sin necesitarlo.
+
+`make check-constantes`, incluido en `make check`, ejecuta el binario C
+`build/probar_constantes` desde `pruebas/constantes/probar.c`. Comprueba búsqueda
+de inicializadores, literales, operadores, referencias Vi encadenadas, rechazo
+de Vm y llamadas, profundidad 64/65, truncamiento a 32 bits, división y módulo
+con signo y conservación de la política sin corto circuito del evaluador.
+El módulo compartido vive en `include/ast_constant.h` y `src/ast_constant.c`;
+lo usa `generate_init.c` y queda disponible para el futuro constructor TAC,
+sin depender del generador ni del emisor. Este target no necesita Python.
+
 La semántica de dependencias del ISA vive en `include/isa_table.h` y
 `src/isa_table.c`, compartida por el descriptor del organizador y disponible
 para la representación intermedia. `codegen_instruction.c` conserva el parseo y
@@ -107,3 +126,51 @@ edición, reconstrucción y rechazos. El target también compila
 `pruebas/tac/ejemplo.cls` con ccom. No usa Python; la construcción habitual con
 `make` tampoco lo necesita. Ver
 [representacion_intermedia.md](representacion_intermedia.md).
+
+## Construcción TAC desde el AST
+
+`make check-tac-build`, incluido en `make check`, construye `probar_tac_build`
+y ejecuta `pruebas/tac_build/probar_cli.py`. El binario C parsea y analiza cada
+fuente, construye TAC en memoria y llama `tac_validate`. Compara imagen inicial
+con la del generador y verifica que AST, símbolos, área de datos y estado del
+emisor no cambien durante la construcción. Se libera TAC antes del semántico.
+
+Hay 22 esperados en `pruebas/tac_build/esperados/`: factorial L/R, corto circuito,
+relaciones y unarias, C/A/residual anidados, S positivo/negativo/paso grande,
+E dentro de S, arreglos 1D/2D, copia y parámetros reenviados, llamadas anidadas
+como valor y sentencia, retorno cero, inicializadores y las siete CRYPTO.
+Incluye los cuatro `r_arreglos*.cls` existentes. Solo los tres casos faltantes
+se agregan en `pruebas/tac_build/casos/`.
+
+La CLI comprueba `-i`/`--tac`, nombres por defecto y `-o`, combinaciones con
+listados, JSON temprano y tiempo, el aviso con `-x`, errores sin TAC y borrado
+de un parcial mediante un enlace temporal a `/dev/full` donde está disponible.
+Compara ASM/BIN/HEX/MEM con y sin `-i`, y TAC con/sin `--no-schedule`.
+`check-tac` comprueba además COPY hacia parámetros arreglo y sus definiciones.
+La construcción C1 se verifica por separado del intérprete y los valores de C2.
+
+## Valores del TAC en memoria
+
+`make check-tac-values`, incluido en `make check`, construye únicamente el
+auxiliar `build/interpretar_tac` con `pruebas/tac_build/interpretar.c` y
+`ejecutar.c`. No incorpora el intérprete a ccom. El auxiliar parsea, analiza y
+construye TAC, lo ejecuta dos veces con memoria nueva para comprobar independencia
+del estado, y publica estado y valores de los símbolos sin homónimos.
+
+`pruebas/tac_build/probar_valores.py` importa CASES de
+`pruebas/programas/probar.py`; sus esperados no se copian. Ejecuta los 22 casos
+sin CRYPTO, incluidos los cuatro R con arreglos (51, 52, 73 y 15). Los dos casos
+especiales CRYPTO (p09/p11) se listan como omitidos y no cuentan como aprobados.
+Diez controles temporales comprueban valor antes que índices, argumentos de
+izquierda a derecha, captura antes de llamada, 32 bits y signos, corto circuito,
+división/módulo por cero, exponente negativo, rechazo CRYPTO y límite de pasos.
+Los fallos de ejecución tienen estado propio y no se aceptan como retornos.
+
+Para un fuente concreto: `build/interpretar_tac archivo.cls [limite_de_pasos]`.
+El JSON contiene `status`, `steps`, `diagnostic` y `values`; el código 0 indica
+que se pudo informar el estado, no necesariamente ejecución normal. Solo `ok`
+publica valores. Para comprobar otro build, incluso sanitizado:
+`python3 pruebas/tac_build/probar_valores.py --binario /ruta/interpretar_tac`.
+Las fuentes de los controles y las salidas son temporales. No se modifican el
+constructor ni el generador cuando aparece una diferencia; la prueba informa
+caso, valor obtenido y esperado y termina con fallo.

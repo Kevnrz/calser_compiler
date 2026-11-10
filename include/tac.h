@@ -14,6 +14,9 @@
  * Propiedad: programa -> funciones -> bloques -> instrucciones y aristas.
  * Los Symbol, el ámbito global y las filas ISA son prestados: deben sobrevivir.
  * Las etiquetas referencian bloques de la misma función, no cadenas ni PC.
+ * block->label es un ID interno estable, independiente del orden de la lista.
+ * Listados y diagnósticos numeran B0, B1... por posición en cada función.
+ * Sin pertenencia válida a una lista, el diagnóstico conserva el ID interno.
  * Las consultas de usos/definiciones devuelven solo valores explícitos.
  * Los análisis deben sumar globales y registros implícitos de TacOpInfo.
  * CALL/jas destruyen t0-t11 físicos (0xfff0), nunca todos los virtuales.
@@ -26,7 +29,7 @@
  * Se pueden editar operandos y usar las funciones de inserción/eliminación.
  * Antes de quitar la instrucción visitada, guardar next. No liberar su bloque.
  * Después de editar control u orden, reconstruir aristas y volver a validar.
- * Impresión estable; la forma todavía no se construye desde el AST.
+ * Impresión estable; tac_build.h construye alto nivel desde el AST validado.
  * Referencias: Aho §6.2, §8.4.1, §10.2.3; enunciado §4.1.
  */
 #ifndef TAC_H
@@ -150,7 +153,7 @@ struct TacInstruction {
 };
 
 struct TacBlock {
-    size_t label;                     /* Identidad local estable; etiquetas e impresión del CFG. */
+    size_t label;                     /* ID interno estable; no es el número de presentación. */
     TacFunction *function;            /* Función propietaria; validación de pertenencia. */
     /* Primera instrucción poseída, o NULL; recorrido y edición. */
     TacInstruction *first;
@@ -160,7 +163,7 @@ struct TacBlock {
     size_t successor_count;           /* Cantidad de sucesores; recorrido y validación del CFG. */
     /* Cantidad de predecesores; recorrido y validación del CFG. */
     size_t predecessor_count;
-    /* Siguiente bloque; determina la caída y el orden de impresión. */
+    /* Siguiente bloque; determina caída y número de presentación en listados/diagnósticos. */
     TacBlock *next;
 };
 
@@ -169,7 +172,7 @@ struct TacFunction {
     TacProgram *program;              /* Programa propietario; acceso a etapa y ámbito global. */
     /* Próximo ID virtual sin reutilizar; expansión y renombramiento. */
     size_t next_temp;
-    /* Próxima etiqueta local sin reutilizar; creación de bloques. */
+    /* Próximo ID interno local sin reutilizar; independiente del número de presentación. */
     size_t next_label;
     TacBlock *first;                  /* Primer bloque poseído; recorrido y orden de caída. */
     /* Último bloque poseído; inserción y validación del cierre. */

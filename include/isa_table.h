@@ -2,7 +2,7 @@
  * isa_table.h — Fases 4–5: tabla de instrucciones de la ISA y lectura de operandos.
  *
  * Es el único lugar donde se declaran los mnemónicos, su unidad, su funct y
- * la forma de sus operandos (isa.md §6). El organizador de bundles la usa
+ * la forma de sus operandos y su semántica de dependencias (isa.md §6). El organizador de bundles la usa
  * para describir dependencias y el ensamblador para codificar; agregar una
  * instrucción es agregar una fila. También ofrece la lectura de registros y
  * enteros que ambos comparten, para que acepten exactamente el mismo texto.
@@ -14,6 +14,8 @@
 
 #ifndef ISA_TABLE_H
 #define ISA_TABLE_H
+
+#include <stdint.h>
 
 /* ==========================================================================
  * TABLA DE INSTRUCCIONES
@@ -44,12 +46,77 @@ typedef enum {
     ISA_FORM_KV_WRITE  /* rs1, k, w                    w va en el campo i       */
 } IsaForm;
 
+/* Posiciones normalizadas: STORE usa SRC1 como base y SRC2 como dato. */
+enum {
+    ISA_REG_DEST = 1u,
+    ISA_REG_SRC1 = 2u,
+    ISA_REG_SRC2 = 4u
+};
+
+/* Valores compatibles con los nombres públicos CG_EFFECT_* de C0. */
+typedef enum {
+    ISA_EFFECT_NONE = 0,
+    ISA_EFFECT_MEMORY_READ = 1u << 0,
+    ISA_EFFECT_MEMORY_WRITE = 1u << 1,
+    ISA_EFFECT_CONTROL = 1u << 2,
+    ISA_EFFECT_CALL = 1u << 3,
+    ISA_EFFECT_CRYPTO_STATE = 1u << 4,
+    ISA_EFFECT_CONDITIONAL_WRITE = 1u << 5,
+    ISA_EFFECT_PIPELINE_STALL = 1u << 6,
+    ISA_EFFECT_PC_RELATIVE = 1u << 7,
+    ISA_EFFECT_BARRIER = 1u << 8
+} IsaEffect;
+
+typedef struct {
+    unsigned reads;
+    unsigned writes;
+    /* ifmov/feis usan el valor anterior si no escriben. Para análisis de
+     * valores, usos = reads | preserves (Aho §10.2.3). No sumar preserves a
+     * lecturas físicas: una WAW de distancia 1 pasaría a RAW de distancia 2
+     * y cambiaría los bundles del organizador actual (isa.md §9).
+     */
+    unsigned preserves;
+    unsigned effects;
+    unsigned result_distance;
+    int call_if_link_nonzero;
+} IsaSemantics;
+
 typedef struct {
     const char *name;
     IsaUnit unit;
     unsigned funct;
     IsaForm form;
+    IsaSemantics semantics;
 } IsaInstruction;
+
+typedef struct {
+    uint16_t reads;
+    uint16_t writes;
+    uint16_t preserves;
+    unsigned effects;
+    unsigned result_distance;
+} IsaPhysicalEffects;
+
+/*
+ * isa_physical_effects — instancia la semántica con registros físicos.
+ *
+ * Entrada:
+ *   instruction  descriptor válido o NULL.
+ *   dest, src1, src2  registros 0..15; -1 en posiciones ausentes.
+ *   pc_relative  no cero si el destino de salto es numérico.
+ *   out  salida escribible o NULL.
+ * Salida:
+ *   1 en éxito; 0 si faltan registros, sobran o están fuera de rango.
+ * Efectos:
+ *   inicializa out a cero, incluso ante error; no define ni preserva rz.
+ * Restricciones:
+ *   el llamador valida texto, inmediatos, selectores y slots. pc_relative
+ *   solo corresponde a BRANCH, JEF y JAS. No agrega convenciones de ccom.
+ *   preserves se mantiene separado de reads (Aho §10.2.3; isa.md §9).
+ */
+int isa_physical_effects(const IsaInstruction *instruction,
+                         int dest, int src1, int src2, int pc_relative,
+                         IsaPhysicalEffects *out);
 
 /*
  * isa_find — busca una instrucción por su mnemónico.

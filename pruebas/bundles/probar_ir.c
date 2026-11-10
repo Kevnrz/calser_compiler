@@ -1,3 +1,8 @@
+/*
+ * probar_ir.c — contratos de la lista de instrucciones del organizador.
+ * Usa: codegen.h; semántica común de isa_table y biblioteca C.
+ * Lo usa: make check-bundles. Referencias: isa.md §6, §9; Aho §10.2.3.
+ */
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -13,7 +18,48 @@ static CGInstruction describe(const char *text, Slot slot, unsigned reads,
     assert(ins.result_distance == (writes ? 2u : 0u));
     return ins;
 }
+/*
+ * shared_semantics — separa preservación de valor y lecturas físicas de C0.
+ *
+ * Entrada:
+ *   ninguna.
+ * Salida:
+ *   ninguna; aborta si el descriptor textual cambia las máscaras anteriores.
+ * Efectos:
+ *   ejecuta aserciones sobre ifmov, feis y las equivalencias de efectos.
+ * Restricciones:
+ *   DEST es distinto de ambas fuentes para detectar una lectura física extra.
+ *   Los análisis de valores usan reads | preserves (Aho §10.2.3).
+ */
+static void shared_semantics(void) {
+    const char *names[] = {"ifmov", "feis"};
+    const char *texts[] = {"ifmov r4, r5, r6", "feis r4, r5, r6, 0, 3"};
+    for (size_t k = 0; k < 2; k++) {
+        IsaPhysicalEffects physical;
+        assert(isa_physical_effects(isa_find(names[k]), 4, 5, 6, 0, &physical));
+        CGInstruction ins = describe(texts[k], k ? SLOT_ALU1 : SLOT_ALU0,
+                                     B(5) | B(6), B(4), k ? 2 : 3);
+        assert(physical.preserves == B(4));
+        assert((physical.reads | physical.preserves) == (B(4) | B(5) | B(6)));
+        assert(ins.reads == physical.reads);
+        assert(ins.writes == physical.writes);
+        assert(ins.effects == physical.effects);
+        assert(!(ins.reads & B(4)));
+    }
+    const unsigned aliases[] = {
+        CG_EFFECT_NONE, CG_EFFECT_MEMORY_READ, CG_EFFECT_MEMORY_WRITE,
+        CG_EFFECT_CONTROL, CG_EFFECT_CALL, CG_EFFECT_CRYPTO_STATE,
+        CG_EFFECT_CONDITIONAL_WRITE, CG_EFFECT_PIPELINE_STALL,
+        CG_EFFECT_PC_RELATIVE, CG_EFFECT_BARRIER
+    };
+    const unsigned original_values[] = {0, 1, 2, 4, 8, 16, 32, 64, 128, 256};
+    for (size_t k = 0; k < sizeof aliases / sizeof aliases[0]; k++) {
+        assert(aliases[k] == original_values[k]);
+    }
+}
+
 int main(void) {
+    shared_semantics();
     const char *alu[] = {"add", "sub", "and", "or", "xor", "sll", "srl",
                         "sra", "slt", "sle", "seq", "sne", "ifmov"};
     char text[256];

@@ -71,3 +71,28 @@ incorrectos y 130 si se interrumpe con Ctrl+C.
 
 `make check` sigue disponible e incluye las pruebas del ejecutor mediante
 `make check-runner`. El uso del script es opcional durante la presentación.
+
+La semántica de dependencias del ISA vive en `include/isa_table.h` y
+`src/isa_table.c`, compartida por el descriptor del organizador y disponible
+para la representación intermedia. `codegen_instruction.c` conserva el parseo y
+la validación del texto. `preserves` identifica el destino cuyo valor anterior
+se conserva en `ifmov` y `feis`; no se suma a las lecturas físicas del organizador,
+para mantener sus distancias RAW/WAW y los bundles existentes.
+
+`make check-semantica-isa`, incluido en `make check-bundles`, ejecuta un binario C
+que comprueba los 34 mnemónicos y las 13 formas, registros repetidos, destino
+`rz`, preservación del destino, llamadas/retornos y la marca de `auth`.
+Los rangos de selectores literales y el resto de la sintaxis siguen probándose
+en `build/probar_ir`. `build/probar_dependencias` comprueba además que un
+productor seguido por `ifmov` con destino preservado mantenga el calendario
+WAW de dos bundles; si el destino es también fuente textual, exige RAW de tres.
+Este target no necesita Python. Las pruebas completas conservan sus ejecutores.
+
+La representación intermedia de tres direcciones tiene además `make check-tac`,
+incluido en `make check`: ejecuta `probar_tac` (seis casos de alto nivel) y
+`probar_tac_isa` (ISA virtual/física), y compara dos salidas esperadas con `diff`.
+Los binarios C comprueban definiciones/usos, globales, ABI, argumentos, memoria,
+edición, reconstrucción y rechazos. El target también compila
+`pruebas/tac/ejemplo.cls` con ccom. No usa Python; la construcción habitual con
+`make` tampoco lo necesita. Ver
+[representacion_intermedia.md](representacion_intermedia.md).

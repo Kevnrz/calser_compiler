@@ -1,3 +1,8 @@
+/*
+ * probar_dependencias.c — calendarios válidos e inválidos del organizador.
+ * Usa: codegen_schedule.h; semántica común de isa_table y biblioteca C.
+ * Lo usa: make check-bundles. Referencias: isa.md §9; Aho §10.2.3.
+ */
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -20,6 +25,68 @@ static void bad(CGVerifyKind expected, const CGInstruction *const *ops, int coun
 }
 static int callbacks;
 static void capture(void *user,const CGScheduledBundle *bundle) { (void)user;(void)bundle;callbacks++; }
+typedef struct {
+    CGScheduledBundle bundles[4];
+    size_t count;
+} ScheduleCapture;
+
+/*
+ * capture_schedule — conserva el calendario para comparar bundles exactos.
+ *
+ * Entrada:
+ *   user  ScheduleCapture escribible; bundle  bundle emitido válido.
+ * Salida:
+ *   ninguna.
+ * Efectos:
+ *   copia el bundle y avanza count.
+ * Restricciones:
+ *   como máximo cuatro bundles; los punteros de operaciones son prestados.
+ */
+static void capture_schedule(void *user, const CGScheduledBundle *bundle) {
+    ScheduleCapture *result = user;
+    assert(result->count < 4);
+    result->bundles[result->count] = *bundle;
+    result->count++;
+}
+
+/*
+ * preserved_destination_schedule — mantiene WAW=1 si no hay lectura física.
+ *
+ * Entrada:
+ *   ninguna.
+ * Salida:
+ *   ninguna; aborta si productor + ifmov deja de ocupar dos bundles.
+ * Efectos:
+ *   planifica y comprueba el calendario exacto de C0.
+ * Restricciones:
+ *   preserves no debe convertirse en RAW=2. Cuando el destino también es
+ *   fuente textual, sí hay RAW=2 (isa_table.h; isa.md §9; Aho §10.2.3).
+ */
+static void preserved_destination_schedule(void) {
+    CGInstruction producer = describe("mov r4, 1", SLOT_ALU0);
+    CGInstruction conditional = describe("ifmov r4, r6, r7", SLOT_ALU0);
+    const CGInstruction *ops[] = {&producer, &conditional};
+    ScheduleCapture result = {0};
+    assert(!cg_schedule_block(ops, 2, 0, capture_schedule, &result));
+    assert(result.count == 2);
+    for (size_t b = 0; b < 2; b++) {
+        assert(result.bundles[b].slots[0] == ops[b]);
+        for (size_t slot = 1; slot < 4; slot++) {
+            assert(!result.bundles[b].slots[slot]);
+        }
+    }
+    assert(!cg_verify_schedule(ops, 2, result.bundles, 2, 0, NULL));
+    conditional = describe("ifmov r4, r4, r7", SLOT_ALU0);
+    result = (ScheduleCapture){0};
+    assert(!cg_schedule_block(ops, 2, 0, capture_schedule, &result));
+    assert(result.count == 3);
+    assert(result.bundles[0].slots[0] == &producer);
+    assert(result.bundles[2].slots[0] == &conditional);
+    for (size_t slot = 0; slot < 4; slot++) {
+        assert(!result.bundles[1].slots[slot]);
+    }
+}
+
 int main(int argc,char **argv) {
     CGInstruction producer=describe("mov r4, 1",SLOT_ALU0);
     if(argc==2 && !strcmp(argv[1],"--reject")) {
@@ -29,6 +96,7 @@ int main(int argc,char **argv) {
         assert(failed==1 && callbacks==0);
         return 0;
     }
+    preserved_destination_schedule();
     const CGInstruction *ops[3];
     CGScheduledBundle calendar[4];
     CGScheduleIssue issue;

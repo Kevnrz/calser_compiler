@@ -2,7 +2,8 @@
  * isa_table.c — Fases 4–5: tabla de instrucciones de la ISA y lectura de operandos.
  *
  * Contiene la única tabla de mnemónicos y las funciones de lectura de texto
- * que comparten el organizador de bundles y el ensamblador.
+ * que comparten el organizador de bundles y el ensamblador. La semántica
+ * común separa lecturas físicas y preservación del destino (Aho §10.2.3).
  *
  * Usa: isa_table.h; biblioteca C.
  * Lo usa: codegen_instruction.c y assembler.c.
@@ -24,47 +25,480 @@
 /* Tablas de funct de isa.md §6.1 (ALU), §6.2 (BRU), §6.3 (LSU), §6.4 (CRYPTO).
  * El funct de nopi no se codifica: es la instrucción vacía, todo ceros. */
 static const IsaInstruction INSTRUCTIONS[] = {
-    { "add",      ISA_UNIT_ALU,    0x01, ISA_FORM_R3 },
-    { "sub",      ISA_UNIT_ALU,    0x02, ISA_FORM_R3 },
-    { "and",      ISA_UNIT_ALU,    0x03, ISA_FORM_R3 },
-    { "or",       ISA_UNIT_ALU,    0x04, ISA_FORM_R3 },
-    { "xor",      ISA_UNIT_ALU,    0x05, ISA_FORM_R3 },
-    { "sll",      ISA_UNIT_ALU,    0x06, ISA_FORM_R3 },
-    { "srl",      ISA_UNIT_ALU,    0x07, ISA_FORM_R3 },
-    { "sra",      ISA_UNIT_ALU,    0x08, ISA_FORM_R3 },
-    { "slt",      ISA_UNIT_ALU,    0x09, ISA_FORM_R3 },
-    { "sle",      ISA_UNIT_ALU,    0x0A, ISA_FORM_R3 },
-    { "seq",      ISA_UNIT_ALU,    0x0B, ISA_FORM_R3 },
-    { "sne",      ISA_UNIT_ALU,    0x0C, ISA_FORM_R3 },
-    { "ifmov",    ISA_UNIT_ALU,    0x0D, ISA_FORM_R3 },
-    { "saddi",    ISA_UNIT_ALU,    0x10, ISA_FORM_IMM },
-    { "xori",     ISA_UNIT_ALU,    0x11, ISA_FORM_IMM },
-    { "mov",      ISA_UNIT_ALU,    0x12, ISA_FORM_MOV },
-
-    { "beq",      ISA_UNIT_BRU,    0x01, ISA_FORM_BRANCH },
-    { "bne",      ISA_UNIT_BRU,    0x02, ISA_FORM_BRANCH },
-    { "blt",      ISA_UNIT_BRU,    0x03, ISA_FORM_BRANCH },
-    { "bge",      ISA_UNIT_BRU,    0x04, ISA_FORM_BRANCH },
-    { "jefR",     ISA_UNIT_BRU,    0x05, ISA_FORM_JEFR },
-    { "jef",      ISA_UNIT_BRU,    0x10, ISA_FORM_JEF },
-    { "jas",      ISA_UNIT_BRU,    0x11, ISA_FORM_JAS },
-
-    { "lw",       ISA_UNIT_LSU,    0x01, ISA_FORM_LOAD },
-    { "sw",       ISA_UNIT_LSU,    0x02, ISA_FORM_STORE },
-    { "lb",       ISA_UNIT_LSU,    0x03, ISA_FORM_LOAD },
-    { "sb",       ISA_UNIT_LSU,    0x04, ISA_FORM_STORE },
-
-    { "feis",     ISA_UNIT_CRYPTO, 0x01, ISA_FORM_FEIS },
-    { "auth",     ISA_UNIT_CRYPTO, 0x02, ISA_FORM_RS1 },
-    { "logout",   ISA_UNIT_CRYPTO, 0x03, ISA_FORM_NONE },
-    { "kv_write", ISA_UNIT_CRYPTO, 0x04, ISA_FORM_KV_WRITE },
-    { "kv_lock",  ISA_UNIT_CRYPTO, 0x05, ISA_FORM_NONE },
-    { "sanc",     ISA_UNIT_CRYPTO, 0x06, ISA_FORM_RS1 },
-
-    { "nopi",     ISA_UNIT_NONE,   0x00, ISA_FORM_NONE }
+    {
+        .name = "add",
+        .unit = ISA_UNIT_ALU,
+        .funct = 0x01,
+        .form = ISA_FORM_R3,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .writes = ISA_REG_DEST,
+            .effects = ISA_EFFECT_NONE,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "sub",
+        .unit = ISA_UNIT_ALU,
+        .funct = 0x02,
+        .form = ISA_FORM_R3,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .writes = ISA_REG_DEST,
+            .effects = ISA_EFFECT_NONE,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "and",
+        .unit = ISA_UNIT_ALU,
+        .funct = 0x03,
+        .form = ISA_FORM_R3,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .writes = ISA_REG_DEST,
+            .effects = ISA_EFFECT_NONE,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "or",
+        .unit = ISA_UNIT_ALU,
+        .funct = 0x04,
+        .form = ISA_FORM_R3,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .writes = ISA_REG_DEST,
+            .effects = ISA_EFFECT_NONE,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "xor",
+        .unit = ISA_UNIT_ALU,
+        .funct = 0x05,
+        .form = ISA_FORM_R3,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .writes = ISA_REG_DEST,
+            .effects = ISA_EFFECT_NONE,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "sll",
+        .unit = ISA_UNIT_ALU,
+        .funct = 0x06,
+        .form = ISA_FORM_R3,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .writes = ISA_REG_DEST,
+            .effects = ISA_EFFECT_NONE,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "srl",
+        .unit = ISA_UNIT_ALU,
+        .funct = 0x07,
+        .form = ISA_FORM_R3,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .writes = ISA_REG_DEST,
+            .effects = ISA_EFFECT_NONE,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "sra",
+        .unit = ISA_UNIT_ALU,
+        .funct = 0x08,
+        .form = ISA_FORM_R3,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .writes = ISA_REG_DEST,
+            .effects = ISA_EFFECT_NONE,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "slt",
+        .unit = ISA_UNIT_ALU,
+        .funct = 0x09,
+        .form = ISA_FORM_R3,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .writes = ISA_REG_DEST,
+            .effects = ISA_EFFECT_NONE,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "sle",
+        .unit = ISA_UNIT_ALU,
+        .funct = 0x0A,
+        .form = ISA_FORM_R3,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .writes = ISA_REG_DEST,
+            .effects = ISA_EFFECT_NONE,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "seq",
+        .unit = ISA_UNIT_ALU,
+        .funct = 0x0B,
+        .form = ISA_FORM_R3,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .writes = ISA_REG_DEST,
+            .effects = ISA_EFFECT_NONE,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "sne",
+        .unit = ISA_UNIT_ALU,
+        .funct = 0x0C,
+        .form = ISA_FORM_R3,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .writes = ISA_REG_DEST,
+            .effects = ISA_EFFECT_NONE,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "ifmov",
+        .unit = ISA_UNIT_ALU,
+        .funct = 0x0D,
+        .form = ISA_FORM_R3,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .writes = ISA_REG_DEST,
+            .preserves = ISA_REG_DEST,
+            .effects = ISA_EFFECT_CONDITIONAL_WRITE,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "saddi",
+        .unit = ISA_UNIT_ALU,
+        .funct = 0x10,
+        .form = ISA_FORM_IMM,
+        .semantics = {
+            .reads = ISA_REG_SRC1,
+            .writes = ISA_REG_DEST,
+            .effects = ISA_EFFECT_NONE,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "xori",
+        .unit = ISA_UNIT_ALU,
+        .funct = 0x11,
+        .form = ISA_FORM_IMM,
+        .semantics = {
+            .reads = ISA_REG_SRC1,
+            .writes = ISA_REG_DEST,
+            .effects = ISA_EFFECT_NONE,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "mov",
+        .unit = ISA_UNIT_ALU,
+        .funct = 0x12,
+        .form = ISA_FORM_MOV,
+        .semantics = {
+            .writes = ISA_REG_DEST,
+            .effects = ISA_EFFECT_NONE,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "beq",
+        .unit = ISA_UNIT_BRU,
+        .funct = 0x01,
+        .form = ISA_FORM_BRANCH,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .effects = ISA_EFFECT_CONTROL,
+        }
+    },
+    {
+        .name = "bne",
+        .unit = ISA_UNIT_BRU,
+        .funct = 0x02,
+        .form = ISA_FORM_BRANCH,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .effects = ISA_EFFECT_CONTROL,
+        }
+    },
+    {
+        .name = "blt",
+        .unit = ISA_UNIT_BRU,
+        .funct = 0x03,
+        .form = ISA_FORM_BRANCH,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .effects = ISA_EFFECT_CONTROL,
+        }
+    },
+    {
+        .name = "bge",
+        .unit = ISA_UNIT_BRU,
+        .funct = 0x04,
+        .form = ISA_FORM_BRANCH,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .effects = ISA_EFFECT_CONTROL,
+        }
+    },
+    {
+        .name = "jefR",
+        .unit = ISA_UNIT_BRU,
+        .funct = 0x05,
+        .form = ISA_FORM_JEFR,
+        .semantics = {
+            .reads = ISA_REG_SRC1,
+            .writes = ISA_REG_DEST,
+            .effects = ISA_EFFECT_CONTROL,
+            .result_distance = 2,
+            .call_if_link_nonzero = 1,
+        }
+    },
+    {
+        .name = "jef",
+        .unit = ISA_UNIT_BRU,
+        .funct = 0x10,
+        .form = ISA_FORM_JEF,
+        .semantics = {
+            .effects = ISA_EFFECT_CONTROL,
+        }
+    },
+    {
+        .name = "jas",
+        .unit = ISA_UNIT_BRU,
+        .funct = 0x11,
+        .form = ISA_FORM_JAS,
+        .semantics = {
+            .writes = ISA_REG_DEST,
+            .effects = ISA_EFFECT_CONTROL |
+                       ISA_EFFECT_CALL,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "lw",
+        .unit = ISA_UNIT_LSU,
+        .funct = 0x01,
+        .form = ISA_FORM_LOAD,
+        .semantics = {
+            .reads = ISA_REG_SRC1,
+            .writes = ISA_REG_DEST,
+            .effects = ISA_EFFECT_MEMORY_READ,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "sw",
+        .unit = ISA_UNIT_LSU,
+        .funct = 0x02,
+        .form = ISA_FORM_STORE,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .effects = ISA_EFFECT_MEMORY_WRITE,
+        }
+    },
+    {
+        .name = "lb",
+        .unit = ISA_UNIT_LSU,
+        .funct = 0x03,
+        .form = ISA_FORM_LOAD,
+        .semantics = {
+            .reads = ISA_REG_SRC1,
+            .writes = ISA_REG_DEST,
+            .effects = ISA_EFFECT_MEMORY_READ,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "sb",
+        .unit = ISA_UNIT_LSU,
+        .funct = 0x04,
+        .form = ISA_FORM_STORE,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .effects = ISA_EFFECT_MEMORY_WRITE,
+        }
+    },
+    {
+        .name = "feis",
+        .unit = ISA_UNIT_CRYPTO,
+        .funct = 0x01,
+        .form = ISA_FORM_FEIS,
+        .semantics = {
+            .reads = ISA_REG_SRC1 | ISA_REG_SRC2,
+            .writes = ISA_REG_DEST,
+            .preserves = ISA_REG_DEST,
+            .effects = ISA_EFFECT_CRYPTO_STATE |
+                       ISA_EFFECT_BARRIER |
+                       ISA_EFFECT_CONDITIONAL_WRITE,
+            .result_distance = 2,
+        }
+    },
+    {
+        .name = "auth",
+        .unit = ISA_UNIT_CRYPTO,
+        .funct = 0x02,
+        .form = ISA_FORM_RS1,
+        .semantics = {
+            .reads = ISA_REG_SRC1,
+            .effects = ISA_EFFECT_CRYPTO_STATE |
+                       ISA_EFFECT_BARRIER |
+                       ISA_EFFECT_PIPELINE_STALL,
+        }
+    },
+    {
+        .name = "logout",
+        .unit = ISA_UNIT_CRYPTO,
+        .funct = 0x03,
+        .form = ISA_FORM_NONE,
+        .semantics = {
+            .effects = ISA_EFFECT_CRYPTO_STATE |
+                       ISA_EFFECT_BARRIER,
+        }
+    },
+    {
+        .name = "kv_write",
+        .unit = ISA_UNIT_CRYPTO,
+        .funct = 0x04,
+        .form = ISA_FORM_KV_WRITE,
+        .semantics = {
+            .reads = ISA_REG_SRC1,
+            .effects = ISA_EFFECT_CRYPTO_STATE |
+                       ISA_EFFECT_BARRIER,
+        }
+    },
+    {
+        .name = "kv_lock",
+        .unit = ISA_UNIT_CRYPTO,
+        .funct = 0x05,
+        .form = ISA_FORM_NONE,
+        .semantics = {
+            .effects = ISA_EFFECT_CRYPTO_STATE |
+                       ISA_EFFECT_BARRIER,
+        }
+    },
+    {
+        .name = "sanc",
+        .unit = ISA_UNIT_CRYPTO,
+        .funct = 0x06,
+        .form = ISA_FORM_RS1,
+        .semantics = {
+            .reads = ISA_REG_SRC1,
+            .effects = ISA_EFFECT_CRYPTO_STATE |
+                       ISA_EFFECT_BARRIER,
+        }
+    },
+    {
+        .name = "nopi",
+        .unit = ISA_UNIT_NONE,
+        .funct = 0x00,
+        .form = ISA_FORM_NONE,
+        .semantics = {
+            .effects = ISA_EFFECT_NONE,
+        }
+    },
 };
 
 #define INSTRUCTION_COUNT (int) (sizeof(INSTRUCTIONS) / sizeof(INSTRUCTIONS[0]))
+
+/*
+ * register_mask — proyecta posiciones normalizadas a registros físicos.
+ *
+ * Entrada:
+ *   positions  máscara de DEST/SRC1/SRC2.
+ *   registers  tres números 0..15 o -1 en posiciones no seleccionadas.
+ * Salida:
+ *   unión de bits de los registros seleccionados, incluidos registros iguales.
+ * Efectos:
+ *   ninguno.
+ * Restricciones:
+ *   el llamador ya comprobó los registros y las posiciones.
+ */
+static uint16_t register_mask(unsigned positions, const int registers[3]) {
+    uint16_t mask = 0;
+    for (unsigned k = 0; k < 3; k++) {
+        if (positions & (1u << k)) {
+            mask |= (uint16_t)(1u << registers[k]);
+        }
+    }
+    return mask;
+}
+
+/*
+ * isa_physical_effects — aplica la tabla sin interpretar texto de ensamblador.
+ *
+ * Entrada:
+ *   instruction  descriptor o NULL; dest/src1/src2 0..15 o -1 si ausentes.
+ *   pc_relative  destino numérico; out  resultado escribible o NULL.
+ * Salida:
+ *   1 en éxito; 0 si los argumentos no corresponden al descriptor.
+ * Efectos:
+ *   inicializa out; reúne máscaras sin agregar preserves a reads.
+ * Restricciones:
+ *   valida posiciones y registros, no sintaxis, inmediatos, selectores o slots.
+ *   La distancia se anula cuando no escribe registros, incluido destino rz.
+ *   Véase preserves en isa_table.h (Aho §10.2.3; isa.md §9).
+ */
+int isa_physical_effects(const IsaInstruction *instruction,
+                         int dest, int src1, int src2, int pc_relative,
+                         IsaPhysicalEffects *out) {
+    if (!out) {
+        return 0;
+    }
+    *out = (IsaPhysicalEffects){0};
+    if (!instruction) {
+        return 0;
+    }
+    const IsaSemantics *semantics = &instruction->semantics;
+    unsigned positions = semantics->reads | semantics->writes |
+                         semantics->preserves;
+    int registers[3] = {dest, src1, src2};
+    if (positions & ~7u) {
+        return 0;
+    }
+    for (unsigned k = 0; k < 3; k++) {
+        if (positions & (1u << k)) {
+            if (registers[k] < 0 || registers[k] > 15) {
+                return 0;
+            }
+        } else if (registers[k] != -1) {
+            return 0;
+        }
+    }
+    if (pc_relative && instruction->form != ISA_FORM_BRANCH &&
+        instruction->form != ISA_FORM_JEF && instruction->form != ISA_FORM_JAS) {
+        return 0;
+    }
+    out->reads = register_mask(semantics->reads, registers);
+    out->writes = register_mask(semantics->writes, registers) & (uint16_t)~1u;
+    out->preserves = register_mask(semantics->preserves, registers) &
+                     (uint16_t)~1u;
+    out->effects = semantics->effects;
+    if (semantics->call_if_link_nonzero && dest != 0) {
+        out->effects |= ISA_EFFECT_CALL;
+    }
+    if (pc_relative) {
+        out->effects |= ISA_EFFECT_PC_RELATIVE;
+    }
+    out->result_distance = out->writes ? semantics->result_distance : 0;
+    return 1;
+}
 
 /* isa_find — véase el contrato en isa_table.h. */
 const IsaInstruction *isa_find(const char *name) {

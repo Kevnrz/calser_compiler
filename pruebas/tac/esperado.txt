@@ -1,0 +1,75 @@
+function recto (entry B0)
+B0: successors []
+  t0 = 3
+  t1 = t0 + 4
+  t2 = t0 * t1
+  a[t0] = t2
+  t1 = a[t0]
+  t3 = address a
+  t1 = t3[t0]
+  t3 = p
+  t1 = t3[t0]
+  return t2
+
+function diamante (entry B0)
+B0: successors [B2, B1]
+  t0 = 3
+  if t0 < 10 goto B2
+B1: successors [B3]
+  t0 = 0
+  goto B3
+B2: successors [B3]
+  t0 = 1
+  goto B3
+B3: successors []
+  return t0
+
+function lazo (entry B0)
+B0: successors [B1]
+  t0 = 0
+B1: successors [B3, B2]
+  if t0 >= 3 goto B3
+B2: successors [B1]
+  t0 = t0 + 1
+  goto B1
+B3: successors []
+  return t0
+
+function llamadas (entry B0)
+B0: successors []
+  g = 5
+  param 9, 1
+  param 8, 0
+  t0 = call aux, 2
+  g = 6
+  autenticar [-193210613]
+  cargar_llave [0, 1, t0]
+  sellar []
+  cifrar [4096, 8192, t0, 0]
+  descifrar [8192, 12288, 1, 0]
+  cambiar_ancla [5]
+  cerrar_sesion []
+  return t0
+
+function aux (entry B0)
+B0: successors []
+  return g
+
+function war_waw (entry B0)
+B0: successors []
+  t0 = 1
+  t1 = t0 + 2
+  t0 = 7
+  t1 = t0 + t0
+  return t1
+
+function main (entry B0)
+B0: successors [B2, B1]
+  res = 3
+  if res < 10 goto B2
+B1: successors []
+  return
+B2: successors [B1]
+  res = res * 2
+  goto B1
+

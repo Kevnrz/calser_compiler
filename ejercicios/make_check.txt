@@ -1,4 +1,5 @@
 $ make -s check
+check-tac: 6 casos de alto nivel, ISA virtual/fisica, consultas y validacion: OK
 PASS contrato y fallo del emisor
 PASS mul: 450 casos, dos expansiones por caso
 PASS div: 450 casos, dos expansiones por caso
@@ -52,7 +53,7 @@ PASS p09: 0x3000 == 0x1000, 0x2000 distinto, 0x4000-0x4007 == 0x1000-0x1007
 PASS p11: n1 = 8, n2 = 8, 0x3000 == 0x1000, 0x2000 distinto
 ........
 ----------------------------------------------------------------------
-Ran 8 tests in 0.006s
+Ran 8 tests in 0.009s
 
 OK
 PASS ayuda: -h/--help, opciones, ejemplos, errores y archivos intactos
@@ -66,6 +67,7 @@ PASS excepciones por prefijo: __ccom_arith_* 68, __ccom_array_* 3, .L_crypto_* 1
 PASS direcciones: Address de -m = bundle contado en el .asm = tabla anotada; "-" solo en las que no llegan al .asm
 PASS inicializadores globales: & constante sin etiqueta en el .asm; & no constante con su etiqueta al inicio de main
 PASS simulador: 48 casos (parser, pipeline, cifrado, traza de ejecución)
+PASS semantica ISA: 34 instrucciones, 13 formas, preserves y efectos fisicos
 PASS IR: ISA, dependencias, efectos, slots, fronteras, copia de textos y liberacion
 PASS dependencias: 19 calendarios invalidos rechazados; RAW, WAR, WAW, memoria, control, cobertura y slots
 pruebas/p02_factorial.cls: 54 operaciones, 2 bundles fijos, 123 registros IR
@@ -78,9 +80,9 @@ PASS calendario rechazado: diagnóstico y ningún callback de emisión ejecutado
 PASS organizador: 143 ejecuciones equivalentes, fallback y protección de entrada fija
 PASS anotaciones: almacenamiento y salto comparten bundle y conservan sus líneas individuales
 PASS factorial: ciclos 337 → 231; bundles 110 → 80; dos ALU ejecutadas 14 veces; f=120
-PASS compilador: 28 programas equivalentes con y sin organizador, cero avisos
-PASS salidas: 28 programas × 2 modos; ASM, BIN, HEX, MEM, -m, -p y reensamblado coherentes
-PASS BRU: 814 instrucciones codificadas con destinos/registros finales correctos
+PASS compilador: 29 programas equivalentes con y sin organizador, cero avisos
+PASS salidas: 29 programas × 2 modos; ASM, BIN, HEX, MEM, -m, -p y reensamblado coherentes
+PASS BRU: 830 instrucciones codificadas con destinos/registros finales correctos
 PASS reubicación factorial: .L_func_factorial 38 → 28; bundles 110 → 80
 PASS factorial: 120; ciclos 337 → 231 (31.45% menos)
 PASS paralelismo: ambas ALU ejecutadas 14 veces; cero avisos

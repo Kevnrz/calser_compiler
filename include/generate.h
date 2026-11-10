@@ -21,14 +21,16 @@
  * Entrada:
  *   root  raíz AST_PROGRAM validada semánticamente.
  *   labels  tabla de etiquetas construida en Fase 3.
+ *   source_name  nombre del fuente prestado; NULL usa "ccom" en diagnósticos.
  * Salida:
  *   0 si genera; 1 si detecta error interno o de generación.
  *   Efectos: reinicia codegen, llena imagen de datos y emite funciones y destinos terminales.
  * Restricciones:
  *   llamar antes de semantic_free; organizar después con cg_schedule salvo
  *   --no-schedule; ante error descartar emisión parcial.
+ *   source_name debe permanecer vivo durante la llamada.
  */
-int generate_code(ASTNode *root, const LabelTable *labels);
+int generate_code(ASTNode *root, const LabelTable *labels, const char *source_name);
  
 #endif
  

@@ -78,6 +78,9 @@ check-matrices: $(TARGET)
 check-programas: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/programas/probar.py
 
+check-diagnosticos-generacion: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/diagnosticos_generacion/probar.py
+
 # Entregables de los tres ejercicios (enunciado CE1108 §10.4 y §10.5). No
 # forma parte de check: es para generar los archivos de ejercicios/.
 ejercicios: $(TARGET)
@@ -138,7 +141,7 @@ check-tac: $(BUILD_DIR)/probar_tac $(BUILD_DIR)/probar_tac_isa $(TARGET)
 	./$(TARGET) pruebas/tac/ejemplo.cls -o $(BUILD_DIR)/tac_ejemplo.bin
 	@echo "check-tac: 6 casos de alto nivel, ISA virtual/fisica, consultas y validacion: OK"
 
-check: check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+check: check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 clean:
 	rm -f $(BUILD_DIR)/probar_semantica_isa
@@ -150,7 +153,7 @@ clean:
 
 -include $(OBJECTS:.o=.d)
 
-.PHONY: all clean ejercicios check check-semantica-isa check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+.PHONY: all clean ejercicios check check-semantica-isa check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 # Prototipo gráfico CALSIDE (PySide6).
 PYTHON ?= python3

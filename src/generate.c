@@ -137,7 +137,7 @@ static void emit_function(GenCtx *gen, ASTNode *function) {
 }
 
 /* generate_code — véase el contrato en generate.h. */
-int generate_code(ASTNode *root, const LabelTable *labels) {
+int generate_code(ASTNode *root, const LabelTable *labels, const char *source_name) {
     if (root == NULL || root->kind != AST_PROGRAM)
         return 1;
 
@@ -145,6 +145,7 @@ int generate_code(ASTNode *root, const LabelTable *labels) {
     // static del módulo).
     GenCtx context = {0};
     GenCtx *gen = &context;
+    gen->source_name = source_name;
 
     // La tabla de etiquetas viene de la Fase 3; aquí solo se consulta.
     gen->label_table = labels;

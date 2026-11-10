@@ -83,6 +83,16 @@ incorrectos y 130 si se interrumpe con Ctrl+C.
 `make check` sigue disponible e incluye las pruebas del ejecutor mediante
 `make check-runner`. El uso del script es opcional durante la presentación.
 
+`make check-diagnosticos-generacion`, incluido en `make check`, ejecuta
+`pruebas/diagnosticos_generacion/probar.py`. Crea en una carpeta temporal un
+fuente semánticamente válido que agota los doce temporales del generador.
+Comprueba el nombre del archivo con ruta y espacios, línea, columna, texto
+exacto, código de salida 1 y ausencia de salidas, con y sin `--no-schedule`.
+`gen_report_error` recibe el nombre prestado mediante `GenCtx.source_name`,
+pasado a `generate_code`; sin nombre usa `ccom`. Conserva el contador y el
+formato de posición del diagnóstico. Este target usa Python; la compilación
+habitual con `make` sigue sin necesitarlo.
+
 La semántica de dependencias del ISA vive en `include/isa_table.h` y
 `src/isa_table.c`, compartida por el descriptor del organizador y disponible
 para la representación intermedia. `codegen_instruction.c` conserva el parseo y

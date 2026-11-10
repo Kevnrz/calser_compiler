@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
     if (!semantic_analyze(root)) return 1;
     LabelTable labels;
     label_table_init(&labels);
-    if (label_table_build(&labels, root) || generate_code(root, &labels)) return 1;
+    if (label_table_build(&labels, root) || generate_code(root, &labels, argv[1])) return 1;
     int operations = 0, fixed = 0, failure = 0;
     for (int i = 0; i < cg_ir_count(); i++) {
         const CGIRRecord *record = cg_ir_record(i);

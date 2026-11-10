@@ -55,15 +55,18 @@
 
 /* gen_report_error — véase el contrato en generate_internal.h. */
 void gen_report_error(GenCtx *gen, ASTNode *node, const char *message) {
+    const char *source_name = gen->source_name ? gen->source_name : "ccom";
     if (node != NULL && node->line > 0) {
         fprintf(stderr,
-                "ccom:%d:%d: error de generacion: %s\n",
+                "%s:%d:%d: error de generacion: %s\n",
+                source_name,
                 node->line,
                 node->column,
                 message);
     } else {
         fprintf(stderr,
-                "ccom: error de generacion: %s\n",
+                "%s: error de generacion: %s\n",
+                source_name,
                 message);
     }
 

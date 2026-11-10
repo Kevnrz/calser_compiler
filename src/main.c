@@ -785,7 +785,7 @@ static int phase_codegen(Compilation *compilation) {
 
     compilation->codegen_started = 1;
 
-    int gen_failed = generate_code(compilation->root, compilation->labels);
+    int gen_failed = generate_code(compilation->root, compilation->labels, options->input);
     report_phase(options, "fase 4: generacion de codigo", !gen_failed);
     if (!gen_failed && !options->no_schedule) {
         gen_failed = cg_schedule();

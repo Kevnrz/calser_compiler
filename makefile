@@ -9,7 +9,7 @@ BUILD_DIR = build
 GEN_DIR = $(BUILD_DIR)/generated
 OBJ_DIR = $(BUILD_DIR)/obj
 
-SOURCES = main ast symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler
+SOURCES = main ast ast_constant symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler
 OBJECTS = $(addprefix $(OBJ_DIR)/,$(addsuffix .o,$(SOURCES))) \
           $(OBJ_DIR)/parser.tab.o $(OBJ_DIR)/lex.yy.o
 
@@ -81,6 +81,13 @@ check-programas: $(TARGET)
 check-diagnosticos-generacion: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/diagnosticos_generacion/probar.py
 
+# Evaluación constante sin dependencias del generador ni del emisor.
+$(BUILD_DIR)/probar_constantes: src/ast.c src/ast_constant.c pruebas/constantes/probar.c include/ast.h include/ast_constant.h include/symbol_table.h | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
+
+check-constantes: $(BUILD_DIR)/probar_constantes
+	$<
+
 # Entregables de los tres ejercicios (enunciado CE1108 §10.4 y §10.5). No
 # forma parte de check: es para generar los archivos de ejercicios/.
 ejercicios: $(TARGET)
@@ -141,9 +148,10 @@ check-tac: $(BUILD_DIR)/probar_tac $(BUILD_DIR)/probar_tac_isa $(TARGET)
 	./$(TARGET) pruebas/tac/ejemplo.cls -o $(BUILD_DIR)/tac_ejemplo.bin
 	@echo "check-tac: 6 casos de alto nivel, ISA virtual/fisica, consultas y validacion: OK"
 
-check: check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+check: check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 clean:
+	rm -f $(BUILD_DIR)/probar_constantes
 	rm -f $(BUILD_DIR)/probar_semantica_isa
 	rm -f $(BUILD_DIR)/tac_obtenido.txt $(BUILD_DIR)/tac_obtenido_isa.txt
 	rm -f $(BUILD_DIR)/probar_tac_isa $(BUILD_DIR)/tac_ejemplo.bin $(BUILD_DIR)/tac_ejemplo.hex $(BUILD_DIR)/tac_ejemplo.mem
@@ -153,7 +161,7 @@ clean:
 
 -include $(OBJECTS:.o=.d)
 
-.PHONY: all clean ejercicios check check-semantica-isa check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+.PHONY: all clean ejercicios check check-semantica-isa check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 # Prototipo gráfico CALSIDE (PySide6).
 PYTHON ?= python3

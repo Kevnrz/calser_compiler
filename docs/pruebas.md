@@ -93,6 +93,15 @@ pasado a `generate_code`; sin nombre usa `ccom`. Conserva el contador y el
 formato de posición del diagnóstico. Este target usa Python; la compilación
 habitual con `make` sigue sin necesitarlo.
 
+`make check-constantes`, incluido en `make check`, ejecuta el binario C
+`build/probar_constantes` desde `pruebas/constantes/probar.c`. Comprueba búsqueda
+de inicializadores, literales, operadores, referencias Vi encadenadas, rechazo
+de Vm y llamadas, profundidad 64/65, truncamiento a 32 bits, división y módulo
+con signo y conservación de la política sin corto circuito del evaluador.
+El módulo compartido vive en `include/ast_constant.h` y `src/ast_constant.c`;
+lo usa `generate_init.c` y queda disponible para el futuro constructor TAC,
+sin depender del generador ni del emisor. Este target no necesita Python.
+
 La semántica de dependencias del ISA vive en `include/isa_table.h` y
 `src/isa_table.c`, compartida por el descriptor del organizador y disponible
 para la representación intermedia. `codegen_instruction.c` conserva el parseo y

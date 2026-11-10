@@ -55,6 +55,8 @@ def main():
         check(['--time', '--ast-json', json, source, '-o', timed], 0, 'exportacion AST')
         assert json.is_file()
         check(['--time', '--ast-json', json, '-s', source, '-o', timed], 0, 'compilacion')
+        check(['--time', '--ast-json', json, '-i', source, '-o', timed], 0, 'compilacion')
+        assert timed.with_suffix('.tac').exists()
         check(['--time'], 2)
         check(['--time', '--desconocida', source], 2)
     print('PASS --time: exito, errores, modos, stdout y archivos sin cambios')

@@ -478,6 +478,19 @@ static void array_errors(void) {
     valid(fixture.program);
     load->src1 = temp;
     invalid(fixture.program, "operando");
+    load->op = TAC_COPY;
+    load->dest = tac_variable(&parameter);
+    load->src1 = temp;
+    load->src2 = tac_none();
+    valid(fixture.program); /* R redefine la dirección del parámetro arreglo. */
+    TacOperand values[3];
+    assert(tac_definitions(load, values) == 1);
+    assert(values[0].value.symbol == &parameter);
+    assert(tac_uses(load, values) == 1 && values[0].kind == TAC_TEMP);
+    load->src1 = tac_variable(&parameter);
+    valid(fixture.program); /* COPY admite leer y escribir el parámetro. */
+    load->dest = tac_variable(&array);
+    invalid(fixture.program, "arreglo"); /* No habilita copia escalar de arreglos declarados. */
     tac_program_free(fixture.program);
 }
 

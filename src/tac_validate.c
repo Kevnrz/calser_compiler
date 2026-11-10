@@ -68,7 +68,7 @@ static int valid_array_roles(const TacInstruction *instruction, const TacOpInfo 
             }
         } else if (symbol->dimensions > 0) {
             if (symbol->kind != SYMBOL_PARAMETER ||
-                instruction->op != TAC_COPY || k != 1) {
+                instruction->op != TAC_COPY || k > 1) {
                 return 0;
             }
         }

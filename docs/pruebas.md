@@ -126,3 +126,25 @@ edición, reconstrucción y rechazos. El target también compila
 `pruebas/tac/ejemplo.cls` con ccom. No usa Python; la construcción habitual con
 `make` tampoco lo necesita. Ver
 [representacion_intermedia.md](representacion_intermedia.md).
+
+## Construcción TAC desde el AST
+
+`make check-tac-build`, incluido en `make check`, construye `probar_tac_build`
+y ejecuta `pruebas/tac_build/probar_cli.py`. El binario C parsea y analiza cada
+fuente, construye TAC en memoria y llama `tac_validate`. Compara imagen inicial
+con la del generador y verifica que AST, símbolos, área de datos y estado del
+emisor no cambien durante la construcción. Se libera TAC antes del semántico.
+
+Hay 22 esperados en `pruebas/tac_build/esperados/`: factorial L/R, corto circuito,
+relaciones y unarias, C/A/residual anidados, S positivo/negativo/paso grande,
+E dentro de S, arreglos 1D/2D, copia y parámetros reenviados, llamadas anidadas
+como valor y sentencia, retorno cero, inicializadores y las siete CRYPTO.
+Incluye los cuatro `r_arreglos*.cls` existentes. Solo los tres casos faltantes
+se agregan en `pruebas/tac_build/casos/`.
+
+La CLI comprueba `-i`/`--tac`, nombres por defecto y `-o`, combinaciones con
+listados, JSON temprano y tiempo, el aviso con `-x`, errores sin TAC y borrado
+de un parcial mediante un enlace temporal a `/dev/full` donde está disponible.
+Compara ASM/BIN/HEX/MEM con y sin `-i`, y TAC con/sin `--no-schedule`.
+`check-tac` comprueba además COPY hacia parámetros arreglo y sus definiciones.
+No hay intérprete ni comprobaciones de valores finales: corresponden a C2.

@@ -21,21 +21,22 @@ def main():
         assert short.stderr == long.stderr == ''
         assert short.stdout == long.stdout
         for flag in ('-h, --help', '-t', '-m', '-v', '-o <salida>', '-s', '-p',
-                     '-x', '--ast-json <json>', '--no-schedule', '--time'):
+                     '-i, --tac', '-x', '--ast-json <json>', '--no-schedule', '--time'):
             assert any(line.strip().startswith(flag) for line in long.stdout.splitlines()), flag
-        for text in ('Ejemplos:', 'Codigos de salida:', '.bin', '.hex', '.mem', '.asm'):
+        for text in ('Ejemplos:', 'Codigos de salida:', '.bin', '.hex', '.mem', '.asm', '.tac'):
             assert text in long.stdout, text
         # La entrada es invalida y hay salidas preexistentes: la ayuda debe
         # terminar sin abrir el fuente, truncar archivos ni medir tiempos.
         source = folder / 'invalido.cls'
         source.write_text('esto no es Calser')
         files = {source: source.read_bytes()}
-        for extension in ('.bin', '.hex', '.mem', '.asm', '.json'):
+        for extension in ('.bin', '.hex', '.mem', '.asm', '.json', '.tac'):
             path = folder / ('salida' + extension)
             path.write_bytes(b'conservar')
             files[path] = path.read_bytes()
         for args in (
             ['--time', '--help'],
+            ['-i', '--help'],
             ['-o', folder / 'salida.bin', '--help', source],
             [source, '-s', '--ast-json', folder / 'salida.json', '-h'],
             ['-x', folder / 'inexistente.asm', '--help'],

@@ -26,7 +26,7 @@
  * Se pueden editar operandos y usar las funciones de inserción/eliminación.
  * Antes de quitar la instrucción visitada, guardar next. No liberar su bloque.
  * Después de editar control u orden, reconstruir aristas y volver a validar.
- * Impresión estable; la forma todavía no se construye desde el AST.
+ * Impresión estable; tac_build.h construye alto nivel desde el AST validado.
  * Referencias: Aho §6.2, §8.4.1, §10.2.3; enunciado §4.1.
  */
 #ifndef TAC_H

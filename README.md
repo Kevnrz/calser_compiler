@@ -351,3 +351,12 @@ por Git. Más detalles en [editors/vscode/README.md](editors/vscode/README.md).
 La extensión conserva una copia del icono para que pueda instalarse de forma
 independiente del repositorio. Los avisos de los recursos Seti están en
 [ThirdPartyNotices.txt](editors/vscode/ThirdPartyNotices.txt).
+
+### Representación intermedia desde AST (C2.1)
+
+`./ccom -i programa.cls` (o `--tac`) agrega `programa.tac`; con `-o salida.bin`
+usa `salida.tac`. La compilación continúa con el generador actual, conservando
+los binarios. El listado contiene imagen inicial, funciones y bloques de alto
+nivel. `make check-tac-build` prueba construcción y CLI con 22 esperados, sin
+intérprete todavía. Ver [la documentación de TAC](docs/representacion_intermedia.md)
+y [las banderas](docs/ccom_banderas.md).

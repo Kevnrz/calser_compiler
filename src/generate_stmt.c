@@ -901,7 +901,28 @@ static int emit_rewind_arguments(GenCtx *gen, ASTNode *node,
     int evaluated = 0;
 
     for (ASTNode *a = info->first_arg; a != NULL; a = a->next) {
-        int reg = gen_expression(gen, a);
+        Symbol *param = gen->current_function_symbol->param_list[evaluated];
+        Symbol *source = a->kind == AST_IDENTIFIER ? gen_get_symbol(a) : NULL;
+        int reg;
+
+        if (param->dimensions > 0 && source != NULL &&
+            source->kind == SYMBOL_VARIABLE) {
+            // R pasa la direccion, como una llamada normal. gen_expression
+            // cargaba el primer elemento de los arreglos declarados.
+            reg = gen_alloc_reg(gen);
+            if (reg >= 0 && !cg_array_base(&gen->arithmetic, source, reg)) {
+                gen_free_reg(gen, reg);
+                reg = -1;
+            }
+            if (reg < 0)
+                gen_report_error(gen, a,
+                                 "no se pudo obtener la direccion del arreglo en R");
+        } else {
+            // Un parametro arreglo ya guarda la direccion. No unificar con
+            // cg_array_base: emite r4/r0 en vez de t0/rz y cambiaria el .asm
+            // de programas correctos, aunque el resultado sea equivalente.
+            reg = gen_expression(gen, a);
+        }
 
         if (reg < 0) {
             // Libera los registros reservados para argumentos anteriores.

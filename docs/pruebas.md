@@ -65,6 +65,17 @@ como la herramienta original. La construcción escribe los binarios en `build/`
 y `ccom`; el resto de las salidas temporales mantiene el manejo de cada suite.
 No se invoca `pruebas/correr_pruebas.sh` ni se sobrescribe `pruebas/resultados.txt`.
 
+La suite `programas` cubre la corrección del error del P1: `R` debe pasar la
+dirección de un arreglo declarado, en lugar de su primer elemento. Incluye
+cuatro casos: arreglo global (`r_arreglos.cls`, `s = 51`), arreglo local a la
+función que ejecuta `R` (`r_arreglos_local.cls`, `s = 52`), matriz de dos
+dimensiones (`r_arreglos_2d.cls`, `s = 73`) y reenvío del mismo parámetro arreglo
+(`r_arreglos_parametro.cls`, `s = 15`). Los tres primeros verifican que los
+argumentos restantes lean el arreglo anterior antes de actualizar los
+parámetros. El reenvío conserva la carga de la dirección y el ensamblador
+anterior: usar `cg_array_base` también ahí cambiaría los alias de registros.
+Los cálculos esperados están comentados en `pruebas/programas/probar.py`.
+
 Códigos de salida del ejecutor: 0 si todo lo seleccionado aprobó (también para
 ayuda/listado), 1 ante fallo de construcción o pruebas, 2 por argumentos
 incorrectos y 130 si se interrumpe con Ctrl+C.

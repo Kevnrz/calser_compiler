@@ -1,7 +1,8 @@
 /*
  * tac.h — representación intermedia de tres direcciones (C2.1a).
  *
- * Alto nivel: cuádruplas de Calser; ISA: operaciones descritas por isa_table.
+ * Alto nivel: cuádruplas de Calser; ISA: instrucciones reales y TAC_PSEUDO.
+ * TAC_PSEUDO usa las mismas consultas; debe expandirse antes de emitir ISA.
  * Etapas: HIGH, ISA_VIRTUAL e ISA_PHYSICAL; no se mezclan al validar.
  * Los temporales virtuales no tienen el límite de doce registros físicos.
  * Impresión: TEMP tN en HIGH; TEMP vN en ISA; PHYS rz/rl/rx/rg/t0-t11.
@@ -47,8 +48,8 @@ typedef struct TacInstruction TacInstruction;
 
 typedef enum {
     TAC_STAGE_HIGH,          /* Operaciones Calser; TEMP se imprime tN. */
-    TAC_STAGE_ISA_VIRTUAL,   /* Solo ISA; TEMP vN y PHYS rz/rl/rx. */
-    TAC_STAGE_ISA_PHYSICAL   /* Solo ISA con registros físicos; sin TEMP. */
+    TAC_STAGE_ISA_VIRTUAL,   /* ISA/PSEUDO; TEMP vN y PHYS rz/rl/rx. */
+    TAC_STAGE_ISA_PHYSICAL   /* ISA/PSEUDO físicos; validar expansión antes de emitir. */
 } TacStage;
 typedef enum {
     TAC_NONE,               /* Posición ausente; la validación comprueba su uso. */
@@ -76,8 +77,18 @@ typedef enum {
     TAC_AUTH, TAC_LOGOUT, TAC_KV_WRITE, TAC_KV_LOCK, TAC_SANC,
     TAC_CIFRAR, TAC_DESCIFRAR, TAC_PARAM, TAC_CALL, TAC_RETURN, TAC_GOTO,
     TAC_IF_EQ, TAC_IF_NE, TAC_IF_LT, TAC_IF_LE, TAC_IF_GT, TAC_IF_GE,
-    TAC_ISA, TAC_OP_COUNT
+    TAC_ISA, TAC_PSEUDO, TAC_OP_COUNT
 } TacOpcode;
+/* Operaciones de destino pendientes de expansión; no son mnemónicos hardware. */
+typedef enum {
+    TAC_PSEUDO_NONE,      /* Metadatos ausentes en una instrucción que no es PSEUDO. */
+    TAC_PSEUDO_MUL, TAC_PSEUDO_DIV, TAC_PSEUDO_MOD, TAC_PSEUDO_POW,
+    TAC_PSEUDO_AUTH, TAC_PSEUDO_LOGOUT, TAC_PSEUDO_KV_WRITE,
+    TAC_PSEUDO_KV_LOCK, TAC_PSEUDO_SANC,
+    TAC_PSEUDO_CIFRAR, TAC_PSEUDO_DESCIFRAR,
+    TAC_PSEUDO_EXIT,       /* Termina main sin retornar mediante rl. */
+    TAC_PSEUDO_COUNT
+} TacPseudoKind;
 enum { TAC_DEST = 1u, TAC_SRC1 = 2u, TAC_SRC2 = 4u };
 enum { TAC_SELECT_K = 1u, TAC_SELECT_W = 2u, TAC_SELECT_ROUND = 4u };
 /* Cada selector ausente vale -1. */
@@ -95,7 +106,7 @@ typedef enum {
 typedef enum {
     TAC_FMT_COPY, TAC_FMT_ADDRESS, TAC_FMT_BINARY, TAC_FMT_UNARY,
     TAC_FMT_LOAD, TAC_FMT_STORE, TAC_FMT_CRYPTO, TAC_FMT_PARAM, TAC_FMT_CALL,
-    TAC_FMT_RETURN, TAC_FMT_GOTO, TAC_FMT_IF, TAC_FMT_ISA
+    TAC_FMT_RETURN, TAC_FMT_GOTO, TAC_FMT_IF, TAC_FMT_ISA, TAC_FMT_PSEUDO
 } TacFormat;
 /*
  * reads/writes/address_bases usan TAC_DEST, TAC_SRC1 y TAC_SRC2.
@@ -119,15 +130,17 @@ typedef struct {
     int nonremovable;                 /* Prohíbe eliminar por resultado muerto; DCE. */
     int crypto_state;                 /* Afecta estado CRYPTO oculto; DCE y orden de operaciones. */
     int may_trap;                     /* Puede fallar; DCE necesita prueba para eliminarla. */
-    /* La expansión puede crear bloques; C2.3 reconstruye el CFG. */
+    /* La expansión puede emitir flujo interno; selección y emisión de C2.3. */
     int may_create_blocks;
     int uses_globals;                 /* Lee implícitamente todas las globales; vivacidad y DCE. */
     int defines_globals;              /* Puede modificar todas las globales; dependencias y DCE. */
     uint16_t implicit_phys_reads;     /* Registros leídos fuera de D/A/B; vivacidad y asignación. */
     /* Registros escritos fuera de D/A/B; dependencias y asignación. */
     uint16_t implicit_phys_writes;
-    /* Registros que puede destruir el llamado; conservación y spilling. */
+    /* Registros que puede destruir CALL/ISA/PSEUDO; conservación y spilling. */
     uint16_t call_clobbers;
+    /* Auxiliares distintos requeridos por la expansión; asignación (8 en aritmética). */
+    unsigned scratch_count;
     /* Continuación o terminador; construcción y validación del CFG. */
     TacFlow flow;
     TacFormat format;                 /* Selecciona la sintaxis del listado; tac_print. */
@@ -140,15 +153,24 @@ typedef struct {
     TacOperand target;                /* LABEL de salto o FUNCTION de jas; validación y CFG. */
 } TacIsaData;
 
+/* D/A/B y selectors se comparten con TacInstruction; no se duplican aquí. */
+typedef struct {
+    TacPseudoKind kind;               /* Operación pendiente; propiedades, validación y emisión. */
+    /* Ocho auxiliares aritméticos físicos; cero en virtual y en las demás PSEUDO. */
+    uint16_t scratch_clobbers;
+} TacPseudoData;
+
 struct TacInstruction {
-    TacOpcode op;                     /* Operación abstracta o TAC_ISA; consultas y pasadas. */
+    TacOpcode op;                     /* Alto nivel, TAC_ISA o TAC_PSEUDO; consultas y pasadas. */
     TacOperand dest;                  /* Posición D; reads/writes determinan si define o usa. */
     TacOperand src1;                  /* Posición A; su función depende de la operación. */
     TacOperand src2;                  /* Posición B; su función depende de la operación. */
     /* Literales CRYPTO, -1 si ausentes; validación e impresión. */
     TacSelectors selectors;
     TacIsaData isa;                   /* Datos exclusivos de TAC_ISA; C2.3 y consultas ISA. */
+    TacPseudoData pseudo;             /* Datos exclusivos de TAC_PSEUDO; asignación y expansión. */
     int source_line;                  /* Línea de origen, 0 si desconocida; futuros diagnósticos. */
+    int source_column;                /* Columna de origen, 0 si desconocida; diagnósticos L:C. */
     TacInstruction *next;             /* Siguiente en orden de lista; recorrido y reordenamiento. */
 };
 
@@ -200,7 +222,7 @@ enum {
  * se cumple; nunca devuelve NULL. No probar ese caso en el mismo proceso.
  * Ante agotamiento de memoria o identificadores size_t: diagnóstico y termina;
  * nunca limita a doce TEMP.
- * Las instrucciones nuevas tienen selectores {-1,-1,-1} y línea cero.
+ * Las instrucciones nuevas tienen selectores {-1,-1,-1} y línea/columna cero.
  */
 TacOperand tac_none(void);
 TacOperand tac_variable(const Symbol *symbol);
@@ -235,6 +257,12 @@ TacInstruction *tac_append_isa(TacBlock *block, const IsaInstruction *instructio
                               TacOperand dest, TacOperand src1, TacOperand src2,
                               int64_t displacement, TacOperand target,
                               TacSelectors selectors);
+/* Usa D/A/B y selectores compartidos; scratch_clobbers solo en aritmética física.
+ * No expande ni asigna auxiliares: reconstruir/validar después de construir.
+ */
+TacInstruction *tac_append_pseudo(TacBlock *block, TacPseudoKind kind,
+                                 TacOperand dest, TacOperand src1, TacOperand src2,
+                                 TacSelectors selectors, uint16_t scratch_clobbers);
 /* Ambos sentidos, sin duplicados. connect conserva el orden de llamadas.
  * 0 si NULL o cruza funciones; disconnect también devuelve 0 si no existía.
  */
@@ -247,6 +275,10 @@ int tac_disconnect(TacBlock *from, TacBlock *to);
  */
 int tac_rebuild_edges(TacFunction *function, char *error, size_t capacity);
 int tac_validate(const TacProgram *program, char *error, size_t capacity);
+/* Exige forma válida, etapa ISA_PHYSICAL y ninguna PSEUDO pendiente de expansión.
+ * Es el control obligatorio del futuro emisor antes de entregar ISA al ensamblador.
+ */
+int tac_validate_for_emission(const TacProgram *program, char *error, size_t capacity);
 /* Requiere programa válido; el llamador comprueba ferror del FILE prestado. */
 void tac_print(FILE *out, const TacProgram *program);
 void tac_program_free(TacProgram *program);

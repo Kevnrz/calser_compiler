@@ -10,7 +10,7 @@
 #define VALUE_DEST (TAC_KIND(TAC_TEMP) | TAC_KIND(TAC_VARIABLE))
 #define VALUE_SOURCE (VALUE_DEST | TAC_KIND(TAC_INTEGER))
 
-/* Propiedades de alto nivel; ISA se consulta en isa_table, sin otra tabla. */
+/* Propiedades HIGH; las reales usan isa_table y PSEUDO su contrato de expansión. */
 static const TacOpInfo operations[TAC_ISA] = {
     [TAC_COPY] = {
         .text = "=",
@@ -525,7 +525,7 @@ int tac_is_global(const TacProgram *program, TacOperand operand) {
  * Entrada:
  *   op: código de operación.
  * Salida:
- *   fila inmutable; NULL para TAC_ISA o código inválido.
+ *   fila inmutable; NULL para TAC_ISA, TAC_PSEUDO o código inválido.
  * Efectos:
  *   ninguno.
  * Restricciones:
@@ -545,7 +545,7 @@ const TacOpInfo *tac_op_info(TacOpcode op) {
  * Efectos:
  *   inicializa out; incorpora resúmenes de globales y ABI.
  * Restricciones:
- *   no valida la forma completa; ISA usa isa_table (Aho §10.2.3).
+ *   no valida la forma completa; ISA usa isa_table y PSEUDO su contrato (Aho §10.2.3).
  */
 int tac_instruction_info(const TacInstruction *instruction, TacOpInfo *out) {
     if (!out) {
@@ -557,6 +557,9 @@ int tac_instruction_info(const TacInstruction *instruction, TacOpInfo *out) {
     }
     if (instruction->op == TAC_ISA) {
         return tac_isa_info(instruction, out);
+    }
+    if (instruction->op == TAC_PSEUDO) {
+        return tac_pseudo_info(instruction, out);
     }
     const TacOpInfo *info = tac_op_info(instruction->op);
     if (!info) {

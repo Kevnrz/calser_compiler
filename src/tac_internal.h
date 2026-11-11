@@ -12,6 +12,9 @@ int tac_has_block(const TacFunction *function, const TacBlock *block);
 int tac_has_instruction(const TacBlock *block, const TacInstruction *instruction);
 int tac_isa_info(const TacInstruction *instruction, TacOpInfo *out);
 int tac_isa_validate(const TacInstruction *instruction, char *error, size_t cap);
+int tac_pseudo_info(const TacInstruction *instruction, TacOpInfo *out);
+int tac_pseudo_validate(const TacFunction *function, const TacInstruction *instruction,
+                        char *error, size_t cap);
 int tac_validate_function_form(const TacFunction *function, char *error, size_t cap);
 int tac_expected_successors(const TacBlock *block, TacBlock *out[2],
                             size_t *count, char *error, size_t cap);

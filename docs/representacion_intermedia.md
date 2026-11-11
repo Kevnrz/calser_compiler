@@ -10,9 +10,9 @@ La lista de instrucciones del organizador existente sigue siendo independiente.
 
 | Etapa de `TacProgram.stage` | Operaciones | Registros y valores |
 | --- | --- | --- |
-| `TAC_STAGE_HIGH` | Operaciones de alto nivel, nunca `TAC_ISA` | TEMP, VARIABLE, INTEGER, LABEL, FUNCTION y NONE según posición; ningún PHYS |
-| `TAC_STAGE_ISA_VIRTUAL` | Solo `TAC_ISA` | TEMP y únicamente PHYS rz/r0, rl/r1 y rx/r2; inmediatos y objetivos estructurados |
-| `TAC_STAGE_ISA_PHYSICAL` | Solo `TAC_ISA` | PHYS r0–r15; ningún TEMP |
+| `TAC_STAGE_HIGH` | Alto nivel; sin `TAC_ISA` ni `TAC_PSEUDO` | TEMP, VARIABLE, INTEGER, LABEL, FUNCTION y NONE según posición; ningún PHYS |
+| `TAC_STAGE_ISA_VIRTUAL` | `TAC_ISA` y `TAC_PSEUDO` | TEMP y únicamente PHYS rz/r0, rl/r1 y rx/r2; inmediatos y objetivos según forma |
+| `TAC_STAGE_ISA_PHYSICAL` | `TAC_ISA` y `TAC_PSEUDO` hasta expandir; solo `TAC_ISA` antes de emitir | PHYS r0–r15; ningún TEMP |
 
 TEMP y PHYS son tipos distintos aunque su número coincida. Los temporales
 virtuales son pseudorregistros ilimitados en el sentido de Aho §10.2.3: no se
@@ -66,10 +66,13 @@ Resultado y valor admiten temporal o variable escalar; valor admite constante.
 | IF_EQ IF_NE IF_LT IF_LE IF_GT IF_GE | LABEL / valor / valor | — | A, B | — | sí / sí | termina bloque, requiere caída |
 
 La tabla en `tac.c` tiene inicializadores designados, sin macros que fabriquen
-filas. `tac_op_info` devuelve una fila inmutable de alto nivel; para TAC_ISA se
-usa `tac_instruction_info`, que resuelve la fila concreta de `isa_table`.
+filas. `tac_op_info` devuelve una fila inmutable de alto nivel; para TAC_ISA y
+TAC_PSEUDO se usa `tac_instruction_info`. Las reales toman la semántica de
+`isa_table`; las pseudo toman su contrato de expansión de `tac_pseudo.c`.
 `may_trap` exige que DCE conserve DIV/MOD/POW salvo prueba de que no fallan.
-`may_create_blocks` avisa a C2.3 de una expansión que puede producir un lazo.
+`may_create_blocks` avisa de una expansión que puede producir flujo interno,
+incluidos lazos. La expansión final sucede después de asignar registros:
+no obliga a crear esos bloques en el TAC virtual.
 No se garantiza expansión recta para DIV/MOD/POW con segundo operando constante.
 CIFRAR/DESCIFRAR también pueden crear lazos al procesar bloques de 64 bits.
 
@@ -195,6 +198,78 @@ en esta forma. `auth` congela el pipeline en hardware; no se insertan esperas
 artificiales. El ensamblador general sigue admitiendo más formas de jas/jefR;
 la representación solo admite jas rl a FUNCTION y jefR rz, rl.
 
+### Contrato de TAC_PSEUDO para C3.3 y C3.4 (C2.3 A)
+
+`TAC_PSEUDO` representa una operación de destino pendiente de expansión, nunca
+una instrucción hardware nueva. `TacPseudoData.kind` distingue MUL, DIV, MOD,
+POW, AUTH, LOGOUT, KV_WRITE, KV_LOCK, SANC, CIFRAR, DESCIFRAR y EXIT.
+NONE solo indica metadatos ausentes en instrucciones de otra clase y es inválido
+como discriminante de TAC_PSEUDO. No se agregan filas a `isa_table`.
+
+Se comparten `dest`, `src1`, `src2` y `selectors` de `TacInstruction`.
+Los argumentos son registros materializados, nunca VARIABLE ni INTEGER.
+Se admiten TEMP en virtual y PHYS según la etapa; la aritmética solo admite
+TEMP en virtual y t0–t11 en física, por el contrato de `cg_arith_emit`.
+Los selectores presentes son literales 0–3; los ausentes valen -1.
+Los metadatos ISA y PSEUDO no pueden mezclarse en una misma instrucción.
+
+| PSEUDO | D / A / B | Usa | Define | Auxiliares | Barrera / estado | Memoria |
+| --- | --- | --- | --- | --- | --- | --- |
+| MUL | resultado / fuente / fuente | A, B | D | 8 | no / no | — |
+| DIV, MOD, POW | resultado / fuente / fuente | A, B | D | 8 | no / no; may_trap | — |
+| AUTH, SANC | — / valor / — | A | — | 0 | sí / sí | — |
+| LOGOUT, KV_LOCK | — / — / — | — | — | 0 | sí / sí | — |
+| KV_WRITE | — / valor / —; k/w | A | — | 0 | sí / sí | — |
+| CIFRAR, DESCIFRAR | origen / destino / bloques; k | D, A, B | — | 0 | sí / sí | lectura y escritura |
+| EXIT | — / — / — | globales implícitas | — | 0 | sí / no | — |
+
+Las pasadas consultan **siempre** `tac_instruction_info`, `tac_uses` y
+`tac_definitions`, igual que para TAC_ISA: no deben identificar MUL o CRYPTO
+por su opcode para reconstruir sus efectos. Las consultas de valores explícitos
+no incluyen memoria, globales, auxiliares ni registros destruidos; se agregan los
+resúmenes de `TacOpInfo`. Las siete CRYPTO son no eliminables y conservan orden
+por su estado oculto. DIV/MOD/POW pueden fallar; DCE necesita demostrar que no
+fallan antes de eliminarlas. MUL sigue siendo pura y ninguna aritmética es barrera.
+
+`TacOpInfo.scratch_count` vale 8 en las cuatro aritméticas, en ambas etapas ISA.
+En virtual, `pseudo.scratch_clobbers` es cero: no se han elegido físicos.
+En física contiene exactamente ocho bits de t0–t11, distintos de fuentes y
+destino; el destino tampoco puede coincidir con una fuente. Las dos fuentes
+sí pueden coincidir entre sí. Es el contrato físico de `cg_arith_emit`; el futuro
+asignador/emisor debe resolver coincidencias y conservar vivos antes de dejar
+válida esta forma. La máscara se consulta como `TacOpInfo.call_clobbers`.
+El contador y la máscara describen los mismos auxiliares: no se suman como
+dos reservas diferentes. Esa máscara no incluye la definición explícita D.
+
+Para CRYPTO, `call_clobbers` resume conservadoramente t0–t11 (`0xfff0`),
+incluido el trabajo de preparar argumentos para las plantillas; `scratch_count`
+es cero porque no solicita auxiliares elegibles como la aritmética. En las CRYPTO
+y EXIT, `pseudo.scratch_clobbers` debe ser cero. EXIT no destruye temporales,
+solo es válido en main, termina sin sucesores locales y se expandirá a la salida
+del programa, nunca a `jefR rz, rl`. Conserva las lecturas globales de RETURN.
+
+`may_create_blocks` permanece activo para aritméticas y cifrar/descifrar:
+la expansión P1 posterior puede emitir lazos internos. Los guardados y la
+recuperación son responsabilidad de asignación/emisión posteriores; A no los
+implementa ni cambia la semántica de memoria general de la operación.
+
+`tac_validate` admite PSEUDO en ISA_VIRTUAL e ISA_PHYSICAL para permitir las
+pasadas anteriores a expansión. **Antes de emitir**, el productor debe llamar
+`tac_validate_for_emission`: exige programa válido, etapa ISA_PHYSICAL y ninguna
+TAC_PSEUDO pendiente. No expande ni corrige el programa. El emisor de C2.3 aún
+no existe en A; el generador actual no consume este programa.
+
+El listado diagnóstico usa `pseudo.mul v0, v1, v2`,
+`pseudo.kv_write v1, 2, 3`, `pseudo.cifrar v0, v1, v2, 2` o `pseudo.exit`.
+KV_WRITE imprime valor, k, w; no es la sintaxis de sentencia Calser.
+Este texto no es ensamblador para `cg_op` y no altera el impreso HIGH.
+
+Cada instrucción conserva `source_line` y `source_column`; cero indica posición
+desconocida. `tb_emit` copia ambas desde el mismo nodo AST, o cero si no hay nodo.
+Las futuras traducciones deben propagarlas para diagnósticos archivo:L:C.
+Los constructores manuales comienzan con ambos campos en cero y el listado
+no imprime la posición. Referencias: Aho §8.1–8.2, §8.6, §8.8 y §9.2.5.
+
 ## Bloques, edición y validación
 
 El programa posee funciones, cada una ligada a su Symbol. Cada función posee
@@ -232,14 +307,22 @@ La liberación del programa no libera Scope, Symbol ni filas ISA prestadas.
 
 ## Orden de pasadas y responsabilidades
 
-**unrolling → DCE → expansión a operaciones del ISA con temporales virtuales
-→ reordenamiento + renombramiento → asignación con spilling
-→ calendarización en bundles con registros físicos**.
+**unrolling → DCE → nivel ISA (MUL/DIV/MOD/POW y CRYPTO como una instrucción)
+→ reordenamiento + renombramiento → asignación de registros (con spilling)
+→ expansión con el código del P1 → calendarización en bundles**.
 
-Unrolling y DCE trabajan en alto nivel. C2.3 pasa a ISA virtual y crea los
-bloques que requiera la expansión. Reordenamiento/renombramiento y spilling
-trabajan sobre ISA; la asignación deja ISA física y la calendarización forma
-bundles. El spilling puede agregar cargas/almacenamientos antes de calendarizar.
+| Pasada | Qué recibe y qué conserva |
+| --- | --- |
+| Unrolling y DCE | HIGH: operaciones Calser, variables y TEMP tN |
+| Selección de C2.3 | HIGH → ISA_VIRTUAL: instrucciones reales y PSEUDO con TEMP vN |
+| Reordenamiento y renombramiento (C3.3) | ISA_VIRTUAL; PSEUDO sigue siendo una instrucción, con sus efectos consultables |
+| Asignación y spilling (C3.4) | ISA_VIRTUAL → ISA_PHYSICAL; resuelve auxiliares y conserva valores según las máscaras |
+| Expansión P1 | ISA_PHYSICAL con PSEUDO → instrucciones reales; agrega guardado/recuperación y flujo interno |
+| Calendarización | Solo ISA real con físicos; organiza bundles y conserva las plantillas fijas del P1 |
+
+El spilling puede agregar cargas/almacenamientos antes de la expansión final y
+la calendarización. A solo define forma, consultas, validación y posición fuente;
+no implementa selección, asignación, expansión ni las banderas de optimización.
 `-O0` seguirá usando el generador actual; `-O1/-O2` usarán este camino cuando
 se implementen. C2.1 construye e imprime alto nivel, pero todavía no implementa
 expansión, asignación, optimizaciones ni adaptador al organizador.

@@ -133,6 +133,38 @@ static void print_isa(FILE *out, TacStage stage, const TacInstruction *instructi
     }
 }
 
+/*
+ * print_pseudo — distingue operaciones pendientes de instrucciones hardware.
+ * Entrada:
+ *   out vivo; stage ISA; instruction e info de forma válida.
+ * Salida:
+ *   ninguna; imprime pseudo.nombre y sus operandos/selectores.
+ * Efectos:
+ *   escribe en out, sin cerrarlo.
+ * Restricciones:
+ *   el listado no se entrega al ensamblador; Aho §8.2 y §8.6.
+ */
+static void print_pseudo(FILE *out, TacStage stage, const TacInstruction *instruction,
+                          const TacOpInfo *info) {
+    fprintf(out, "pseudo.%s", info->text);
+    TacOperand operands[3] = {instruction->dest, instruction->src1, instruction->src2};
+    unsigned positions = info->reads | info->writes;
+    int first = 1;
+    for (unsigned k = 0; k < 3; k++) {
+        if (positions & (1u << k)) {
+            fputs(first ? " " : ", ", out);
+            print_operand(out, stage, operands[k]);
+            first = 0;
+        }
+    }
+    if (info->selectors & TAC_SELECT_K) {
+        fprintf(out, ", %d", instruction->selectors.k);
+    }
+    if (info->selectors & TAC_SELECT_W) {
+        fprintf(out, ", %d", instruction->selectors.w);
+    }
+}
+
 /* Imprime una cuádrupla válida usando el formato de su tabla. */
 static void print_instruction(FILE *out, TacStage stage, const TacInstruction *instruction) {
     TacOpInfo info;
@@ -204,6 +236,9 @@ static void print_instruction(FILE *out, TacStage stage, const TacInstruction *i
             break;
         case TAC_FMT_ISA:
             print_isa(out, stage, instruction);
+            break;
+        case TAC_FMT_PSEUDO:
+            print_pseudo(out, stage, instruction, &info);
             break;
     }
     fputc('\n', out);

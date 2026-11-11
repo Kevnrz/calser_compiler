@@ -82,7 +82,8 @@ static int valid_instruction(const TacFunction *function,
                              char *error, size_t cap) {
     TacOpInfo info;
     int isa_stage = function->program->stage != TAC_STAGE_HIGH;
-    if ((instruction->op == TAC_ISA) != isa_stage) {
+    int target_op = instruction->op == TAC_ISA || instruction->op == TAC_PSEUDO;
+    if (target_op != isa_stage) {
         return tac_error(error, cap, "operación no corresponde a la etapa");
     }
     if (!tac_instruction_info(instruction, &info)) {
@@ -102,6 +103,17 @@ static int valid_instruction(const TacFunction *function,
     }
     if (!valid_selectors(instruction, info.selectors)) {
         return tac_error(error, cap, "selector inválido para %s", info.text);
+    }
+    if (instruction->op == TAC_PSEUDO) {
+        if (instruction->isa.instruction || instruction->isa.displacement ||
+            instruction->isa.target.kind != TAC_NONE) {
+            return tac_error(error, cap, "metadatos ISA en PSEUDO");
+        }
+        return tac_pseudo_validate(function, instruction, error, cap);
+    }
+    if (instruction->pseudo.kind != TAC_PSEUDO_NONE ||
+        instruction->pseudo.scratch_clobbers) {
+        return tac_error(error, cap, "metadatos PSEUDO en otra operación");
     }
     if (isa_stage) {
         if (!valid_operand(function, instruction->isa.target)) {
@@ -287,4 +299,36 @@ int tac_validate(const TacProgram *program, char *error, size_t capacity) {
         last = function;
     }
     return last == program->last ? 1 : tac_error(error, capacity, "last del programa inválido");
+}
+
+/*
+ * tac_validate_for_emission — exige instrucciones físicas reales antes de emitir.
+ * Entrada:
+ *   program o NULL; error escribible o NULL solo si capacity es cero.
+ * Salida:
+ *   1 si puede entregar ISA al emisor; 0 con diagnóstico.
+ * Efectos:
+ *   valida todo el programa sin modificarlo ni expandir operaciones.
+ * Restricciones:
+ *   el futuro emisor debe llamar antes de emitir; Aho §8.6 y §8.8.
+ */
+int tac_validate_for_emission(const TacProgram *program, char *error, size_t capacity) {
+    if (!tac_validate(program, error, capacity)) {
+        return 0;
+    }
+    if (program->stage != TAC_STAGE_ISA_PHYSICAL) {
+        return tac_error(error, capacity, "emisión requiere etapa ISA_PHYSICAL");
+    }
+    for (const TacFunction *function = program->first; function; function = function->next) {
+        for (const TacBlock *block = function->first; block; block = block->next) {
+            for (const TacInstruction *instruction = block->first; instruction;
+                 instruction = instruction->next) {
+                if (instruction->op == TAC_PSEUDO) {
+                    return tac_error(error, capacity, "B%zu: PSEUDO sin expandir antes de emitir",
+                                     tac_block_presentation_number(block));
+                }
+            }
+        }
+    }
+    return 1;
 }

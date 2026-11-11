@@ -82,6 +82,19 @@ int main(int argc, char **argv) {
     }
     assert(result && !error[0]);
     assert(tac_validate(result->program, error, sizeof error));
+    for (const TacFunction *function = result->program->first; function;
+         function = function->next) {
+        const ASTNode *declaration = function->symbol->decl_node;
+        assert(function->first->first->source_line == declaration->line);
+        assert(function->first->first->source_column == declaration->column);
+        for (const TacBlock *block = function->first; block; block = block->next) {
+            for (const TacInstruction *instruction = block->first; instruction;
+                 instruction = instruction->next) {
+                assert(instruction->source_line > 0 ? instruction->source_column > 0 :
+                       instruction->source_column == 0);
+            }
+        }
+    }
     assert(result->program->global_scope == scopes_global());
     assert(result->initial_data_size == (size_t)size);
     assert(!memcmp(result->initial_data, image, (size_t)size));

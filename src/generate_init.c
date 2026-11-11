@@ -5,7 +5,7 @@
  * código de los que dependen de valores en ejecución, celda por celda.
  *
  * El evaluador y la búsqueda del inicializador viven en ast_constant.c,
- * compartidos con el futuro constructor TAC.
+ * compartidos con el constructor TAC de tac_build_init.c.
  * Usa: generate_internal.h, codegen.h, ast_constant.h.
  * Lo usa: generate.c y generate_stmt.c.
  * Referencias: libro §6.3.4.

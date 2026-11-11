@@ -38,9 +38,9 @@ Las constantes de alto nivel no se truncan: C2.3 deberá aplicar la semántica d
 32 bits y materializar las que no caben en un inmediato de 18 bits con signo.
 La selección de pasos de materialización vive en `isa_constant_plan`
 (`include/isa_constant.h`, `src/isa_constant.c`), compartida entre `gen_mov` y la
-futura bajada a ISA virtual. Devuelve uno o cuatro pasos con roles DEST/SCRATCH,
+bajada a ISA virtual. Devuelve uno o cuatro pasos con roles DEST/SCRATCH,
 sin elegir registros, bundles ni huecos. El generador conserva su empaquetado P1;
-la futura bajada vinculará esos roles a TEMP y propagará línea/columna.
+la bajada vincula esos roles a TEMP y propaga línea/columna.
 
 ## Operaciones de alto nivel
 
@@ -472,6 +472,110 @@ con arreglos globales, locales, matrices y parámetros reenviados. Estas pruebas
 de C1 no ejecutan TAC; las pruebas de valores de C2 usan el intérprete descrito abajo.
 El `.tac` sigue siendo un listado diagnóstico, no un formato deserializable ni
 un archivo para entregar entero a `cg_op`.
+
+## Bajada a ISA virtual (C2.3 B)
+
+`include/tac_lower.h` expone `tac_lower(high, error, capacity)`. Recibe el
+programa HIGH de `TacBuildResult` y devuelve otro `TacProgram` propio, en etapa
+ISA_VIRTUAL y validado. Ante forma o anotaciones insuficientes devuelve NULL;
+los diagnósticos de selección incluyen `linea L:C`. No modifica HIGH, AST,
+símbolos, imagen inicial ni estado del generador. Requiere símbolos semánticos
+con direcciones, `param_list` y `decl_node` anotados, no solo nombres.
+
+Ambos programas comparten símbolos y ámbito global prestados. La imagen inicial
+y los símbolos auxiliares de S siguen perteneciendo a `TacBuildResult`.
+Liberar primero ISA con `tac_program_free`, después el resultado HIGH con
+`tac_build_free` y al final el semántico. La salida tiene bloques propios:
+sus objetivos se mapean por puntero, conservando orden y caída de la función.
+Nunca se interpreta Bn como identidad ni se ordenan los sucesores.
+
+Cada TEMP de HIGH conserva su ID local en la función nueva. Los virtuales
+adicionales se reservan desde `next_temp`; no hay límite de doce ni registros
+físicos asignables en esta etapa. Cada instrucción seleccionada hereda línea
+y columna de su instrucción HIGH, incluso los pasos de constantes y direcciones.
+Una posición desconocida sigue siendo cero.
+
+La obtención de fuentes usa `rz` para INTEGER exactamente cero cuando el
+consumidor admite registros fijos, sin reservar un virtual. No propaga ceros
+conocidos de TEMP ni VARIABLE. Las PSEUDO aritméticas exigen fuentes TEMP por
+el contrato de `cg_arith_emit` (registros físicos 4–15); esta política se elige
+por sus propiedades de auxiliares. CRYPTO admite `rz` en sus fuentes de valor,
+pero conserva los selectores como literales. Las bases simbólicas de dirección
+cero usan el mismo ayudante. COPY hacia TEMP y ADDRESS conservan la definición
+del destino, incluso con `mov vN, 0`; ADD con inmediato derecho cero conserva
+`saddi`. El plan compartido de constantes no cambia.
+
+La tabla siguiente usa `g@32`, `a@64`, parámetro 0 en dirección 8 y retorno en 4
+como ejemplos; vN es ilustrativo. Las fuentes VARIABLE se cargan antes de la ALU
+y los resultados VARIABLE se escriben después. No hay plegado, DCE ni reducción
+de fuerza: incluso multiplicar un índice por cuatro conserva una PSEUDO MUL.
+
+| HIGH | Selección | Ejemplo ISA virtual |
+| --- | --- | --- |
+| COPY de literal | materialización directa | `t0 = 7` → `mov v0, 7` |
+| COPY de TEMP | ADD con rz | `t1 = t0` → `add v1, v0, rz` |
+| COPY desde VARIABLE | LW de su casilla | `t0 = g` → `lw v0, 32(rz)` |
+| COPY hacia VARIABLE | SW del valor materializado | `g = t0` → `sw v0, 32(rz)` |
+| ADDRESS | materializa la dirección, no el contenido | `t0 = address a` → `mov v0, 64` |
+| ADD | ADD o SADDI si la fuente derecha cabe en 18 bits | `t2 = t0 + 1` → `saddi v2, v0, 1` |
+| SUB | SUB | `sub v2, v0, v1` |
+| AND | AND | `and v2, v0, v1` |
+| OR | OR | `or v2, v0, v1` |
+| XOR | XOR | `xor v2, v0, v1` |
+| EQ | SEQ | `seq v2, v0, v1` |
+| NE | SNE | `sne v2, v0, v1` |
+| LT | SLT | `slt v2, v0, v1` |
+| LE | SLE | `sle v2, v0, v1` |
+| GT | SLT con fuentes intercambiadas | `slt v2, v1, v0` |
+| GE | SLE con fuentes intercambiadas | `sle v2, v1, v0` |
+| NEG | SUB desde cero | `sub v1, rz, v0` |
+| NOT | SEQ contra cero | `seq v1, v0, rz` |
+| LOAD, base simbólica | dirección absoluta si cabe | `t0 = a[4]` → `lw v0, 68(rz)` |
+| LOAD, offset constante | LW con desplazamiento | `t1 = t0[4]` → `lw v1, 4(v0)` |
+| LOAD, offset calculado | ADD de dirección y LW | `add v3, v0, v1; lw v2, 0(v3)` |
+| STORE | dirección seleccionada y SW | `t0[4] = t1` → `sw v1, 4(v0)` |
+| IF_EQ | BEQ | `beq v0, v1, B2` |
+| IF_NE | BNE | `bne v0, v1, B2` |
+| IF_LT | BLT | `blt v0, v1, B2` |
+| IF_LE | BGE con fuentes intercambiadas | `bge v1, v0, B2` |
+| IF_GT | BLT con fuentes intercambiadas | `blt v1, v0, B2` |
+| IF_GE | BGE | `bge v0, v1, B2` |
+| GOTO | JEF a LABEL propio | `jef B2` |
+| PARAM | SW a `callee.param_list[posición]` | `param t0, 0` → `sw v0, 8(rz)` |
+| CALL | JAS y captura inmediata del resultado | `jas rl, .L_func_f; lw v0, 4(rz)` |
+| RETURN de función | casilla de retorno y JEFR | `sw v0, 4(rz); jefR rz, rl` |
+| RETURN de main | PSEUDO EXIT | `pseudo.exit` |
+| MUL/DIV/MOD/POW | una PSEUDO con fuentes materializadas | `pseudo.mul v2, v0, v1` |
+| Cada CRYPTO | una PSEUDO con valores y selectores | `pseudo.cifrar v0, v1, v2, 2` |
+
+Para una base simbólica se combina su dirección con un offset inmediato cuando
+el acceso resultante cabe en 18 bits. En los demás casos se materializa la base;
+si el offset tampoco cabe, se materializa y suma a la base antes del LW/SW con
+desplazamiento cero. Un parámetro arreglo se lee y redefine como puntero en su
+casilla. El constructor ya capturó los argumentos de R antes de esas escrituras;
+la bajada conserva sus COPY y el salto al cuerpo, sin llamada nueva.
+
+`tl_constant` consume `isa_constant_plan`, sin copiar su descomposición. DEST
+es el TEMP del resultado y SCRATCH, otro TEMP. Sus pasos son TAC_ISA reales;
+no agrega bundles ni huecos. Por ejemplo, 200000 se construye como
+`mov v0, 6; mov v1, 15; sll v0, v0, v1; saddi v0, v0, 3392`.
+Un NEG presente en HIGH se conserva aunque su operando sea constante.
+
+Cada PARAM encuentra el CALL de su grupo y usa la posición explícita, sin
+suponer orden físico 0,1,2. La aridad debe coincidir con la firma semántica.
+CALL captura el retorno antes de cualquier otra llamada; si se descarta, no
+lo carga. RETURN no recarga una casilla que ya es el resultado de la función;
+si recibe otro valor, lo escribe antes de JEFR. Main siempre termina con EXIT.
+
+`make check-tac-lower` prueba selección manual y todo el corpus válido, incluidos
+CRYPTO y los cuatro R con arreglos. Compara doce listados y captura HIGH,
+sus metadatos, aristas e imagen antes/después sin normalización.
+
+Esta etapa se enlaza solo con los binarios de prueba, no con ccom. No cambia
+`-i`, el intérprete ni la CLI. Quedan para los siguientes commits liveness,
+asignación, conservación de vivos/rl, expansión P1, partición de CRYPTO y emisión.
+Por eso la salida virtual aún no es un programa físico ejecutable: el control
+`tac_validate_for_emission` la rechaza. Referencias: Aho §7.2, §8.1–8.2 y §8.6.
 
 ## Intérprete de pruebas de alto nivel (C2)
 

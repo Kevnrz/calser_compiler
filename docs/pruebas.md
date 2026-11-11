@@ -162,6 +162,28 @@ Compara ASM/BIN/HEX/MEM con y sin `-i`, y TAC con/sin `--no-schedule`.
 `check-tac` comprueba además COPY hacia parámetros arreglo y sus definiciones.
 La construcción C1 se verifica por separado del intérprete y los valores de C2.
 
+## Selección HIGH a ISA virtual
+
+`make check-tac-lower`, incluido en `make check`, ejecuta dos binarios que no
+se enlazan con ccom. `build/probar_tac_lower` comprueba selección ALU y unaria,
+fronteras de constantes/desplazamientos, bases simbólicas/calculadas, IF_LE/IF_GT,
+PARAM fuera de orden, CALL/RETURN/EXIT, posiciones y las once PSEUDO complejas.
+
+`build/bajar_tac` parsea, analiza, construye HIGH y llama `tac_lower`, sin usar
+el generador. Captura HIGH e imagen antes/después y exige igualdad de bytes,
+incluidos IDs internos, posiciones y aristas. Distingue rechazo del frontend
+(código 3) de fallo de selección (código 1). `pruebas/tac_lower/probar.py` recorre
+los 118 fuentes de pruebas/ y ejercicios/: baja y valida los 39 válidos, exige
+los 79 rechazos esperados y comprueba doce listados de `pruebas/tac_lower/esperados/`.
+El caso adicional de constantes grandes se crea en una carpeta temporal, sin
+agregar otro .cls al corpus. Incluye CRYPTO y los cuatro R con arreglos.
+
+No asigna registros, conserva vivos, expande PSEUDO ni emite ensamblador.
+La función compartida `isa_constant_plan` produce los pasos de constantes;
+la bajada les asigna roles virtuales y copia línea/columna. Se libera ISA antes
+de TacBuildResult y del semántico. La compilación habitual conserva sus fuentes
+y el binario ccom; las pruebas se verifican además con C11 estricto y ASan/UBSan.
+
 ## Valores del TAC en memoria
 
 `make check-tac-values`, incluido en `make check`, construye únicamente el

@@ -173,9 +173,24 @@ $(BUILD_DIR)/interpretar_tac: pruebas/tac_build/ejecutar.c pruebas/tac_build/int
 check-tac-values: $(BUILD_DIR)/interpretar_tac
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/tac_build/probar_valores.py --binario $(BUILD_DIR)/interpretar_tac
 
-check: check-tac check-tac-build check-tac-values check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+# B aún no se enlaza con ccom: selección y sus pruebas son independientes de la CLI.
+TAC_LOWER_SOURCES = src/tac_lower.c src/tac_lower_value.c src/tac_lower_control.c
+TAC_LOWER_HEADERS = include/tac_lower.h src/tac_lower_internal.h include/isa_constant.h include/ast.h
+
+$(BUILD_DIR)/bajar_tac: pruebas/tac_lower/desde_fuente.c $(TAC_LOWER_SOURCES) $(TAC_LOWER_HEADERS) $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $(filter %.c %.o,$^) $(LDLIBS)
+
+$(BUILD_DIR)/probar_tac_lower: pruebas/tac_lower/probar.c $(TAC_LOWER_SOURCES) $(TAC_SOURCES) src/isa_constant.c src/ast.c $(TAC_LOWER_HEADERS) $(TAC_HEADERS) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
+
+check-tac-lower: $(BUILD_DIR)/bajar_tac $(BUILD_DIR)/probar_tac_lower
+	$(BUILD_DIR)/probar_tac_lower
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/tac_lower/probar.py
+
+check: check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 clean:
+	rm -f $(BUILD_DIR)/bajar_tac $(BUILD_DIR)/probar_tac_lower
 	rm -f $(BUILD_DIR)/interpretar_tac
 	rm -f $(BUILD_DIR)/probar_tac_build
 	rm -f $(BUILD_DIR)/probar_constantes
@@ -190,7 +205,7 @@ clean:
 
 -include $(OBJECTS:.o=.d)
 
-.PHONY: all clean ejercicios check check-tac-values check-tac-build check-semantica-isa check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+.PHONY: all clean ejercicios check check-tac-lower check-tac-values check-tac-build check-semantica-isa check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 # Prototipo gráfico CALSIDE (PySide6).
 PYTHON ?= python3

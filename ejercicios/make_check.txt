@@ -36,6 +36,8 @@ PASS TAC control exponente negativo: negative_exponent
 PASS TAC control CRYPTO rechazado: unsupported_crypto
 PASS TAC control limite de pasos: step_limit
 TAC valores: 22 programas aprobados, 2 omitidos, 10 controles aprobados, 0 fallos
+PASS selección manual: ALU, constantes, direcciones, saltos, PARAM/CALL/RETURN y PSEUDO
+PASS bajada ISA virtual: 39 programas del corpus y 1 temporal; 12 esperados; HIGH intacto; 79 rechazos del frontend
 PASS contrato y fallo del emisor
 PASS mul: 450 casos, dos expansiones por caso
 PASS div: 450 casos, dos expansiones por caso
@@ -96,7 +98,7 @@ PASS constantes: inicializadores, Vi, profundidad, 32 bits, signos y rechazos si
 PASS constantes ISA: 12 casos, pasos, auxiliares y rechazos sin modificar salida
 ........
 ----------------------------------------------------------------------
-Ran 8 tests in 0.024s
+Ran 8 tests in 0.009s
 
 OK
 PASS ayuda: -h/--help, opciones, ejemplos, errores y archivos intactos

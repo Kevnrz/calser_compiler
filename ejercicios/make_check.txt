@@ -93,9 +93,10 @@ PASS p09: 0x3000 == 0x1000, 0x2000 distinto, 0x4000-0x4007 == 0x1000-0x1007
 PASS p11: n1 = 8, n2 = 8, 0x3000 == 0x1000, 0x2000 distinto
 PASS diagnosticos de generacion: ruta, linea, columna, texto y sin salidas en ambos modos
 PASS constantes: inicializadores, Vi, profundidad, 32 bits, signos y rechazos sin corto circuito
+PASS constantes ISA: 12 casos, pasos, auxiliares y rechazos sin modificar salida
 ........
 ----------------------------------------------------------------------
-Ran 8 tests in 0.009s
+Ran 8 tests in 0.024s
 
 OK
 PASS ayuda: -h/--help, opciones, ejemplos, errores y archivos intactos

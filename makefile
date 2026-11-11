@@ -9,7 +9,7 @@ BUILD_DIR = build
 GEN_DIR = $(BUILD_DIR)/generated
 OBJ_DIR = $(BUILD_DIR)/obj
 
-SOURCES = main tac tac_edit tac_cfg tac_validate tac_isa tac_pseudo tac_print tac_build tac_build_expr tac_build_stmt tac_build_flow tac_build_init ast ast_constant symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler
+SOURCES = main tac tac_edit tac_cfg tac_validate tac_isa tac_pseudo tac_print tac_build tac_build_expr tac_build_stmt tac_build_flow tac_build_init ast ast_constant symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table isa_constant codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler
 OBJECTS = $(addprefix $(OBJ_DIR)/,$(addsuffix .o,$(SOURCES))) \
           $(OBJ_DIR)/parser.tab.o $(OBJ_DIR)/lex.yy.o
 
@@ -86,6 +86,13 @@ $(BUILD_DIR)/probar_constantes: src/ast.c src/ast_constant.c pruebas/constantes/
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
 
 check-constantes: $(BUILD_DIR)/probar_constantes
+	$<
+
+# Materialización de constantes sin AST, registros concretos ni emisión.
+$(BUILD_DIR)/probar_constantes_isa: src/isa_constant.c pruebas/constantes_isa/probar.c include/isa_constant.h | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
+
+check-constantes-isa: $(BUILD_DIR)/probar_constantes_isa
 	$<
 
 # Entregables de los tres ejercicios (enunciado CE1108 §10.4 y §10.5). No
@@ -166,12 +173,13 @@ $(BUILD_DIR)/interpretar_tac: pruebas/tac_build/ejecutar.c pruebas/tac_build/int
 check-tac-values: $(BUILD_DIR)/interpretar_tac
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/tac_build/probar_valores.py --binario $(BUILD_DIR)/interpretar_tac
 
-check: check-tac check-tac-build check-tac-values check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+check: check-tac check-tac-build check-tac-values check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 clean:
 	rm -f $(BUILD_DIR)/interpretar_tac
 	rm -f $(BUILD_DIR)/probar_tac_build
 	rm -f $(BUILD_DIR)/probar_constantes
+	rm -f $(BUILD_DIR)/probar_constantes_isa
 	rm -f $(BUILD_DIR)/probar_semantica_isa
 	rm -f $(BUILD_DIR)/tac_obtenido.txt $(BUILD_DIR)/tac_obtenido_isa.txt
 	rm -f $(BUILD_DIR)/probar_tac_isa $(BUILD_DIR)/tac_ejemplo.bin $(BUILD_DIR)/tac_ejemplo.hex $(BUILD_DIR)/tac_ejemplo.mem
@@ -182,7 +190,7 @@ clean:
 
 -include $(OBJECTS:.o=.d)
 
-.PHONY: all clean ejercicios check check-tac-values check-tac-build check-semantica-isa check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+.PHONY: all clean ejercicios check check-tac-values check-tac-build check-semantica-isa check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 # Prototipo gráfico CALSIDE (PySide6).
 PYTHON ?= python3

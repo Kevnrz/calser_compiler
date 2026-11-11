@@ -7,6 +7,7 @@
  * interfaz pública (generate_code).
  *
  * Usa: ast.h, symbol_table.h, label_table.h, codegen_arith.h, codegen_crypto.h.
+ * generate_support.c consulta isa_constant.h para los pasos de constantes.
  * Lo usa: generate.c, generate_support.c, generate_expr.c, generate_stmt.c y
  * generate_init.c.
  * Referencias: libro §6.4, §7.2; isa.md §6, §8, §9.
@@ -148,7 +149,8 @@ void gen_free_reg(GenCtx *gen, int reg);
  *   Efectos: emite instrucciones y reserva/libera un temporal auxiliar si hace falta.
  * Restricciones:
  *   fuera del inmediato de 18 bits necesita un temporal libre; rd debe
- *   seguir reservado.
+ *   seguir reservado. Consulta isa_constant_plan sin delegar emisión ni
+ *   diagnósticos; conserva el empaquetado P1 (Aho §8.1–8.2).
  */
 int gen_mov(GenCtx *gen, int rd, long immediate, ASTNode *node);
 

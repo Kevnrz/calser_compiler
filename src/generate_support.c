@@ -5,7 +5,8 @@
  * variables en sus casillas estáticas, construye constantes de 32 bits,
  * maneja la pila de llamadas y copia etiquetas de la tabla de la Fase 3.
  *
- * Usa: generate_internal.h, codegen.h, label_table.h.
+ * Usa: generate_internal.h, codegen.h, label_table.h, isa_constant.h.
+ * La selección de pasos para constantes vive en isa_constant.c; aquí se emite.
  * Lo usa: generate.c, generate_expr.c, generate_stmt.c y generate_init.c.
  * Referencias: libro §7.1.1, §7.2; isa.md §4.3, §8.
  */
@@ -16,6 +17,7 @@
 
 #include "generate_internal.h"
 #include "codegen.h"
+#include "isa_constant.h"
 
 
 /*
@@ -128,16 +130,13 @@ void gen_free_reg(GenCtx *gen, int reg) {
 
 /* gen_mov — véase el contrato en generate_internal.h. */
 int gen_mov(GenCtx *gen, int rd, long immediate, ASTNode *node) {
-    /* 2147483648 aparece como hijo del menos unario de INT32_MIN. */
-    if (immediate < INT32_MIN || immediate > (long) UINT32_MAX) {
+    IsaConstantPlan plan;
+    if (!isa_constant_plan(immediate, &plan)) {
         gen_report_error(gen, node, "constante fuera de 32 bits");
         return -1;
     }
-    int64_t value = immediate;
-    if (value > INT32_MAX)
-        value -= INT64_C(4294967296);
-    if (value >= -131072 && value <= 131071) {
-        cg_op(SLOT_ALU0, "mov %s, %ld", gen_reg_name(rd), (long) value);
+    if (plan.count == 1) {
+        cg_op(SLOT_ALU0, "mov %s, %ld", gen_reg_name(rd), (long) plan.steps[0].immediate);
         return 0;
     }
     int scratch = gen_alloc_reg(gen);
@@ -145,15 +144,17 @@ int gen_mov(GenCtx *gen, int rd, long immediate, ASTNode *node) {
         gen_report_error(gen, node, "sin registro para construir constante de 32 bits");
         return -1;
     }
-    int64_t high = value / 32768, low = value % 32768;
-    if (low < 0) { high--; low += 32768; }
+    /* DEST se vincula a rd y SCRATCH al auxiliar; el empaquetado sigue siendo P1. */
     char first[64], second[64];
-    snprintf(first, sizeof(first), "mov %s, %ld", gen_reg_name(rd), (long) high);
-    snprintf(second, sizeof(second), "mov %s, 15", gen_reg_name(scratch));
+    snprintf(first, sizeof(first), "mov %s, %ld", gen_reg_name(rd),
+             (long) plan.steps[0].immediate);
+    snprintf(second, sizeof(second), "mov %s, %ld", gen_reg_name(scratch),
+             (long) plan.steps[1].immediate);
     cg_bundle(first, second, NULL, NULL);
     cg_gap();
     cg_op(SLOT_ALU0, "sll %s, %s, %s", gen_reg_name(rd), gen_reg_name(rd), gen_reg_name(scratch));
-    cg_op(SLOT_ALU0, "saddi %s, %s, %ld", gen_reg_name(rd), gen_reg_name(rd), (long) low);
+    cg_op(SLOT_ALU0, "saddi %s, %s, %ld", gen_reg_name(rd), gen_reg_name(rd),
+          (long) plan.steps[3].immediate);
     gen_free_reg(gen, scratch);
     return 0;
 }

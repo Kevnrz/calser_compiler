@@ -102,6 +102,14 @@ El módulo compartido vive en `include/ast_constant.h` y `src/ast_constant.c`;
 lo usa `generate_init.c` y queda disponible para el futuro constructor TAC,
 sin depender del generador ni del emisor. Este target no necesita Python.
 
+`make check-constantes-isa`, incluido en `make check`, ejecuta el binario C
+`build/probar_constantes_isa` desde `pruebas/constantes_isa/probar.c`. Prueba
+los doce valores de frontera y normalización de `isa_constant_plan`, el orden
+MOV/MOV/SLL/SADDI, los roles DEST/SCRATCH, los inmediatos de 18 bits y la
+cantidad de auxiliares. Recompone con aritmética definida de 32 bits y comprueba
+que dos entradas fuera de rango no modifican la salida. No depende del AST,
+del emisor ni de Python; la función compartida vive en `isa_constant.c`.
+
 La semántica de dependencias del ISA vive en `include/isa_table.h` y
 `src/isa_table.c`, compartida por el descriptor del organizador y disponible
 para la representación intermedia. `codegen_instruction.c` conserva el parseo y

@@ -36,6 +36,11 @@ Si un diagnóstico encuentra un bloque sin función o fuera de su lista, usa su
 ID interno porque no hay una posición válida.
 Las constantes de alto nivel no se truncan: C2.3 deberá aplicar la semántica de
 32 bits y materializar las que no caben en un inmediato de 18 bits con signo.
+La selección de pasos de materialización vive en `isa_constant_plan`
+(`include/isa_constant.h`, `src/isa_constant.c`), compartida entre `gen_mov` y la
+futura bajada a ISA virtual. Devuelve uno o cuatro pasos con roles DEST/SCRATCH,
+sin elegir registros, bundles ni huecos. El generador conserva su empaquetado P1;
+la futura bajada vinculará esos roles a TEMP y propagará línea/columna.
 
 ## Operaciones de alto nivel
 

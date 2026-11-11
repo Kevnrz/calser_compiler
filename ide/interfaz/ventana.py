@@ -130,15 +130,12 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         header = QWidget()
         header.setObjectName("cabecera")
         header.setStyleSheet("QWidget#cabecera { background: #272c37; border-bottom: 1px solid #363d4b; }")
-        header.setFixedHeight(44)
+        header.setFixedHeight(32)
         bar = QHBoxLayout(header)
         bar.setContentsMargins(16, 0, 0, 0)
         brand = QLabel("⬡  CALSIDE")
         brand.setStyleSheet("background: transparent; color: #efbb65; font-size: 15px;")
         bar.addWidget(brand)
-        self.context = QLabel("Análisis en vivo · F5 compila · F6 ejecuta")
-        self.context.setStyleSheet("background: transparent; color: #a5afbf;")
-        bar.addWidget(self.context)
         bar.addStretch()
         bar.addWidget(Esquina(), alignment=Qt.AlignmentFlag.AlignTop)
         layout.addWidget(header)
@@ -878,7 +875,6 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         etiqueta = {'compilar': 'Compilar', 'analizar': 'Analizar', 'ast': 'Exportar AST', 'ensamblar': 'Ensamblar'}[modo]
         self.compile_action.setText(f'▷ {etiqueta}  F5')
         self.compile_button.setMinimumWidth(self.compile_button.fontMetrics().horizontalAdvance(self.compile_action.text()) + 48)
-        self.context.setText(f'Análisis en vivo · F5: {etiqueta.lower()} · F6 ejecuta')
         self.compile_action.setToolTip(compilacion.MODOS[modo] + ' · Opciones de compilación para elegir destino y banderas')
 
     def seleccionar_modo(self, modo):

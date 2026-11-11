@@ -1,6 +1,10 @@
-# Contrato de asistencia de CALSIDE · versión 1
+# Asistencia de CALSIDE: modelos, aplicación y permisos
 
-> **Estado M6, 2026-11-11:** contrato Python de datos vigente, consumido por los adaptadores de motores **C** y los widgets. No implica implementar reglas Calser en Python. `asistencia.py` no carga el lexer/parser LL(1). Sugerencias: `ide.sugerencias_ccom`; reparaciones: `ide.reparaciones_ccom`; validación de lenguaje automática: `--syntax-json`. [Frontera y ciclo de vida](revision_m6.md).
+Contrato vigente · 2026-11-11. Sugerencias y reparaciones están conectadas a motores C. `ide/nucleo/asistencia.py` mantiene modelos sin Qt ni dependencia del LL(1). El catálogo automático contiene INSERCION_PUNTO_COMA; está desactivado hasta habilitar automatización y seleccionar la regla.
+
+Este documento define el contrato Python/UI. Las decisiones del lenguaje y formatos nativos se explican en [Servicios de ccom](../../docs/ccom_servicios_ide.md). [Guía del sistema](guia_sistema_calside.md), [prueba manual](revision_manual.md#asistencia).
+
+<a id="contrato"></a>
 
 ## Archivos y responsabilidades
 
@@ -17,7 +21,7 @@
 
 Importar los tipos compartidos; **no volver a definir** `EdicionTexto`, `Sugerencia`, `Reparacion` ni los resultados dentro de los motores. El LL(1) conserva sus propios tipos de consulta en `ide/nucleo/parser.py`, fuera de los modelos de propuestas productivas.
 
-Las funciones Python del contrato reciben texto en memoria y devuelven datos. Sus adaptadores invocan los servicios de ccom sobre copias temporales; las decisiones del lenguaje están en C. No acceden a widgets ni guardan los documentos originales. Una reparación no equivale a validación semántica. La UI presenta propuestas manuales; los disparadores y permisos de automatización están implementados en la [política del paso 6](politica_asistencia.md).
+Las funciones Python del contrato reciben texto en memoria y devuelven datos. Sus adaptadores invocan los servicios de ccom sobre copias temporales; las decisiones del lenguaje están en C. No acceden a widgets ni guardan los documentos originales. Una reparación no equivale a validación semántica. La UI presenta propuestas manuales; los disparadores y permisos de automatización están implementados en la [política del paso 6](asistencia.md).
 
 ## Funciones de los adaptadores implementados
 
@@ -65,7 +69,7 @@ Usar `EstadoAsistencia`, no cadenas arbitrarias:
 | `LIMITE` | No se completó una respuesta fiable dentro de los límites. | No. |
 | `ERROR` | Fallo informado por el motor. | No. |
 
-`ResultadoSugerencias(estado, sugerencias=(), explicacion='')` y `ResultadoReparaciones(estado, propuestas=(), explicacion='')` convierten las colecciones a tuplas. Solo `OK` acepta opciones y debe contener al menos una. `BLOQUEADO`, `LIMITE` y `ERROR` requieren explicación. Un constructor inválido genera un error de contrato; el futuro coordinador deberá presentarlo como fallo, no como análisis correcto.
+`ResultadoSugerencias(estado, sugerencias=(), explicacion='')` y `ResultadoReparaciones(estado, propuestas=(), explicacion='')` convierten las colecciones a tuplas. Solo `OK` acepta opciones y debe contener al menos una. `BLOQUEADO`, `LIMITE` y `ERROR` requieren explicación. Un constructor inválido genera un error de contrato; el coordinador debe presentarlo como fallo, no como análisis correcto.
 
 ### Sugerencia
 
@@ -214,19 +218,75 @@ El controlador emite `reparacionesRecibidas(RespuestaAsistencia)` y el panel con
 
 El panel no publica diagnósticos ni reemplaza Problemas: conserva las prioridades actuales entre compilación manual, ccom automático y lexer. Aplicar ediciones invalida los diagnósticos antiguos mediante el flujo normal del editor y vuelve a programar su análisis. Los diagnósticos visibles del lenguaje proceden de ccom; las propuestas no crean otra lista de errores Python. La ruta léxica y el análisis completo se identifican por su origen y revisión.
 
-## Integración vigente
 
-1. [x] Proveedores C de sugerencias y reparaciones conectados con modelos compartidos.
-2. [x] Coordinador serial con contexto, cancelación y descarte de respuestas antiguas.
-3. [x] Popup manual de sugerencias y aplicación validada.
-4. [x] Panel de reparaciones, vista previa y aplicación explícita.
-5. [x] Preferencias, pausa opcional y regla automática revisada de punto y coma.
-6. [x] Casos del lenguaje probados contra C real; dobles limitados a coordinación/transporte/UI.
+<a id="politica"></a>
 
-La automatización viene apagada; exige habilitarla y seleccionar INSERCION_PUNTO_COMA. El catálogo ya no está vacío. Una propuesta parcial nunca se automatiza. [Política y catálogo](politica_asistencia.md), [protocolo C de sugerencias](../../docs/ccom_suggestions_json.md), [protocolo de reparaciones/sintaxis](../../docs/ccom_repairs_json.md).
+## Política y preferencias
 
-## Registro histórico de las entregas iniciales
+### Uso
 
-Verificación: pasos 1/2, 23 pruebas nuevas y 227 combinadas en su entrega; pasos 3/4, **26 pruebas nuevas y 253 combinadas correctas** con `make check-ide`. El paso 5 añade **15 pruebas; 268 combinadas correctas**, incluyendo revisión sin editar, aplicar/Deshacer/Rehacer sin guardar, cancelación, foco del panel, contexto antiguo, pestañas cerradas, estados sin motor y distribución inferior/derecha. Se cubren proveedores ausentes/rotos, contratos inválidos, hilos seriales, sustitución de pendientes, cancelación, timeout, cierre aplazado, foco, teclado/ratón, Unicode, contexto obsoleto, geometría y ninguna aplicación implícita de reparaciones manuales. El paso 6 añade **26 pruebas; 294 combinadas correctas**, incluyendo automatización con reglas controladas de prueba, comprobación del parser en segundo plano, Deshacer sin bucles y cancelación al cambiar permisos/foco/contexto.
+Abrir **Editar → Preferencias de asistencia…**. Aceptar aplica y guarda los ajustes del perfil sin reiniciar; Cancelar no cambia ajustes ni consulta motores.
 
-Las solicitudes internas del coordinador añaden `origen` (`manual`, `escritura`, `linea_confirmada`) y reglas revisadas capturadas. La respuesta interna añade `automatica` y `motivo_automatico` tras evaluar en el trabajador. Estos campos no cambian las firmas ni los modelos públicos de los motores. Las consultas manuales nunca activan esta ruta automática.
+| Preferencia | Predeterminado | Efecto |
+| --- | --- | --- |
+| Habilitar asistencia | Sí | Control general de consultas manuales y automáticas. Al desactivar cancela pendientes y cierra sugerencias. |
+| Mostrar sugerencias después de escribir | No | Solicita opciones tras una pausa de escritura; nunca las acepta sola. Ctrl+Espacio sigue disponible cuando el control general está habilitado. |
+| Pausa de asistencia | 700 ms | Ajustable entre 300 y 3000 ms. Se reinicia al seguir escribiendo; también se usa después de confirmar una línea. |
+| Corregir al confirmar una línea con Enter | No | Requiere catálogo revisado y reglas seleccionadas. Sin catálogo el control está deshabilitado. |
+| Reglas permitidas | Ninguna | Permiso por código exacto; el indicador del motor no agrega permisos. |
+
+Estos ajustes son independientes de **Compilar → Análisis automático** (`ccom --check-json`), del lexer y de F5/F6. Se persisten bajo `asistencia` en el estado JSON existente; campos inválidos recuperan valores predeterminados, sin interpretar cadenas como booleanos.
+
+### Disparadores y cancelación
+
+El Editor emite `entradaAsistencia` **después** de procesar una tecla que realmente cambia el texto. Escribir caracteres imprimibles sin Ctrl/Alt y sin reemplazar una selección puede programar sugerencias. Enter sin modificadores, sin repetición, sin selección y al final de una línea no vacía puede programar reparaciones.
+
+Abrir, recargar, pegar, arrastrar texto, completar desde una propuesta, Deshacer/Rehacer y las ediciones programáticas no arman el temporizador. Una entrada mediante IME invalida lo anterior; esta versión conserva la asistencia manual para esa entrada, sin activación automática al confirmar la composición.
+
+Se captura el contexto completo al armar la pausa. Modificar texto, mover cursor/selección, cambiar pestaña, cerrar, desplazar/redimensionar u ocultar el editor, perder foco, presionar Esc, cambiar proveedor, catálogo o preferencias cancela lo que corresponda. Las sugerencias/manuales de reparaciones conservan sus reglas de interacción del paso 5: leer el panel no invalida una reparación manual. Las solicitudes automáticas sí se cancelan al perder foco.
+
+Antes de consultar y antes de aplicar se comprueba que el editor sigue activo, enfocado, editable, sin selección ni conflicto externo conocido, y que no hay compilación o simulación en curso. También se verifica que coincidan documento, revisión, texto, cursor y ancla. Una consulta manual cancela la automatización anterior y toma prioridad. El cierre detiene la pausa y conserva el protocolo cooperativo de cancelación de trabajadores.
+
+### Política inicial de reparación automática
+
+El motor conserva su firma: `proponer_reparaciones(texto, *, cancelar=None)`. No recibe widgets, preferencias ni autorización para editar. El IDE añade el origen y las reglas autorizadas a su solicitud interna; no modifica los tipos compartidos del motor.
+
+Para aplicar automáticamente deben cumplirse **todas** estas condiciones:
+
+1. El usuario habilitó la asistencia, la corrección automática y el código concreto de una regla revisada del IDE.
+2. La solicitud provino de confirmar una línea con Enter y terminó la pausa sin nuevas acciones que la invalidaran.
+3. La respuesta contiene exactamente una propuesta, marcada `automatica_segura`, con razones y validación no vacías.
+4. Tiene exactamente una edición, sin borrar/reemplazar texto ni fijar un cursor nuevo. Solo inserta el delimitador de esa regla (`;`, `.`, `]` o `)`, con espacios opcionales y máximo 8 caracteres insertados) al final de la línea recién confirmada, antes de su espacio final.
+5. Tiene al menos una precondición no vacía sobre esa línea; todas las precondiciones y rangos son válidos.
+6. El texto no supera 100000 caracteres; no existe selección. El cursor sigue al comienzo de la línea siguiente, con solo espacios antes de él.
+7. El parser real encuentra un error sintáctico en el original y **acepta todo el programa corregido**, sin errores léxicos, límites ni cancelación. Ambas comprobaciones se realizan en el trabajador, dentro del plazo y callback de cancelación del coordinador.
+8. Antes de editar, el hilo gráfico vuelve a comprobar contexto, foco, permisos y regla vigente. El aplicador común verifica nuevamente precondiciones.
+
+Esta política no intenta cerrar funciones o programas mientras se construyen. Si el resto del documento todavía está incompleto, la propuesta requiere revisión manual. La aceptación sintáctica no prueba intención ni semántica; por eso también se exige revisar y probar cada regla antes de incorporarla al catálogo.
+
+La reparación aplicada se informa en la barra de estado y queda consultable en **Reparaciones**, con cambios, motivo del motor y comprobación del IDE. No abre el panel ni roba foco. Una operación de Ctrl+Z revierte la reparación; los diagnósticos anteriores se invalidan mediante la edición normal y vuelve a programarse su análisis. No guarda ni compila. No encadena otra corrección y Deshacer/Rehacer no dispara un nuevo ciclo.
+
+Si una respuesta con propuestas no cumple la política, queda disponible en el panel para revisión manual con su motivo; una consulta posterior con Alt+Enter puede actualizarla. Bloqueos, límites y errores se informan sin diálogos automáticos. Nunca se toma la primera opción de una respuesta ambigua como autorización.
+
+### Conexión y aprobación del catálogo real
+
+Archivos de referencia:
+
+- `ide/politica_asistencia.py`: validación de preferencias, `ReglaAutomatica`, catálogo `REGLAS_AUTOMATICAS` y coordinación de validación nativa en el trabajador.
+- `ide/interfaz/preferencias_asistencia.py`: diálogo nativo.
+- `ide/interfaz/sugerencias.py`: pausa, permisos, vigencia y aplicación en el hilo gráfico.
+- `ide/interfaz/asistencia.py`: motor y validación del parser en segundo plano.
+- `ide/pruebas/test_politica_asistencia.py`: proveedores controlados exclusivamente de prueba.
+
+El catálogo M4 contiene **INSERCION_PUNTO_COMA**, revisada con casos positivos/negativos. La automatización y su selección vienen apagadas por defecto. No se importa como permiso un listado que venga del motor y no hay reglas ficticias activas en la aplicación.
+
+Para añadir o modificar una regla:
+
+1. Entregar el módulo y firma acordados, importando `Reparacion`, `PrecondicionTexto` y `ResultadoReparaciones` desde `ide.nucleo.asistencia`. Los widgets existentes consumen directamente sus resultados.
+2. Documentar por código la forma exacta de edición, justificación, validación y casos ambiguos. Usar `automatica_segura=False` cuando no se pueda justificar la automatización.
+3. Añadir positivos y negativos con el parser real: comentarios de línea/bloque, código incompleto, delimitadores anidados, Unicode, cursores, errores múltiples y precondiciones. Una regla puede quedar solo manual.
+4. Para una regla que satisface esta política y ha sido revisada, añadir `ReglaAutomatica(codigo_real, descripcion, delimitador)` a `REGLAS_AUTOMATICAS`. No cambiar la evaluación para aceptar un código sin sus pruebas.
+5. El usuario habilita corrección automática y marca esa regla en preferencias. Incorporar una regla al código no la habilita en el perfil por sí solo.
+6. Verificar en la ventana: Enter al final de la línea, pausa, modificación esperada, Ctrl+Z, ningún guardado y descarte de respuesta antigua. Mantener las consultas manuales.
+
+Para pruebas aisladas existe `ventana.asistencia.establecer_reglas(...)`; invalida tareas anteriores, pero no habilita preferencias. `establecer_motor(...)` sigue permitiendo proveedores controlados; ninguno se activa por defecto.

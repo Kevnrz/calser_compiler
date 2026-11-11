@@ -65,8 +65,10 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
             QMainWindow, QWidget { background: #191c24; color: #dce2ec; }
             QMenuBar, QMenu, QStatusBar { background: #222631; }
             QMenu::item:selected { background: #3a3340; }
-            QMenuBar::item:selected { background: #34303a; }
-            QMenuBar::item { padding: 6px 9px; }
+            QMenuBar::item { padding: 6px 9px; background: transparent;
+                border: 1px solid transparent; border-radius: 4px; }
+            QMenuBar::item:selected { background: #393344; color: #efbb65; }
+            QMenuBar::item:pressed { background: #504135; color: #ffcf7c; }
             QToolButton { border: none; padding: 5px 8px; color: #b7c1cf; }
             QToolButton:hover { background: #393344; color: #efbb65; }
             QLineEdit { background: #222631; border: 1px solid #414957; padding: 7px; color: #e2e7ef; }
@@ -81,9 +83,23 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
             QPushButton { background: #2c313e; border: 1px solid #424a59; border-radius: 5px; padding: 7px 12px; }
             QPushButton:hover { border-color: #efbb65; }
             QPushButton:disabled { color: #8992a1; }
-            QToolButton#compilar { padding-right: 24px; }
-            QToolButton#compilar::menu-button { width: 18px; border-left: 1px solid #665137; }
-            QPushButton#compilar, QToolButton#compilar { background: #403525; color: #f0bf72; border-color: #665137; }
+            QToolButton#archivos, QToolButton#archivos:checked {
+                background: transparent; border: none; border-radius: 4px; }
+            QToolButton#archivos:hover { background: #393344; color: #efbb65; }
+            QToolButton#archivos:pressed { background: #504135; color: #ffcf7c; }
+            QToolButton#compilar { background: #403525; color: #f0bf72;
+                border: 1px solid #665137; border-radius: 5px; padding: 7px 30px 7px 12px; }
+            QToolButton#compilar:hover { background: #51412b; border-color: #efbb65; color: #ffcf7c; }
+            QToolButton#compilar:pressed { background: #6a4b25; border-color: #ffcf7c; color: #fff2d3; }
+            QToolButton#compilar:focus { border-color: #b18ada; }
+            QToolButton#compilar:disabled { background: #272b34; color: #8992a1; border-color: #424a59; }
+            QToolButton#compilar::menu-button { subcontrol-origin: padding;
+                subcontrol-position: top right; width: 21px; background: transparent;
+                border: none; border-left: 1px solid #665137;
+                border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
+            QToolButton#compilar::menu-button:hover,
+            QToolButton#compilar::menu-button:pressed { background: transparent; }
+            QToolButton#compilar::menu-arrow { width: 8px; height: 8px; }
             QSplitter::handle { background: #303644; width: 2px; height: 2px; }
             QToolTip { background: #303644; color: #ffffff; border: 1px solid #666077; }
         """)
@@ -130,8 +146,11 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         # QMainWindow.menuBar() siempre va sobre el widget central. Una barra
         # embebida permite respetar el orden cabecera → menús → editor del diseño.
         toolbar = QWidget()
+        toolbar.setObjectName("barraHerramientas")
         toolbar.setFixedHeight(48)
-        toolbar.setStyleSheet("background: #222631;")
+        # Limitar el fondo al contenedor: una regla sin selector se hereda por
+        # los botones y tapa sus estados de hover/pulsación, incluso con ID.
+        toolbar.setStyleSheet("QWidget#barraHerramientas { background: #222631; }")
         tools = QHBoxLayout(toolbar)
         tools.setContentsMargins(8, 4, 12, 4)
         self.menus = QMenuBar(toolbar)
@@ -140,6 +159,8 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         tools.addWidget(self.menus, 0, Qt.AlignmentFlag.AlignVCenter)
         tools.addStretch()
         self.files_button = QToolButton()
+        self.files_button.setObjectName("archivos")
+        self.files_button.setAutoRaise(True)
         self.files_button.setText("Archivos")
         self.files_button.setToolTip("Mostrar u ocultar el explorador · Ctrl+B")
         self.files_button.setCheckable(True)
@@ -198,6 +219,8 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         self.tabs.setIconSize(QSize(18, 18))
         self.tabs.setTabsClosable(True)
         self.tabs.setMovable(True)
+        self.tabs.tabBar().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tabs.tabBar().customContextMenuRequested.connect(self.menu_pestana_archivo)
         self.tabs.tabCloseRequested.connect(self.cerrar_tab)
         self.tabs.currentChanged.connect(self.actualizar_estado)
         editor_area = QWidget()
@@ -307,6 +330,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         for text, key, method in [("Deshacer", "Ctrl+Z", "undo"), ("Rehacer", "Ctrl+Shift+Z", "redo"),
                                   ("Cortar", "Ctrl+X", "cut"), ("Copiar", "Ctrl+C", "copy"), ("Pegar", "Ctrl+V", "paste")]:
             self.accion(edit, text, key, lambda checked=False, m=method: self.editar_en_foco(m))
+        self.accion(edit, "Deshacer eliminación de archivos", None, self.deshacer_eliminacion)
         copiar_consola = QAction("Copiar texto seleccionado", self)
         copiar_consola.setShortcut("Ctrl+Shift+C")
         copiar_consola.triggered.connect(lambda: self.editar_en_foco("copy"))
@@ -362,7 +386,11 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
 
     def editar_en_foco(self, metodo):
         widget = self.focusWidget()
-        if isinstance(widget, (QPlainTextEdit, QLineEdit)):
+        if metodo == "undo" and self.deshacer_eliminacion_pendiente():
+            return
+        if metodo == "undo" and (widget is self.tree or (widget and self.tree.isAncestorOf(widget))):
+            self.deshacer_eliminacion()
+        elif isinstance(widget, (QPlainTextEdit, QLineEdit)):
             getattr(widget, metodo)()
 
     def mover_panel(self):
@@ -426,6 +454,8 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
 
     def nuevo(self):
         editor = Editor(self.root)
+        editor.eliminar_archivo = lambda: self.eliminar_archivo(editor.path)
+        editor.deshacer_archivo = self.deshacer_eliminacion_pendiente
         editor.acciones_contextuales = (self.sugerencias_action, self.reparaciones_action)
         self.asistencia.conectar_editor(editor)
         self.aplicar_fuente(editor)
@@ -464,6 +494,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         self.actualizar_aviso_externo()
 
     def edicion(self, editor):
+        self._eliminacion_prioritaria = False
         self.analizador.olvidar(editor.documento_id)
         self.comprobador.invalidar(editor.documento_id)
         self.auto_results.pop(editor, None)
@@ -519,6 +550,11 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
             editor.estado_ccom = "Esperando léxico…"
         elif editor.errores_lexicos:
             editor.estado_ccom = "Corrige el léxico"
+        elif editor.contiene_codigo is False:
+            self.comprobador.invalidar(editor.documento_id)
+            self.auto_results.pop(editor, None)
+            editor.estado_ccom = "Sin código para analizar"
+            self.actualizar_problemas()
         else:
             self.comprobador.configured = self.configured_ccom
             self.comprobador.programar(SolicitudCcom(editor.documento_id, editor.revision, editor.toPlainText(), editor.path, self.project))

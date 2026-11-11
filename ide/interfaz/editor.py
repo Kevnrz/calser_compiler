@@ -3,7 +3,7 @@ from html import escape
 from uuid import uuid4
 
 from PySide6.QtCore import QEvent, QRect, QSize, QTimer, Qt, Signal
-from PySide6.QtGui import QContextMenuEvent, QColor, QFont, QPainter, QSyntaxHighlighter, QTextCharFormat, QTextCursor, QTextFormat
+from PySide6.QtGui import QContextMenuEvent, QColor, QFont, QPainter, QKeySequence, QSyntaxHighlighter, QTextCharFormat, QTextCursor, QTextFormat
 from PySide6.QtWidgets import QPlainTextEdit, QTextEdit, QToolTip, QWidget
 
 
@@ -72,6 +72,7 @@ class Editor(QPlainTextEdit):
         self._texto_actual = ""
         self.errores_lexicos = []
         self.analisis_revision = -1
+        self.contiene_codigo = None
         self.estado_analisis = "Esperando…"
         self.estado_ccom = "Esperando léxico…"
         self.problemas = []
@@ -91,6 +92,17 @@ class Editor(QPlainTextEdit):
         self.actualizar_margen()
         self.linea_actual()
 
+    def canInsertFromMimeData(self, source):
+        # Qt ofrece text/uri-list como texto: arrastrar/copiar un archivo no
+        # debe escribir file://... en el código. Copiar ubicación como texto
+        # plano o pegar código sigue pasando por el editor estándar.
+        return not source.hasUrls() and super().canInsertFromMimeData(source)
+
+    def insertFromMimeData(self, source):
+        if source.hasUrls():
+            return
+        super().insertFromMimeData(source)
+
     def crear_menu_contextual(self):
         """Conserva las acciones estándar y añade accesos a la asistencia.
 
@@ -108,6 +120,11 @@ class Editor(QPlainTextEdit):
                 # debe cancelar la consulta como si el usuario abandonara el editor.
                 accion.triggered.connect(lambda checked=False, destino=original:
                                          QTimer.singleShot(0, destino.trigger))
+        if getattr(self, 'eliminar_archivo', None):
+            menu.addSeparator()
+            eliminar = menu.addAction('Eliminar archivo…')
+            eliminar.setEnabled(self.path is not None and self.path.exists())
+            eliminar.triggered.connect(lambda: QTimer.singleShot(0, self.eliminar_archivo))
         return menu
 
     def contextMenuEvent(self, event):
@@ -125,6 +142,11 @@ class Editor(QPlainTextEdit):
             menu.deleteLater()
 
     def keyPressEvent(self, event):
+        if event.matches(QKeySequence.StandardKey.Undo):
+            restaurar = getattr(self, 'deshacer_archivo', None)
+            if restaurar and restaurar():
+                event.accept()
+                return
         cursor = self.textCursor()
         revision = self.revision
         sin_seleccion = not cursor.hasSelection()
@@ -160,6 +182,7 @@ class Editor(QPlainTextEdit):
         self.revision += 1
         self.errores_lexicos = []
         self.analisis_revision = -1
+        self.contiene_codigo = None
         self.establecer_problemas([])
         self.highlighter.actualizar({})
         self.programar_analisis()
@@ -181,6 +204,7 @@ class Editor(QPlainTextEdit):
         modified = self.document().isModified()
         self.errores_lexicos = list(result.problemas)
         self.analisis_revision = result.revision
+        self.contiene_codigo = result.contiene_codigo
         self.highlighter.actualizar(result.tramos)
         self.document().setModified(modified)
         self.estado_analisis = f"{len(result.problemas)} error(es)" if result.problemas else "Sin errores léxicos"

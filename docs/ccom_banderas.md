@@ -294,21 +294,26 @@ Un JSON combinado con compilación también figura entre los archivos generados.
 
 Usa las fases C existentes sin generar archivos. Su respuesta versionada distingue análisis correcto, errores del programa, fallo del servicio e informe limitado; incluye una lista de diagnósticos con códigos, categorías y rangos UTF-8. Admite `-v` y `--time`, y rechaza opciones de generación/listados igual que `--check`.
 
-Contrato completo y ejemplos: [ccom_check_json.md](ccom_check_json.md). Verificación: `make check-analysis-json`, incluida en `make check`.
+Contrato completo y ejemplos: [Servicio de diagnósticos](ccom_servicios_ide.md#check). Verificación: `make check-analysis-json`, incluida en `make check`.
 
 ## Tokens para el editor (`--tokens-json`)
 
-`./ccom --tokens-json programa.cls` recorre la entrada completa con Flex y devuelve clasificación y rangos UTF-8, incluidos comentarios. No comprueba sintaxis/semántica ni genera archivos. Compatible con `-v` y `--time`. Contrato y límites: [servicio léxico M2](ccom_tokens_json.md).
+`./ccom --tokens-json programa.cls` recorre la entrada completa con Flex y devuelve clasificación y rangos UTF-8, incluidos comentarios. No comprueba sintaxis/semántica ni genera archivos. Compatible con `-v` y `--time`. Contrato y límites: [servicio léxico M2](ccom_servicios_ide.md#tokens).
 
 ## Sugerencias sintácticas (`--suggest-json`)
 
-`./ccom --suggest-json 14 programa.cls` consulta continuaciones en la frontera UTF-8 solicitada. Ejemplo: `F main [] : vo` ofrece `void`. Solo admite `-v` y `--time` como auxiliares. [Protocolo, decisiones y límites M3](ccom_suggestions_json.md).
+`./ccom --suggest-json 14 programa.cls` consulta continuaciones en la frontera UTF-8 solicitada. Ejemplo: `F main [] : vo` ofrece `void`. Solo admite `-v` y `--time` como auxiliares. [Protocolo, decisiones y límites M3](ccom_servicios_ide.md#suggest).
 
 ## Reparaciones y verificación sintáctica M4
 
-`./ccom --repair-json programa.cls` propone cierres del primer error; `./ccom --syntax-json programa.cls` verifica sintaxis completa sin semántica. No generan artefactos y solo admiten -v/--time como auxiliares. [Contrato, garantías y límites](ccom_repairs_json.md).
+`./ccom --repair-json programa.cls` propone cierres del primer error; `./ccom --syntax-json programa.cls` verifica sintaxis completa sin semántica. No generan artefactos y solo admiten -v/--time como auxiliares. [Contrato, garantías y límites](ccom_servicios_ide.md#repair).
 
 
 ## Clones Tipo I/II (`--clones-json`)
 
-`./ccom --clones-json 20 consulta.ccl` compara los textos del paquete CCL1 mediante Flex y el motor C. Las rutas del paquete solo identifican documentos; no se abren. Solo admite `-v`/`--time`, no genera artefactos y devuelve JSON v1 con pares/rangos UTF-8 o un fallo explícito sin resultados parciales. El IDE crea el paquete con los buffers sin guardar y conserva su panel. [Contrato, ejemplo de paquete y límites M5](ccom_clones_json.md). `make check-clones-json` forma parte de `make check`.
+`./ccom --clones-json 20 consulta.ccl` compara los textos del paquete CCL1 mediante Flex y el motor C. Las rutas del paquete solo identifican documentos; no se abren. Solo admite `-v`/`--time`, no genera artefactos y devuelve JSON v1 con pares/rangos UTF-8 o un fallo explícito sin resultados parciales. El IDE crea el paquete con los buffers sin guardar y conserva su panel. [Contrato, ejemplo de paquete y límites M5](ccom_servicios_ide.md#clones). `make check-clones-json` forma parte de `make check`.
+
+
+## Recuperación de errores sintácticos (M7)
+
+`--check`, `--check-json` y la compilación habitual utilizan recuperación conservadora del parser C. Una consulta puede reportar varios errores independientes; cualquier error bloquea semántica, AST y generación. No hay una bandera para compilar programas recuperados. [Funcionamiento y límites](ccom_servicios_ide.md#recovery).

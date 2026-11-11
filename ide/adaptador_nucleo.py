@@ -28,6 +28,7 @@ class ResultadoLexico:
     tramos: dict
     problemas: tuple
     fatal: bool
+    contiene_codigo: bool = True
 
 
 def convertir_lexico(documento, revision, texto, salida, fuente, codigo):
@@ -63,7 +64,10 @@ def convertir_lexico(documento, revision, texto, salida, fuente, codigo):
                 tramos.setdefault(fila, []).append(Tramo(mapa[a], mapa[b] - mapa[a], token['kind']))
             fila += 1
     problemas = tuple(replace(p, archivo=None, documento=documento, origen='ccom léxico') for p in errores)
-    return ResultadoLexico(documento, revision, tramos, problemas, fatal)
+    # Solo metadatos de tokens ya clasificados por Flex: no reconocer de nuevo
+    # comentarios ni gramática en Python. Los errores léxicos se conservan.
+    contiene_codigo = any(token['kind'] != 'comentario' for token in tokens)
+    return ResultadoLexico(documento, revision, tramos, problemas, fatal, contiene_codigo)
 
 
 def analizar_documento(documento, revision, texto, *, ejecutable=None, cancelar=lambda: False):

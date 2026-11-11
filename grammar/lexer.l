@@ -19,6 +19,7 @@
 #include "diagnostics.h"
 #include "diagnostics_json.h"
 #include "lexer_service.h"
+#include "parser_service.h"
 
 // Columna del siguiente carácter. Una tabulación cuenta como UNA columna:
 // el señalador de los errores queda alineado porque copia las tabulaciones
@@ -355,6 +356,7 @@ int lexer_parse_text(const char *text, size_t length) {
     BEGIN(INITIAL);
     YY_BUFFER_STATE buffer = yy_scan_bytes(text, (int) length);
     int result = yyparse();
+    parser_finish();
     root = NULL;  /* El servicio liberó los símbolos mediante destructores. */
     yy_delete_buffer(buffer);
     yylex_destroy();

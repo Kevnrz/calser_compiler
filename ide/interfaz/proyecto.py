@@ -30,6 +30,8 @@ class ProyectoVentana:
         for texto, accion in [('Recargar', self.recargar), ('Conservar', self.conservar),
                               ('Guardar como…', lambda: self.guardar(como=True))]:
             boton = QPushButton(texto)
+            if texto == 'Recargar':
+                self.boton_recargar_externo = boton
             boton.clicked.connect(accion)
             fila.addWidget(boton)
         self.aviso_externo.hide()
@@ -64,10 +66,13 @@ class ProyectoVentana:
             if editor.error_disco:
                 texto = 'No se puede comprobar el archivo: ' + editor.error_disco
             elif not editor.estado_observado.existe:
-                texto = 'El archivo fue borrado o movido fuera de CALSIDE. Tu texto sigue en el editor.'
+                propio = any(editor.path.is_relative_to(r['origen']) for grupo in getattr(self, '_eliminaciones', []) for r in grupo)
+                texto = ('Eliminaste este archivo. Ctrl+Z permite recuperarlo; tu texto sigue en el editor.' if propio else
+                         'El archivo fue borrado o movido. Tu texto sigue en el editor.')
             else:
                 texto = 'El archivo cambió fuera de CALSIDE. Tu texto sigue en el editor.'
             self.texto_externo.setText(texto)
+        self.boton_recargar_externo.setEnabled(bool(editor and editor.estado_observado and editor.estado_observado.existe))
         self.aviso_externo.setVisible(visible)
 
     def establecer_version(self, editor, estado):
@@ -90,6 +95,9 @@ class ProyectoVentana:
             return False
         if self.ruta_ocupada(editor.path):
             self.error('Operación en curso', 'Espera a que termine la operación de carpetas antes de recargar.')
+            return False
+        if not editor.path.exists():
+            self.error('No se puede recargar', 'El archivo ya no existe en disco. Usa Deshacer eliminación para restaurarlo o Guardar como para conservar el texto en otra ubicación.')
             return False
         if editor.document().isModified():
             answer = QMessageBox.question(self, 'Recargar desde disco',

@@ -1,5 +1,6 @@
 """Acciones explícitas del explorador sobre archivos, con pestañas conservadas."""
 from pathlib import Path
+from ide.interfaz import papelera as servicio_papelera
 import stat
 
 from PySide6.QtCore import QDateTime, QFile, QMimeData, Qt, QUrl
@@ -7,6 +8,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QApplication, QInputDialog, QMenu, QMessageBox
 
 from ide import archivos
+from ide.interfaz.historial_archivos import HistorialArchivos
 from ide.interfaz.operaciones_carpetas import OperacionCarpeta, dentro
 from ide.interfaz.seleccion_archivos import SeleccionArchivos, archivos_portapapeles
 
@@ -29,7 +31,7 @@ def archivo_portapapeles():
     return path, cortar
 
 
-class AccionesArchivos(SeleccionArchivos):
+class AccionesArchivos(HistorialArchivos, SeleccionArchivos):
     def menu_archivo(self, path, posicion):
         menu = self.crear_menu_archivo(path)
         menu.exec(posicion)
@@ -66,7 +68,8 @@ class AccionesArchivos(SeleccionArchivos):
             accion('Abrir', lambda: self.abrir(path), archivo and not self.ruta_ocupada(path))
         menu.addSeparator()
         accion('Renombrar…', lambda: self.renombrar_archivo(path), modificable)
-        accion('Enviar a la papelera…', lambda: self.eliminar_archivo(path), modificable)
+        accion('Eliminar carpeta…' if directorio else 'Eliminar archivo…', lambda: self.eliminar_archivo(path), modificable)
+        accion('Deshacer eliminación', self.deshacer_eliminacion, bool(getattr(self, '_eliminaciones', [])) and not ocupado)
         menu.addSeparator()
         accion('Copiar', lambda: self.copiar_archivo(path), (archivo or directorio) and not ocupado)
         accion('Cortar', lambda: self.copiar_archivo(path, cortar=True), modificable)
@@ -256,11 +259,13 @@ class AccionesArchivos(SeleccionArchivos):
             return False
         if path.is_dir():
             return self.iniciar_operacion_carpeta('papelera', path)
-        ok, _ = QFile.moveToTrash(str(path))
+        registro = self.preparar_eliminacion(path)
+        ok, papelera = servicio_papelera.enviar_a_papelera(path)
         if not ok:
             self.error('No se pudo enviar a la papelera', 'El archivo se conserva. Podés usar el gestor de archivos del sistema.')
             return False
         self.marcar_eliminados(path)
+        self.registrar_eliminacion(registro, papelera)
         return True
 
     def marcar_eliminados(self, path):
@@ -321,6 +326,7 @@ class AccionesArchivos(SeleccionArchivos):
                 return False
         tarea = OperacionCarpeta(tipo, origen, destino,
                     [e.path for e in self.editores_de_archivo(origen)], self)
+        tarea.eliminacion = self.preparar_eliminacion(origen) if tipo == 'papelera' else None
         tarea.portapapeles_cortado = None
         tarea.ramas_antes = set(self.tree.ramas)
         self.operacion_carpetas = tarea
@@ -357,6 +363,7 @@ class AccionesArchivos(SeleccionArchivos):
                     QApplication.clipboard().clear()
             elif resultado.tipo == 'papelera':
                 self.marcar_eliminados(resultado.origen)
+                self.registrar_eliminacion(tarea.eliminacion, resultado.destino)
             else:
                 self.clones_panel.invalidar(resultado.destino)
                 self.tree.revelar_ruta(resultado.destino)

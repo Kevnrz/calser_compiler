@@ -11,6 +11,7 @@
 #include <string.h>
 #include "diagnostics.h"
 #include "diagnostics_json.h"
+#include "parser_service.h"
 
 #define MAX_DIAGNOSTICS 128
 #define MAX_MESSAGES 65536
@@ -120,6 +121,8 @@ void diag_json_lexical_begin(void) {
 }
 
 int diag_json_finish(FILE *out, const char *source, int exit_code) {
+    /* No presentar una recuperación agotada como lista completa. */
+    if (!lexical_mode && parser_recovery_limited()) truncated = 1;
     const char *status, *message = "";
     if (failed || (exit_code != 0 && entry_count == 0 && !truncated)) {
         status = "error";

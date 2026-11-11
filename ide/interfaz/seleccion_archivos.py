@@ -1,5 +1,6 @@
 """Operaciones de selección múltiple; las carpetas se procesan una a una."""
 from pathlib import Path
+from ide.interfaz import papelera as servicio_papelera
 from PySide6.QtCore import QFile, QMimeData, Qt, QUrl
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox
 
@@ -64,7 +65,7 @@ class SeleccionArchivos:
         menu.addSeparator()
         accion('Copiar', lambda: self.copiar_seleccion(rutas), not ocupado)
         accion('Cortar', lambda: self.copiar_seleccion(rutas, True), not ocupado)
-        accion('Enviar a la papelera…', lambda: self.eliminar_seleccion(rutas), not ocupado)
+        accion('Eliminar selección…', lambda: self.eliminar_seleccion(rutas), not ocupado)
         menu.addSeparator()
         accion('Copiar ubicación', lambda: QApplication.clipboard().setText('\n'.join(map(str, rutas))))
         accion('Abrir ubicación', lambda: self.abrir_ubicacion(path))
@@ -154,9 +155,11 @@ class SeleccionArchivos:
                     else:
                         self.error('No se pudo copiar', f'El destino no se sobrescribió: {destino}')
                 else:
-                    ok, _ = QFile.moveToTrash(str(origen))
+                    registro = self.preparar_eliminacion(origen)
+                    ok, papelera = servicio_papelera.enviar_a_papelera(origen)
                     if ok:
                         self.marcar_eliminados(origen)
+                        self.registrar_eliminacion(registro, papelera)
                     else:
                         self.error('No se pudo enviar a papelera', str(origen))
             if not ok:

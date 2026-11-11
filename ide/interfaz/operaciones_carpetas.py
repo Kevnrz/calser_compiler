@@ -2,6 +2,7 @@
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
+from ide.interfaz import papelera as servicio_papelera
 import shutil
 import stat
 import time
@@ -139,7 +140,8 @@ class OperacionCarpeta(QThread):
                     except OSError as error:
                         r.despues[path] = (None, str(error))
             elif self.tipo == 'papelera':
-                ok, _ = QFile.moveToTrash(str(self.origen))
+                ok, papelera = servicio_papelera.enviar_a_papelera(self.origen)
+                r.destino = Path(papelera) if papelera else None
                 if not ok:
                     raise OSError('La papelera no está disponible. No se intentó borrar permanentemente.')
             else:

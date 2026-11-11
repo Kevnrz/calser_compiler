@@ -13,7 +13,7 @@ Saddy autorizó conservar el LL(1) en Python. Se mantiene como material de estud
 
 `ContextoDocumento`, `EdicionTexto`, `PrecondicionTexto`, `Sugerencia`, `Reparacion`, resultados y estados viven en `asistencia.py`. Sus rangos son caracteres Python `[inicio,fin)`. No importa `lexico`, `gramatica`, `tabla` ni `parser`.
 
-[Contrato de asistencia](../docs/contrato_asistencia.md), [arquitectura y revisión M6](../docs/revision_m6.md).
+[Contrato de asistencia](../docs/asistencia.md), [arquitectura y revisión M6](../docs/guia_sistema_calside.md).
 
 ## API LL(1) de consulta
 
@@ -43,4 +43,4 @@ make check-ide
 make check-recorrido-ide
 ```
 
-[Gramática original](../docs/gramatica_calser.md), [transformación LL(1)](../docs/gramatica_ll1.md), [API detallada](../docs/parser_predictivo.md). Si cambia Bison, revisar las comparaciones y actualizar la documentación de estudio cuando corresponda; la aplicación no depende de reconstruir esa tabla Python.
+[Gramática original](../docs/ll1/gramatica_calser.md), [transformación LL(1)](../docs/ll1/gramatica_ll1.md), [API detallada](../docs/ll1/parser_predictivo.md). Si cambia Bison, revisar las comparaciones y actualizar la documentación de estudio cuando corresponda; la aplicación no depende de reconstruir esa tabla Python.

@@ -43,7 +43,7 @@ class MenuArchivos(unittest.TestCase):
     def test_menu_archivo_y_fondo(self):
         menu=self.window.crear_menu_archivo(self.path)
         acciones={a.text():a for a in menu.actions()}
-        self.assertTrue({'Abrir','Renombrar…','Enviar a la papelera…','Copiar','Cortar','Pegar','Copiar ubicación','Abrir ubicación','Propiedades'} <= acciones.keys())
+        self.assertTrue({'Abrir','Renombrar…','Eliminar archivo…','Copiar','Cortar','Pegar','Copiar ubicación','Abrir ubicación','Propiedades'} <= acciones.keys())
         acciones['Copiar ubicación'].trigger()
         self.assertEqual(APP.clipboard().text(),str(self.path))
         menu.deleteLater()
@@ -51,7 +51,7 @@ class MenuArchivos(unittest.TestCase):
         menu=self.window.crear_menu_archivo(self.folder)
         acciones={a.text():a for a in menu.actions()}
         self.assertTrue(acciones['Pegar'].isEnabled())
-        self.assertTrue(acciones['Enviar a la papelera…'].isEnabled())
+        self.assertTrue(acciones['Eliminar carpeta…'].isEnabled())
         menu.deleteLater()
 
     def test_renombrar_conserva_buffer_cursor_y_guardado(self):
@@ -140,10 +140,10 @@ class MenuArchivos(unittest.TestCase):
         self.assertTrue(self.path.exists())
 
     def test_papelera_cancelada_o_fallida_conserva_archivo(self):
-        with patch.object(QMessageBox,'exec',return_value=QMessageBox.StandardButton.No),patch.object(QFile,'moveToTrash') as trash:
+        with patch.object(QMessageBox,'exec',return_value=QMessageBox.StandardButton.No),patch('ide.interfaz.papelera.enviar_a_papelera') as trash:
             self.assertFalse(self.window.eliminar_archivo(self.path))
             trash.assert_not_called()
-        with patch.object(QMessageBox,'exec',return_value=QMessageBox.StandardButton.Yes),patch.object(QFile,'moveToTrash',return_value=(False,'')),patch.object(self.window,'error'):
+        with patch.object(QMessageBox,'exec',return_value=QMessageBox.StandardButton.Yes),patch('ide.interfaz.papelera.enviar_a_papelera',return_value=(False,'')),patch.object(self.window,'error'):
             self.assertFalse(self.window.eliminar_archivo(self.path))
         self.assertEqual(self.path.read_text(),TEXTO)
 
@@ -154,7 +154,7 @@ class MenuArchivos(unittest.TestCase):
         def trash(path):
             Path(path).rename(recuperable)
             return True,str(recuperable)
-        with patch.object(QMessageBox,'exec',return_value=QMessageBox.StandardButton.Yes),patch.object(QFile,'moveToTrash',side_effect=trash):
+        with patch.object(QMessageBox,'exec',return_value=QMessageBox.StandardButton.Yes),patch('ide.interfaz.papelera.enviar_a_papelera',side_effect=trash):
             self.assertTrue(self.window.eliminar_archivo(self.path))
         self.assertFalse(self.path.exists())
         self.assertTrue(recuperable.exists())

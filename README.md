@@ -353,6 +353,8 @@ La extensión conserva una copia del icono para que pueda instalarse de forma
 independiente del repositorio. Los avisos de los recursos Seti están en
 [ThirdPartyNotices.txt](editors/vscode/ThirdPartyNotices.txt).
 
-## CALSIDE · prototipo de IDE
+## CALSIDE · IDE de Calser
 
-Aplicación de escritorio propia con PySide6: editor, pestañas, manejo de archivos y compilación con `ccom`. Inicio: `make ide`; pruebas: `make check-ide`. Requiere instalar `ide/requirements.txt`. Ver [instalación, funciones y límites](ide/README.md) y [plan del IDE](ide/docs/plan_ide.md). Incluye resaltado y léxico en vivo con el núcleo, análisis automático sintáctico/semántico con `ccom --check`, compilación manual y clones Tipo I/II entre archivos. Incluye protección ante cambios externos, explorador de subcarpetas y preferencias persistentes. Incluye además el parser LL(1) con consulta de contexto como API Python independiente; los motores de sugerencias/reparaciones y su integración gráfica siguen pendientes. Ver [API del parser](ide/docs/parser_predictivo.md).
+Aplicación propia de escritorio con Python/PySide6 para edición, proyecto, búsqueda, terminales y procesos. ccom aporta léxico, sintaxis/semántica, sugerencias, reparaciones y clones en C; el LL(1) Python se conserva como API de consulta/pruebas. Incluye perfiles gráficos F5, ejecución F6 mediante el simulador, recuperación de varios errores sintácticos y protección de cambios externos. M1–M7 implementados; revisión manual, empaquetado y otra máquina siguen su plan de cierre.
+
+Inicio: `make ide` tras construir ccom e instalar `ide/requirements.txt`; pruebas: `make check-ide`. [Uso e instalación](ide/README.md) · [Guía del sistema](ide/docs/guia_sistema_calside.md) · [Plan vigente](ide/docs/plan_ide.md) · [Revisión manual](ide/docs/revision_manual.md) · [Bitácora](ide/docs/bitacora_ide.md) · [Protocolos C](docs/ccom_servicios_ide.md).

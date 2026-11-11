@@ -1,6 +1,6 @@
 # Parser predictivo LL(1): API disponible y entrega a los motores
 
-Estado M6 (2026-11-11): API Python de consulta/estudio y pruebas diferenciales, conservada por autorización explícita. Se implementó originalmente en `feat/parser-ll1` el 2026-11-05. **El editor ya utiliza C** para análisis, sugerencias, reparaciones y clones; no hay integración gráfica pendiente de este parser ni fallback al LL(1). [Frontera actual](revision_m6.md), [contratos productivos](contrato_asistencia.md).
+Estado M6 (2026-11-11): API Python de consulta/estudio y pruebas diferenciales, conservada por autorización explícita. Se implementó originalmente en `feat/parser-ll1` el 2026-11-05. **El editor ya utiliza C** para análisis, sugerencias, reparaciones y clones; no hay integración gráfica pendiente de este parser ni fallback al LL(1). [Frontera actual](../guia_sistema_calside.md), [contratos productivos](../asistencia.md).
 
 ## Decisiones cerradas
 

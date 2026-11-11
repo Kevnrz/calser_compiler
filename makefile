@@ -113,7 +113,7 @@ check-salidas: $(TARGET)
 validar-bundles: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 tools/validar_bundles.py
 
-check: check-clones-json check-repairs-json check-suggestions-json check-tokens-json check-success check-analysis check-analysis-json check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+check: check-recovery check-clones-json check-repairs-json check-suggestions-json check-tokens-json check-success check-analysis check-analysis-json check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 clean:
 	rm -f $(TARGET) $(OBJECTS) $(OBJECTS:.o=.d)
@@ -172,3 +172,7 @@ check-clones-json: $(TARGET)
 .PHONY: check-recorrido-ide
 check-recorrido-ide: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 QT_QPA_PLATFORM=offscreen $(PYTHON) tools/probar_recorrido_ide.py
+
+.PHONY: check-recovery
+check-recovery: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/recuperacion/probar.py

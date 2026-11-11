@@ -176,7 +176,7 @@ class Carpetas(unittest.TestCase):
         texto=editor.toPlainText();trash=self.base/'papelera-simulada'
         def mover(path):
             Path(path).rename(trash);return True,str(trash)
-        with patch.object(QMessageBox,'exec',return_value=QMessageBox.StandardButton.Yes),patch.object(QFile,'moveToTrash',side_effect=mover):
+        with patch.object(QMessageBox,'exec',return_value=QMessageBox.StandardButton.Yes),patch('ide.interfaz.papelera.enviar_a_papelera',side_effect=mover):
             self.assertTrue(self.window.eliminar_archivo(origen));self.terminar()
         self.assertFalse(origen.exists());self.assertTrue(trash.exists())
         self.assertEqual(editor.toPlainText(),texto)
@@ -187,7 +187,7 @@ class Carpetas(unittest.TestCase):
 
     def test_papelera_fallida_y_copia_parcial_informan_sin_perder_origen(self):
         origen=self.arbol()
-        with patch.object(QMessageBox,'exec',return_value=QMessageBox.StandardButton.Yes),patch.object(QFile,'moveToTrash',return_value=(False,'')),patch.object(self.window,'error') as error:
+        with patch.object(QMessageBox,'exec',return_value=QMessageBox.StandardButton.Yes),patch('ide.interfaz.papelera.enviar_a_papelera',return_value=(False,'')),patch.object(self.window,'error') as error:
             self.assertTrue(self.window.eliminar_archivo(origen));self.terminar()
             error.assert_called_once()
         self.assertTrue(origen.exists())

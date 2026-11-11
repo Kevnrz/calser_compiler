@@ -48,8 +48,8 @@ def main():
         check(VALIDO, 0)
         check('F main [] : void ;\n a = 1 ;\n b = 2 ;\n E ;\n.\n', 1, 'semantic', 2)
         check('@ @\n' + VALIDO, 1, 'lexical', 2)
-        # No simular recuperación: el parser actual aún termina en el primer error.
-        check('F main [] : void ;\n Vm a : int = ;\n Vm b : int = ;\n E ;\n.\n', 1, 'syntax', 1)
+        # M7: ambos errores independientes se obtienen del parser C en una consulta.
+        check('F main [] : void ;\n Vm a : int = ;\n Vm b : int = ;\n E ;\n.\n', 1, 'syntax', 2)
         general = check('F suma [] : void ; E ; .\n', 1, 'semantic', 1)
         assert general['diagnostics'][0]['range'] is None
         texto = '# café 😀\r\nF main [] : void ;\r\n\tno_declarada = 1 ;\r\n E ;\r\n.\r\n'

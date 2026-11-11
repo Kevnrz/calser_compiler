@@ -25,6 +25,7 @@
 #include "repairs.h"
 #include "clones.h"
 #include "syntax_service.h"
+#include "parser_service.h"
 #include <errno.h>
 #include "label_table.h"
 #include "codegen.h"
@@ -643,9 +644,10 @@ static int phase_parse(Compilation *compilation) {
 
     fclose(yyin);
 
-    // Solo hay AST que liberar si el parser terminó bien.
-    if (result == 0)
-        compilation->root = root;
+    // El árbol inicial, si llegó a construirse, pertenece a main. Un AST
+    // recuperado se libera normalmente, pero jamás se exporta ni se analiza.
+    compilation->root = root;
+    parser_finish();
 
     if (lexical_errors > 0) {
         fprintf(stderr,
@@ -659,7 +661,9 @@ static int phase_parse(Compilation *compilation) {
         return 0;
     }
 
-    if (result != 0) {
+    if (result != 0 || parser_syntax_errors() > 0) {
+        if (parser_recovery_limited())
+            fprintf(stderr, "Analisis sintactico incompleto: limite de recuperacion alcanzado.\n");
         report_phase(options, "fase 1-2: analisis lexico y sintactico", 0);
 
         compilation->exit_code = 1;

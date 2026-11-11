@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from ide.ediciones import aplicar_ediciones
 from ide.reparaciones_ccom import comprobar_sintaxis
 
-PREDETERMINADAS = {'habilitada': True, 'sugerencias_pausa': False, 'pausa_ms': 700,
+PREDETERMINADAS = {'habilitada': True, 'sugerencias_inline': True, 'sugerencias_pausa': False, 'pausa_ms': 350,
                    'reparaciones_automaticas': False, 'reglas_automaticas': []}
 MAX_TEXTO_AUTOMATICO = 100_000
 
@@ -20,7 +20,7 @@ def validar_preferencias(datos):
     salida = dict(PREDETERMINADAS, reglas_automaticas=[])
     if not isinstance(datos, dict):
         return salida
-    for campo in ('habilitada', 'sugerencias_pausa', 'reparaciones_automaticas'):
+    for campo in ('habilitada', 'sugerencias_inline', 'sugerencias_pausa', 'reparaciones_automaticas'):
         if type(datos.get(campo)) is bool:
             salida[campo] = datos[campo]
     if type(datos.get('pausa_ms')) is int and 300 <= datos['pausa_ms'] <= 3000:

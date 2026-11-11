@@ -7,6 +7,7 @@ from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QFileDialog
 from ide.pruebas import test_comprobacion as fixtures
+from ide import archivos
 
 
 class ComentariosYArchivos(unittest.TestCase):
@@ -91,16 +92,36 @@ class ComentariosYArchivos(unittest.TestCase):
         self.esperar(lambda:editor.estado_ccom=='Sin código para analizar')
         self.assertFalse(editor.problemas)
 
-    def test_f5_explicito_con_comentario_sigue_validando_programa(self):
-        path=self.folder/'comentario.cls';path.write_text('# prueba manual')
-        editor=self.window.abrir(path)
+    def test_f5_sin_codigo_informa_sin_marcar_error_y_flex_no_oculta_errores(self):
+        path=self.folder/'comentario.cls'
         self.window.seleccionar_modo('analizar')
+        for texto in ('# prueba manual', '#[ comentario\nmultilínea ]#', '  \n'):
+            path.write_text(texto)
+            editor=self.window.abrir(path)
+            editor.setPlainText(texto)
+            editor.document().setModified(False)
+            self.window.establecer_version(editor, archivos.estado(path))
+            self.window.compilar()  # F5 inmediato: no depender del debounce.
+            self.esperar(lambda:'no hay código para compilar' in self.window.output.toPlainText())
+            self.assertIsNone(self.window.process)
+            self.assertFalse(self.window.results.get(editor))
+            self.assertFalse(editor.problemas)
+            self.assertNotIn('fin de archivo', self.window.output.toPlainText())
+            self.assertEqual(path.read_text(),texto)
+            self.assertFalse(list(self.folder.rglob('*.bin')))
+            self.window.output.clear()
+        self.escribir('#[ comentario sin cerrar')
         self.window.compilar()
+        self.esperar(lambda:bool(self.window.results.get(editor)))
+        self.assertTrue(editor.errores_lexicos)
+        self.assertNotIn('no hay código para compilar',self.window.output.toPlainText())
         self.esperar(lambda:self.window.process is None)
-        self.assertTrue(self.window.results.get(editor))
-        self.assertEqual(self.window.results[editor][0].categoria,'Sintáctico')
-        self.assertIn('fin de archivo',self.window.output.toPlainText())
-        self.assertEqual(path.read_text(),'# prueba manual')
+        self.escribir(fixtures.VALIDO)
+        self.window.compilar()
+        self.esperar(lambda:'Análisis correcto' in self.window.output.toPlainText())
+        self.esperar(lambda:self.window.process is None)
+        self.assertFalse(self.window.results.get(editor))
+
 
 
 if __name__=='__main__':unittest.main()

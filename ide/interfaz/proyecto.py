@@ -151,6 +151,10 @@ class ProyectoVentana:
 
     def restaurar_preferencias(self):
         d = self.datos_preferencias
+        # Restaurar sin volver a escribir estado parcial durante el constructor.
+        self.animacion_inicio_action.blockSignals(True)
+        self.animacion_inicio_action.setChecked(d.get('animacion_inicio', True))
+        self.animacion_inicio_action.blockSignals(False)
         self.fuente_editor = QFont(d.get('familia') or 'monospace', d.get('puntos', 12))
         for i in range(self.tabs.count()):
             self.aplicar_fuente(self.tabs.widget(i))
@@ -211,6 +215,7 @@ class ProyectoVentana:
             'explorador': self.files_button.isChecked(), 'resultados': self.results_action.isChecked(),
             'panel_derecho': self.workspace_splitter.orientation() == Qt.Orientation.Horizontal,
             'automatico': self.auto_action.isChecked(),
+            'animacion_inicio': self.animacion_inicio_action.isChecked(),
             'divisiones': self.project_splitter.sizes(), 'paneles': self.workspace_splitter.sizes(),
         }):
             self.error('No se pudieron guardar las preferencias', 'Revisa los permisos de la carpeta de configuración.')

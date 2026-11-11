@@ -135,7 +135,7 @@ class InterfazReal(unittest.TestCase):
 
     def test_pausa_real_consulta_sin_aplicar(self):
         self.preparar()
-        self.control.configurar({**self.control.configuracion, 'sugerencias_pausa': True, 'pausa_ms': 200})
+        self.control.configurar({**self.control.configuracion, 'sugerencias_pausa': True, 'sugerencias_inline': False, 'pausa_ms': 300})
         antes=self.editor.contexto_asistencia()
         self.control.programar(self.editor, 'escritura')
         self.esperar(lambda:self.control.popup.isVisible())

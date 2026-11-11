@@ -44,7 +44,7 @@ static int emit(FILE *out, const char *source, const char *text, SyntaxAnalysis 
         fputs("}],\"reasons\":[", out);
         diag_json_write_string(out, r.accepted ? "La copia completa es aceptada por el parser C." : "La copia supera el token del primer error; quedan errores posteriores.");
         fputc(',', out);
-        diag_json_write_string(out, r.automatic ? "Unico punto y coma validado antes de un inicio de sentencia, sin errores lexicos." : "Requiere revision manual; no garantiza intencion ni semantica.");
+        diag_json_write_string(out, r.automatic ? "Unico punto y coma con aceptacion sintactica completa, sin errores lexicos." : "Requiere revision manual; no garantiza intencion ni semantica.");
         fprintf(out, "],\"validation\":{\"accepted\":%s,\"resolved\":true,\"reached\":%zu,\"target\":%zu,\"description\":",
                 r.accepted ? "true" : "false", r.reached, base.offset);
         diag_json_write_string(out, r.accepted ? "Bison/Flex: aceptacion sintactica completa de la copia; semantica no comprobada." : "Bison/Flex: primer error superado; aceptacion sintactica parcial, solo manual.");
@@ -87,7 +87,10 @@ int repairs_run(FILE *out, const char *source) {
         }
         if (!status) {
             qsort(options, count, sizeof(options[0]), compare);
-            if (count == 1 && options[0].kind == 0 && options[0].accepted && !base.eof && base.next_statement)
+            /* La copia completa y un único ; justifican esta candidatura,
+             * incluso antes de una asignación cuyo inicio sea identificador.
+             * La UI todavía requiere permiso y valida la línea confirmada. */
+            if (count == 1 && options[0].kind == 0 && options[0].accepted && !base.eof)
                 options[0].automatic = 1;
             status = count ? "ok" : "sin_opciones";
             explanation = count ? "" : "No hay una insercion de cierre que supere el primer error sin inventar codigo.";

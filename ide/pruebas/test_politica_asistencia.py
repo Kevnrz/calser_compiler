@@ -117,7 +117,9 @@ class Interaccion(unittest.TestCase):
         return reparaciones(texto, cancelar=cancelar)
 
     def configurar(self, **datos):
-        d = {'pausa_ms': 300}; d.update(datos)
+        # Este recorrido conserva la modalidad de lista por pausa; el gris
+        # predeterminado se comprueba con el motor real en test_sugerencia_inline.
+        d = {'pausa_ms': 300, 'sugerencias_inline': False}; d.update(datos)
         self.control.configurar(d)
 
     def confirmar_linea(self):

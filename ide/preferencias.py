@@ -36,7 +36,7 @@ def validar(datos):
         if isinstance(valor, str) and len(valor) <= 4096 and '\x00' not in valor:
             limpio[campo] = valor
     # Exigir booleanos reales evita interpretar la cadena "false" como activada.
-    for campo in ('explorador', 'resultados', 'panel_derecho', 'automatico'):
+    for campo in ('explorador', 'resultados', 'panel_derecho', 'automatico', 'animacion_inicio'):
         if type(datos.get(campo)) is bool:
             limpio[campo] = datos[campo]
     for campo, minimo, maximo in (('puntos', 6, 40), ('ancho', 800, 3840), ('alto', 520, 2160)):

@@ -131,9 +131,9 @@ class CoordinadorAsistencia(QObject):
     def solicitar(self, tipo, contexto, *, origen='manual', reglas=()):
         reglas = tuple(reglas)
         if (tipo not in MODULOS or not isinstance(contexto, ContextoDocumento)
-                or origen not in ('manual', 'escritura', 'linea_confirmada')
+                or origen not in ('manual', 'escritura', 'linea_confirmada', 'vista_inline')
                 or (origen == 'escritura' and tipo != 'sugerencias')
-                or (origen == 'linea_confirmada' and tipo != 'reparaciones')
+                or (origen in ('linea_confirmada', 'vista_inline') and tipo != 'reparaciones')
                 or len(reglas) > 64 or any(not isinstance(r, ReglaAutomatica) for r in reglas)):
             raise ValueError('Solicitud de asistencia inválida')
         self.numero += 1

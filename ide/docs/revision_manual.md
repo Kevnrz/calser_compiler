@@ -31,12 +31,12 @@ Marca cada caso **Pendiente / OK / Fallo / No aplica**. Un fallo debe describir 
 
 | Caso | Acción | Resultado esperado | Estado |
 | --- | --- | --- | --- |
-| R01 | Abrir la carpeta temporal y `programas/suma.cls`. Abrir una segunda pestaña y alternar. | Jerarquía, iconos `.cls`, colores, números de línea y contenido independiente; sin errores en suma. | OK — confirmado por el usuario |
-| R02 | Crear un documento, escribir `# prueba manual`, guardar como `programas/nota.cls`, editar sin guardar y cerrar. Elegir Cancelar; repetir con Descartar. | Cancelar conserva pestaña/texto; Descartar conserva la última versión guardada. El indicador de cambios coincide. | Pendiente |
-| R03 | Crear carpeta `prueba archivos`; copiar/cortar/pegar, renombrar y mover copias con pestañas abiertas. Probar Ctrl/Shift y arrastre. Eliminar una copia desde el clic derecho del árbol, editor o pestaña; pulsar Ctrl+Z inmediatamente, también después de hacer clic en el editor. Escribir después de eliminar y comprobar que Ctrl+Z deshace esa escritura. Repetir con carpeta y selección múltiple. | Se restauran las rutas y los bytes guardados, manteniendo cambios sin guardar e historial del editor. Un destino ocupado bloquea la restauración sin sobrescribir. Las rutas se actualizan sin perder texto ni Deshacer. No sobrescribe destinos sin el flujo previsto. Soltar entre hermanos solo reordena. | Pendiente |
-| R04 | Buscar un archivo, una carpeta y texto de una copia modificada sin guardar. Seleccionar resultados. | Resultados correctos, buffer reciente, navegación correcta; al cambiar consulta no reaparecen resultados antiguos. | Pendiente |
+| R01 | Abrir la carpeta temporal y `programas/suma.cls`. Abrir una segunda pestaña y alternar. | Jerarquía, iconos `.cls`, colores, números de línea y contenido independiente; sin errores en suma. | OK — confirmado por el usuario (2026-11-11) |
+| R02 | Crear un documento, escribir `# prueba manual`, guardar como `programas/nota.cls`, editar sin guardar y cerrar. Elegir Cancelar; repetir con Descartar. | Cancelar conserva pestaña/texto; Descartar conserva la última versión guardada. El indicador de cambios coincide. | OK — confirmado por el usuario (2026-11-11) |
+| R03 | Crear carpeta `prueba archivos`; copiar/cortar/pegar, renombrar y mover copias con pestañas abiertas. Probar Ctrl/Shift y arrastre. Eliminar una copia desde el clic derecho del árbol, editor o pestaña; pulsar Ctrl+Z inmediatamente, también después de hacer clic en el editor. Escribir después de eliminar y comprobar que Ctrl+Z deshace esa escritura. Repetir con carpeta y selección múltiple. | Se restauran las rutas y los bytes guardados, manteniendo cambios sin guardar e historial del editor. Un destino ocupado bloquea la restauración sin sobrescribir. Las rutas se actualizan sin perder texto ni Deshacer. No sobrescribe destinos sin el flujo previsto. Soltar entre hermanos solo reordena. | OK — confirmado por el usuario (2026-11-11) |
+| R04 | Buscar un archivo, una carpeta y texto de una copia modificada sin guardar. Seleccionar resultados. | Resultados correctos, buffer reciente, navegación correcta; al cambiar consulta no reaparecen resultados antiguos. | OK — confirmado por el usuario (2026-11-11) |
 
-En R02 se puede usar `# prueba manual`: un documento con solo comentarios válidos debe quedar sin problemas automáticos y con estado «Sin código para analizar». Un comentario sin cerrar sí debe señalar error léxico. F5 explícito conserva la validación de programa completo. Guardar no debe añadir rutas ni cambiar el texto; comprobar también Cancelar/Descartar.
+En R02 se puede usar `# prueba manual`: un documento con solo comentarios válidos debe quedar sin problemas automáticos y con estado «Sin código para analizar». Un comentario sin cerrar sí debe señalar error léxico. Al pulsar F5, un comentario válido muestra «El archivo solo contiene comentarios; no hay código para compilar» en Salida, sin subrayado de error ni artefactos. Un archivo vacío recibe el aviso equivalente; un comentario sin cerrar conserva sus errores. Guardar no debe añadir rutas ni cambiar el texto; comprobar también Cancelar/Descartar.
 
 No continuar automáticamente al siguiente bloque si aparece pérdida de datos o selección/ruta incorrecta. Registrar el fallo y conservar la copia temporal para reproducirlo.
 
@@ -44,10 +44,10 @@ No continuar automáticamente al siguiente bloque si aparece pérdida de datos o
 
 | Caso | Acción | Resultado esperado | Estado |
 | --- | --- | --- | --- |
-| R05 | Abrir `errores/dos_sintacticos.cls`; esperar análisis sin F5. | **2 errores sintácticos**, líneas 3 y 4; cada uno permite navegar al `;` inesperado. | Pendiente |
-| R06 | Completar `x =` con `1` y después `y =` con `2`, conservando declaraciones. Alternar con la pestaña suma. | Primero queda un problema y luego ninguno. Las pestañas no mezclan diagnósticos; el disco no cambia hasta guardar. | Pendiente |
-| R07 | En una copia válida añadir `@`; borrarlo. Añadir un comentario `#[` sin cierre y después cerrarlo con `]#`. | Errores léxicos reales; al corregir desaparecen. El comentario abierto no produce una cascada de errores sintácticos. | Pendiente |
-| R08 | Abrir `errores/semantico.cls`. Sustituir `desconocida` por `2`. | Error semántico por nombre no declarado; al corregir desaparece. Con sintaxis inválida no se anuncian errores semánticos de un AST recuperado. | Pendiente |
+| R05 | Abrir `errores/dos_sintacticos.cls`; esperar análisis sin F5. | **2 errores sintácticos**, líneas 3 y 4; cada uno permite navegar al `;` inesperado. | OK — confirmado por el usuario (2026-11-11) |
+| R06 | Completar `x =` con `1` y después `y =` con `2`, conservando declaraciones. Alternar con la pestaña suma. | Primero queda un problema y luego ninguno. Las pestañas no mezclan diagnósticos; el disco no cambia hasta guardar. | OK — confirmado por el usuario (2026-11-11) |
+| R07 | En una copia válida añadir `@`; borrarlo. Añadir un comentario `#[` sin cierre y después cerrarlo con `]#`. | Errores léxicos reales; al corregir desaparecen. El comentario abierto no produce una cascada de errores sintácticos. | OK — confirmado por el usuario (2026-11-11) |
+| R08 | Abrir `errores/semantico.cls`. Sustituir `desconocida` por `2`. | Error semántico por nombre no declarado; al corregir desaparece. Con sintaxis que quinválida no se anuncian errores semánticos de un AST recuperado. | OK — confirmado por el usuario (2026-11-11) |
 
 **Límite conocido:** no se prometen todos los errores de un programa arbitrariamente dañado. Separadores faltantes pueden hacer que se salte parte del código hasta una ancla fiable. La recuperación puede detenerse; no es un defecto por sí solo si respeta lo documentado en [servicios C](../../docs/ccom_servicios_ide.md#recovery).
 
@@ -57,12 +57,16 @@ No continuar automáticamente al siguiente bloque si aparece pérdida de datos o
 
 | Caso | Acción | Resultado esperado | Estado |
 | --- | --- | --- | --- |
-| R09 | En un documento nuevo escribir `F main [] : vo`; Ctrl+Espacio o clic derecho → Sugerencias. Aceptar `void`, Deshacer y repetir. | Reemplaza `vo` sin duplicar el sufijo; un Deshacer revierte la propuesta. No inventa `main`, nombres ni cuerpos de función. | Pendiente |
-| R10 | Abrir `errores/reparacion.cls`; Alt+Enter o clic derecho → Reparaciones. Revisar cambios y aplicar. | Propone `;` tras `3`, muestra motivo/precondiciones. Aplicar modifica el buffer; Ctrl+Z revierte; no guarda. | Pendiente |
-| R11 | Solicitar una reparación y luego editar/mover cursor/cambiar pestaña antes de aplicar. Solicitar sugerencias dentro de un comentario. | No aplica una respuesta antigua ni otra pestaña. El comentario bloquea sugerencias; cero opciones se explica sin inventarlas. | Pendiente |
-| R12 | Opcional: habilitar corrección automática **y** seleccionar la regla de `;`. En la copia de reparación, Enter justo después de `3`; esperar. Probar Ctrl+Z y luego deshabilitar la función. | Solo con permisos/regla y copia completa aceptable puede aplicar `;`. Informa el cambio, permite Deshacer y no entra en un ciclo de reparación. Sin permisos no edita solo. | Pendiente |
+| R09 | En un documento nuevo escribir `F main [] : vo`; Ctrl+Espacio o clic derecho → Sugerencias. Aceptar `void`, Deshacer y repetir. | Reemplaza `vo` sin duplicar el sufijo; un Deshacer revierte la propuesta. No inventa `main`, nombres ni cuerpos de función. | OK — confirmado por el usuario (2026-11-11) |
+| R10 | Abrir `errores/reparacion.cls`; Alt+Enter o clic derecho → Reparaciones. Revisar cambios y aplicar. | Propone `;` tras `3`, muestra motivo/precondiciones. Aplicar modifica el buffer; Ctrl+Z revierte; no guarda. | OK — confirmado por el usuario (2026-11-11) |
+| R11 | Solicitar una reparación y luego editar/mover cursor/cambiar pestaña antes de aplicar. Solicitar sugerencias dentro de un comentario. | No aplica una respuesta antigua ni otra pestaña. El comentario bloquea sugerencias; cero opciones se explica sin inventarlas. | OK — confirmado por el usuario (2026-11-11) |
+| R12 | Activar «Corregir al confirmar una línea con Enter»; la regla de `;` se selecciona inicialmente. En la copia de reparación, Enter justo después de `3`; esperar. Probar Ctrl+Z y luego deshabilitar la función. | Solo con permisos/regla y copia completa aceptable puede aplicar `;`. Informa el cambio, permite Deshacer y no entra en un ciclo de reparación. Sin permisos no edita solo. | Ajustado y comprobado con ccom real — pendiente repetición humana tras H03 |
 
 Las condiciones precisas están en [asistencia](asistencia.md#politica). Un contexto incompleto, ambiguo o cambiado puede dejar una propuesta manual en lugar de corregir automáticamente.
+
+### Repetición añadida: propuestas en gris
+
+Con asistencia habilitada, escribir `F main [] : vo` al final de una línea y esperar: debe verse `id` gris sin cambiar el texto. Tab completa `void`; `F main` propone `[]` con el cursor dentro al aceptar; una línea vacía del cuerpo no sugiere `C` arbitrariamente. Ctrl+Z revierte; Esc descarta. Enter no acepta la vista. Probar también un `;` faltante al final de una declaración, comentarios, cambio de pestaña y Ctrl+Espacio para abrir la lista. Con análisis automático activado, esperar a que aparezca un diagnóstico: la propuesta gris debe seguir visible y Tab debe aceptarla si texto/cursor no cambiaron. La pausa por defecto es 350 ms; las preferencias anteriores pueden conservar otra espera. **Pendiente de revisión humana**, sin revocar los OK anteriores de la lista manual.
 
 ## Bloque D: compilar y ejecutar
 
@@ -106,6 +110,7 @@ No analizar la carpeta completa para esperar exactamente tres pares: suma y otra
 | --- | --- | --- | --- | --- |
 | H01 | R24 | La aplicación se cerró de golpe durante la revisión inicial. | Cierre inesperado; causa aún sin identificar. | Pendiente: reproducir y capturar salida de terminal. |
 | H02 | R13 / R20 | Pasar el mouse y pulsar Compilar; comparar con Ejecutar. | Compilar no mostraba respuesta visual. | Corregido en estilos; 18 pruebas y capturas verificadas. Pendiente repetición humana. |
+| H03 | R12 | Activar reparación automática y regla de `;`; pulsar Enter después de `3` en la copia de reparación. | El usuario informa que no funciona y considera rígida/poco útil la interacción. | Vista gris con Tab y activación más sencilla implementadas; comprobación con motor real correcta. Pendiente repetir R12 y validar usabilidad en la pantalla del usuario. |
 
 Una captura ayuda para fallos visuales, pero registrar también archivo/código y pasos para reproducirlos. No poner datos personales en el corpus compartido.
 

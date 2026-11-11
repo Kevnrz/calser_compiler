@@ -1,17 +1,17 @@
-"""Interacción de asistencia Qt: popup, permisos, revisión y disparadores.
+"""Interacción de asistencia Qt: vista gris, lista, permisos y disparadores.
 
 AsistenciaEditor conecta acciones/cursor/edición a CoordinadorAsistencia. Los
 proveedores consultan C en trabajadores; este controlador no reconoce sintaxis.
-El popup muestra modelos Sugerencia con índices Python y el aplicador convierte
+La vista gris y el popup muestran propuestas C con índices Python; el aplicador convierte
 a UTF-16 al aceptar. Cambiar foco/pestaña/revisión invalida el contexto visible.
-Pausa opcional consulta sugerencias; Enter de línea puede solicitar reparación
+La pausa de escritura consulta propuestas sin editar; Enter puede solicitar reparación
 solo con preferencias/reglas vigentes. La respuesta automática se comprueba
 otra vez antes de aplicarse: no se guarda ni encadena y Deshacer no repara solo."""
 import weakref
 from PySide6.QtCore import QEvent, QObject, QPoint, Qt, QTimer, Signal
 from PySide6.QtWidgets import QApplication, QFrame, QLabel, QListWidget, QListWidgetItem, QVBoxLayout, QWidget
 from shiboken6 import isValid
-from ide.nucleo.asistencia import EstadoAsistencia
+from ide.nucleo.asistencia import EstadoAsistencia, Reparacion
 from ide.politica_asistencia import REGLAS_AUTOMATICAS, ReglaAutomatica, validar_preferencias
 from ide.interfaz.asistencia import CoordinadorAsistencia
 from ide.interfaz.ediciones import aplicar_reparacion, aplicar_sugerencia
@@ -52,6 +52,10 @@ class ListaSugerencias(QFrame):
             self.lista.addItem(item)
         self.lista.setCurrentRow(0)
         self.lista.setFixedHeight(min(8, len(opciones)) * max(28, self.lista.sizeHintForRow(0)) + 4)
+        self.reposicionar(editor)
+        self.show(); self.raise_()
+
+    def reposicionar(self, editor):
         pantalla = editor.screen().availableGeometry().adjusted(8, 8, -8, -8)
         self.setFixedWidth(min(430, max(100, pantalla.width() - 16)))
         self.adjustSize()
@@ -62,7 +66,7 @@ class ListaSugerencias(QFrame):
         if y + self.height() > pantalla.bottom():
             y = editor.viewport().mapToGlobal(rect.topLeft()).y() - self.height() - 4
         y = max(pantalla.top(), min(y, pantalla.bottom() - self.height() + 1))
-        self.move(x, y); self.show(); self.raise_()
+        self.move(x, y)
 
     def cambiar_detalle(self, item, anterior=None):
         texto = item.data(Qt.ItemDataRole.UserRole).detalle if item else ''
@@ -92,6 +96,8 @@ class AsistenciaEditor(QObject):
         self.popup.elegida.connect(self.aceptar)
         self.editores = weakref.WeakValueDictionary()
         self.contexto_visible = None
+        self.opciones_inline = ()
+        self.indice_inline = 0
         self.actual = None
         self.reglas = REGLAS_AUTOMATICAS
         self.configuracion = validar_preferencias(ventana.datos_preferencias.get('asistencia'))
@@ -109,8 +115,8 @@ class AsistenciaEditor(QObject):
         editor.contenidoCambiado.connect(lambda: self.invalidar(documento))
         editor.cursorPositionChanged.connect(lambda: self.invalidar(documento))
         editor.selectionChanged.connect(lambda: self.invalidar(documento))
-        editor.verticalScrollBar().valueChanged.connect(lambda _: self.invalidar(documento, tipo='sugerencias'))
-        editor.horizontalScrollBar().valueChanged.connect(lambda _: self.invalidar(documento, tipo='sugerencias'))
+        editor.verticalScrollBar().valueChanged.connect(lambda _: QTimer.singleShot(0, self.reposicionar_vista))
+        editor.horizontalScrollBar().valueChanged.connect(lambda _: QTimer.singleShot(0, self.reposicionar_vista))
         editor.destroyed.connect(lambda: self.olvidar(documento))
 
     def establecer_motor(self, tipo, motor):
@@ -167,7 +173,7 @@ class AsistenciaEditor(QObject):
         reglas = tuple(r for r in self.reglas if r.codigo in d['reglas_automaticas'])
         if origen == 'linea_confirmada' and d['reparaciones_automaticas'] and reglas:
             tipo = 'reparaciones'
-        elif origen == 'escritura' and d['sugerencias_pausa']:
+        elif origen == 'escritura' and (d['sugerencias_inline'] or d['sugerencias_pausa']):
             tipo, reglas = 'sugerencias', ()
         else:
             return
@@ -217,6 +223,12 @@ class AsistenciaEditor(QObject):
 
     def cerrar_lista(self):
         QApplication.instance().removeEventFilter(self)
+        if self.contexto_visible:
+            editor = self.editores.get(self.contexto_visible.documento)
+            if editor and isValid(editor):
+                editor.sugerencia_inline.ocultar()
+        self.opciones_inline = ()
+        self.indice_inline = 0
         self.popup.hide(); self.contexto_visible = None
 
     def invalidar(self, documento, *, tipo=None):
@@ -258,6 +270,85 @@ class AsistenciaEditor(QObject):
         self.ventana.statusBar().showMessage(f'Consultando {tipo}…')
         return self.coordinador.solicitar(tipo, contexto)
 
+    def reposicionar_vista(self):
+        """Un diagnóstico puede redimensionar el editor sin cambiar el contexto.
+
+        Se ejecuta después del layout de Qt. Conservar la propuesta y la opción
+        elegida; no consultar de nuevo al motor por un cambio puramente visual.
+        """
+        contexto = self.contexto_visible
+        if contexto is None or not isValid(self.ventana) or not isValid(self.ventana.tabs):
+            return
+        editor = self.editores.get(contexto.documento)
+        if (not editor or not isValid(editor) or editor is not self.ventana.editor()
+                or editor.contexto_asistencia() != contexto):
+            self.cerrar_lista()
+            return
+        if self.opciones_inline:
+            sufijo = self.opciones_inline[self.indice_inline][1]
+            if not editor.sugerencia_inline.mostrar(sufijo):
+                self.cerrar_lista()
+        elif self.popup.isVisible():
+            if editor.viewport().rect().intersects(editor.cursorRect()):
+                self.popup.reposicionar(editor)
+            else:
+                self.cerrar_lista()
+
+    def mostrar_inline(self, contexto, opciones):
+        editor = self.editores.get(contexto.documento)
+        if not editor or not self.disponible_automatico(editor):
+            return False
+        candidatas = []
+        for opcion in opciones:
+            if isinstance(opcion, Reparacion):
+                if len(opcion.ediciones) != 1:
+                    continue
+                edicion = opcion.ediciones[0]
+                if edicion.inicio != contexto.cursor or edicion.fin != contexto.cursor:
+                    continue
+                sufijo = edicion.texto
+            else:
+                if not opcion.preferida_inline:
+                    continue
+                prefijo = contexto.texto[opcion.inicio:contexto.cursor]
+                if opcion.fin != contexto.cursor or not opcion.texto.startswith(prefijo):
+                    continue
+                sufijo = opcion.texto[len(prefijo):]
+            if sufijo and '\n' not in sufijo and '\r' not in sufijo:
+                candidatas.append((opcion, sufijo))
+        self.cerrar_lista()
+        if not candidatas or not editor.sugerencia_inline.mostrar(candidatas[0][1]):
+            return False
+        self.contexto_visible = contexto
+        self.opciones_inline = tuple(candidatas)
+        self.indice_inline = 0
+        QApplication.instance().installEventFilter(self)
+        self.ventana.statusBar().showMessage('Tab acepta la propuesta en gris · Esc descarta · Alt+[ / Alt+] alternativas', 4000)
+        return True
+
+    def cambiar_inline(self, paso):
+        if not self.opciones_inline or not self.contexto_visible:
+            return
+        self.indice_inline = (self.indice_inline + paso) % len(self.opciones_inline)
+        editor = self.editores.get(self.contexto_visible.documento)
+        if editor:
+            editor.sugerencia_inline.mostrar(self.opciones_inline[self.indice_inline][1])
+
+    def aceptar_inline(self):
+        if not self.opciones_inline or not self.contexto_visible:
+            return
+        contexto = self.contexto_visible
+        opcion = self.opciones_inline[self.indice_inline][0]
+        editor = self.editores.get(contexto.documento)
+        self.cerrar_lista()
+        if not editor or not isValid(editor) or editor is not self.ventana.editor():
+            return
+        self.invalidar(contexto.documento)
+        aplicar = aplicar_reparacion if isinstance(opcion, Reparacion) else aplicar_sugerencia
+        resultado = aplicar(editor, contexto, opcion)
+        self.ventana.statusBar().showMessage('Propuesta aplicada · Ctrl+Z deshace · sin guardar' if resultado.aplicada else resultado.explicacion, 4000)
+        editor.setFocus()
+
     def recibir(self, respuesta):
         contexto = respuesta.solicitud.contexto
         editor = self.editores.get(contexto.documento)
@@ -273,9 +364,20 @@ class AsistenciaEditor(QObject):
         if respuesta.solicitud.origen != 'manual' and not self.disponible_automatico(editor):
             return
         if respuesta.solicitud.tipo == 'reparaciones':
+            if respuesta.solicitud.origen == 'vista_inline':
+                if respuesta.resultado.estado == EstadoAsistencia.OK:
+                    self.mostrar_inline(contexto, respuesta.resultado.propuestas)
+                return
             self.reparacionesRecibidas.emit(respuesta)
             return
         resultado = respuesta.resultado
+        if respuesta.solicitud.origen != 'manual' and self.configuracion['sugerencias_inline']:
+            mostrada = resultado.estado == EstadoAsistencia.OK and self.mostrar_inline(contexto, resultado.sugerencias)
+            if not mostrada and resultado.estado in (EstadoAsistencia.OK, EstadoAsistencia.SIN_OPCIONES, EstadoAsistencia.BLOQUEADO):
+                # ccom puede proponer un cierre omitido en esta misma posición.
+                # No mostrar ni aplicar una reparación de otra zona del archivo.
+                self.coordinador.solicitar('reparaciones', contexto, origen='vista_inline')
+            return
         if resultado.estado == EstadoAsistencia.OK:
             self.contexto_visible = contexto
             QApplication.instance().installEventFilter(self)
@@ -310,12 +412,15 @@ class AsistenciaEditor(QObject):
             return False
         tipo = evento.type()
         visible = self.popup.isVisible()
-        if tipo == QEvent.Type.MouseButtonPress and visible:
+        inline = bool(self.opciones_inline)
+        if tipo == QEvent.Type.MouseButtonPress and (visible or inline):
             if widget is not self.popup and (not isinstance(widget, QWidget) or not self.popup.isAncestorOf(widget)):
                 self.cerrar_lista()
                 self.coordinador.invalidar(tipo='sugerencias')
         if widget is editor:
-            if tipo in (QEvent.Type.FocusOut, QEvent.Type.Resize, QEvent.Type.Hide, QEvent.Type.InputMethod):
+            if tipo == QEvent.Type.Resize:
+                QTimer.singleShot(0, self.reposicionar_vista)
+            if tipo in (QEvent.Type.FocusOut, QEvent.Type.Hide, QEvent.Type.InputMethod):
                 self.cancelar_automaticas(editor.documento_id)
                 self.invalidar(editor.documento_id, tipo='sugerencias')
             if tipo in (QEvent.Type.ShortcutOverride, QEvent.Type.KeyPress):
@@ -324,14 +429,21 @@ class AsistenciaEditor(QObject):
                 reparar = tecla in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and mods == Qt.KeyboardModifier.AltModifier
                 teclas = (Qt.Key.Key_Up, Qt.Key.Key_Down, Qt.Key.Key_PageUp, Qt.Key.Key_PageDown,
                           Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Tab, Qt.Key.Key_Escape)
-                if tipo == QEvent.Type.ShortcutOverride and (consulta or reparar or (visible and tecla in teclas and mods == Qt.KeyboardModifier.NoModifier)):
+                alternativa = inline and mods == Qt.KeyboardModifier.AltModifier and tecla in (Qt.Key.Key_BracketLeft, Qt.Key.Key_BracketRight)
+                aceptar_inline = inline and mods == Qt.KeyboardModifier.NoModifier and tecla == Qt.Key.Key_Tab
+                if tipo == QEvent.Type.ShortcutOverride and (consulta or reparar or alternativa or aceptar_inline or (inline and tecla == Qt.Key.Key_Escape) or (visible and tecla in teclas and mods == Qt.KeyboardModifier.NoModifier)):
                     evento.accept(); return True
                 if tipo == QEvent.Type.KeyPress:
                     if consulta:
                         self.solicitar(); evento.accept(); return True
                     if reparar:
                         self.ventana.solicitar_reparaciones(); evento.accept(); return True
-                    if tecla == Qt.Key.Key_Escape and (visible or self.programada or self.coordinador.task or self.coordinador.pendientes):
+                    if aceptar_inline:
+                        self.aceptar_inline(); evento.accept(); return True
+                    if alternativa:
+                        self.cambiar_inline(-1 if tecla == Qt.Key.Key_BracketLeft else 1)
+                        evento.accept(); return True
+                    if tecla == Qt.Key.Key_Escape and (inline or visible or self.programada or self.coordinador.task or self.coordinador.pendientes):
                         self.cerrar_lista(); self.invalidar(editor.documento_id)
                         evento.accept(); return True
                     if visible and mods == Qt.KeyboardModifier.NoModifier:
@@ -341,7 +453,8 @@ class AsistenciaEditor(QObject):
                             evento.accept(); return True
                         if tecla in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Tab):
                             self.popup.aceptar(); evento.accept(); return True
-                    if visible:
+                    modificador = tecla in (Qt.Key.Key_Shift, Qt.Key.Key_Control, Qt.Key.Key_Alt, Qt.Key.Key_Meta, Qt.Key.Key_AltGr)
+                    if (visible or inline) and not modificador:
                         self.cerrar_lista(); self.coordinador.invalidar(editor.documento_id)
         return False
 

@@ -22,9 +22,9 @@ CALSIDE puede ejecutarse desde Python en desarrollo. Una aplicación empaquetada
 | F08 | Diagnósticos gráficos y navegación | Implementado desde C; incluye varios errores sintácticos con recuperación conservadora. |
 | F09 | Colores y errores léxicos | Flex real mediante `--tokens-json`. |
 | F10 | Análisis automático | `--check-json` sobre copias sin guardar, por documento/revisión. |
-| F11 | Sugerencias | Motor C conectado; Ctrl+Espacio, clic derecho y pausa opcional. No inventa identificadores ni instrucciones completas. |
-| F12 | Reparaciones propuestas | Motor C conectado; `;`, `.`, `]`, `)`, vista previa, precondiciones y Deshacer. |
-| F13 | Corrección automática | Implementada de forma conservadora para una regla de `;`, con habilitación y selección del usuario. Otras reglas requieren desarrollo/pruebas. |
+| F11 | Sugerencias | Motor C conectado; vista gris por defecto con Tab/Esc, alternativas Alt+[ / Alt+] y lista Ctrl+Espacio. No inventa identificadores ni instrucciones completas. |
+| F12 | Reparaciones propuestas | Motor C conectado; `;`, `.`, `]`, `)`, vista previa, precondiciones y Deshacer; cierres locales en gris aceptables con Tab. |
+| F13 | Corrección automática | Optativa para `;`, con una sola activación en preferencias y validación completa C. Comprobada con motor real; repetición humana de R12 pendiente. |
 | F14 | Clones Tipo I | Comparación C, formato/comentarios ignorados. |
 | F15 | Clones Tipo II | Comparación C con biyección de identificadores y variación de literales por clase. No demuestra equivalencia semántica. |
 | F16 | Recuperación ante fallos | Protecciones implementadas; validar manualmente los recorridos entregados. |
@@ -38,6 +38,7 @@ CALSIDE puede ejecutarse desde Python en desarrollo. Una aplicación empaquetada
 | F24 | Alineación y posición de menús | Implementado. |
 | F25 | Aplicación empaquetada | Pendiente E8. |
 | F26 | Esquina de papel animada | Mejora futura; esquina estática actual. |
+| F27 | Animación de inicio | Implementada: diseño geométrico aprobado, SVG/Qt, 4,4 s, clic/Esc y preferencia persistente. Revisión visual humana pendiente. |
 
 Las funciones implementadas tienen pruebas automatizadas; aún deben pasar la revisión humana y la prueba en el equipo de entrega. Las limitaciones de M7, asistencia y terminal se conservan explícitas en las referencias técnicas.
 
@@ -53,11 +54,17 @@ La evidencia y evolución están en la [bitácora](bitacora_ide.md). No hay moto
 ## Siguiente trabajo: revisión manual
 
 - [ ] Copiar los ejemplos a un proyecto temporal, abrir CALSIDE y registrar plataforma/pantalla.
-- [ ] Completar los bloques de [revisión manual](revision_manual.md), anotando resultado y fallos.
+- [x] Bloque A de revisión manual: R01–R04 aprobados por el usuario (2026-11-11).
+- [x] Bloque B de revisión manual: R05–R08 aprobados por el usuario (2026-11-11).
+- [x] R09–R11 (sugerencias y reparación manual) aprobados por el usuario (2026-11-11).
+- [ ] R12: ajustes de interacción implementados y comprobados con ccom real; pendiente repetir en la pantalla del usuario. La corrección automática es un requisito del enunciado, aunque la prueba se hubiera etiquetado opcional.
+- [ ] Completar los bloques restantes de [revisión manual](revision_manual.md), anotando resultado y fallos; seguir desde R13. Las comprobaciones pendientes también pueden realizarse sobre el paquete E8.
 - [ ] Corregir cada fallo y repetir su caso y las pruebas afectadas.
 - [ ] Contrastar el alcance demostrado con los requisitos vigentes del proyecto y el profesor; anotar cualquier diferencia antes de afirmar cierre de requisitos.
 
 No se marca un caso como aprobado solo porque tenga una prueba automática. Los fallos descubiertos se registran en la misma guía; su solución y evidencia pasan a la bitácora.
+
+Según lo indicado por el usuario tras consultar al profesor (2026-11-11), informar un error a la vez satisface ese aspecto de la entrega. La detección entre fases y la recuperación más amplia no son un requisito adicional de cierre; permanecen como mejora futura. Esto no da por aprobados los demás requisitos del proyecto.
 
 ## E8: empaquetado y otra máquina
 
@@ -79,15 +86,29 @@ Cierre E8: el paquete funciona como aplicación normal en la plataforma acordada
 - [ ] Revisar alcance/responsabilidades con el resto del proyecto; no atribuir al IDE funciones backend no entregadas.
 - [ ] Preparar revisión/PR/publicación cuando se solicite; no forma parte de una limpieza automática de documentación.
 
+### Hallazgo pendiente de asistencia: R12
+
+- [x] Replantear asistencia: sugerencias/cierres locales en gris con Tab; simplificar la activación de corrección automática y verificar el motor real. H03 conserva pendiente su repetición humana.
+- [ ] Repetir R12 y la nueva vista gris con el usuario antes de marcar su cierre. Mantener el acceso manual a reparaciones y no ampliar reglas sin validación.
+
 ## Mejoras futuras, separadas del cierre
 
-- Predicción gris dentro del editor, aceptable con Tab y cancelable; no modificar el buffer al previsualizar. Completar instrucciones completas requiere propuestas justificadas por C.
+- Completar instrucciones o cuerpos de función mediante propuestas justificadas por C. La vista gris con Tab ya está implementada para terminales y cierres locales; no genera código arbitrario.
 - Esquina morada que se dobla y revela controles: clic/teclado, movimiento reducido y conservación de mover/redimensionar/cerrar.
-- Apertura animada: dibujar hexágono lado a lado, girarlo/desplazarlo a la izquierda y dibujar CALSIDE letra por letra. Objetivo inicial aproximado 2 s, carga en paralelo, saltable con clic/Esc, desactivable y sin espera obligatoria.
 - Tema claro, preferencias adicionales y más reglas de reparación con positivos/negativos.
 - Agrupar visualmente pares de clones equivalentes manteniendo los pares de archivos reales. Tres archivos pueden producir tres pares legítimos.
 - Métricas/IR/optimizaciones cuando exista contrato de datos; recursos del compilador cuando estén implementados.
 - Terminal con emulación completa, redimensionamiento PTY y otras plataformas.
+
+### Diagnósticos de varias fases en una misma revisión
+
+- [ ] Ampliar la recuperación de **ccom en C** para informar errores léxicos, sintácticos y semánticos de zonas independientes en una misma revisión. CALSIDE presenta los resultados mediante el contrato JSON, sin duplicar analizadores en Python.
+- [ ] Permitir que el parser continúe después de tokens léxicos inválidos, conservando su ubicación y evitando mensajes sintácticos derivados del mismo fallo.
+- [ ] Identificar nodos incompletos o inválidos del AST recuperado y analizar semánticamente solo las partes fiables. No basta con retirar los bloqueos actuales del IDE.
+- [ ] Evitar diagnósticos en cascada o duplicados; mantener límites de errores, tiempo y recuperación. Un AST con errores sigue sin autorizar generación de código ni ejecución.
+- [ ] Validar con un programa que combine un símbolo inválido, una asignación sin expresión y un identificador no declarado en instrucciones independientes. Mostrar los errores recuperables con su fase y ubicación, sin prometer detectar todos los errores de cualquier programa dañado.
+
+Implementación gradual: recuperación léxica/sintáctica, semántica parcial segura y adaptación del contrato/interfaz si hace falta. Es una mejora futura; el flujo vigente sigue bloqueando las fases posteriores cuando encuentra errores en una fase previa.
 
 ## Documentación vigente
 

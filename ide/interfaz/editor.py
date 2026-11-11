@@ -1,6 +1,7 @@
 """Editor Qt con resaltado del lexer real, margen y diagnósticos por origen."""
 from html import escape
 from uuid import uuid4
+from ide.interfaz.sugerencia_inline import SugerenciaInline
 
 from PySide6.QtCore import QEvent, QRect, QSize, QTimer, Qt, Signal
 from PySide6.QtGui import QContextMenuEvent, QColor, QFont, QPainter, QKeySequence, QSyntaxHighlighter, QTextCharFormat, QTextCursor, QTextFormat
@@ -83,6 +84,7 @@ class Editor(QPlainTextEdit):
         self.setFont(QFont("monospace", 12))
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self.setTabStopDistance(self.fontMetrics().horizontalAdvance(" ") * 4)
+        self.sugerencia_inline = SugerenciaInline(self)
         self.margin = Margen(self)
         self.highlighter = Resaltado(self.document())
         self.blockCountChanged.connect(self.actualizar_margen)
@@ -160,7 +162,7 @@ class Editor(QPlainTextEdit):
         if self.revision != revision and sin_seleccion:
             if confirmar and final_linea:
                 self.entradaAsistencia.emit('linea_confirmada')
-            elif escribir:
+            elif escribir or (event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete) and mods == Qt.KeyboardModifier.NoModifier):
                 self.entradaAsistencia.emit('escritura')
 
     def contexto_asistencia(self):

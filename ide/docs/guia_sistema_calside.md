@@ -26,7 +26,7 @@ Este documento sirve para entender el IDE antes de modificarlo y como recorrido 
 
 CALSIDE es una aplicación de escritorio para editar programas Calser, recibir diagnósticos, compilar con `ccom` y ejecutar mediante el simulador del repositorio. La interfaz utiliza **Python y PySide6/Qt**. Abrirla no exige VS Code; en desarrollo se inicia con Python o `make ide`. El empaquetado para distribuirla como ejecutable sigue pendiente.
 
-La distribución visual incluye cabecera, menús, explorador/búsqueda, pestañas de código, panel de resultados y barra de estado. El panel puede estar abajo o a la derecha. La esquina morada todavía es estática; las animaciones son una mejora futura.
+La distribución visual incluye cabecera, menús, explorador/búsqueda, pestañas de código, panel de resultados y barra de estado. El panel puede estar abajo o a la derecha. La esquina morada todavía es estática; la presentación de inicio de 4,4 s está implementada, se omite con clic/Esc y se desactiva desde Ver.
 
 Conviene distinguir estas responsabilidades:
 
@@ -49,7 +49,8 @@ Por tanto, el IDE incluye lógica propia en Python además de widgets. `ccom` si
 
 ```mermaid
 flowchart TD
-    MAIN[ide/main.py] --> V[Ventana y componentes PySide6]
+    MAIN[ide/main.py] --> INICIO[Inicio y presentación de marca]
+    INICIO --> V[Ventana y componentes PySide6]
     V --> E[Editor y documentos]
     V --> P[Explorador, búsqueda y operaciones de proyecto]
     V --> X[Paneles y terminales]
@@ -153,11 +154,43 @@ En un rango `[inicio, fin)`, `inicio` está incluido y `fin` queda fuera. Una in
 ### Arranque
 
 1. `ide/main.py:main` crea `QApplication`, establece nombre, estilo e icono y calcula la raíz a partir de la ubicación del propio archivo.
-2. Crea `Ventana(root)`. Su constructor prepara estado, interfaz, acciones y servicios.
-3. `iniciar_proyecto` carga las preferencias y crea el monitor del disco.
+2. Crea `Inicio`, que lee `animacion_inicio` en las preferencias existentes (activada por defecto), muestra `Presentacion` si corresponde y programa la inicialización. `app.exec()` entrega el control al bucle Qt.
+3. `Inicio` construye `Ventana(root)` en el hilo gráfico. Su constructor prepara interfaz, acciones y servicios; `iniciar_proyecto` carga preferencias y crea el monitor del disco.
 4. Se crea `AsistenciaEditor`, se conecta el panel de reparaciones, se abre una pestaña nueva y se restauran preferencias/proyecto.
-5. Si se pasaron archivos por consola, `main` selecciona la carpeta del primero y los abre.
-6. `window.show()` muestra la ventana y `app.exec()` inicia el bucle de eventos de Qt.
+5. En turnos posteriores de eventos, si hay argumentos, selecciona la carpeta del primero y abre una ruta por turno.
+6. Una barrera espera **ventana preparada** y **presentación terminada u omitida**. Entonces muestra la ventana antes de retirar la presentación. Sin animación, se muestra en cuanto está preparada.
+
+`ide/interfaz/inicio.py` usa `QVariantAnimation`, `QPainterPath` y
+`QSvgRenderer`: 1200 ms de trazado de los seis fragmentos, 900 ms de
+desplazamiento, 2000 ms de letras y 300 ms finales de giro. El hexágono
+gira a velocidad constante durante los 4400 ms completos (unos 43°/s),
+empezando a unos −189° y terminando a 0° sin recolocación brusca. La composición
+aprobada vive en `assets/branding/calside-inicio.svg`: hexágono regular de
+seis fragmentos iguales, segundo fragmento morado contando desde arriba en
+sentido horario, CALS naranja e IDE morado. La D es el reflejo exacto de C.
+La variante CALSER se conserva en `assets/branding/calser-marca-geometrica.svg`.
+
+`MarcaInicio` carga el SVG una sola vez. Las máscaras vectoriales recorren los
+trazos centrales y revelan sus contornos exactos. Cada fragmento se limita a
+su propia región para evitar adelantar el siguiente al atravesar una división.
+La escena lógica de 1600×900 se escala con Qt, sin bitmaps ni fuentes instaladas.
+Al terminar se dibuja directamente el SVG aprobado; las comprobaciones 1×/2×
+verifican que el giro continúe durante las letras y al final, conserve los
+colores y llegue al SVG estático sin un salto de orientación. Los logos PNG
+anteriores se conservan para sus usos existentes, fuera de esta presentación.
+
+Clic/Esc y cerrar la presentación omiten solo su tiempo visual restante. Si la
+carga sigue pendiente se conserva la composición con «Preparando el editor…».
+**Ver → Animación al iniciar CALSIDE** persiste inmediatamente el booleano
+`animacion_inicio` en `estado_v1`, con validación y sin perder los otros campos.
+
+No hay `sleep`, bucles de espera ni llamadas reentrantes a `processEvents` en
+producción. Los pasos de arranque se programan con `QTimer`; esto no crea un
+hilo ni vuelve paralela la construcción de widgets o la lectura inicial de
+archivos, que conservan su recorrido existente en el hilo Qt. Los servicios de
+análisis, explorador y disco mantienen sus mecanismos asíncronos. La animación
+no espera a completar un análisis de ccom para entregar el editor. Si falla la
+inicialización, se retira la presentación, se informa el error y se sale con 1.
 
 El orden importa: por ejemplo, las acciones y widgets deben existir antes de que la configuración de asistencia intente habilitarlos o conectar sus señales.
 
@@ -220,7 +253,7 @@ La asistencia no publica actualmente otra fuente de diagnósticos del parser en 
 
 ### Documentos sin código y datos de archivos
 
-El resultado léxico incluye `contiene_codigo`, calculado a partir de las categorías que ya produjo Flex, sin volver a reconocer comentarios en Python. Si no hay tokens de código ni errores léxicos, la interfaz cancela/retira solo la comprobación sintáctica automática y muestra «Sin código para analizar». Esto permite comentarios válidos sin exigir un programa mientras se edita. Un bloque de comentario sin cerrar conserva su error; F5 explícito sigue validando la fuente como programa.
+El resultado léxico incluye `contiene_codigo`, calculado a partir de las categorías que ya produjo Flex, sin volver a reconocer comentarios en Python. Si no hay tokens de código ni errores léxicos, la interfaz cancela/retira solo la comprobación sintáctica automática y muestra «Sin código para analizar». Esto permite comentarios válidos sin exigir un programa mientras se edita. Un bloque de comentario sin cerrar conserva su error. F5 también consulta el resultado vigente de Flex: si solo hay comentarios válidos, muestra «El archivo solo contiene comentarios; no hay código para compilar» en Salida, sin crear un problema sintáctico ni generar artefactos. Para un archivo vacío muestra un aviso equivalente. Si el léxico aún está pendiente espera de forma asíncrona; una edición posterior cancela esa solicitud de compilación. Los programas con código mantienen su compilación normal.
 
 El editor rechaza `text/uri-list` al insertar/arrastrar/pegar archivos: la representación `file://...` no se añade al código. El texto plano y las rutas copiadas explícitamente como texto se pegan normalmente, con Deshacer. Guardar persiste el buffer; no añade el nombre de destino al contenido.
 
@@ -333,7 +366,9 @@ El coordinador los importa de forma diferida dentro del trabajador y captura roo
 
 `AsistenciaEditor`, en `interfaz/sugerencias.py`, conecta cada editor con `CoordinadorAsistencia`. Ctrl+Espacio o el menú solicitan opciones; `ListaSugerencias` las presenta junto al cursor sin quitarle el foco. Flechas recorren, Enter/Tab o clic aceptan y Escape cancela.
 
-La preferencia de pausa utiliza `Editor.entradaAsistencia`, emitida después de una tecla que cambió el contenido. El temporizador captura el contexto y, si sigue vigente al vencer, consulta el motor. Consultar opciones no las acepta automáticamente.
+`SugerenciaInline` (`interfaz/sugerencia_inline.py`) dibuja por defecto el sufijo en gris al final de la línea: Tab acepta, Esc descarta, Alt+[ / Alt+] cambia de propuesta. No modifica el documento, la revisión ni Deshacer. C distingue propuestas preferidas para la vista gris de las alternativas ambiguas de la lista; no elige `C` por orden alfabético en una línea vacía. Un token completo permite consultar su continuación: `F main` propone el par `[]`, con cursor dentro al aceptar. Para reemplazos a mitad de línea se conserva la lista manual. Si no hay continuación, el controlador puede consultar reparaciones C y presentar una inserción de cierre en esa misma posición. Enter sigue creando una línea; aceptar la vista pasa por el aplicador y sus precondiciones.
+
+La pausa utiliza `Editor.entradaAsistencia`, emitida después de una tecla que cambió el contenido. El temporizador captura el contexto y, si sigue vigente al vencer, consulta el motor. Consultar opciones no las acepta automáticamente.
 
 Cambios de texto/cursor/selección, foco, pestaña y otras interacciones invalidan lo que corresponda. Abrir, pegar, recargar, Deshacer/Rehacer y aplicar propuestas no arman por sí mismos otra pausa. La entrada IME conserva la vía manual en esta versión.
 
@@ -357,7 +392,7 @@ Las posiciones se refieren al original: aplicar de derecha a izquierda evita des
 
 ### Preferencias y automatización
 
-Editar → Preferencias de asistencia permite habilitar/deshabilitar el conjunto, activar sugerencias por pausa y ajustar la espera entre 300 y 3000 ms, con 700 ms por defecto. Pausa y corrección automática están desactivadas inicialmente. Son controles independientes del análisis automático con ccom.
+Editar → Preferencias de asistencia permite habilitar/deshabilitar el conjunto, activar sugerencias por pausa y ajustar la espera entre 300 y 3000 ms, con 350 ms por defecto (se conserva la espera ya guardada). La vista gris está activada inicialmente; la lista por pausa y la corrección automática con Enter permanecen optativas. Activar esta última selecciona la primera regla revisada si no había ninguna seleccionada. Son controles independientes del análisis automático con ccom.
 
 La política en `ide/politica_asistencia.py` exige permiso por código de regla revisada; `automatica_segura=True` del motor no basta. Su ruta inicial se dispara al confirmar con Enter una línea no vacía desde su final y esperar sin cambios.
 
@@ -417,7 +452,7 @@ Ejecutar `ccom` o el simulador desde el shell permite elegir banderas, pero no e
 
 ### Preferencias y recursos
 
-`preferencias.py` valida y limita el JSON guardado mediante `QSettings('Calser', 'CALSIDE')`. `ProyectoVentana` restaura y guarda proyecto, ccom, fuente, tamaño, divisiones, visibilidad, ramas, orden y análisis. El bloque `asistencia` guarda sus permisos y tiempos. Datos inválidos recuperan valores predeterminados; no se restauran buffers ni procesos de terminal.
+`preferencias.py` valida y limita el JSON guardado mediante `QSettings('Calser', 'CALSIDE')`. `ProyectoVentana` restaura y guarda proyecto, ccom, fuente, tamaño, divisiones, visibilidad, ramas, orden, análisis y animación de inicio. El bloque `asistencia` guarda sus permisos y tiempos. Datos inválidos recuperan valores predeterminados; no se restauran buffers ni procesos de terminal.
 
 `iconos.py` localiza la identidad compartida con la extensión de VS Code; `assets/branding/` contiene los recursos utilizados. Compartir un icono no crea una dependencia de ejecución con VS Code.
 
@@ -498,6 +533,7 @@ Los nombres son rutas relativas a la raíz del repositorio. Los módulos de prod
 
 | Archivo | Entrada o componente principal | Responsabilidad y comentario que merece |
 | --- | --- | --- |
+| `ide/interfaz/inicio.py` | `Inicio`, `Presentacion`, `MarcaInicio`, `trazar`. | Presentación Qt y barrera de arranque; omisión idempotente y argumentos por turnos. |
 | `ide/interfaz/__init__.py` | Paquete de interfaz. | Ubicación de los componentes Qt. |
 | `ide/interfaz/ventana.py` | `Ventana`, `Esquina`. | Ensamblaje, señales, estado compartido con mixins, F5, problemas y cierre. Conviene revisar por bloques: concentra cerca de mil líneas. |
 | `ide/interfaz/editor.py` | `Editor`, `Resaltado`, `Margen`. | Separar cambios de texto y formato, disparadores, marcas y conversiones de posiciones. |
@@ -517,6 +553,7 @@ Los nombres son rutas relativas a la raíz del repositorio. Los módulos de prod
 | `ide/interfaz/ejecucion.py` | `CompilacionEjecutable`, `EjecucionVentana`. | Vigencia de fuente/artefactos, copia por corrida, traza y controles del proceso. |
 | `ide/interfaz/clones.py` | `PanelClones`, `Analisis`. | Reunir fuentes/buffers, ejecutar detector, comparar y marcar obsolescencia. |
 | `ide/interfaz/asistencia.py` | `CoordinadorAsistencia`, `TareaAsistencia`. | Importación diferida, validación, serialización, origen de consultas y evaluación automática en el trabajador. |
+| `ide/interfaz/sugerencia_inline.py` | `SugerenciaInline`. | Presentación gris sobre el viewport sin cambios en el texto ni historial. |
 | `ide/interfaz/sugerencias.py` | `ListaSugerencias`, `AsistenciaEditor`. | Foco, filtros de eventos, permisos, pausa, contexto vigente y aceptación. Coordina también la ruta automática de reparaciones. |
 | `ide/interfaz/reparaciones.py` | `PanelReparaciones`, `ReparacionesVentana`, `vista_previa`. | UI manual, límites de revisión, aplicación explícita e invalidación. |
 | `ide/interfaz/ediciones.py` | `capturar_contexto`, `aplicar_ediciones_editor`. | Hilo gráfico, snapshot estricto, conversión a UTF-16 y bloque único de Deshacer. |
@@ -545,6 +582,7 @@ Las pruebas viven en `ide/pruebas/`. Los proveedores de motores controlados se d
 
 | Archivo en `ide/pruebas/` | Área que ayuda a verificar al comentar |
 | --- | --- |
+| `test_inicio.py` | Barrera de carga/animación, clic/Esc, argumentos, fallos y persistencia aislada. |
 | `test_prototipo.py` | Ventana/editor, compilación, navegación, terminales y experiencia base. |
 | `test_lexico.py` | Tokens, comentarios, errores y equivalencia léxica esperada. |
 | `test_tabla.py` | FIRST/FOLLOW, tabla y casos de referencia de gramáticas. |
@@ -660,7 +698,7 @@ Después de cada grupo se puede registrar aquí fecha, archivos revisados y duda
 
 ## 15. Pendientes y mantenimiento de esta guía
 
-La funcionalidad conectada de M1–M7 está implementada; eso no certifica todos los requisitos ni reemplaza la revisión humana. El [plan vigente](plan_ide.md) es el único checklist de cierre: revisión manual, empaquetado E8 y validación/documentación/defensa E9. Animaciones, predicción gris, más reglas y métricas mantienen su lista de mejoras futuras.
+La funcionalidad conectada de M1–M7 está implementada; eso no certifica todos los requisitos ni reemplaza la revisión humana. El [plan vigente](plan_ide.md) es el único checklist de cierre: revisión manual, empaquetado E8 y validación/documentación/defensa E9. La animación de inicio está implementada; esquina animada, predicción gris, más reglas y métricas mantienen su lista de mejoras futuras.
 
 | Consulta | Referencia única |
 | --- | --- |

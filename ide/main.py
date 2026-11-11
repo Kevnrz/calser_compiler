@@ -3,7 +3,7 @@
 Se inicia desde la raíz del repositorio con ``python3 -m ide.main``. También
 acepta rutas de archivos después del nombre del módulo para abrirlos al iniciar.
 
-Este archivo prepara Qt y entrega el control a ``Ventana``. La edición, los
+Este archivo prepara Qt y entrega el control a ``Inicio`` y ``Ventana``. La edición, los
 análisis y las llamadas al compilador se coordinan en los componentes de esa
 ventana; aquí no se compila ni se analiza el código del usuario.
 """
@@ -13,7 +13,7 @@ from pathlib import Path
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
-from ide.interfaz.ventana import Ventana
+from ide.interfaz.inicio import Inicio
 
 
 def main():
@@ -34,16 +34,10 @@ def main():
     # aunque el usuario inicie CALSIDE desde otro directorio de trabajo.
     root = Path(__file__).resolve().parents[1]
     app.setWindowIcon(QIcon(str(root / "assets/branding/calser-file-icon.png")))
-    window = Ventana(root)
-
-    # Con archivos de entrada, el primero determina la carpeta del explorador.
-    # Después se abre cada ruta en una pestaña, incluso si pertenecen a carpetas
-    # distintas. Ventana se encarga de la lectura y de informar sus errores.
-    if len(sys.argv) > 1:
-        window.cargar_carpeta(Path(sys.argv[1]).resolve().parent)
-    for argument in sys.argv[1:]:
-        window.abrir(Path(argument))
-    window.show()
+    # Conservar el coordinador durante todo el bucle Qt. Inicializa la ventana
+    # por etapas mientras se anima la marca; clic/Esc solo omiten la presentación.
+    inicio = Inicio(app, root, sys.argv[1:])
+    inicio.iniciar()
 
     # Esta llamada permanece activa hasta cerrar la aplicación; no es un bucle
     # que tengamos que escribir manualmente para actualizar los widgets.

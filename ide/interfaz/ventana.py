@@ -355,6 +355,12 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
                 action.toggled.connect(self.files_button.setChecked)
             else:
                 self.results_action = action
+        self.animacion_inicio_action = QAction("Animación al iniciar CALSIDE", self)
+        self.animacion_inicio_action.setCheckable(True)
+        self.animacion_inicio_action.setChecked(True)
+        self.animacion_inicio_action.setToolTip("Se aplica en el próximo inicio; clic o Esc omiten la presentación actual")
+        self.animacion_inicio_action.toggled.connect(lambda: self.guardar_preferencias())
+        view.addAction(self.animacion_inicio_action)
         self.accion(view, "Fuente del editor…", None, self.configurar_fuente)
         self.accion(view, "Enfocar explorador", "Ctrl+Shift+E", self.enfocar_explorador)
         self.accion(view, "Revelar archivo activo en el explorador", None, self.revelar_archivo_activo)
@@ -494,6 +500,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         self.actualizar_aviso_externo()
 
     def edicion(self, editor):
+        self._compilacion_esperando_lexico = None
         self._eliminacion_prioritaria = False
         self.analizador.olvidar(editor.documento_id)
         self.comprobador.invalidar(editor.documento_id)
@@ -532,11 +539,20 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         if editor and editor.aplicar_analisis(result):
             self.actualizar_problemas()
             self.programar_comprobacion(editor)
+            pendiente = getattr(self, '_compilacion_esperando_lexico', None)
+            if pendiente and pendiente[0] is editor:
+                self._compilacion_esperando_lexico = None
+                if self.editor() is editor and pendiente[1] == editor.revision and pendiente[2] == self.perfil_compilacion:
+                    self.compilar()
 
     def fallo_analisis(self, documento, revision, message):
         editor = next((self.tabs.widget(i) for i in range(self.tabs.count()) if self.tabs.widget(i).documento_id == documento), None)
         if editor and editor.revision == revision:
             editor.estado_analisis = f"No disponible: {message}"
+            pendiente = getattr(self, '_compilacion_esperando_lexico', None)
+            if pendiente and pendiente[0] is editor and pendiente[1] == revision:
+                self._compilacion_esperando_lexico = None
+                self.statusBar().showMessage(f'No se pudo preparar la compilación: {message}')
             self.actualizar_estado()
 
     def programar_comprobacion(self, editor):
@@ -909,6 +925,29 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
                 if not self.guardar(editor=editor):
                     return
             self.compilation_disk = editor.estado_disco
+            if self.perfil_compilacion['modo'] != 'ensamblar':
+                # Flex decide si hay código. Esperar su revisión vigente evita
+                # reconocer comentarios en Python o bloquear el hilo gráfico.
+                if editor.analisis_revision != editor.revision:
+                    self._compilacion_esperando_lexico = (editor, editor.revision, dict(self.perfil_compilacion))
+                    editor.analisis_timer.stop()
+                    self.statusBar().showMessage('Preparando compilación · esperando léxico…')
+                    editor.emitir_analisis()
+                    return
+                if editor.contiene_codigo is False and not editor.errores_lexicos:
+                    mensaje = ('El archivo solo contiene comentarios; no hay código para compilar.'
+                               if editor.toPlainText().strip() else
+                               'El archivo está vacío; no hay código para compilar.')
+                    self.comprobador.invalidar(editor.documento_id)
+                    self.results.pop(editor, None)
+                    self.auto_results.pop(editor, None)
+                    self.compilados.pop(editor, None)
+                    editor.estado_ccom = 'Sin código para compilar'
+                    self.actualizar_problemas()
+                    self.output.setPlainText(mensaje)
+                    self.panels.setCurrentWidget(self.output)
+                    self.statusBar().showMessage(mensaje)
+                    return
             perfil, destino, arguments, salidas = compilacion.preparar(self.perfil_compilacion, editor.path)
             abiertos = {self.tabs.widget(i).path.resolve() for i in range(self.tabs.count()) if self.tabs.widget(i).path}
             if any(p in abiertos or self.ruta_ocupada(p) for p in salidas):

@@ -1,6 +1,6 @@
 # Asistencia de CALSIDE: modelos, aplicación y permisos
 
-Contrato vigente · 2026-11-11. Sugerencias y reparaciones están conectadas a motores C. `ide/nucleo/asistencia.py` mantiene modelos sin Qt ni dependencia del LL(1). El catálogo automático contiene INSERCION_PUNTO_COMA; está desactivado hasta habilitar automatización y seleccionar la regla.
+Contrato vigente · 2026-11-11. Sugerencias y reparaciones están conectadas a motores C. `ide/nucleo/asistencia.py` mantiene modelos sin Qt ni dependencia del LL(1). El catálogo automático contiene INSERCION_PUNTO_COMA; está desactivado hasta habilitar automatización. El diálogo selecciona la primera regla revisada si todavía no hay ninguna seleccionada. La vista gris con Tab sí viene activada.
 
 Este documento define el contrato Python/UI. Las decisiones del lenguaje y formatos nativos se explican en [Servicios de ccom](../../docs/ccom_servicios_ide.md). [Guía del sistema](guia_sistema_calside.md), [prueba manual](revision_manual.md#asistencia).
 
@@ -14,7 +14,8 @@ Este documento define el contrato Python/UI. Las decisiones del lenguaje y forma
 | `ide/ediciones.py` | Validación de rangos/precondiciones, transformación sobre copia y conversiones Python/UTF-16. Python puro. |
 | `ide/interfaz/ediciones.py` | Capturar el contexto y aplicar cambios sobre un Editor en el hilo gráfico. |
 | `ide/interfaz/asistencia.py` | Coordinador serial de ambos motores, tareas, cancelación, límites y validación de respuestas. |
-| `ide/interfaz/sugerencias.py` | Lista junto al cursor y control manual de sugerencias en el editor. |
+| `ide/interfaz/sugerencias.py` | Vista gris, lista junto al cursor, aceptación y vigencia de propuestas. |
+| `ide/interfaz/sugerencia_inline.py` | Dibuja un sufijo sobre el viewport, sin editar el documento ni su historial. |
 | `ide/interfaz/reparaciones.py` | Panel manual con motivos, vista previa, cancelación y aplicación explícita. |
 | `ide/sugerencias_ccom.py` | Adaptador productivo del motor C Flex/Bison-LAC (`--suggest-json`). |
 | `ide/reparaciones_ccom.py` | Adaptador productivo de reparaciones y comprobación sintáctica C. |
@@ -192,13 +193,25 @@ ventana.asistencia.establecer_motor('reparaciones', funcion_reparar)
 
 El coordinador también expone `establecer_motor`. El proveedor debe aceptar `cancelar` por nombre y respetar el contrato. Los proveedores controlados del repositorio viven únicamente en las pruebas; no se activan en el programa normal.
 
+## Vista gris con Tab
+
+Al escribir o borrar con Backspace/Supr, una pausa (350 ms iniciales, conservando la espera guardada) consulta el motor C. `sugerencias_inline=True` por defecto habilita esta presentación aunque el perfil antiguo tuviera desactivada la lista por pausa. Puede desactivarse en preferencias.
+
+C marca `inline_preferred` cuando hay un prefijo escrito o una continuación única. No se escoge una instrucción por orden alfabético en una línea vacía; Ctrl+Espacio mantiene todas las opciones válidas. Después de `F main`, el par `[]` se propone sin exigir espacio y Tab deja el cursor dentro. Los campos nativos opcionales `inline_preferred` y `cursor_relative` se validan en el adaptador y llegan como `preferida_inline` y `cursor_relativo`.
+
+`SugerenciaInline` dibuja el sufijo al final de la línea en un widget transparente a los eventos del mouse. La vista previa no añade texto, revisión, cambios sin guardar ni entradas de Deshacer. El controlador conserva el contexto exacto y la propuesta original. No se muestra sobre texto existente ni dentro de una selección; para reemplazos a mitad de línea se usa Ctrl+Espacio.
+
+**Tab** acepta mediante el aplicador común; **Esc** descarta; **Alt+[ / Alt+]** recorre opciones. Enter conserva su función de nueva línea. Editar, mover cursor o selección, cambiar pestaña o perder foco descarta la vista. Redimensionar o desplazar el viewport solo la recoloca si el contexto sigue vigente; se oculta si el cursor queda fuera del área visible. No se aceptan respuestas de otra revisión y el motor bloquea comentarios.
+
+Si no hay una continuación, puede consultarse el motor de reparaciones con origen interno `vista_inline`: solo se presentan inserciones locales de una única edición exactamente en el cursor. Tab aplica la reparación con sus precondiciones; no se interpreta `automatic_safe` como permiso para editar solo. La lista manual y el panel de reparación siguen disponibles.
+
 ## UI manual de sugerencias disponible
 
 - **Ctrl+Espacio dentro del editor**, o Editar → Sugerencias de código, captura el contexto y solicita opciones. El atajo no roba el foco a búsqueda, consolas ni terminales.
 - La lista se coloca junto al cursor y se limita al área disponible de pantalla. Muestra etiqueta, categoría, detalle de la opción activa y ayudas de teclado.
 - Flechas arriba/abajo y RePág/AvPág recorren opciones. **Enter/Tab** o clic en una opción aceptan mediante el aplicador común; no insertan un salto o tabulación adicional.
 - **Esc** cierra sin modificar. Escribir otra tecla cierra y deja que la tecla actúe normalmente en el editor; solo vuelve a consultar tras una pausa si esa preferencia está habilitada.
-- Mover el cursor/cambiar selección, editar, desplazar el editor, cambiar pestaña, perder foco o cerrar el documento invalida solicitudes y lista. Un clic fuera de la lista también la cierra.
+- Mover el cursor/cambiar selección, editar, cambiar pestaña, perder foco o cerrar el documento invalida solicitudes y lista. Los cambios de geometría recolocan la lista manteniendo la opción elegida. Un clic fuera de la lista también la cierra.
 - Se conserva el foco en el editor y se comprueba el contexto otra vez antes de aplicar. Aceptar es una operación de Deshacer; no guarda.
 - Estados sin opciones, bloqueo, límite, cancelación y error se informan en la barra de estado sin abrir listas vacías ni diálogos por cada consulta.
 
@@ -210,7 +223,7 @@ La lista muestra las propuestas del motor. **Cambios** presenta cada edición co
 
 **Aplicar reparación** es la única acción que modifica el editor. Usa el aplicador común: valida de nuevo todo el contexto y las precondiciones, agrupa los cambios en una operación de Deshacer y no guarda ni compila. **Cancelar** o **Escape** descarta la consulta/propuestas sin modificar texto ni historial.
 
-Editar, mover el cursor/cambiar selección, cambiar pestaña o cerrar el documento invalida la propuesta y deshabilita Aplicar. Dar foco al panel, seleccionar su texto o desplazar el editor no invalida una reparación; estos eventos sí cierran sugerencias. Una respuesta cancelada o antigua no vuelve a habilitar Aplicar.
+Editar, mover el cursor/cambiar selección, cambiar pestaña o cerrar el documento invalida la propuesta y deshabilita Aplicar. Dar foco al panel, seleccionar su texto o desplazar el editor no invalida una reparación; perder el foco cierra sugerencias, mientras el desplazamiento conserva las que siguen visibles y vigentes. Una respuesta cancelada o antigua no vuelve a habilitar Aplicar.
 
 Límite de vista previa: **12000 caracteres afectados**, sumando los eliminados y los insertados. Dentro de ese límite se muestra el cambio completo, con hasta 60 caracteres de contexto inalterado a cada lado en la misma línea. Las propuestas mayores se explican y quedan deshabilitadas para aplicar desde este panel; no se aprueban cambios ocultos por truncamiento. La metadata explicativa se limita por separado a 4000 caracteres.
 
@@ -230,8 +243,9 @@ Abrir **Editar → Preferencias de asistencia…**. Aceptar aplica y guarda los 
 | Preferencia | Predeterminado | Efecto |
 | --- | --- | --- |
 | Habilitar asistencia | Sí | Control general de consultas manuales y automáticas. Al desactivar cancela pendientes y cierra sugerencias. |
-| Mostrar sugerencias después de escribir | No | Solicita opciones tras una pausa de escritura; nunca las acepta sola. Ctrl+Espacio sigue disponible cuando el control general está habilitado. |
-| Pausa de asistencia | 700 ms | Ajustable entre 300 y 3000 ms. Se reinicia al seguir escribiendo; también se usa después de confirmar una línea. |
+| Sugerencias en gris al escribir | Sí | Presenta propuestas C y cierres locales sin modificar el texto; Tab acepta. |
+| Lista por pausa (sin vista gris) | No | Solicita opciones tras una pausa de escritura; nunca las acepta sola. Ctrl+Espacio sigue disponible cuando el control general está habilitado. |
+| Pausa de asistencia | 350 ms | Ajustable entre 300 y 3000 ms. Se reinicia al seguir escribiendo; también se usa después de confirmar una línea. |
 | Corregir al confirmar una línea con Enter | No | Requiere catálogo revisado y reglas seleccionadas. Sin catálogo el control está deshabilitado. |
 | Reglas permitidas | Ninguna | Permiso por código exacto; el indicador del motor no agrega permisos. |
 
@@ -243,9 +257,11 @@ El Editor emite `entradaAsistencia` **después** de procesar una tecla que realm
 
 Abrir, recargar, pegar, arrastrar texto, completar desde una propuesta, Deshacer/Rehacer y las ediciones programáticas no arman el temporizador. Una entrada mediante IME invalida lo anterior; esta versión conserva la asistencia manual para esa entrada, sin activación automática al confirmar la composición.
 
-Se captura el contexto completo al armar la pausa. Modificar texto, mover cursor/selección, cambiar pestaña, cerrar, desplazar/redimensionar u ocultar el editor, perder foco, presionar Esc, cambiar proveedor, catálogo o preferencias cancela lo que corresponda. Las sugerencias/manuales de reparaciones conservan sus reglas de interacción del paso 5: leer el panel no invalida una reparación manual. Las solicitudes automáticas sí se cancelan al perder foco.
+Se captura el contexto completo al armar la pausa. Modificar texto, mover cursor/selección, cambiar pestaña, cerrar u ocultar el editor, perder foco, presionar Esc, cambiar proveedor, catálogo o preferencias cancela lo que corresponda. Las sugerencias/manuales de reparaciones conservan sus reglas de interacción del paso 5: leer el panel no invalida una reparación manual. Las solicitudes automáticas sí se cancelan al perder foco.
 
 Antes de consultar y antes de aplicar se comprueba que el editor sigue activo, enfocado, editable, sin selección ni conflicto externo conocido, y que no hay compilación o simulación en curso. También se verifica que coincidan documento, revisión, texto, cursor y ancla. Una consulta manual cancela la automatización anterior y toma prioridad. El cierre detiene la pausa y conserva el protocolo cooperativo de cancelación de trabajadores.
+
+Los cambios de distribución al aparecer un diagnóstico no cancelan la asistencia: se espera al layout de Qt y se recoloca la propuesta, sin volver a consultar C ni cambiar el texto.
 
 ### Política inicial de reparación automática
 
@@ -286,7 +302,7 @@ Para añadir o modificar una regla:
 2. Documentar por código la forma exacta de edición, justificación, validación y casos ambiguos. Usar `automatica_segura=False` cuando no se pueda justificar la automatización.
 3. Añadir positivos y negativos con el parser real: comentarios de línea/bloque, código incompleto, delimitadores anidados, Unicode, cursores, errores múltiples y precondiciones. Una regla puede quedar solo manual.
 4. Para una regla que satisface esta política y ha sido revisada, añadir `ReglaAutomatica(codigo_real, descripcion, delimitador)` a `REGLAS_AUTOMATICAS`. No cambiar la evaluación para aceptar un código sin sus pruebas.
-5. El usuario habilita corrección automática y marca esa regla en preferencias. Incorporar una regla al código no la habilita en el perfil por sí solo.
+5. El usuario habilita corrección automática en preferencias. Si no tenía reglas seleccionadas, el diálogo selecciona la primera regla revisada; puede personalizar después el catálogo. Incorporar una regla al código no habilita la corrección en el perfil por sí solo.
 6. Verificar en la ventana: Enter al final de la línea, pausa, modificación esperada, Ctrl+Z, ningún guardado y descarte de respuesta antigua. Mantener las consultas manuales.
 
 Para pruebas aisladas existe `ventana.asistencia.establecer_reglas(...)`; invalida tareas anteriores, pero no habilita preferencias. `establecer_motor(...)` sigue permitiendo proveedores controlados; ninguno se activa por defecto.

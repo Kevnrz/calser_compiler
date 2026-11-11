@@ -289,11 +289,13 @@ Solo `ok` contiene propuestas. Todos los demás estados incluyen explicación y 
 4. Se analiza únicamente el prefijo anterior al fragmento con el parser existente. En modo consulta, `syntax_lex` sustituye el EOF temporal por un **TOKEN_CURSOR privado**, que no pertenece a ninguna producción. `yyreport_syntax_error` consulta `yypcontext_expected_tokens` con **LAC**, distingue ese marcador de un error real anterior y recoge los terminales concretos.
 5. Así un programa completo también puede ofrecer continuaciones, sin confundir EOF con un error del usuario. No se derivan reglas a partir de mensajes humanos ni se copia una gramática a Python.
 6. C excluye identificadores genéricos, números genéricos, EOF y símbolos internos. Filtra por el prefijo escrito y ordena: palabras, delimitadores, operadores; alfabético dentro de cada grupo.
-7. Cada propuesta reemplaza el fragmento completo. En `vo|id` reemplaza `void`, evitando duplicar el sufijo. Se omiten reemplazos idénticos al fragmento ya terminado; tras una palabra completa, un espacio permite consultar las continuaciones siguientes.
+7. Cada propuesta reemplaza el fragmento completo. En `vo|id` reemplaza `void`, evitando duplicar el sufijo. Si no hay una completación y Flex reconoció un token completo hasta el cursor, C vuelve a consultar LAC después de ese token. Así `F main` puede ofrecer su continuación sin exigir un espacio y `void` completo puede ofrecer `;`. No se avanza sobre un prefijo inválido.
+8. `inline_preferred` (booleano opcional) distingue propuestas útiles para la vista gris: un prefijo escrito o una única continuación. Una línea vacía con muchas instrucciones posibles conserva la lista manual, pero no elige `C` por orden alfabético. La ausencia del campo se interpreta como false.
+9. Cuando `[` es la única continuación, C puede devolver el par `[]` con `cursor_relative: 1`: al aceptar, el cursor queda dentro. Este campo opcional mide bytes UTF-8 del texto propuesto y el adaptador lo convierte a caracteres Python. No se duplica un delimitador que ya está a la derecha del cursor.
 
 Los comentarios de línea incluyen el punto antes de LF; los bloques abiertos incluyen EOF. Después de un bloque cerrado sí se puede consultar. No hay sugerencias dentro de comentarios.
 
-Las propuestas son **continuaciones sintácticas**, no garantías semánticas. No se inventan nombres declarados ni literales numéricos. Consultar ámbitos, completar símbolos declarados o añadir plantillas queda como ampliación explícita posterior.
+Las propuestas son **continuaciones sintácticas**, no garantías semánticas. No se inventan nombres declarados ni literales numéricos. Consultar ámbitos, completar símbolos declarados o añadir plantillas de instrucciones completas queda como ampliación posterior; el par de corchetes ya se presenta desde C.
 
 ### Memoria, límites y cancelación
 
@@ -308,7 +310,7 @@ Flex libera las cadenas del escaneo completo que normalmente consumiría Bison. 
 - `ide/sugerencias_ccom.py`: firma `sugerir(texto, cursor, *, cancelar=None, root=None, configurado='')`, devuelve los tipos de `ide/nucleo/asistencia.py`. Valida versión, operación, fuente, cursor, código, estado, cantidades, rangos, fronteras UTF-8, textos y duplicados. Solo convierte posiciones; no clasifica ni filtra lenguaje.
 - `ide/interfaz/asistencia.py`: carga ese adaptador por defecto y captura root/ccom configurado para cada tarea. El proveedor de reparaciones también consulta C; véase la sección de reparaciones. Proveedores explícitos de pruebas siguen disponibles.
 - `AsistenciaEditor`: mantiene **Ctrl+Espacio**, menú Editar y **clic derecho → Sugerencias de código**, lista, Enter/Tab/clic, Escape y consulta tras pausa. Las respuestas se descartan al editar, mover cursor/selección o cambiar/cerrar pestaña. Cambiar ccom invalida la consulta/lista anterior.
-- Pausa permanece **desactivada por defecto**: habilitar **Editar → Preferencias de asistencia → sugerencias por pausa**. Mostrar una lista no aplica su primera opción.
+- La vista gris por pausa está **activada por defecto**. La lista por pausa continúa optativa en **Editar → Preferencias de asistencia**; Ctrl+Espacio siempre conserva la consulta explícita. Mostrar una propuesta no la acepta.
 - Aplicar usa el contexto completo capturado y una operación de Deshacer, sin guardar. `.asm` no consulta asistencia de Calser.
 
 ### Pruebas
@@ -318,7 +320,7 @@ Flex libera las cadenas del escaneo completo que normalmente consumiría Bison. 
 `ide/pruebas/test_sugerencias_ccom.py` verifica el motor real y el contrato, rechazo de JSON incompatible, ausencia de consultas al lexer/LL(1) Python, cancelación/límites, Ctrl+Espacio, pausa, aceptación/Deshacer, configuración de ccom y cancelación del hijo por edición. `make check-ide` comprueba también las interfaces y descartes ya existentes.
 
 
-El menú contextual conserva copiar/cortar/pegar y consulta en el punto pulsado (teclado: cursor actual). La consulta se inicia tras cerrar el menú para que la devolución de foco no la invalide. Respeta asistencia desactivada, solo lectura y entradas .asm. El texto de continuación en gris se mantiene como mejora de interfaz pendiente; M3 actual muestra una lista y no inserta automáticamente puntuación adicional.
+El menú contextual conserva copiar/cortar/pegar y consulta en el punto pulsado (teclado: cursor actual). La consulta se inicia tras cerrar el menú para que la devolución de foco no la invalide. Respeta asistencia desactivada, solo lectura y entradas .asm. La interfaz también presenta por defecto continuaciones en gris al final de la línea; Tab acepta y Esc descarta. Ctrl+Espacio conserva la lista para otros reemplazos. La vista previa no inserta texto ni genera propuestas propias.
 
 <a id="repair"></a>
 
@@ -382,9 +384,9 @@ Límites por análisis: **200000 bytes**, **50000 tokens/tramos**, cuatro candid
 
 #### Automatización opcional
 
-El catálogo de `politica_asistencia.py` incluye una sola regla revisada: **INSERCION_PUNTO_COMA**. Incorporarla no la habilita. Por defecto `reparaciones_automaticas=False` y la selección de reglas está vacía. El usuario debe habilitar la opción y marcar la regla en **Editar → Preferencias de asistencia**.
+El catálogo de `politica_asistencia.py` incluye una sola regla revisada: **INSERCION_PUNTO_COMA**. Incorporarla no la habilita. Por defecto `reparaciones_automaticas=False` y la selección de reglas está vacía. El usuario debe habilitar la opción en **Editar → Preferencias de asistencia**; el diálogo selecciona la primera regla revisada si no había ninguna seleccionada.
 
-C marca candidata automática únicamente una propuesta única de `;`, con aceptación sintáctica completa y antes de una reservada de inicio de sentencia, nunca en EOF. La interfaz exige además confirmar con Enter una línea no vacía, una inserción local al final de esa línea, precondición real en la línea, sin selección/conflicto/solo lectura/compilación/pérdida de foco.
+C marca candidata automática únicamente una propuesta única de `;`, con aceptación sintáctica completa, sin errores léxicos y nunca en EOF. También puede aparecer antes de una asignación que comienza con un identificador, sin exigir una reservada. La interfaz exige además confirmar con Enter una línea no vacía, una inserción local al final de esa línea, precondición real en la línea, sin selección/conflicto/solo lectura/compilación/pérdida de foco.
 
 La bandera del motor no basta: la política vuelve a consultar **C mediante --syntax-json** sobre original y copia concreta; exige error sintáctico original y aceptación completa del resultado, sin errores léxicos. Python conserva solamente permisos, contexto, restricciones de interacción y aplicación. Antes de editar, el hilo gráfico vuelve a comprobar todo lo vigente. No guarda ni encadena otra reparación y Deshacer/Rehacer no dispara un nuevo ciclo.
 

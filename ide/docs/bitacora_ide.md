@@ -2,6 +2,151 @@
 
 Registro consolidado · 2026-11-11. Este archivo guarda decisiones, entregas, verificaciones y documentos sustituidos. **Las secciones históricas pueden describir estados anteriores; no son instrucciones vigentes ni pendientes actuales.** Para trabajar usar [plan actual](plan_ide.md), [guía del sistema](guia_sistema_calside.md) y [revisión manual](revision_manual.md).
 
+## Continuaciones útiles: main y líneas vacías — 2026-11-11
+
+El usuario observa una `C` arbitraria en la línea vacía del cuerpo y ausencia de `[]` después de `main`. La primera era la primera opción alfabética entre muchas continuaciones válidas; la segunda ocurría porque el motor seguía tratando el identificador completo como prefijo de una reservada. Se corrige en C: si no hay completación y el token terminó en el cursor, se consulta LAC después del token. Un `[` inequívoco puede presentarse como par `[]` con cursor dentro, sin duplicar puntuación existente.
+
+El protocolo añade campos opcionales `inline_preferred` y `cursor_relative`, validados y convertidos por el adaptador Python. La vista gris solo presenta propuestas preferidas por C (prefijo escrito o continuación única); Ctrl+Espacio conserva la lista completa. Un resultado sin preferencia puede dar paso a la consulta de reparación local, conservando el `;` propuesto en una declaración. No se inventan identificadores ni cuerpos de funciones.
+
+Compilación de ccom correcta y **4 comprobaciones focalizadas OK**: `F main`/Tab/posición/Deshacer, línea vacía sin `C` conservando lista y prefijos, reparación local de `;` y reemplazo Unicode dentro de palabra. Sin suite completa. Pendiente repetición humana.
+
+## Letras un 10 % más lentas — 2026-11-11
+
+Se reduce la velocidad del trazado al 90 %: la fase de letras pasa de 1800 a
+2000 ms (1800/0,9). Se conservan las otras fases; la secuencia total dura ahora
+4,4 s. La velocidad angular permanece en unos 43°/s y se ajusta el ángulo
+inicial para terminar a 0° sin salto. Cambios en `ide/interfaz/inicio.py`,
+la prueba del giro en el tramo final y los tiempos de README/guía/plan.
+Verificación focalizada: **10 pruebas de arranque OK** y `git diff --check`
+sin errores. Sin suite completa ni commits.
+
+## Giro lento y continuo durante toda la presentación — 2026-11-11
+
+A petición del usuario, se sustituye el giro rápido limitado al desplazamiento
+por media vuelta a velocidad constante durante los 4,2 s completos (~43°/s).
+Empieza mientras se dibujan los fragmentos y continúa durante el desplazamiento,
+las letras y los 300 ms finales. Parte de −180° y llega a 0° para conservar la
+composición aprobada al finalizar, sin recolocación brusca. Clic/Esc y la
+preferencia conservan su funcionamiento; la duración total no cambia.
+
+Se ajustan `ide/interfaz/inicio.py`, las pruebas de `ide/pruebas/test_inicio.py`
+y la explicación en README/guía del sistema. Verificación focalizada:
+**10 pruebas de arranque OK**, incluyendo giro durante letras y tramo final,
+colores y transición al SVG estático en escalas 1×/2×. Vista previa regenerada;
+`git diff --check` sin errores. Sin suite completa, commits ni cambios de E8.
+
+## Animación con marca geométrica aprobada — 2026-11-11
+
+Tras validar imágenes estáticas con el usuario, la presentación adopta el
+hexágono de seis fragmentos iguales y la tipografía dibujada a medida. Solo el
+**segundo fragmento completo**, contando desde arriba en sentido horario,
+es morado; CALS es naranja e IDE morado. La D refleja exactamente la C y queda
+abierta. El SVG aprobado se guarda como `assets/branding/calside-inicio.svg`.
+La variante CALSER que el usuario pidió conservar queda en
+`assets/branding/calser-marca-geometrica.svg`; los PNG previos no se modifican.
+
+Se amplía el ritmo a **4,2 s**: 1200 ms para dibujar los seis fragmentos,
+900 ms para desplazamiento/giro completo, 1800 ms para trazos de las letras y
+300 ms de reposo final. `MarcaInicio`, en `ide/interfaz/inicio.py`, carga el SVG
+una vez y lo revela con máscaras de trazos Qt. No depende de bitmaps ni fuentes
+instaladas. Cada fragmento se recorta por sus propias divisiones; un margen de
+antialiasing evita que el paso al SVG completo cambie los bordes.
+
+Clic/Esc, preferencia persistente y barrera entre presentación e inicialización
+conservan su comportamiento. La construcción de widgets sigue en el hilo Qt y
+los servicios mantienen sus trabajadores. No se amplía el trabajo a E8.
+
+Archivos de esta revisión: dos SVG nuevos en `assets/branding/`,
+`ide/interfaz/inicio.py`, `ide/pruebas/test_inicio.py`, `ide/README.md`,
+`ide/docs/guia_sistema_calside.md`, `ide/docs/plan_ide.md` y esta bitácora.
+Los cambios locales de otras tareas se conservan; no se realizan commits.
+
+Verificación: **37 pruebas focalizadas OK** con
+`QT_QPA_PLATFORM=offscreen python3 -m unittest ide.pruebas.test_inicio ide.pruebas.test_proyecto`.
+Incluye colores y transición al reposo sin diferencias a escalas 1×/2×.
+Se revisaron fotogramas intermedios y se generó una vista previa animada.
+El punto de entrada real, con archivo de ruta con espacios y configuración
+provisional, mostró la ventana a los 4346 ms en el recorrido normal, 160 ms
+al omitir y 158 ms desactivada. Son medidas locales, no garantías. La revisión
+del ritmo en el escritorio del usuario queda pendiente. `git diff --check`
+sin errores; no se ejecutó la suite completa por este ajuste visual.
+
+## Presentación de inicio de CALSIDE — 2026-11-11
+
+Se implementa la secuencia acordada de unos 2 s: logo por seis lados, giro con
+desplazamiento a la izquierda y trazos progresivos de CALSIDE. Se reutiliza
+`assets/branding/calser-logo.png`; Qt dibuja letras y máscara de revelado en
+coordenadas lógicas. Clic/Esc omiten el tiempo restante. Ver → Animación al
+iniciar CALSIDE permite desactivar/reactivar los próximos arranques con
+persistencia inmediata en `estado_v1.animacion_inicio`.
+
+`Inicio` coordina la presentación con la preparación real mediante una barrera
+de dos condiciones y pasos en el bucle Qt, sin sleeps ni bucles reentrantes.
+Los widgets se construyen en el hilo gráfico y los servicios conservan sus
+trabajadores; los argumentos se abren uno por turno. La presentación permanece
+con «Preparando el editor…» si se omite antes de terminar la carga.
+
+Archivos de implementación: `ide/interfaz/inicio.py` (nuevo), `ide/main.py`,
+`ide/interfaz/ventana.py`, `ide/interfaz/proyecto.py`, `ide/preferencias.py` y
+`ide/pruebas/test_inicio.py` (nuevo). Uso y verificación en `ide/README.md`;
+estado y arquitectura actualizados en plan y guía del sistema. Se conservan
+los cambios locales previos; no se realizan commits ni trabajo de E8.
+
+Verificación focalizada: **36 pruebas OK**, con
+`QT_QPA_PLATFORM=offscreen python3 -m unittest ide.pruebas.test_inicio ide.pruebas.test_proyecto`.
+Se inspeccionaron fotogramas del revelado y composición final sin pantalla y
+se verificó renderizado a escala Qt 2×. El punto de entrada real, con bucle Qt,
+preferencias temporales y archivo con espacios, mostró la ventana a los 2166 ms
+con animación, 177 ms al omitirla y 166 ms desactivada en esta máquina. Estos
+valores son observaciones locales, no garantías de rendimiento. El constructor
+de Ventana midió unos 52 ms; Qt conserva la construcción de widgets en su hilo.
+La validación visual humana en el escritorio sigue pendiente; no equivale a
+completar la revisión manual del IDE ni el empaquetado.
+
+## Vista gris conservada al aparecer un diagnóstico — 2026-11-11
+
+El usuario informa que la sugerencia aparece y luego desaparece cuando llega el error. Se reproduce con ccom automático real: el mensaje de diagnóstico modifica el tamaño del editor y el filtro trataba `Resize` como invalidación de contexto. Se conserva ahora la propuesta cuando solo cambia la geometría; una llamada posterior al layout la recoloca sin consultar de nuevo C, editar el documento ni reiniciar la opción elegida. El desplazamiento conserva propuestas vigentes mientras su cursor permanece visible. Edición, cursor/selección, cambio de pestaña, foco y Esc siguen descartándolas.
+
+Comprobación focalizada: reproducción del diagnóstico tardío con Tab posterior y descarte con Esc/Enter/foco, **2 casos OK**. No se ejecutó la suite completa. Repetición humana pendiente.
+
+## Asistencia en gris y correcciones más directas — 2026-11-11
+
+A petición del usuario se presenta asistencia sobre el editor sin abrir un panel por cada propuesta. Tras una pausa de escritura (350 ms iniciales; se conserva la espera del perfil), el motor C propone y el widget `SugerenciaInline` dibuja solo el sufijo gris al final de la línea. Tab acepta, Esc descarta, Alt+[ / Alt+] recorre opciones; Enter continúa escribiendo líneas. No cambia documento, revisión, historial ni disco hasta aceptar. Contextos obsoletos, selección, comentarios y pérdida de foco impiden aplicar la vista. Ctrl+Espacio y Alt+Enter conservan sus vías manuales.
+
+Si no hay una continuación, se puede solicitar una reparación nativa con origen interno `vista_inline`: se muestra solo una inserción local en el cursor, aplicable con Tab y precondiciones. No se inventan identificadores, números ni instrucciones completas; la lógica del lenguaje sigue en C. Para reemplazos a mitad de línea se usa la lista manual, evitando tapar código existente.
+
+Se simplifica la activación de corrección con Enter: el diálogo selecciona la primera regla revisada cuando el usuario activa la opción y no tenía selección. La candidatura automática C de `;` conserva unicidad, aceptación completa, ausencia de errores léxicos y bloqueo de EOF, pero deja de exigir que el siguiente token sea reservado; una asignación puede comenzar con un identificador. No se habilita la corrección automática por defecto.
+
+Validación focalizada: **7 casos UI, OK** (seis recorridos nuevos con ccom real y lista manual anterior), **2 casos de compatibilidad de preferencias/lista por pausa, OK**, compilación de ccom y revisión visual de `/tmp/calside-sugerencia-inline.png`. Sin suite completa. R12/H03 quedan ajustados y pendientes de repetición humana; los OK anteriores de la lista/panel manual se conservan.
+
+## Asistencia manual aprobada y alcance informado por el profesor — 2026-11-11
+
+El usuario confirma que todo el bloque C salvo R12 funciona: R09–R11 quedan OK y R12 conserva el fallo ya registrado. Informa que el profesor acepta un error a la vez; la recuperación de varias fases no se exige como trabajo adicional de esta entrega. Los demás requisitos y recorridos no se marcan aprobados por esta confirmación.
+
+Se explica que E8 puede producir nuevas versiones empaquetadas durante el desarrollo: se continúa editando y probando el proyecto fuente y se vuelve a construir el paquete cuando se desee. Deben incluirse interfaz, recursos y dependencias, ccom y simulador según la plataforma. No se ha implementado el empaquetado con esta actualización documental.
+
+## R12: fallo y observación de usabilidad — 2026-11-11
+
+El usuario informa que la corrección automática no funciona y considera rígida y poco útil su interacción. Se marca R12 como Fallo y se registra H03, pendiente de diagnóstico y replanteamiento de la experiencia. No se atribuye una causa técnica sin investigar ni se modifica/retira la función. R09–R11 conservan sus estados anteriores, sin inferir aprobación. Actualización documental sin ejecutar pruebas.
+
+## Revisión manual del bloque B aprobada — 2026-11-11
+
+El usuario confirma como exitoso el bloque B: R05–R08 (diagnósticos sintácticos múltiples, actualización entre ediciones/pestañas, errores léxicos y comprobación semántica). Se conserva como límite vigente que una fase con errores bloquea las posteriores; la recuperación entre fases queda en mejoras futuras. Los bloques A y B están aprobados; continuar desde R09. Actualización documental sin nuevas pruebas automatizadas.
+
+## Mejora futura: diagnósticos de varias fases — 2026-11-11
+
+A petición del usuario se agrega al plan la recuperación de ccom para informar errores léxicos, sintácticos y semánticos de zonas independientes en una misma revisión. Incluye continuar tras tokens inválidos, analizar semánticamente partes fiables del AST, evitar cascadas y conservar los límites y el bloqueo de generación con errores. La lógica pertenece a C; CALSIDE muestra los resultados. Solo se documenta como trabajo futuro, sin cambiar el comportamiento actual ni ejecutar pruebas.
+
+## Revisión manual R01–R04 aprobada — 2026-11-11
+
+El usuario confirma que R01, R02, R03 y R04 pasan. Se marca completo el bloque A (archivos y edición): apertura y pestañas, guardado/cierre, operaciones del explorador con eliminación recuperable y búsqueda. Esta confirmación sustituye los estados pendientes anteriores de esos casos. El siguiente bloque pendiente es R05–R08: diagnósticos y recuperación. No se ejecutaron pruebas automatizadas para esta actualización documental.
+
+## F5 sin código: aviso informativo — 2026-11-11
+
+Compilar un documento que solo contiene comentarios válidos muestra «El archivo solo contiene comentarios; no hay código para compilar» en Salida, sin añadir un diagnóstico sintáctico ni generar salidas. Un documento vacío recibe un mensaje equivalente. Se usa `contiene_codigo` de Flex para la revisión actual; Python no reconoce comentarios. Si falta ese resultado, F5 lo espera de forma asíncrona y reanuda solo para el mismo documento, revisión y perfil, sin otra edición intermedia. ccom por consola conserva su comportamiento.
+
+Se actualizó y ejecutó únicamente la regresión de F5 sin código: comentario de línea, comentario de bloque, documento vacío, comentario sin cerrar y transición a programa válido. **Una prueba focalizada, OK**. No se repitió la suite completa.
+
 ## Corrección de Ctrl+Z con papelera real — 2026-11-11
 
 El usuario reprodujo un fallo que no detectaban los dobles de papelera: en esta versión de PySide, `QFile.moveToTrash(ruta)` devuelve bool aunque su documentación anuncie una tupla. La entrada se movía antes de fallar el desempaquetado y no se registraba en el historial. `papelera.py` usa ahora la API de instancia: `archivo.moveToTrash()` y `archivo.fileName()`, que proporciona la ubicación real. Archivo individual, carpeta y selección comparten este acceso.

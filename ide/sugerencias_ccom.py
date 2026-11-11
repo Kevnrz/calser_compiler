@@ -51,7 +51,18 @@ def interpretar(salida, fuente, texto, cursor, codigo):
         clave = (inicio, fin, opcion['text'])
         requerir(clave not in vistas, 'sugerencia duplicada')
         vistas.add(clave)
-        sugerencias.append(Sugerencia(opcion['label'], opcion['text'], fronteras[inicio], fronteras[fin], categoria, opcion['detail']))
+        preferida = opcion.get('inline_preferred', False)
+        requerir(type(preferida) is bool, 'preferencia inline inválida')
+        relativo = opcion.get('cursor_relative')
+        if relativo is not None:
+            raw = opcion['text'].encode('utf-8')
+            requerir(type(relativo) is int and 0 <= relativo <= len(raw), 'cursor relativo inválido')
+            try:
+                relativo = len(raw[:relativo].decode('utf-8'))
+            except UnicodeError:
+                requerir(False, 'cursor relativo parte un carácter UTF-8')
+        sugerencias.append(Sugerencia(opcion['label'], opcion['text'], fronteras[inicio], fronteras[fin], categoria,
+                                      opcion['detail'], cursor_relativo=relativo, preferida_inline=preferida))
     return ResultadoSugerencias(estados[estado], tuple(sugerencias), explicacion)
 
 

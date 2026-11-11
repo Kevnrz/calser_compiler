@@ -85,12 +85,15 @@ class Sugerencia:
     categoria: str
     detalle: str = ''
     cursor_relativo: int | None = None
+    preferida_inline: bool = True
 
     def __post_init__(self):
         cadena(self.etiqueta, 'etiqueta', no_vacia=True)
         cadena(self.categoria, 'categoria', no_vacia=True)
         cadena(self.detalle, 'detalle')
         EdicionTexto(self.inicio, self.fin, self.texto)
+        if type(self.preferida_inline) is not bool:
+            raise ValueError('preferida_inline debe ser bool')
         if self.cursor_relativo is not None:
             entero(self.cursor_relativo, 'cursor_relativo')
             if self.cursor_relativo > len(self.texto):

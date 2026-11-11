@@ -57,7 +57,12 @@ class ComprobacionAutomatica(unittest.TestCase):
 
     def fake(self, body):
         path = self.folder / "ccom_prueba"
-        path.write_text(f"#!{sys.executable}\n" + body)
+        # Estos dobles prueban fallos del análisis sintáctico/semántico. El
+        # resaltado M2 es otra operación del mismo ejecutable y conserva Flex.
+        ruta_real = str(ROOT / 'ccom')
+        delegar = ("import os, sys\nif '--tokens-json' in sys.argv:\n"
+                   f"    os.execv({ruta_real!r}, [{ruta_real!r}, *sys.argv[1:]])\n")
+        path.write_text(f"#!{sys.executable}\n" + delegar + body)
         path.chmod(0o755)
         self.window.configured_ccom = str(path)
         return path
@@ -256,9 +261,17 @@ class ComprobacionAutomatica(unittest.TestCase):
         self.assertFalse(editor.document().isModified())
 
     def test_fallo_de_arranque_limpia_temporal(self):
+        # Completar primero la operación léxica real: aquí se aísla el fallo
+        # de QProcess en --check-json, no el arranque del nuevo servicio Flex.
+        from ide.interfaz.comprobacion import SolicitudCcom
+        editor = self.escribir(VALIDO)
+        self.esperar(lambda: editor.analisis_revision == editor.revision)
+        self.window.comprobador.invalidar(editor.documento_id)
         path = self.fake("esto no es un ejecutable\n")
         path.write_bytes(b"\x00ELF-invalido")
-        editor = self.escribir(VALIDO)
+        self.window.comprobador.configured = str(path)
+        self.window.comprobador.programar(SolicitudCcom(editor.documento_id, editor.revision,
+                                                       VALIDO, None, self.folder))
         self.esperar(lambda: editor.estado_ccom == "No disponible")
         self.assertIsNone(self.window.comprobador.temporary)
         self.assertIsNone(self.window.comprobador.process)

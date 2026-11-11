@@ -1,4 +1,8 @@
 """
+
+Estado M6: API de consulta/estudio y pruebas del LL(1), conservada por decisión
+explícita. La interfaz productiva usa Flex/Bison en ccom, no este módulo.
+
 gramatica.py — gramática LL(1) de Calser como datos.
 
 Fuente: ide/docs/gramatica_ll1.md §3, obtenida de grammar/parser.y quitando

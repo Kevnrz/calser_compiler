@@ -1,17 +1,14 @@
-"""Clones léxicos entre archivos, independientes de ccom y del parser LL(1).
+"""Puente de clones nativos; Python conserva instantáneas y coordenadas de UI.
 
-Tipo I: tokens idénticos omitiendo comentarios/espacios.
-Tipo II: misma estructura con renombramiento biyectivo de identificadores y
-cambios de literales del mismo tipo. No se normalizan operadores ni reservadas.
-Se indexan ventanas, se verifican y extienden; no se compara cada par de tokens.
+Flex y src/clones.c deciden tokens, equivalencia y extensión Tipo I/II. Aquí no
+hay expresiones regulares, gramática ni comparación de lexemas. El paquete
+CCL1 lleva rutas como identidad y textos como bytes, sin guardar documentos.
 """
 from dataclasses import dataclass
 from pathlib import Path
-import re
-
-
-RESERVADAS = frozenset("F Vm Vi int bool void C A L S E R autenticar cerrar_sesion cargar_llave sellar cambiar_ancla cifrar descifrar".split())
-PATRON = re.compile(r'(?P<comentario>\#\[[\s\S]*?(?:\]\#|\Z)|\#(?!\[)[^\n]*)|(?P<espacio>\s+)|(?P<numero>[0-9]+)|(?P<cadena>"(?:\\.|[^"\\])*")|(?P<nombre>[A-Za-z_][A-Za-z0-9_]*)|(?P<simbolo>==|!=|<=|>=|.)')
+import struct
+from ide import ccom
+from ide.servicio_ccom import consultar, LimiteServicio
 
 
 class Cancelado(Exception):
@@ -48,125 +45,151 @@ class ParClon:
     tokens: int
 
 
-def tokenizar(texto, cancelar=lambda: False):
-    result = []
-    line = 1
-    for index, match in enumerate(PATRON.finditer(texto)):
-        if index % 1024 == 0 and cancelar():
-            raise Cancelado()
-        kind, value = match.lastgroup, match.group()
-        if kind not in ("comentario", "espacio"):
-            if kind == "nombre":
-                kind = "booleano" if value in ("verdadero", "falso") else ("reservada" if value in RESERVADAS else "identificador")
-            result.append(Token(kind, value, match.start(), match.end(), line))
-        line += value.count("\n")
-    return result
-
-
-def firma(tokens, parametrizada):
-    identifiers = {}
-    result = []
-    for token in tokens:
-        if parametrizada and token.clase == "identificador":
-            result.append(("id", identifiers.setdefault(token.valor, len(identifiers))))
-        elif parametrizada and token.clase in ("numero", "booleano", "cadena"):
-            result.append((token.clase, "literal"))
-        else:
-            result.append((token.clase, token.valor))
-    return tuple(result)
-
-
-def compatibles(a, b, parametrizada, directo, inverso):
-    if a.clase != b.clase:
-        return False
-    if not parametrizada:
-        return a.valor == b.valor
-    if a.clase == "identificador":
-        if a.valor in directo:
-            return directo[a.valor] == b.valor
-        if b.valor in inverso:
-            return False
-        directo[a.valor], inverso[b.valor] = b.valor, a.valor
-        return True
-    return a.clase in ("numero", "booleano", "cadena") or a.valor == b.valor
-
-
-def detectar(fuentes, minimo=20, cancelar=lambda: False):
-    """Devuelve pares máximos por tipo, con offsets de caracteres Unicode.
-
-    Límites explícitos para proyectos educativos: 200 archivos, 100000 tokens,
-    50000 verificaciones y 500 pares. Al excederlos no se presentan resultados
-    parciales como completos. El umbral mide tokens, no líneas ni similitud.
-    """
-    if minimo < 5:
-        raise ValueError("El mínimo debe ser de al menos 5 tokens.")
+def empaquetar(fuentes, cancelar=lambda: False):
+    """Orden estable e identidades únicas; los límites también se aplican en C."""
     if len(fuentes) > 200:
-        raise LimiteAnalisis("Más de 200 archivos. Selecciona una carpeta más pequeña.")
-    data = []
-    total = 0
-    for path, text in sorted(fuentes.items(), key=lambda item: str(item[0])):
+        raise LimiteAnalisis('Más de 200 archivos. Reduce la carpeta analizada.')
+    documentos, vistos, piezas, total = [], set(), [b'CCL1', struct.pack('<I', len(fuentes))], 0
+    for path, texto in sorted(fuentes.items(), key=lambda item: str(item[0])):
         if cancelar():
             raise Cancelado()
-        tokens = tokenizar(text, cancelar)
-        total += len(tokens)
-        if total > 100000:
-            raise LimiteAnalisis("Más de 100000 tokens. Reduce la carpeta analizada.")
-        data.append((Path(path).resolve(), tokens))
-    matches = []
-    attempts = 0
-    for parametrizada in (False, True):
-        index = {}
-        covered = {}
-        for file_id, (path, tokens) in enumerate(data):
-            pending = []
-            for start in range(len(tokens) - minimo + 1):
-                if start % 128 == 0 and cancelar():
-                    raise Cancelado()
-                key = firma(tokens[start:start + minimo], parametrizada)
-                for other_id, other_start in index.get(key, ()):
-                    if file_id == other_id:
-                        continue
-                    attempts += 1
-                    if attempts % 128 == 0 and cancelar():
-                        raise Cancelado()
-                    if attempts > 50000:
-                        raise LimiteAnalisis("Demasiados fragmentos repetidos. Aumenta el mínimo de tokens o reduce la carpeta.")
-                    diagonal = (other_id, file_id, start - other_start)
-                    if any(left <= other_start and other_start + minimo <= right for left, right in covered.get(diagonal, ())):
-                        continue
-                    other = data[other_id][1]
-                    direct, inverse = {}, {}
-                    if not all(compatibles(other[other_start + k], tokens[start + k], parametrizada, direct, inverse) for k in range(minimo)):
-                        continue
-                    left_a, left_b = other_start, start
-                    right_a, right_b = other_start + minimo, start + minimo
-                    while right_a < len(other) and right_b < len(tokens) and compatibles(other[right_a], tokens[right_b], parametrizada, direct, inverse):
-                        right_a += 1
-                        right_b += 1
-                        if right_a % 1024 == 0 and cancelar():
-                            raise Cancelado()
-                    while left_a > 0 and left_b > 0 and compatibles(other[left_a - 1], tokens[left_b - 1], parametrizada, direct, inverse):
-                        left_a -= 1
-                        left_b -= 1
-                    covered.setdefault(diagonal, []).append((left_a, right_a))
-                    exact = all(a.valor == b.valor for a, b in zip(other[left_a:right_a], tokens[left_b:right_b]))
-                    if parametrizada and exact:
-                        continue
-                    def fragmento(file_path, sequence, a, b):
-                        return Fragmento(file_path, sequence[a].inicio, sequence[b - 1].fin, sequence[a].linea, sequence[b - 1].linea)
-                    matches.append(ParClon("II" if parametrizada else "I", fragmento(data[other_id][0], other, left_a, right_a), fragmento(path, tokens, left_b, right_b), right_a - left_a))
-                    if len(matches) > 500:
-                        raise LimiteAnalisis("Más de 500 pares. Aumenta el mínimo de tokens o reduce la carpeta.")
-                pending.append((key, start))
-            # Publicar solo al terminar el archivo: no comparar ventanas del
-            # mismo documento, incluso si tiene miles de secuencias repetidas.
-            for key, start in pending:
-                index.setdefault(key, []).append((file_id, start))
-    # Una extensión anterior puede haber encontrado un subconjunto antes que
-    # otra ventana lo amplíe; eliminar solo inclusiones dentro del mismo tipo.
-    result = []
-    for pair in sorted(matches, key=lambda p: -p.tokens):
-        if any(p.tipo == pair.tipo and p.primero.archivo == pair.primero.archivo and p.segundo.archivo == pair.segundo.archivo and p.primero.inicio <= pair.primero.inicio and pair.primero.fin <= p.primero.fin and p.segundo.inicio <= pair.segundo.inicio and pair.segundo.fin <= p.segundo.fin for p in result):
-            continue
-        result.append(pair)
-    return result
+        path = Path(path).resolve()
+        if path in vistos:
+            raise ValueError('Dos instantáneas identifican el mismo archivo.')
+        vistos.add(path)
+        if not isinstance(texto, str):
+            raise TypeError('Las instantáneas deben ser texto Unicode.')
+        nombre, raw = str(path).encode('utf-8'), texto.encode('utf-8')
+        total += len(raw)
+        if len(raw) > 2_000_000 or total > 20_000_000 or len(nombre) > 16384:
+            raise LimiteAnalisis('Límite: 2 MB por documento, 20 MB por consulta y 16384 bytes por ruta.')
+        if b'\0' in nombre:
+            raise ValueError('Ruta de instantánea inválida.')
+        piezas.extend((struct.pack('<II', len(nombre), len(raw)), nombre, raw))
+        documentos.append((path, texto, raw))
+    return b''.join(piezas), documentos
+
+
+def interpretar(salida, fuente, codigo, documentos, minimo, cancelar=lambda: False):
+    """Valida el contrato C antes de permitir previsualización o navegación.
+
+    Convierte solo los extremos usados. Evita un diccionario por cada carácter
+    de hasta 20 MB; los segmentos UTF-8 de cada documento se decodifican una vez.
+    """
+    requerir = ccom._requerir
+    datos = ccom.informe_json(salida, fuente, codigo, 'clones')
+    requerir(type(datos.get('minimum')) is int and datos['minimum'] == minimo, 'umbral de otra consulta')
+    estado = datos.get('status')
+    requerir(isinstance(estado, str) and estado in ('ok', 'limit', 'error', 'lexical_error'), 'estado de clones desconocido')
+    requerir(codigo == (estado != 'ok'), 'estado/código de clones inconsistente')
+    explicacion = datos.get('explanation')
+    requerir(ccom._texto_json(explicacion) and (estado == 'ok' or bool(explicacion.strip())), 'explicación de clones inválida')
+    archivos = datos.get('files')
+    requerir(isinstance(archivos, list) and len(archivos) <= 200, 'lista de archivos inválida')
+    requerir(len(archivos) == len(documentos) or (estado in ('error', 'limit') and not archivos), 'faltan instantáneas en respuesta')
+    for i, archivo in enumerate(archivos):
+        path, _, raw = documentos[i]
+        requerir(isinstance(archivo, dict) and type(archivo.get('id')) is int and archivo['id'] == i
+                  and archivo.get('path') == str(path) and type(archivo.get('bytes')) is int
+                  and archivo['bytes'] == len(raw), 'identidad/tamaño de instantánea inconsistente')
+    pares = datos.get('pairs')
+    requerir(isinstance(pares, list) and len(pares) <= 500, 'lista de pares inválida')
+    requerir(estado == 'ok' or not pares, 'no se aceptan clones parciales')
+    if estado != 'ok':
+        if estado == 'limit':
+            raise LimiteAnalisis(explicacion)
+        raise ValueError(explicacion)
+    extremos = [set() for _ in documentos]
+    vistos = set()
+    for par in pares:
+        if cancelar():
+            raise Cancelado()
+        requerir(isinstance(par, dict) and par.get('type') in ('I', 'II'), 'tipo de clon inválido')
+        requerir(type(par.get('tokens')) is int and minimo <= par['tokens'] <= 100000, 'longitud de clon inválida')
+        for lado in ('a', 'b'):
+            f = par.get(lado)
+            requerir(isinstance(f, dict), 'fragmento inválido')
+            i, inicio, fin = f.get('file'), f.get('start'), f.get('end')
+            requerir(type(i) is int and 0 <= i < len(documentos), 'archivo de fragmento inválido')
+            raw = documentos[i][2]
+            requerir(type(inicio) is int and type(fin) is int and 0 <= inicio < fin <= len(raw), 'rango de fragmento inválido')
+            requerir(raw[inicio] & 0xc0 != 0x80 and (fin == len(raw) or raw[fin] & 0xc0 != 0x80), 'fragmento corta UTF-8')
+            requerir(type(f.get('line_start')) is int and type(f.get('line_end')) is int
+                      and 1 <= f['line_start'] <= f['line_end'], 'líneas de fragmento inválidas')
+            extremos[i].update((inicio, fin))
+        a, b = par['a'], par['b']
+        requerir(a['file'] < b['file'], 'clones del mismo documento o par invertido')
+        clave = (par['type'], a['file'], a['start'], a['end'], b['file'], b['start'], b['end'])
+        requerir(clave not in vistos, 'par de clones duplicado')
+        vistos.add(clave)
+    coordenadas = []
+    for (_, _, raw), offsets in zip(documentos, extremos):
+        anterior, caracteres, linea, mapa = 0, 0, 1, {}
+        for offset in sorted(offsets):
+            if cancelar():
+                raise Cancelado()
+            segmento = raw[anterior:offset]
+            caracteres += len(segmento.decode('utf-8'))
+            linea += segmento.count(b'\n')
+            mapa[offset] = (caracteres, linea)
+            anterior = offset
+        coordenadas.append(mapa)
+    resultado = []
+    for par in pares:
+        fragmentos = []
+        for lado in ('a', 'b'):
+            f = par[lado]; i = f['file']
+            inicio, primera = coordenadas[i][f['start']]
+            fin, ultima = coordenadas[i][f['end']]
+            requerir((primera, ultima) == (f['line_start'], f['line_end']), 'líneas ajenas al fragmento')
+            fragmentos.append(Fragmento(documentos[i][0], inicio, fin, primera, ultima))
+        resultado.append(ParClon(par['type'], *fragmentos, par['tokens']))
+    return resultado
+
+
+def detectar(fuentes, minimo=20, cancelar=lambda: False, *, root=None, configurado=''):
+    """Consulta C en un hijo cancelable. Nunca guarda los buffers del editor."""
+    if type(minimo) is not int or not 5 <= minimo <= 100000:
+        raise ValueError('El mínimo debe estar entre 5 y 100000 tokens.')
+    if cancelar():
+        raise Cancelado()
+    paquete, documentos = empaquetar(fuentes, cancelar)
+    try:
+        salida, fuente, codigo = consultar(paquete, ['--clones-json', str(minimo)], root=root,
+            configurado=configurado, cancelar=cancelar, plazo=15, max_salida=1_000_000)
+        if cancelar():
+            raise Cancelado()
+        return interpretar(salida, fuente, codigo, documentos, minimo, cancelar)
+    except InterruptedError as error:
+        raise Cancelado() from error
+    except LimiteServicio as error:
+        raise LimiteAnalisis(str(error)) from error
+
+
+def tokenizar(texto, cancelar=lambda: False):
+    """Compatibilidad para inspección/pruebas; Flex sigue siendo el único lexer.
+
+    El detector productivo no usa este helper: envía todos los textos al motor C.
+    """
+    try:
+        salida, fuente, codigo = consultar(texto, ['--tokens-json'], cancelar=cancelar)
+        spans, problemas, fatal = ccom.lexico_json(salida, fuente, texto, codigo)
+        if problemas or fatal:
+            raise ValueError('Hay errores léxicos; no se pueden comparar clones.')
+        raw = texto.encode('utf-8')
+        tokens = []
+        anterior, caracteres, linea = 0, 0, 1
+        for span in spans:
+            if cancelar():
+                raise Cancelado()
+            a, b = span['start'], span['end']
+            if span['kind'] == 'comentario':
+                continue
+            salto = raw[anterior:a]
+            caracteres += len(salto.decode('utf-8')); linea += salto.count(b'\n')
+            valor = raw[a:b].decode('utf-8')
+            tokens.append(Token(span['kind'], valor, caracteres, caracteres + len(valor), linea))
+            caracteres += len(valor); anterior = b
+        return tokens
+    except InterruptedError as error:
+        raise Cancelado() from error

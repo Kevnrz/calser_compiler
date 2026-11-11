@@ -1,5 +1,7 @@
 # Preferencias y política de asistencia — paso 6
 
+> **M4 implementado (2026-11-11):** motor real `ide/reparaciones_ccom.py` sobre `ccom --repair-json`; la política verifica original/candidato con `--syntax-json` en C. Python conserva permisos, contexto y aplicación. Catálogo inicial INSERCION_PUNTO_COMA, optativo y desactivado por defecto. [Contrato M4](../../docs/ccom_repairs_json.md).
+
 > **Actualización M1 (2026-11-11):** el análisis automático usa `ccom --check-json` y conserva el front-end real en C. Saddy aclaró que el LL(1) y el simulador pueden seguir en Python; no se exige migrarlos. Las demás etapas se describen en el [plan de integración](plan_migracion_logica_c.md).
 
 Estado: preparación del IDE implementada. Motores reales y aprobación de su catálogo pendientes de integración (paso 7). No se declara E5/E6 completa sin esas entregas.
@@ -53,13 +55,13 @@ Si una respuesta con propuestas no cumple la política, queda disponible en el p
 
 Archivos de referencia:
 
-- `ide/politica_asistencia.py`: validación de preferencias, `ReglaAutomatica`, catálogo `REGLAS_AUTOMATICAS` y evaluación pura.
+- `ide/politica_asistencia.py`: validación de preferencias, `ReglaAutomatica`, catálogo `REGLAS_AUTOMATICAS` y coordinación de validación nativa en el trabajador.
 - `ide/interfaz/preferencias_asistencia.py`: diálogo nativo.
 - `ide/interfaz/sugerencias.py`: pausa, permisos, vigencia y aplicación en el hilo gráfico.
 - `ide/interfaz/asistencia.py`: motor y validación del parser en segundo plano.
 - `ide/pruebas/test_politica_asistencia.py`: proveedores controlados exclusivamente de prueba.
 
-El catálogo de producción está **vacío**. No se importa como permiso un listado que venga del motor y no hay reglas ficticias activas en la aplicación.
+El catálogo M4 contiene **INSERCION_PUNTO_COMA**, revisada con casos positivos/negativos. La automatización y su selección vienen apagadas por defecto. No se importa como permiso un listado que venga del motor y no hay reglas ficticias activas en la aplicación.
 
 Al integrar el motor:
 

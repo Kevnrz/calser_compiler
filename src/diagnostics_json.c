@@ -1,4 +1,9 @@
-/* Protocolo --check-json v1. El lexer/parser/semántico siguen reportando por
+/* Serialización y captura de --check-json / --tokens-json v1.
+ * main.c instala el modo antes de compilar/escanear y finish publica el resultado.
+ * Acumula mensajes propios y rangos UTF-8; comentarios/tokens tienen kind estático.
+ * No es reentrante. Al exceder límites marca informe incompleto y finish falla.
+ * M3–M5 solo reutilizan el escapado de cadenas, no esta captura global.
+ * El lexer/parser/semántico siguen reportando por
  * diag_error; aquí solo se conservan y serializan sus datos. No se reinterpretan
  * mensajes para reconocer errores ni se cambia la recuperación del parser. */
 #include <stdio.h>
@@ -21,6 +26,20 @@ typedef struct {
 static JsonDiagnostic entries[MAX_DIAGNOSTICS];
 static int entry_count, truncated, failed;
 static size_t message_bytes;
+#define MAX_TOKENS 100000
+/* Capacidad fija y respuesta explícita limit: nunca devolver colores parciales
+ * como si cubrieran el documento completo. Un proceso atiende una solicitud. */
+typedef struct { const char *kind; size_t start, end; } JsonToken;
+static JsonToken tokens[MAX_TOKENS];
+static size_t token_count;
+static int lexical_mode;
+extern int lexical_fatal;
+
+void diag_json_token(const char *kind, size_t start, size_t end) {
+    if (!lexical_mode || failed) return;
+    if (token_count == MAX_TOKENS) { truncated = 1; return; }
+    tokens[token_count++] = (JsonToken) {kind, start, end};
+}
 
 /* Aceptar solo secuencias UTF-8 canónicas; los bytes inválidos se escapan al
  * serializar para no producir JSON ilegible. No es tokenización del lenguaje. */
@@ -36,9 +55,9 @@ static size_t utf8_sequence(const unsigned char *p, size_t remaining) {
     return n;
 }
 
-static void json_string(FILE *out, const char *text) {
+void diag_json_write_bytes(FILE *out, const char *text, size_t length) {
     const unsigned char *p = (const unsigned char *) text;
-    size_t remaining = strlen(text);
+    size_t remaining = length;
     fputc('"', out);
     while (remaining) {
         unsigned c = *p;
@@ -53,6 +72,10 @@ static void json_string(FILE *out, const char *text) {
         p++; remaining--;
     }
     fputc('"', out);
+}
+
+void diag_json_write_string(FILE *out, const char *text) {
+    diag_json_write_bytes(out, text, strlen(text));
 }
 
 static void capture(const char *category, DiagPosition position,
@@ -83,10 +106,17 @@ static void capture(const char *category, DiagPosition position,
 
 void diag_json_begin(void) {
     entry_count = truncated = failed = 0;
+    lexical_mode = 0;
+    token_count = 0;
     message_bytes = 0;
     /* No duplicar cada diagnóstico en stderr. La CLI clásica mantiene intactos
      * su texto y señaladores; este modo reserva stdout para el protocolo. */
     diag_set_observer(capture, NULL, 0);
+}
+
+void diag_json_lexical_begin(void) {
+    diag_json_begin();
+    lexical_mode = 1;
 }
 
 int diag_json_finish(FILE *out, const char *source, int exit_code) {
@@ -97,23 +127,23 @@ int diag_json_finish(FILE *out, const char *source, int exit_code) {
                            "No se pudo completar el analisis; consulta stderr.";
         exit_code = 1;
     } else if (truncated) {
-        status = "limit"; message = "El informe supera el limite de diagnosticos o mensajes.";
+        status = "limit"; message = "El informe supera el limite de diagnosticos, mensajes o tokens.";
         exit_code = 1;
     } else if (exit_code || entry_count) {
         status = "errors"; exit_code = 1;
     } else status = "ok";
 
-    fprintf(out, "{\"schema_version\":1,\"operation\":\"check\",\"offset_unit\":\"utf8\",\"source\":");
-    json_string(out, source);
+    fprintf(out, "{\"schema_version\":1,\"operation\":\"%s\",\"offset_unit\":\"utf8\",\"source\":", lexical_mode ? "lex" : "check");
+    diag_json_write_string(out, source);
     fprintf(out, ",\"status\":\"%s\",\"exit_code\":%d,\"error_count\":%d,\"truncated\":%s,\"message\":",
             status, exit_code, diag_count(), truncated ? "true" : "false");
-    json_string(out, message);
+    diag_json_write_string(out, message);
     fputs(",\"diagnostics\":[", out);
     for (int i = 0; i < entry_count; i++) {
         JsonDiagnostic *d = &entries[i];
         if (i) fputc(',', out);
         fprintf(out, "{\"code\":\"%s\",\"category\":\"%s\",\"severity\":\"error\",\"message\":", d->code, d->category);
-        json_string(out, d->message);
+        diag_json_write_string(out, d->message);
         fputs(",\"range\":", out);
         if (d->position.located)
             fprintf(out, "{\"start\":%zu,\"end\":%zu,\"line\":%d,\"column\":%d}",
@@ -122,7 +152,18 @@ int diag_json_finish(FILE *out, const char *source, int exit_code) {
         fputc('}', out);
         free(d->message);
     }
-    fputs("]}\n", out);
+    fputc(']', out);
+    if (lexical_mode) {
+        fprintf(out, ",\"fatal\":%s,\"tokens\":[", lexical_fatal ? "true" : "false");
+        for (size_t i = 0; i < token_count; i++) {
+            if (i) fputc(',', out);
+            fprintf(out, "{\"kind\":\"%s\",\"start\":%zu,\"end\":%zu}",
+                    tokens[i].kind, tokens[i].start, tokens[i].end);
+        }
+        fputc(']', out);
+    }
+    fputs("}\n", out);
+    lexical_mode = 0; token_count = 0;
     entry_count = 0;
     diag_set_observer(NULL, NULL, 1);
     if (fflush(out) != 0 || ferror(out)) {

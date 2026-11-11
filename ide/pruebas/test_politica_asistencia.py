@@ -49,8 +49,8 @@ class Politica(unittest.TestCase):
         d['reglas_automaticas'].append('x')
         self.assertEqual(validar_preferencias({})['reglas_automaticas'], [])
 
-    def test_catalogo_real_vacio_y_descriptores_validados(self):
-        self.assertEqual(REGLAS_AUTOMATICAS, ())
+    def test_catalogo_real_revisado_y_descriptores_validados(self):
+        self.assertEqual([r.codigo for r in REGLAS_AUTOMATICAS], ['INSERCION_PUNTO_COMA'])
         for insercion in ('texto', '\n', '', ';;'):
             with self.assertRaises(ValueError): ReglaAutomatica('prueba', 'Prueba', insercion)
 
@@ -306,12 +306,12 @@ class Interaccion(unittest.TestCase):
 
     def test_validacion_parser_se_ejecuta_fuera_del_hilo_grafico(self):
         self.preparar(); self.habilitar_auto()
-        from ide.nucleo.parser import analizar_sintaxis
+        from ide.reparaciones_ccom import comprobar_sintaxis
         hilos = []
         def comprobar(*args, **kwargs):
             hilos.append(threading.get_ident())
-            return analizar_sintaxis(*args, **kwargs)
-        with patch('ide.politica_asistencia.analizar_sintaxis', comprobar):
+            return comprobar_sintaxis(*args, **kwargs)
+        with patch('ide.politica_asistencia.comprobar_sintaxis', comprobar):
             self.confirmar_linea(); self.esperar(lambda: '3 ;' in self.editor.toPlainText())
         self.assertEqual(len(hilos), 2)
         self.assertTrue(all(hilo != threading.get_ident() for hilo in hilos))

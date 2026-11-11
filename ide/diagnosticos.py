@@ -5,7 +5,7 @@ La ventana reúne esos resultados y el editor utiliza sus posiciones para
 subrayar, mostrar detalles y navegar al fragmento correspondiente.
 
 Las posiciones conservan su unidad de origen: ccom informa columnas en bytes
-UTF-8 y el lexer Python cuenta caracteres Unicode. El editor las convierte a
+UTF-8; los motores Python aún pendientes de integración pueden usar Unicode. El editor las convierte a
 UTF-16 al construir selecciones de Qt; este módulo no depende de la interfaz.
 """
 from dataclasses import dataclass
@@ -34,7 +34,7 @@ class Problema:
     longitud: int = 1
 
     # Los valores predeterminados permiten representar directamente un mensaje
-    # de ccom. El adaptador léxico declara origen="núcleo" y unidad="unicode".
+    # de ccom. El adaptador Flex declara origen="ccom léxico" y conserva unidad="utf8".
     # longitud se interpreta junto a la unidad, no como un tamaño universal.
     origen: str = "ccom"
     unidad: str = "utf8"

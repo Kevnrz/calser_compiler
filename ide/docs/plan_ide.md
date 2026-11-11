@@ -24,6 +24,16 @@ Referencias:
 
 ## 2. Estado real al actualizar este documento
 
+Actualización M6 (2026-11-11): revisión de dependencias, LL(1) de consulta explícitamente fuera de producción, cabecera JSON común y comentarios de servicios/adaptadores. Recorrido gráfico con varios documentos, C real y bloqueo de imports de analizadores Python; 382 pruebas IDE y suite de ccom verificadas. [Revisión y orden de lectura](revision_m6.md).
+
+Actualización M5 (2026-11-11): clones Tipo I/II con Flex/comparación C, instantáneas múltiples CCL1 y panel existente. Sin tokenizador/normalizador Python. Límites, cancelación y bloqueo explícito de errores léxicos. [Contrato M5](../../docs/ccom_clones_json.md).
+
+Actualización M4 (2026-11-11): reparaciones reales C (`--repair-json`), cuatro cierres validados sobre copias, precondiciones verificables y panel conectado. La política automática usa `--syntax-json` en C. Una regla revisada de punto y coma, desactivada hasta permiso explícito en preferencias. 371 pruebas IDE y suite del compilador correctas. [Contrato M4](../../docs/ccom_repairs_json.md).
+
+Actualización M3 (2026-11-11): sugerencias reales en C con Flex + Bison/LAC, `--suggest-json`, Ctrl+Espacio y pausa opcional. La entrega se adaptó a C sin usar sus modelos duplicados. Reparaciones sigue pendiente M4. [Contrato M3](../../docs/ccom_suggestions_json.md).
+
+Actualización M2 (2026-11-11): resaltado/errores léxicos vivos desde Flex mediante `ccom --tokens-json`, sin recorrido léxico ni búsqueda de comentarios Python en el editor. Se conservan snapshots, cancelación y Deshacer. Ver [contrato léxico](../../docs/ccom_tokens_json.md).
+
 Actualización M1B (2026-11-11): botón Compilar dividido, F5 según modo seleccionado, diálogo de destino/opciones compatibles y preferencias. Cuatro modos reales: análisis, compilación, AST JSON sintáctico y ensamblado .asm; F6 requiere compilación completa con listado y artefactos renovados. Ver [plan de integración](plan_migracion_logica_c.md#resultado-de-m1b-2026-11-11).
 
 Actualización M1 (2026-11-11): `ccom --check-json` implementado y conectado al análisis automático. Diagnósticos tipados y listas/rangos validados, sin regex de mensajes en ese recorrido. 312 pruebas del IDE y suite completa del compilador correctas. F5/F6, lexer en vivo, LL(1) y simulador se conservan. Ver [contrato del servicio](../../docs/ccom_check_json.md).
@@ -140,7 +150,7 @@ ide/
   preferencias.py               configuración validada
   politica_asistencia.py        permisos, catálogo revisado y evaluación automática con el parser
   ccom.py                       ejecutable, diagnósticos y categorías
-  clones.py                     detector léxico independiente de Qt
+  clones.py                     adaptador JSON/CCL1 y modelos, sin Qt
   interfaz/
     ventana.py                  ventana, acciones, procesos y coordinación
     ejecucion.py                compilaciones vigentes, QProcess del simulador, trazas y cancelación
@@ -173,7 +183,7 @@ ide/
 
 Componentes de E3 ya creados: `adaptador_nucleo.py`, `diagnosticos.py` e `interfaz/analisis.py`. El modelo común explicita origen, unidad de columna e identidad del documento; el coordinador procesa snapshots sin tocar widgets desde el trabajador. La cola reemplaza solicitudes pendientes del mismo documento y rechaza respuestas de revisiones antiguas.
 
-No refactorizar todo el IDE solo para igualar un árbol de carpetas. Mantener `ide/clones.py` e `ide/interfaz/clones.py`: uno es motor, otro presentación. No hace falta LSP para completar el alcance.
+No refactorizar todo el IDE solo para igualar un árbol de carpetas. Mantener `ide/clones.py` e `ide/interfaz/clones.py`: uno es adaptador del motor C y el otro presentación. No hace falta LSP para completar el alcance.
 
 ## 7. Contratos de integración
 
@@ -270,7 +280,7 @@ La presencia del paquete ya está resuelta; no volver a planificar otro merge pa
 
 **Criterio cumplido:** escribir `@` produce el error sin guardar ni compilar; quitarlo retira el diagnóstico; tipos, reservadas, comentarios y Unicode se muestran correctamente; editar una pestaña no contamina otra. No se anuncian todavía errores sintácticos del parser LL(1).
 
-Implementación: adaptador puro, comentarios de presentación, timer de 300 ms y cola serial con snapshots por revisión; errores con origen `núcleo`. Desduplicación por rango frente a ccom. Límite explícito de 2 millones de caracteres. Verificación E3: 56 pruebas combinadas, incluidos cierre durante análisis, resultados antiguos, recuperación ante fallos, Unicode y preservación de guardado/Deshacer.
+Implementación histórica E3 (sustituida por M2 para usar Flex): adaptador puro, comentarios de presentación, timer de 300 ms y cola serial con snapshots por revisión; errores con origen `núcleo`. Desduplicación por rango frente a ccom. Límite explícito de 2 millones de caracteres. Verificación E3: 56 pruebas combinadas, incluidos cierre durante análisis, resultados antiguos, recuperación ante fallos, Unicode y preservación de guardado/Deshacer.
 
 ### E4 · Análisis automático con ccom — completado, independiente de LL(1)
 
@@ -291,12 +301,12 @@ Verificación E4: 70 pruebas combinadas de CALSIDE/núcleo; `make check-analysis
 - [x] Contrato real documentado en `parser_predictivo.md`, con posiciones Python, estados, límites y ejemplos para ambos motores.
 - [x] 26 pruebas nuevas; 96 combinadas correctas. Comparación sintáctica con Bison (`--ast-json`): 105 de 110 fuentes sin errores léxicos, sin discrepancias; cinco excluidas por errores léxicos.
 - [x] Contrato de motores y aplicador común implementados; ver preparación de integración más abajo.
-- [ ] Recibir motor de sugerencias del compañero (también responsable de reparaciones), adaptado a la API del parser.
-- [ ] Incorporar el motor sin reemplazar ccom y definir prioridad de diagnósticos antes de mostrar otra fuente en vivo.
+- [x] M3: comportamiento/casos de la entrega adaptados a C sobre Flex/Bison-LAC.
+- [x] M3: proveedor C conectado al contrato; no añade otra fuente de diagnósticos en vivo.
 - [x] UI manual con Ctrl+Espacio y coordinador conectados al contrato; sin motor ficticio de producción.
 - [x] Activación por pausa opcional, permisos y cancelación preparados en el paso 6; falta verificar contextos con el motor real.
 - [x] Lista con flechas, Enter/Tab/clic, Escape y reemplazo por rango, con descarte de contexto anterior.
-- [ ] Verificar con el motor real que no proponga dentro de comentarios; los errores/bloqueos se presentan sin lista.
+- [x] M3: verificado con el motor real que no propone dentro de comentarios; los errores/bloqueos se presentan sin lista.
 
 **Terminado cuando:** se puede escribir una declaración o construcción Calser apoyándose en opciones válidas; aceptar reemplaza solo el fragmento previsto; cancelar no cambia el texto. El parser disponible no equivale todavía a sugerencias integradas.
 
@@ -360,6 +370,7 @@ Detalle y prueba manual en [proyecto_archivos.md](proyecto_archivos.md). No se p
 
 ### E10 · Mejoras posteriores, sin bloquear el cierre funcional
 
+- Texto de sugerencia en gris dentro del editor (mejora de interfaz sobre M3): mostrar sin modificar el buffer, aceptar con Tab y cancelar al cambiar contexto. Reutilizar el motor C. Completar varios terminales, como `void;`, requiere definir una propuesta conjunta justificada por el backend; no añadir puntuación automáticamente desde Python. Pendiente de decisión/implementación.
 - Esquina morada que se dobla y revela minimizar/maximizar/restaurar/cerrar; clic y teclado, animación breve y opción de movimiento reducido. Conservar comportamiento de ventana antes de sustituir controles nativos.
 - Tema claro, refinamientos visuales y preferencias adicionales. Los iconos `.cls` compartidos con el plugin de VS Code ya están incorporados en explorador, pestañas, búsqueda y arrastre.
 - Abrir artefactos del compilador y exponer opciones nuevas cuando estén realmente implementadas.

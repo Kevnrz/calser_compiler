@@ -9,7 +9,7 @@ BUILD_DIR = build
 GEN_DIR = $(BUILD_DIR)/generated
 OBJ_DIR = $(BUILD_DIR)/obj
 
-SOURCES = main ast symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics diagnostics_json label_table isa_table codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler
+SOURCES = main clones repairs syntax_service suggestions ast symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics diagnostics_json label_table isa_table codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler
 OBJECTS = $(addprefix $(OBJ_DIR)/,$(addsuffix .o,$(SOURCES))) \
           $(OBJ_DIR)/parser.tab.o $(OBJ_DIR)/lex.yy.o
 
@@ -113,7 +113,7 @@ check-salidas: $(TARGET)
 validar-bundles: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 tools/validar_bundles.py
 
-check: check-success check-analysis check-analysis-json check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+check: check-clones-json check-repairs-json check-suggestions-json check-tokens-json check-success check-analysis check-analysis-json check-arith check-arrays check-crypto check-ast check-asm check-programas check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 clean:
 	rm -f $(TARGET) $(OBJECTS) $(OBJECTS:.o=.d)
@@ -150,3 +150,25 @@ check-success: $(TARGET)
 .PHONY: check-analysis-json
 check-analysis-json: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/analisis_json/probar.py
+
+# Tokens del lexer real y presentación del IDE, sin parser ni artefactos.
+.PHONY: check-tokens-json
+check-tokens-json: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/tokens_json/probar.py
+
+.PHONY: check-suggestions-json
+check-suggestions-json: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/sugerencias_json/probar.py
+
+.PHONY: check-repairs-json
+check-repairs-json: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/reparaciones_json/probar.py
+
+.PHONY: check-clones-json
+check-clones-json: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/clones_json/probar.py
+
+# Recorrido gráfico aislado con todos los proveedores C y el simulador reales.
+.PHONY: check-recorrido-ide
+check-recorrido-ide: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 QT_QPA_PLATFORM=offscreen $(PYTHON) tools/probar_recorrido_ide.py

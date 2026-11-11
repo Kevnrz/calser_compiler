@@ -22,7 +22,7 @@ class AdaptadorNucleo(unittest.TestCase):
         self.assertIn("tipo", categories)
         self.assertIn("numero", categories)
         self.assertIn("comentario", categories)
-        # El lexer reconoce Vm incluso pegado a x; el antiguo regex no.
+        # La clasificación viene de Flex, sin reglas de presentación propias.
         self.assertTrue(any(s.categoria == "reservada" and s.longitud == 2 for s in result.tramos[2]))
         self.assertEqual(result.problemas, ())
 
@@ -30,7 +30,7 @@ class AdaptadorNucleo(unittest.TestCase):
         result = analizar_documento("doc", 1, "F main [] : void ;\n#[ sin cerrar\n\n")
         self.assertTrue(result.fatal)
         self.assertEqual(result.problemas[0].longitud, 2)
-        self.assertEqual(result.problemas[0].unidad, "unicode")
+        self.assertEqual(result.problemas[0].unidad, "utf8")
         self.assertTrue(all(s.categoria == "comentario" for s in result.tramos[1]))
         self.assertEqual(analizar_documento("doc", 2, "").tramos, {})
 
@@ -75,10 +75,10 @@ class AnalisisVivo(unittest.TestCase):
         self.assertIsNone(editor.path)
         self.assertIsNone(self.window.process)
         self.assertEqual(len(editor.errores_lexicos), 1)
-        self.assertEqual(self.window.problems.topLevelItem(0).text(5), "núcleo")
+        self.assertEqual(self.window.problems.topLevelItem(0).text(5), "ccom léxico")
         self.window.ir_problema(self.window.problems.topLevelItem(0), 0)
         self.assertEqual(editor.textCursor().selectedText(), "@")
-        self.assertIn("núcleo · Léxico", self.window.diagnostic_message.text())
+        self.assertIn("ccom léxico · Léxico", self.window.diagnostic_message.text())
         editor.insertPlainText("")
         self.analizado(editor)
         self.assertEqual(self.window.problems.topLevelItemCount(), 0)
@@ -88,8 +88,8 @@ class AnalisisVivo(unittest.TestCase):
         editor = self.window.editor()
         editor.insertPlainText("#[ café 😀\n]#\tVm x : int = 1 ;\n😀 @")
         self.analizado(editor)
-        self.assertEqual(len(editor.errores_lexicos), 2)
-        emoji, at = editor.errores_lexicos
+        self.assertEqual(len(editor.errores_lexicos), 5)
+        emoji, at = editor.errores_lexicos[0], editor.errores_lexicos[-1]
         self.assertEqual(editor.rango_problema(emoji).selectedText(), "😀")
         self.assertEqual(editor.rango_problema(at).selectedText(), "@")
         block = editor.document().findBlockByNumber(2)
@@ -133,11 +133,11 @@ class AnalisisVivo(unittest.TestCase):
         self.addCleanup(release.set)
         seen = []
 
-        def delayed(*args):
+        def delayed(*args, **kwargs):
             seen.append(threading.current_thread() is not threading.main_thread())
             started.set()
             release.wait(2)
-            return analizar_documento(*args)
+            return analizar_documento(*args, **kwargs)
 
         editor = self.window.editor()
         with patch("ide.interfaz.analisis.analizar_documento", side_effect=delayed):
@@ -157,9 +157,9 @@ class AnalisisVivo(unittest.TestCase):
         started, release = threading.Event(), threading.Event()
         self.addCleanup(release.set)
 
-        def delayed(*args):
+        def delayed(*args, **kwargs):
             started.set(); release.wait(2)
-            return analizar_documento(*args)
+            return analizar_documento(*args, **kwargs)
 
         with patch("ide.interfaz.analisis.analizar_documento", side_effect=delayed):
             editor = self.window.editor()

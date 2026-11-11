@@ -1,8 +1,8 @@
 # CALSIDE: guía unificada del sistema
 
-> **Actualización M1 (2026-11-11):** el análisis automático usa `ccom --check-json` y conserva el front-end real en C. Saddy aclaró que el LL(1) y el simulador pueden seguir en Python; no se exige migrarlos. Las demás etapas se describen en el [plan de integración](plan_migracion_logica_c.md).
+> **Actualización M1/M1B/M2/M3/M4/M5/M6 (2026-11-11):** el léxico vivo y resaltado usan Flex mediante `--tokens-json`; el análisis automático usa `ccom --check-json` y conserva el front-end real en C. Saddy aclaró que el LL(1) y el simulador pueden seguir en Python; no se exige migrarlos. Las demás etapas se describen en el [plan de integración](plan_migracion_logica_c.md).
 
-Estado base: **6 de noviembre de 2026, después del paso 6 de asistencia**, actualizado con **M1 el 2026-11-11**. El análisis automático usa ahora `--check-json`; el LL(1) y el simulador Python permanecen. Última verificación: **312 pruebas correctas** con `make check-ide` y suite completa del compilador correcta. Contrato del nuevo servicio: [ccom_check_json.md](../../docs/ccom_check_json.md).
+Estado base: **6 de noviembre de 2026, después del paso 6 de asistencia**, actualizado con **M1/M1B/M2/M3/M4/M5/M6 el 2026-11-11**. El editor usa `--tokens-json` para colores/errores léxicos y `--check-json` para análisis completo; el LL(1) y el simulador Python permanecen. Última verificación: **382 pruebas correctas** con `make check-ide` y suite completa del compilador correcta. Contrato del nuevo servicio: [ccom_check_json.md](../../docs/ccom_check_json.md).
 
 Este documento sirve para entender el IDE antes de modificarlo y como recorrido para revisar y comentar sus archivos. La lista de revisión del final todavía no significa que todos los archivos hayan recibido nuevos comentarios.
 
@@ -35,8 +35,8 @@ Conviene distinguir estas responsabilidades:
 | Parte | Qué hace hoy | Implementación |
 | --- | --- | --- |
 | Interfaz | Ventanas, editor, marcas, explorador, paneles, atajos y diálogos. | Python/PySide6 en `ide/interfaz/`. |
-| Lógica del IDE | Lectura/guardado, búsqueda, clones, conversiones de posiciones y política de asistencia. | Python en `ide/`. |
-| Núcleo del IDE | Lexer, gramática, FIRST/FOLLOW, tabla y parser predictivo; modelos de asistencia. | Python sin Qt en `ide/nucleo/`. |
+| Lógica del IDE | Lectura/guardado, búsqueda, transporte de clones, conversiones de posiciones y política de asistencia. | Python en `ide/`. |
+| Núcleo del IDE | Gramática, FIRST/FOLLOW, tabla y parser predictivo; lexer para esos consumidores pendientes, no para el resaltado vivo; modelos de asistencia. | Python sin Qt en `ide/nucleo/`. |
 | Compilador | Análisis completo del lenguaje, semántica y generación de artefactos. | Ejecutable `ccom`; fuentes C en `src/` y gramática Flex/Bison en `grammar/`. |
 | Simulador | Ejecuta el listado generado y produce registros, memoria y traza. | Proceso Python externo: `tools/sim_asm.py`. |
 | Shell | Ejecuta comandos escritos por el usuario en una terminal independiente. | Shell del sistema mediante un auxiliar PTY en Linux. |
@@ -45,7 +45,7 @@ Por tanto, el IDE incluye lógica propia en Python además de widgets. `ccom` si
 
 **Disponible:** edición con pestañas, explorador jerárquico y operaciones de archivos/carpetas, búsqueda, lexer en vivo, comprobación automática con ccom, compilación F5, ejecución F6, clones Tipo I/II, terminales y preferencias. También están preparados el contrato, coordinador, aplicador, interfaces manuales y política de asistencia.
 
-**Pendiente de entrega real:** los motores de sugerencias y reparaciones y la revisión de sus reglas. La aplicación no utiliza proveedores ficticios. El catálogo automático de producción está vacío; los ejemplos controlados viven en pruebas.
+**Sugerencias reales M3:** motor C conectado al menú/Ctrl+Espacio y pausa opcional. **Reparaciones reales M4:** cierres validados por C, panel y regla opcional de punto y coma. La aplicación no utiliza proveedores ficticios. El catálogo automático incluye una regla revisada, desactivada hasta que el usuario la habilite; los ejemplos controlados viven en pruebas.
 
 ## 2. Arquitectura y conexiones
 
@@ -55,24 +55,27 @@ flowchart TD
     V --> E[Editor y documentos]
     V --> P[Explorador, búsqueda y operaciones de proyecto]
     V --> X[Paneles y terminales]
+    X --> CL[Clones: copias CCL1 y --clones-json]
+    CL --> CF[Flex y comparacion Tipo I/II en C]
     E --> L[Coordinador de análisis léxico]
-    L --> A[Adaptador de posiciones]
-    A --> N[Lexer del núcleo]
+    L --> A[Adaptador de posiciones y proceso ccom]
+    A --> N[Flex mediante --tokens-json]
     L --> C[Comprobador automático]
-    C --> CC[ccom --check en proceso externo]
+    C --> CC[ccom --check-json en proceso externo]
     V --> F[Compilación manual F5]
     F --> CB[ccom y artefactos de compilación]
     CB --> R[Ejecución F6]
     R --> S[tools/sim_asm.py en proceso externo]
     E --> AS[Controlador y coordinador de asistencia]
-    AS -. carga pendiente .-> MS[Motores de sugerencias y reparaciones]
-    MS -. consulta .-> LL[Parser LL1, gramática y tabla]
+    AS --> MS[Sugerencias mediante ccom --suggest-json]
+    MS --> BP[Bison LAC y Flex]
+    AS --> RP[ccom --repair-json y verificacion --syntax-json]
     AS --> PA[Política automática y validación con parser]
     AS --> ED[Aplicador de ediciones]
     ED --> E
 ```
 
-Las flechas representan llamadas o flujo de datos, no importaciones exactas. Las conexiones con motores se dibujan discontinuas porque sus módulos todavía no están entregados.
+Las flechas representan llamadas o flujo de datos, no importaciones exactas. Sugerencias M3 y reparaciones M4 consultan el backend C real. Clones M5 también consulta Flex/comparación en C mediante `--clones-json`.
 
 ### La ventana central y los componentes que reutiliza
 
@@ -188,12 +191,14 @@ Cambio real del texto
     → Editor.analisisSolicitado
     → CoordinadorAnalisis / TareaLexica
     → adaptador_nucleo.analizar_documento
-    → nucleo.lexico.analizar
+    → ccom --tokens-json sobre copia temporal UTF-8
+    → Flex publica tokens/comentarios y diagnósticos JSON
+    → convertir_lexico adapta bytes a UTF-16
     → ResultadoLexico
     → Editor.aplicar_analisis, solo si documento/revision siguen vigentes
 ```
 
-El lexer produce tokens y errores. El adaptador los convierte en tramos de color y diagnósticos compatibles con el editor. Recorre también comentarios para colorearlos, porque el lexer los omite como tokens.
+Flex produce tokens, comentarios y errores. El adaptador valida el JSON y convierte sus rangos de bytes UTF-8 a tramos UTF-16 y diagnósticos compatibles con el editor; no reconoce lexemas ni busca comentarios. La tarea de fondo llama a un proceso ccom cancelable, con temporal privado, límite de 5 s y respuesta acotada. Sin ccom compatible se informa el fallo sin respaldo Python. Detalles en [M2](../../docs/ccom_tokens_json.md).
 
 `Resaltado`, un `QSyntaxHighlighter`, aplica los formatos. `Margen` dibuja números de línea y puntos de error. El resaltado no debe aumentar la revisión, ensuciar el documento ni añadir acciones de Deshacer; `Editor.cambio` distingue cambios reales de señales debidas al formato.
 
@@ -207,7 +212,7 @@ Las pausas se reinician con las ediciones; los 300 + 600 ms describen el recorri
 
 ### Presentación de problemas
 
-`Problema`, en `ide/diagnosticos.py`, es el modelo común: archivo/documento, origen, categoría, mensaje, rango y unidad de columna. `ccom.diagnosticos_json` valida el protocolo del análisis automático; `ccom.diagnosticos` mantiene la lectura textual para F5. El adaptador léxico construye diagnósticos del núcleo. La categoría JSON ya viene decidida por C; Python no la deduce del mensaje.
+`Problema`, en `ide/diagnosticos.py`, es el modelo común: archivo/documento, origen, categoría, mensaje, rango y unidad de columna. `ccom.diagnosticos_json` valida el protocolo del análisis automático; `ccom.diagnosticos` mantiene la lectura textual para F5. El adaptador léxico construye diagnósticos del núcleo. El léxico vivo utiliza `ccom.lexico_json` y origen ccom léxico. La categoría JSON ya viene decidida por C; Python no la deduce del mensaje.
 
 `Ventana.actualizar_problemas` combina los resultados válidos de las pestañas. Evita duplicados exactos entre ccom manual y automático y da prioridad a ccom sobre un error léxico equivalente del núcleo. No elimina indiscriminadamente todos los diagnósticos de otro origen.
 
@@ -258,7 +263,7 @@ El programa Calser del usuario se simula: el botón no ejecuta el `.bin` como un
 
 ## 7. Núcleo LL(1)
 
-LL(1) describe un análisis que lee de izquierda a derecha, construye una derivación por la izquierda y decide con un token de anticipación. En CALSIDE permite reconocer sintaxis y conocer qué terminales podrían continuar en el cursor.
+LL(1) describe un análisis que lee de izquierda a derecha, construye una derivación por la izquierda y decide con un token de anticipación. La API de consulta conservada permite estudiar reconocimiento y contexto; la interfaz productiva consulta Flex/Bison en C para esas tareas.
 
 ```text
 texto
@@ -286,7 +291,7 @@ La primera reconoce el programa completo. La segunda analiza un prefijo y devuel
 
 El parser tiene límites y cancelación. No genera AST, no comprueba declaraciones/tipos como ccom y no edita texto. Su recuperación posterior a errores por sincronización es una mejora pendiente.
 
-**Uso actual:** el lexer alimenta el editor y el parser valida candidatos de la política automática. **Uso preparado:** los motores pendientes pueden consultar contexto/sintaxis para proponer sugerencias y reparaciones. El análisis sintáctico/semántico habitual mientras se escribe sigue pasando por `ccom --check`.
+**Uso actual del núcleo Python:** clones ya no utiliza tokenización Python; la API LL(1) se conserva para consulta/pruebas. La política de reparaciones verifica en C. El resaltado y las sugerencias usan Flex/Bison en C; el análisis sintáctico/semántico habitual pasa por `ccom --check-json`. El LL(1) permanece disponible como API autorizada.
 
 ## 8. Sugerencias, reparaciones y política automática
 
@@ -305,14 +310,14 @@ El parser tiene límites y cancelación. No genera AST, no comprueba declaracion
 
 Los estados distinguen `OK`, `SIN_OPCIONES`, `BLOQUEADO`, `CANCELADO`, `LIMITE` y `ERROR`. No se debe presentar un motor roto como si simplemente no hubiera opciones.
 
-Los módulos esperados, todavía ausentes, son:
+El proveedor productivo de sugerencias M3 y el proveedor de reparaciones M4 son:
 
 ```text
-ide/nucleo/sugerencias.py → sugerir(texto, cursor, *, cancelar=None)
-ide/nucleo/correccion.py  → proponer_reparaciones(texto, *, cancelar=None)
+ide/sugerencias_ccom.py  → sugerir(texto, cursor, *, cancelar=None, root=None, configurado="")
+ide/reparaciones_ccom.py → proponer_reparaciones(texto, *, cancelar=None, root=None, configurado="")
 ```
 
-El coordinador los importa de forma diferida dentro del trabajador. Si falta exactamente el módulo del motor informa ausencia; una dependencia interna rota se considera error. Las firmas y modelos ya están fijados y no necesitan widgets para conectarse.
+El coordinador los importa de forma diferida dentro del trabajador y captura root/ccom configurado. Para sugerencias, `servicio_ccom.py` lanza el proceso C cancelable y `sugerencias_ccom.py` valida JSON/convierte coordenadas. El contexto y el filtrado se resuelven con Flex y Bison/LAC, no con LL(1). Ver [M3](../../docs/ccom_suggestions_json.md). Si falta exactamente el módulo del motor informa ausencia; una dependencia interna rota se considera error. Las firmas y modelos ya están fijados y no necesitan widgets para conectarse.
 
 ### Sugerencias manuales y por pausa
 
@@ -350,7 +355,7 @@ Solo admite una propuesta con una inserción local del delimitador autorizado, p
 
 No se automatiza si hay selección, solo lectura, conflicto externo conocido, compilación/ejecución o pérdida de contexto. La reparación se explica y puede deshacerse sin guardar ni encadenar otra reparación. Si la propuesta requiere revisión, se conserva para uso manual.
 
-El catálogo `REGLAS_AUTOMATICAS` de producción está vacío. Revisar y añadir reglas reales con positivos/negativos y habilitarlas en el perfil es parte del paso 7. Las consultas manuales nunca activan esta ruta automática por su cuenta.
+El catálogo `REGLAS_AUTOMATICAS` de producción contiene INSERCION_PUNTO_COMA, revisada con positivos/negativos. El usuario debe habilitar automatización y seleccionar esa regla; los permisos predeterminados siguen apagados. La comprobación de original/candidato usa `ccom --syntax-json`, no LL(1) Python. Las consultas manuales nunca activan esta ruta automática por su cuenta.
 
 ## 9. Archivos, carpetas y protección del disco
 
@@ -386,7 +391,7 @@ Activar una coincidencia abre/revela el destino o selecciona el rango. Si cambi�
 
 ### Clones Tipo I y II
 
-`ide/clones.py` contiene un detector léxico propio para comparar archivos; no llama al parser LL(1) ni necesita ccom. Su tokenización para comparación está separada del lexer del núcleo usado para diagnosticar el editor.
+`ide/clones.py` es el adaptador del motor C: empaqueta todas las instantáneas en CCL1, consulta el ccom configurado, valida JSON y convierte extremos UTF-8 a posiciones Python. No tokeniza ni compara Calser. `src/clones.c` reutiliza Flex y realiza firmas, biyección de nombres, extensión y filtro de inclusiones. Requiere ccom compatible; errores léxicos bloquean la consulta. [Protocolo M5](../../docs/ccom_clones_json.md).
 
 Tipo I exige tokens iguales ignorando espacios/comentarios. Tipo II permite renombrar identificadores de forma consistente y cambiar literales del mismo tipo; conserva operadores y reservadas. Un índice de ventanas encuentra candidatos, que se verifican y amplían; se eliminan inclusiones redundantes del mismo tipo.
 
@@ -412,7 +417,7 @@ Ejecutar `ccom` o el simulador desde el shell permite elegir banderas, pero no e
 
 | Trabajo | Mecanismo | Control de vigencia/cancelación |
 | --- | --- | --- |
-| Léxico | `CoordinadorAnalisis` y un `TareaLexica`. | Última pendiente por documento; recepción comprueba identidad/revisión. La interrupción no convierte el lexer en preemptivo. |
+| Léxico | `CoordinadorAnalisis` y un `TareaLexica`. | Última pendiente por documento; recepción comprueba identidad/revisión. El transporte cancela y recoge el proceso Flex antes de terminar la tarea. |
 | ccom automático | `ComprobadorCcom` y un `QProcess`. | Temporizador/cola por documento, invalidación, kill del proceso y revisión/ruta al recibir. |
 | F5 / F6 | Procesos externos separados. | Impide superposición; revisión/huellas, cancelación y timeout. |
 | Asistencia | Un trabajador serial para ambos tipos de motor. | Una pendiente por documento/tipo, número de solicitud, callback cooperativo, contexto estricto. |
@@ -428,7 +433,8 @@ Límites actuales que ayudan a entender el comportamiento:
 
 | Servicio | Límite principal |
 | --- | --- |
-| Análisis léxico / ediciones | 2 millones de caracteres; hasta 128 ediciones/precondiciones por propuesta. |
+| Análisis léxico Flex | 2 millones de caracteres; 5 s de proceso; 100000 tramos; 16 MB stdout y 1 MB stderr. |
+| Ediciones | 2 millones de caracteres; hasta 128 ediciones/precondiciones por propuesta. |
 | ccom automático | 5 s; 1 MB por canal de salida. |
 | Compilar / ejecutar | 30 s por proceso controlado por el botón. |
 | Asistencia | 3 s cooperativos, 32 pendientes, 64 sugerencias o 32 reparaciones por respuesta. |
@@ -444,7 +450,7 @@ El timeout de asistencia solicita cancelación. Si el motor ignora el callback, 
 
 ## 12. Inventario de archivos de producción
 
-Los nombres son rutas relativas a la raíz del repositorio. Hay **40 módulos Python de producción** en `ide/`, sin contar pruebas o cachés. Las tablas incluyen qué revisar al documentar cada archivo; no son un listado de archivos ya comentados.
+Los nombres son rutas relativas a la raíz del repositorio. Los módulos de producción de `ide/` se agrupan abajo, sin contar pruebas o cachés. Las tablas incluyen qué revisar al documentar cada archivo; no son un listado de archivos ya comentados.
 
 ### Entrada, modelos y lógica sin widgets
 
@@ -455,13 +461,17 @@ Los nombres son rutas relativas a la raíz del repositorio. Hay **40 módulos Py
 | `ide/archivos.py` | `EstadoArchivo`, `cargar`, `guardar`. | Versiones, lectura consistente, temporal/reemplazo y límite de concurrencia con otros escritores. |
 | `ide/diagnosticos.py` | `Problema`. | Modelo común; unidades, posición ausente, categoría y descripción. |
 | `ide/compilacion.py` | `validar`, `preparar`, `MODOS`, `OPCIONES`. | Perfiles manuales, compatibilidad de casillas, destinos y lista de argumentos; sin analizar el lenguaje. |
-| `ide/ccom.py` | `ejecutable`, `diagnosticos`. | Orden de resolución y formatos admitidos; líneas que no son diagnósticos se conservan en la salida. |
-| `ide/adaptador_nucleo.py` | `Tramo`, `ResultadoLexico`, `analizar_documento`. | Frontera entre tokens Python, colores, comentarios y posiciones UTF-16. |
+| `ide/ccom.py` | `ejecutable`, `informe_json`, `diagnosticos_json`, `lexico_json`, `diagnosticos`. | Resolución, cabecera común, contenido por servicio y lector textual F5; no analiza Calser. |
+| `ide/servicio_ccom.py` | `consultar`, `LimiteServicio`. | Transporte de procesos compartido por léxico/sugerencias/reparaciones/sintaxis/clones; temporales, límites y cancelación. |
+| `ide/sugerencias_ccom.py` | `sugerir`, `interpretar`. | Puente del motor C al contrato; valida el JSON y convierte UTF-8 a offsets Python, sin reglas del lenguaje. |
+| `ide/adaptador_nucleo.py` | `Tramo`, `ResultadoLexico`, `analizar_documento`. | Invocación cancelable de ccom --tokens-json, validación y conversión de rangos UTF-8 a UTF-16; sin reglas léxicas Python. |
 | `ide/ediciones.py` | `validar_ediciones`, `aplicar_ediciones`, conversiones. | Rangos del original, superposición, precondiciones, Unicode y traslado de posiciones. |
 | `ide/busqueda.py` | `Coincidencia`, `buscar_proyecto`. | Recorrido, exclusiones, prioridad del buffer sobre disco y límites. |
-| `ide/clones.py` | `detectar`, `firma`, `compatibles`. | Índice, renombramiento biyectivo, extensión, inclusión y cancelación. |
+| `ide/clones.py` | `detectar`, `empaquetar`, `interpretar`. | Modelos, copias CCL1, transporte cancelable, validación de JSON y rangos. |
+| `src/clones.c`, `include/clones.h` | `clones_run`. | Flex, firmas, biyección, extensión, inclusión y presupuestos nativos. |
 | `ide/preferencias.py` | `validar`, `cargar`, `guardar`. | Campos permitidos y presupuesto del JSON; ramas/orden no deben impedir guardar el estado básico. |
-| `ide/politica_asistencia.py` | `ReglaAutomatica`, `evaluar_automatizacion`. | Separar propuesta, permiso, disparador y prueba sintáctica; explicar catálogo vacío. |
+| `ide/reparaciones_ccom.py` | `proponer_reparaciones`, `comprobar_sintaxis`, `interpretar`. | Puente de reparaciones y validación C; precondiciones reales y rangos UTF-8, sin analizar lenguaje en Python. |
+| `ide/politica_asistencia.py` | `ReglaAutomatica`, `evaluar_automatizacion`. | Separar propuesta, permiso, disparador y prueba sintáctica; explicar regla revisada, permisos y verificación nativa. |
 
 ### Núcleo del lenguaje
 
@@ -520,7 +530,7 @@ Los nombres son rutas relativas a la raíz del repositorio. Hay **40 módulos Py
 
 ## 13. Pruebas: dónde comprobar cada parte
 
-Hay **19 archivos de pruebas**. Los proveedores de motores controlados se definen allí; no son parte de la aplicación normal.
+Las pruebas viven en `ide/pruebas/`. Los proveedores de motores controlados se definen allí; no son parte de la aplicación normal.
 
 | Archivo en `ide/pruebas/` | Área que ayuda a verificar al comentar |
 | --- | --- |
@@ -530,8 +540,11 @@ Hay **19 archivos de pruebas**. Los proveedores de motores controlados se define
 | `test_parser.py` | Reconocimiento, contexto de cursor, errores, límites y cancelación del parser. |
 | `test_analisis_vivo.py` | Adaptador, Unicode, marcas, revisiones y resultados tardíos. |
 | `test_comprobacion.py` | Copia temporal, ccom automático, fallos, límites y prioridades. |
+| `test_reparaciones_ccom.py` | Motor C, cierres/EOF, transporte, Alt+Enter, vista previa, permisos, auto nativa y cancelación del hijo. |
+| `test_sugerencias_ccom.py` | Motor C real, contrato/transporte, Ctrl+Espacio, pausa, Deshacer y cancelación del hijo al editar. |
+| `test_tokens_ccom.py` | Servicio Flex real, contrato de tokens, UTF-16, cancelación/limpieza y ausencia de fallback Python. |
 | `test_protocolo_ccom.py` | Servicio JSON real, categorías explícitas, rangos/Unicode, listas de problemas y respuestas incompatibles. |
-| `test_clones.py` | Equivalencia Tipo I/II, correspondencias y límites del detector. |
+| `test_clones.py`, `test_clones_ccom.py` | Motor C, equivalencia Tipo I/II, límites, contrato, procesos, buffers y panel real. |
 | `test_proyecto.py` | Disco, conflictos, guardado, preferencias y recuperación. |
 | `test_menu_archivos.py` | Acciones de archivo, portapapeles y conservación de pestañas. |
 | `test_carpetas.py` | Jerarquía y operaciones de carpetas asíncronas. |
@@ -610,7 +623,7 @@ Las casillas significan **revisión de comentarios completada**, no funcionalida
 - [ ] **1. Entrada y orientación:** `ide/__init__.py`, `ide/main.py`, `ide/interfaz/__init__.py`, `ide/nucleo/__init__.py`. Entender el arranque y los límites de paquetes.
 - [ ] **2. Documento y persistencia básica:** `ide/diagnosticos.py`, `ide/archivos.py`, `ide/preferencias.py`, `ide/interfaz/editor.py`. Fijar identidad, versiones y unidades antes de comentar consumidores.
 - [ ] **3. Ensamblaje de ventana:** `ide/interfaz/ventana.py`. Revisar por bloques: constructor/UI/acciones; documentos; análisis/problemas; F5; cierre. Documentar atributos y conexiones sin mezclarlo con una refactorización masiva.
-- [ ] **4. Lexer y análisis vivo:** `ide/nucleo/lexico.py`, `ide/adaptador_nucleo.py`, `ide/interfaz/analisis.py`.
+- [ ] **4. Lexer y análisis vivo:** `grammar/lexer.l`, `ide/adaptador_nucleo.py`, `ide/interfaz/analisis.py`. El lexer Python se lee después como material LL(1).
 - [ ] **5. ccom y ejecución:** `ide/ccom.py`, `ide/interfaz/comprobacion.py`, `ide/interfaz/ejecucion.py`.
 - [ ] **6. Protección de proyecto:** `ide/interfaz/disco.py`, `ide/interfaz/proyecto.py`.
 - [ ] **7. Explorador y lotes:** `ide/interfaz/explorador.py`, `ide/interfaz/acciones_archivos.py`, `ide/interfaz/seleccion_archivos.py`, `ide/interfaz/operaciones_carpetas.py`, `ide/interfaz/orden_explorador.py`, `ide/interfaz/iconos.py`.
@@ -619,7 +632,7 @@ Las casillas significan **revisión de comentarios completada**, no funcionalida
 - [ ] **10. Contratos y aplicación:** `ide/nucleo/asistencia.py`, `ide/ediciones.py`, `ide/interfaz/ediciones.py`.
 - [ ] **11. Interacción de asistencia:** `ide/interfaz/asistencia.py`, `ide/interfaz/sugerencias.py`, `ide/interfaz/reparaciones.py`, `ide/politica_asistencia.py`, `ide/interfaz/preferencias_asistencia.py`.
 - [ ] **12. Terminal y proceso auxiliar:** `ide/interfaz/terminal.py`, `ide/interfaz/terminal_pty.py`.
-- [ ] **13. Pruebas y documentación:** revisar los 19 archivos de la sección 13, README, esta guía y contratos. Explicar fixtures, proveedores controlados y el comportamiento que demuestra cada caso importante.
+- [ ] **13. Pruebas y documentación:** revisar los archivos de la sección 13, README, esta guía y contratos. Explicar fixtures, proveedores controlados y el comportamiento que demuestra cada caso importante.
 
 Después de cada grupo se puede registrar aquí fecha, archivos revisados y dudas descubiertas. No marcar un grupo solo porque ya existe un docstring de una línea.
 
@@ -636,7 +649,7 @@ Después de cada grupo se puede registrar aquí fecha, archivos revisados y duda
 
 ## 15. Pendientes y mantenimiento de esta guía
 
-Los pasos **1–6 de preparación de asistencia están implementados del lado del IDE**. El paso 7 consiste en recibir/conectar motores reales, probarlos con el parser y ccom, revisar su catálogo y decidir la presentación/prioridad de diagnósticos adicionales. E5/E6 completas dependen de esa verificación, no solo de que existan los widgets.
+Los pasos **1–6 de preparación de asistencia están implementados del lado del IDE**. M3 completa la integración real de sugerencias desde C. M4 conecta reparaciones y una regla revisada optativa; M5 conecta clones C; M6 completa revisión de servicios/adaptadores, comentarios y separación del LL(1); queda pendiente recuperación sintáctica M7. Los motores de lenguaje están verificados con servicios C reales; el empaquetado y los pendientes globales conservan sus fases.
 
 Otros pendientes incluyen empaquetado, validación en otra máquina, integración futura de IR/TAC y optimizaciones, mejoras de preferencias y las animaciones propuestas. La terminal PTY está implementada para Linux; no se promete soporte equivalente en otros sistemas sin probarlo.
 
@@ -652,4 +665,15 @@ Esta guía es la entrada unificada; los siguientes documentos conservan el detal
 - [Contexto del motor de sugerencias](contexto_motor_sugerencias.md).
 - [Contexto del motor de reparaciones](contexto_motor_reparaciones.md).
 
-Cuando cambie un flujo, actualizar primero su explicación y el archivo responsable en este mapa; después revisar el documento especializado afectado. Mantener separados **lo que existe**, **lo probado con proveedores controlados** y **lo pendiente de motores reales**. Así los comentarios y el resumen siguen describiendo el mismo sistema.
+Cuando cambie un flujo, actualizar primero su explicación y el archivo responsable en este mapa; después revisar el documento especializado afectado. Mantener separados **lo que existe**, **lo probado con proveedores controlados** y **las mejoras futuras**. Así los comentarios y el resumen siguen describiendo el mismo sistema.
+
+Para el detalle del reanálisis de candidatos, precondiciones y clasificación manual/automática, ver [M4](../../docs/ccom_repairs_json.md).
+
+
+## Revisión M6 y comprobación de la frontera
+
+[revision_m6.md](revision_m6.md) registra qué se retira/conserva, propiedad de buffers/AST, comentarios y orden de lectura vigente. `ccom.informe_json` valida la cabecera común de los seis servicios; cada adaptador conserva sus datos/estados específicos. `lexico_json` ya no decodifica dos veces la respuesta. El nombre interno `lexer_parse_text` cubre prefijos y copias completas.
+
+`test_arquitectura_ccom.py` verifica la cabecera de las seis operaciones y ejecuta el recorrido aislado; `tools/probar_recorrido_ide.py` permite repetirlo y guardar una captura.
+
+`make check-recorrido-ide` recorre varios documentos, análisis, clones, reparación/Deshacer, sugerencias y F5/F6 con C real. Un importador impide cargar los analizadores Python durante ese recorrido. Las pruebas académicas/diferenciales del LL(1) se mantienen por separado; modelos de `nucleo/asistencia.py` siguen siendo productivos.

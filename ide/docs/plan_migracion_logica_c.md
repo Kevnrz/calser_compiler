@@ -2,7 +2,7 @@
 
 Fecha inicial: **2026-11-10**. Actualizado: **2026-11-11**. Este documento revisa la conexión inicial de motores y propone reutilizar el front-end C de ccom, conservando las excepciones de lenguaje aclaradas después por Saddy. Registra la indicación del profesor comunicada por Saddy: la aplicación/interfaz puede ser Python, pero la lógica del lenguaje debe estar en C y reutilizar el compilador existente.
 
-Estado: **M1 implementado y verificado (2026-11-11)**: `ccom --check-json` y análisis automático estructurado. No se han fusionado los motores ni retirado componentes del IDE; M1B también implementado y verificado (2026-11-11): modos gráficos y preferencias. Las demás etapas siguen pendientes salvo indicación expresa.
+Estado: **M1 implementado y verificado (2026-11-11)**: `ccom --check-json` y análisis automático estructurado. No se han fusionado los motores ni retirado componentes del IDE; M1B también implementado y verificado (2026-11-11): modos gráficos y preferencias. M2 también implementado y verificado (2026-11-11): léxico y resaltado desde Flex. M3 también implementado y verificado (2026-11-11): sugerencias C desde Bison/LAC conectadas al IDE. M4 también implementado y verificado (2026-11-11): reparaciones C, panel y validación automática nativa; regla opcional de punto y coma. M5 también implementado y verificado (2026-11-11): clones Tipo I/II en C y envío de múltiples buffers. M6 implementado y verificado (2026-11-11): limpieza, comentarios, documentación y recorrido gráfico sin analizadores Python. M7 sigue pendiente.
 
 **Aclaración posterior de Saddy (2026-11-11):** el simulador y el LL(1) pueden seguir en Python. Migrarlos no es una obligación del enunciado ni de este plan. Las propuestas de retirar duplicación se evalúan por responsabilidad y mantenimiento, sin convertir esa autorización en otra restricción.
 
@@ -117,7 +117,7 @@ No se debe vincular un parser nuevo solo porque el servicio tenga otro ejecutabl
 
 ## 4. Contrato del servicio: decisiones que deben fijarse primero
 
-M1 concreta la operación `check` con `--check-json`; véase el [protocolo implementado](../../docs/ccom_check_json.md). Las operaciones de tokens, sugerencias, reparaciones y clones siguen siendo diseño pendiente.
+M1 concreta la operación `check` con `--check-json`; véase el [protocolo implementado](../../docs/ccom_check_json.md). M2–M5 ya concretan las demás operaciones; los resultados y contratos vigentes aparecen al final de este documento.
 
 - Versión explícita del protocolo y operación identificada.
 - Resultado con estado y **listas** de tokens, diagnósticos, sugerencias o reparaciones según la operación.
@@ -194,54 +194,54 @@ Es una tarea de interfaz que puede adelantarse sin esperar a los motores, una ve
 
 ### M2 — Tokens y resaltado desde Flex
 
-- [ ] Instrumentar el lexer existente para exponer clasificación y rangos, incluidos comentarios para presentación, sin otra tabla de reglas Python.
-- [ ] Transportar tokens/diagnósticos léxicos en la respuesta C y convertir posiciones en el adaptador.
-- [ ] Reemplazar el recorrido Python de análisis vivo y la dependencia productiva de `ide/nucleo/lexico.py`.
-- [ ] Mantener revisión, cancelación, colores, Deshacer y comportamiento sin guardar.
+- [x] Instrumentar el lexer existente para exponer clasificación y rangos, incluidos comentarios para presentación, sin otra tabla de reglas Python.
+- [x] Transportar tokens/diagnósticos léxicos en la respuesta C y convertir posiciones en el adaptador.
+- [x] Reemplazar el recorrido Python de análisis vivo y la dependencia de `ide/nucleo/lexico.py` en ese recorrido vivo (clones y asistencia tienen sus fases posteriores).
+- [x] Mantener revisión, cancelación, colores, Deshacer y comportamiento sin guardar.
 
 Criterio de cierre: una corrección en `grammar/lexer.l` es la fuente de las reglas usadas por compilación y editor.
 
 ### M3 — Sugerencias contextuales en C
 
-- [ ] Trasladar comportamiento y casos de la entrega, no sus dataclasses duplicadas.
-- [ ] Obtener fragmento/comentario del lexer C y contexto/esperados del parser existente.
-- [ ] Distinguir prefijo válido de programa completo; no considerar cualquier EOF como error previo.
-- [ ] Filtrar/rankear opciones en C, sin inventar `id`, `num` o símbolos declarados que no se hayan consultado.
-- [ ] Conectar respuesta al panel actual de sugerencias y preferencias de pausa.
-- [ ] Migrar pruebas de prefijos, cursor en medio de palabra, comentarios, límites, errores previos y cancelación.
+- [x] Trasladar comportamiento y casos de la entrega, no sus dataclasses duplicadas.
+- [x] Obtener fragmento/comentario del lexer C y contexto/esperados del parser existente.
+- [x] Distinguir prefijo válido de programa completo; no considerar cualquier EOF como error previo.
+- [x] Filtrar/rankear opciones en C, sin inventar `id`, `num` o símbolos declarados que no se hayan consultado.
+- [x] Conectar respuesta al panel actual de sugerencias y preferencias de pausa.
+- [x] Migrar pruebas de prefijos, cursor en medio de palabra, comentarios, límites, errores previos y cancelación.
 
 Criterio de cierre: Ctrl+Espacio y pausa funcionan con el motor C real; no requieren la gramática/tabla/parser Python.
 
 ### M4 — Reparaciones en C y autorización de reglas
 
-- [ ] Usar diagnósticos y expectativas estructuradas del parser C para construir candidatos.
-- [ ] Reanalizar copias con el mismo parser, reiniciando y liberando su estado entre intentos.
-- [ ] Trasladar pruebas de `;`, `.`, `]`, `)` y los negativos del compañero.
-- [ ] Normalizar precondiciones y validación; no convertir instrucciones descriptivas en una precondición vacía que siempre pase.
-- [ ] Resolver la diferencia entre inserción ante el siguiente token e inserción al final de la línea previa.
-- [ ] Conectar panel, vista previa y aplicador existentes.
-- [ ] Mover a C la validación del lenguaje que hoy hace `politica_asistencia.py`; conservar en Python preferencias, vigencia y aplicación.
-- [ ] Habilitar solo reglas revisadas, con permiso del usuario, sin guardar ni encadenar reparaciones y con un Deshacer.
+- [x] Usar diagnósticos y expectativas estructuradas del parser C para construir candidatos.
+- [x] Reanalizar copias con el mismo parser, reiniciando y liberando su estado entre intentos.
+- [x] Trasladar pruebas de `;`, `.`, `]`, `)` y los negativos del compañero.
+- [x] Normalizar precondiciones y validación; no convertir instrucciones descriptivas en una precondición vacía que siempre pase.
+- [x] Resolver la diferencia entre inserción ante el siguiente token e inserción al final de la línea previa.
+- [x] Conectar panel, vista previa y aplicador existentes.
+- [x] Mover a C la validación del lenguaje que hoy hace `politica_asistencia.py`; conservar en Python preferencias, vigencia y aplicación.
+- [x] Habilitar solo reglas revisadas, con permiso del usuario, sin guardar ni encadenar reparaciones y con un Deshacer.
 
 Criterio de cierre: consultas manuales y ruta automática usan el motor C y sus reglas comprobadas; no hay análisis del lenguaje en Python.
 
 ### M5 — Clones con el flujo léxico C
 
-- [ ] Reemplazar el tokenizador y comparación Python de `ide/clones.py` por lógica C.
-- [ ] Reutilizar tokens reales para Tipo I/II y preservar correspondencia consistente de nombres/literales.
-- [ ] Definir envío de varias instantáneas, incluidas las de buffers sin guardar, sin perder límites ni cancelación.
-- [ ] Mantener el panel de comparación/navegación en Python.
+- [x] Reemplazar el tokenizador y comparación Python de `ide/clones.py` por lógica C.
+- [x] Reutilizar tokens reales para Tipo I/II y preservar correspondencia consistente de nombres/literales.
+- [x] Definir envío de varias instantáneas, incluidas las de buffers sin guardar, sin perder límites ni cancelación.
+- [x] Mantener el panel de comparación/navegación en Python.
 
 Criterio de cierre: no existe un segundo tokenizador Calser productivo para clones.
 
 ### M6 — Retiro de duplicados, comentarios y comprensión
 
-- [ ] Revisar duplicaciones y retirar solo las sustituidas por recorridos comprobados; el LL(1) está autorizado en Python y no se elimina por obligación de lenguaje. Documentar su papel si se conserva como apoyo.
-- [ ] Decidir explícitamente si los archivos anteriores se eliminan o conservan como material histórico fuera de producción; no seguir presentándolos como backend actual.
-- [ ] Actualizar pruebas del IDE: casos del lenguaje contra el servicio C; dobles solo para aislar transporte/UI.
-- [ ] Comentar cada archivo C y adaptador: propósito, consumidores, memoria, unidades, estado global, errores y cancelación.
-- [ ] Actualizar `guia_sistema_calside.md`, contratos, plan y guías de motores.
-- [ ] Ejecutar las suites afectadas del compilador y del IDE, y el recorrido manual de varios documentos.
+- [x] Revisar duplicaciones y retirar solo las sustituidas por recorridos comprobados; el LL(1) está autorizado en Python y no se elimina por obligación de lenguaje. Documentar su papel si se conserva como apoyo.
+- [x] Decidir explícitamente si los archivos anteriores se eliminan o conservan como material histórico fuera de producción; no seguir presentándolos como backend actual.
+- [x] Actualizar pruebas del IDE: casos del lenguaje contra el servicio C; dobles solo para aislar transporte/UI.
+- [x] Comentar cada archivo C y adaptador: propósito, consumidores, memoria, unidades, estado global, errores y cancelación.
+- [x] Actualizar `guia_sistema_calside.md`, contratos, plan y guías de motores.
+- [x] Ejecutar las suites afectadas del compilador y del IDE, y un recorrido gráfico automatizado de varios documentos, con captura inspeccionada y guía de repetición.
 
 Criterio de cierre: mapa y comentarios describen el sistema real; el análisis principal y los motores reutilizan C, el papel del LL(1) Python permitido queda explícito y cada recorrido tiene pruebas.
 
@@ -456,3 +456,51 @@ Cada operación captura perfil, revisión y versión de disco. Se descarta el re
 Las preferencias solo conservan campos/banderas conocidos y se filtran al restaurar, seleccionar otro ccom y lanzar el trabajo. No hay negociación de capacidades con ejecutables ajenos: si no admiten una bandera, su error se presenta como fallo y no habilita ejecución. IR/TAC/optimizaciones quedan pendientes de integrarse en ccom antes de incorporarlas al diálogo.
 
 Validación: `ide/pruebas/test_compilacion.py` cubre perfiles, interfaz, cuatro operaciones reales, AST con error semántico, rutas con espacios, destinos personalizados, sobrescritura, enlaces, preferencias, cancelación y rechazo de artefactos antiguos. Suite completa: `make check-ide`.
+
+## 14. Resultado de M2 (2026-11-11)
+
+Implementado `ccom --tokens-json`: Flex publica clasificación y rangos UTF-8 de tokens y comentarios; el escaneo independiente del parser llega hasta EOF aunque el programa esté incompleto. Comparte captura de diagnósticos con M1, manteniendo `--check-json` y la CLI clásica. No genera artefactos.
+
+El adaptador conserva el nombre `ide/adaptador_nucleo.py` para sus consumidores, pero ya no importa `ide/nucleo/lexico.py` ni reconoce comentarios. Recibe el JSON, valida el transporte y convierte a UTF-16 para Qt. La tarea de fondo lanza ccom sin shell, usa instantáneas privadas y mata/recoge el hijo al cancelar. Se mantienen revisión, pestañas, archivos sin guardar y Deshacer. Los errores ahora tienen origen ccom léxico y las reglas/recuperación reales de Flex, incluidos errores individuales por byte no ASCII fuera de comentarios.
+
+Límites: 2 millones de caracteres/8 millones de bytes de entrada, 100000 tramos, 128 diagnósticos, proceso de 5 s, stdout de 16 MB y stderr de 1 MB. Un límite o ccom incompatible se informa explícitamente sin fallback al lexer Python ni apariencia de análisis correcto. Configurar otro ccom vuelve a pedir el léxico.
+
+Ver [protocolo M2](../../docs/ccom_tokens_json.md). Pruebas: `make check-tokens-json`, `make check` y `make check-ide`; 341 pruebas del IDE correctas, incluidas 11 nuevas del transporte Flex y cancelación, además de los casos nativos. Clones, asistencia, LL(1) y simulador conservan sus recorridos actuales; no se anticiparon M3/M4/M5.
+
+## 15. Resultado de M3 (2026-11-11)
+
+Adaptado el comportamiento y los casos de la entrega a `src/suggestions.c`, sin importar/fusionar sus dataclasses. `--suggest-json <cursor UTF-8>` usa los rangos Flex y el contexto real de Bison/LAC. Un marcador privado en el EOF temporal permite preguntar por continuaciones de programas completos/incompletos y distinguir errores anteriores. No se ejecuta semántica ni se inventan identificadores/literales. Filtrado y orden se realizan en C.
+
+`ide/sugerencias_ccom.py` valida JSON y convierte rangos al contrato compartido. `ide/servicio_ccom.py` comparte transporte cancelable con el léxico de M2. El proveedor predeterminado ya es C; Ctrl+Espacio, pausa opcional, aceptación, Deshacer y vigencia mantienen su UI. La pausa conserva su valor predeterminado desactivado. Cambiar ccom cancela consultas/listas antiguas. Reparaciones sigue pendiente para M4.
+
+Contrato, decisiones de fragmento/comentario, límites y archivos: [servicio de sugerencias](../../docs/ccom_suggestions_json.md). Límites: 200000 bytes de fuente, 50000 tokens y 64 opciones; proceso 2,5 s, stdout/stderr 1 MB por canal. El coordinador conserva 3 s. No se ofrecen listas parciales como completas.
+
+Validación: `make check-suggestions-json`, `make check` completo y suite IDE; 14 pruebas nuevas del motor real/transporte/interfaz. Verificación adicional ASan/LSan: 65 consultas parciales sin incidencias detectadas. Se preserva la compatibilidad de M1, M1B y M2.
+
+## 16. Resultado de M4 (2026-11-11)
+
+Motor entregado adaptado a C: `repairs.c` enumera cierres LAC y `syntax_service.c` reanaliza cada copia con Flex/Bison, reiniciando/liberando estado entre intentos. `--repair-json` ofrece inserciones de ; . ] ) solo cuando superan el primer error; las parciales son manuales. `--syntax-json` permite verificación independiente desde la política, sin semántica ni artefactos. Se conserva la CLI clásica.
+
+El proveedor `ide/reparaciones_ccom.py` sustituye la carga pendiente del motor Python. Alt+Enter, clic derecho, vista previa/aplicador y cancelación usan el motor C real. Precondiciones verificables no vacías y contexto completo sustituyen las instrucciones narrativas de la entrega. La inserción queda tras el último token válido, antes de espacios/comentarios y del salto de línea.
+
+La política ya no llama al parser LL(1) Python: valida original y candidato en C. Catálogo revisado inicial: INSERCION_PUNTO_COMA, con configuración automática desactivada y ninguna regla seleccionada por defecto. Requiere permiso explícito por regla, una propuesta única aceptada completamente, línea confirmada/contexto vigente y un Deshacer. No guarda ni encadena reparaciones. Otros cierres, EOF y propuestas parciales siguen manuales.
+
+[Contrato, arquitectura, límites y diferencias frente a la entrega](../../docs/ccom_repairs_json.md). Verificación: `make check-repairs-json`, `make check` completo y 371 pruebas IDE correctas, incluidas 12 nuevas del motor real/interfaz; ASan/LSan correcto en 124 consultas con reanálisis. Este apartado registra el cierre de M4; M5 se detalla a continuación. M6 revisará retiros y documentación global.
+
+
+## 17. Resultado de M5 (2026-11-11)
+
+Clones Tipo I/II compara en `src/clones.c` los reconocimientos reales de Flex. `ide/clones.py` queda como modelos, empaquetado CCL1, transporte y adaptación de rangos, sin regex ni comparación Python. La ventana pasa la ruta de ccom configurada al trabajador; el panel, instantáneas sin guardar, comparación y navegación se conservan.
+
+Se mantienen equivalencia biyectiva de nombres, variación de literales por clase, límites de archivos/bytes/tokens/candidatos/pares, cancelación y ausencia de resultados parciales; se añade un presupuesto de trabajo y plazo de 15 s. Las entradas con errores léxicos se bloquean explícitamente. [Protocolo, arquitectura, límites y pruebas M5](../../docs/ccom_clones_json.md).
+
+Verificación: `make check-clones-json`, suite completa `make check`, 379 pruebas IDE verificadas (378 en la primera ejecución completa más la prueba final de ruta configurada/error léxico), 250 comparaciones diferenciales con el detector previo y suite nativa con ASan/UBSan/LSan. Este apartado registra el cierre de M5; M6 se detalla a continuación y M7 sigue pendiente.
+
+
+## 18. Resultado de M6 (2026-11-11)
+
+Revisadas las importaciones productivas: solo se usan modelos de `ide.nucleo.asistencia`; lexer, gramática, tabla y parser LL(1) permanecen como API autorizada de consulta/estudio y pruebas, fuera del backend gráfico. No se necesita eliminar ni mover esos módulos para preservar la frontera.
+
+Se unifica cabecera JSON en `ccom.informe_json` (seis operaciones), se elimina la segunda decodificación léxica y las copias de validación en adaptadores, se retira el vector inverso nunca leído de clones y se aclara `lexer_parse_text` para prefijos/copias completas. Comentarios de servicios C y adaptadores explican consumidores, memoria, UTF-8/Python/UTF-16, estado global/local, errores y cancelación. Guías de núcleo/motores/contratos describen el backend real. [Auditoría, decisiones, orden de lectura y reproducción](revision_m6.md).
+
+Verificación: suite completa `make check`, **382 pruebas IDE**, recorrido gráfico con varios documentos y captura inspeccionada. `test_arquitectura_ccom` y `tools/probar_recorrido_ide.py` bloquean importar analizadores Python durante el recorrido real de M1–M5/F5/F6. El resultado de ejecución es 5; análisis, propuestas y Deshacer no guardan fuentes. M7 queda pendiente.

@@ -1,14 +1,24 @@
-"""Solicitudes de asistencia seriales, cancelables e independientes de los widgets."""
+"""Coordinación Qt de los dos adaptadores C: serializa y vigila el contexto.
+
+AsistenciaEditor captura documento/revisión/texto/cursor y este módulo conserva
+una tarea activa más la última pendiente por documento/tipo. TareaAsistencia
+llama los proveedores sin tocar widgets; respuestas vuelven al hilo gráfico.
+Los números de solicitud y la validación del aplicador impiden usar copias viejas.
+root/configurado se capturan al crear la tarea, no se leen widgets desde el hilo.
+El timer solicita cancelación; servicio_ccom mata/recoge el hijo. Los proveedores
+inyectados solo permiten aislar transporte/UI en pruebas, sin reglas ficticias
+en producción. Los contratos usan caracteres Python, antes de convertir a Qt."""
 from dataclasses import dataclass
 import importlib
+from functools import partial
 from PySide6.QtCore import QObject, QThread, QTimer, Qt, Signal
 from ide.politica_asistencia import ReglaAutomatica, evaluar_automatizacion
 from ide.ediciones import MAX_TEXTO, aplicar_ediciones, validar_ediciones
 from ide.nucleo.asistencia import (ContextoDocumento, EstadoAsistencia, ResultadoReparaciones,
                                   ResultadoSugerencias, validar_resultado, Reparacion, Sugerencia)
 
-MODULOS = {'sugerencias': ('ide.nucleo.sugerencias', 'sugerir', ResultadoSugerencias),
-           'reparaciones': ('ide.nucleo.correccion', 'proponer_reparaciones', ResultadoReparaciones)}
+MODULOS = {'sugerencias': ('ide.sugerencias_ccom', 'sugerir', ResultadoSugerencias),
+           'reparaciones': ('ide.reparaciones_ccom', 'proponer_reparaciones', ResultadoReparaciones)}
 
 
 @dataclass(frozen=True)
@@ -32,7 +42,7 @@ def estado_resultado(tipo, estado, explicacion):
     return MODULOS[tipo][2](estado, explicacion=explicacion)
 
 
-def cargar_motor(tipo):
+def cargar_motor(tipo, *, root=None, configurado=""):
     modulo, nombre, _ = MODULOS[tipo]
     try:
         biblioteca = importlib.import_module(modulo)
@@ -43,7 +53,7 @@ def cargar_motor(tipo):
     motor = getattr(biblioteca, nombre)
     if not callable(motor):
         raise TypeError(f'{modulo}.{nombre} no es invocable')
-    return motor
+    return partial(motor, root=root, configurado=configurado)
 
 
 def validar_respuesta(solicitud, resultado):
@@ -70,9 +80,10 @@ def validar_respuesta(solicitud, resultado):
 class TareaAsistencia(QThread):
     resultado = Signal(object)
 
-    def __init__(self, solicitud, motor, parent):
+    def __init__(self, solicitud, motor, parent, *, root=None, configurado=""):
         super().__init__(parent)
         self.solicitud, self.motor = solicitud, motor
+        self.root, self.configurado = root, configurado
 
     def run(self):
         s = self.solicitud
@@ -80,7 +91,7 @@ class TareaAsistencia(QThread):
         try:
             if self.isInterruptionRequested():
                 return
-            motor = self.motor if self.motor is not None else cargar_motor(s.tipo)
+            motor = self.motor if self.motor is not None else cargar_motor(s.tipo, root=self.root, configurado=self.configurado)
             if motor is None:
                 resultado = estado_resultado(s.tipo, EstadoAsistencia.BLOQUEADO,
                                              f'El motor de {s.tipo} todavía no está disponible')
@@ -90,7 +101,7 @@ class TareaAsistencia(QThread):
                 resultado = validar_respuesta(s, resultado)
                 if s.origen == 'linea_confirmada' and resultado.estado == EstadoAsistencia.OK:
                     automatica, motivo = evaluar_automatizacion(s.contexto, resultado, s.reglas,
-                                                               cancelar=self.isInterruptionRequested)
+                                                               cancelar=self.isInterruptionRequested, root=self.root, configurado=self.configurado)
         except Exception as error:
             resultado = estado_resultado(s.tipo, EstadoAsistencia.ERROR, f'{type(error).__name__}: {error}')
         if not self.isInterruptionRequested():
@@ -154,7 +165,9 @@ class CoordinadorAsistencia(QObject):
             return
         clave = next(iter(self.pendientes))
         solicitud = self.pendientes.pop(clave)
-        self.task = TareaAsistencia(solicitud, self.motores[solicitud.tipo], self)
+        ventana = getattr(self.parent(), 'ventana', None)
+        self.task = TareaAsistencia(solicitud, self.motores[solicitud.tipo], self,
+            root=getattr(ventana, 'root', None), configurado=getattr(ventana, 'configured_ccom', ''))
         self.task.resultado.connect(self.recibir, Qt.ConnectionType.QueuedConnection)
         self.task.finished.connect(self.terminar, Qt.ConnectionType.QueuedConnection)
         self.timer.start(self.plazo_ms)

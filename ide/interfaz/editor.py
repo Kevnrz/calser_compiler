@@ -3,7 +3,7 @@ from html import escape
 from uuid import uuid4
 
 from PySide6.QtCore import QEvent, QRect, QSize, QTimer, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QSyntaxHighlighter, QTextCharFormat, QTextCursor, QTextFormat
+from PySide6.QtGui import QContextMenuEvent, QColor, QFont, QPainter, QSyntaxHighlighter, QTextCharFormat, QTextCursor, QTextFormat
 from PySide6.QtWidgets import QPlainTextEdit, QTextEdit, QToolTip, QWidget
 
 
@@ -61,6 +61,7 @@ class Editor(QPlainTextEdit):
 
     def __init__(self, root):
         super().__init__()
+        self.acciones_contextuales = ()
         self.path = None
         self.estado_disco = None
         self.estado_observado = None
@@ -89,6 +90,39 @@ class Editor(QPlainTextEdit):
         self.textChanged.connect(self.cambio)
         self.actualizar_margen()
         self.linea_actual()
+
+    def crear_menu_contextual(self):
+        """Conserva las acciones estándar y añade accesos a la asistencia.
+
+        Se crean acciones locales para respetar solo aquí lectura/.asm sin
+        cambiar el estado de las acciones compartidas del menú principal.
+        """
+        menu = self.createStandardContextMenu()
+        if self.acciones_contextuales:
+            menu.addSeparator()
+            for original in self.acciones_contextuales:
+                accion = menu.addAction(original.text())
+                accion.setEnabled(original.isEnabled() and not self.isReadOnly()
+                                  and not (self.path and self.path.suffix.lower() == '.asm'))
+                # Lanzar después de cerrar el menú: su devolución de foco no
+                # debe cancelar la consulta como si el usuario abandonara el editor.
+                accion.triggered.connect(lambda checked=False, destino=original:
+                                         QTimer.singleShot(0, destino.trigger))
+        return menu
+
+    def contextMenuEvent(self, event):
+        # El clic consulta su posición; dentro de una selección se conserva la
+        # selección. La tecla de menú/Shift+F10 usa el cursor existente.
+        if event.reason() == QContextMenuEvent.Reason.Mouse:
+            cursor = self.cursorForPosition(event.pos())
+            actual = self.textCursor()
+            if not (actual.hasSelection() and actual.selectionStart() <= cursor.position() < actual.selectionEnd()):
+                self.setTextCursor(cursor)
+        menu = self.crear_menu_contextual()
+        try:
+            menu.exec(event.globalPos())
+        finally:
+            menu.deleteLater()
 
     def keyPressEvent(self, event):
         cursor = self.textCursor()

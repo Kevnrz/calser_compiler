@@ -376,7 +376,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         buffers = {self.tabs.widget(i).path: self.tabs.widget(i).toPlainText() for i in range(self.tabs.count()) if self.tabs.widget(i).path is not None}
         self.results_action.setChecked(True)
         self.panels.setCurrentWidget(self.clones_panel)
-        self.clones_panel.analizar(self.project, buffers)
+        self.clones_panel.analizar(self.project, buffers, root=self.root, configurado=self.configured_ccom)
 
     def ir_clone(self, fragment, snapshot):
         editor = next((self.tabs.widget(i) for i in range(self.tabs.count()) if self.tabs.widget(i).path == fragment.archivo), None)
@@ -426,6 +426,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
 
     def nuevo(self):
         editor = Editor(self.root)
+        editor.acciones_contextuales = (self.sugerencias_action, self.reparaciones_action)
         self.asistencia.conectar_editor(editor)
         self.aplicar_fuente(editor)
         self.tabs.addTab(editor, "Sin título")
@@ -489,6 +490,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
             self.actualizar_problemas()
             self.actualizar_estado()
             return
+        self.analizador.configured = self.configured_ccom
         self.analizador.solicitar(documento, revision, texto)
 
     def recibir_analisis(self, result):
@@ -803,11 +805,17 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
             return
         filename, _ = QFileDialog.getOpenFileName(self, "Seleccionar ejecutable ccom", str(self.root))
         if filename:
+            self.asistencia.coordinador.invalidar()
+            self.asistencia.cerrar_lista()
+            self.clones_panel.invalidar()
             self.configured_ccom = filename
+            self.analizador.configured = filename
             self.actualizar_perfil_compilacion()
             for i in range(self.tabs.count()):
                 editor = self.tabs.widget(i)
                 self.auto_results.pop(editor, None)
+                self.analizador.olvidar(editor.documento_id)
+                editor.programar_analisis()
                 self.programar_comprobacion(editor)
             self.actualizar_problemas()
 

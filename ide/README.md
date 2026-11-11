@@ -1,6 +1,6 @@
 # CALSIDE · prototipo inicial
 
-> **M1 completado (2026-11-11):** el análisis automático usa el servicio `ccom --check-json`. El LL(1) y el simulador siguen en Python con la autorización aclarada por Saddy. [Plan y etapas pendientes](docs/plan_migracion_logica_c.md).
+> **M1/M1B/M2/M3/M4/M5/M6 completados (2026-11-11):** el resaltado y léxico vivo usan Flex mediante `ccom --tokens-json`; el análisis automático usa el servicio `ccom --check-json`. Sugerencias y reparaciones usan motores C (`--suggest-json` / `--repair-json`); la política verifica sintaxis con C y los clones usan Flex y comparación C (`--clones-json`). El LL(1) y el simulador siguen en Python con la autorización aclarada por Saddy. [Plan y etapas pendientes](docs/plan_migracion_logica_c.md).
 
 Para entender la arquitectura, los flujos y el papel de cada archivo, consulta la [guía unificada del sistema y recorrido de comentarios](docs/guia_sistema_calside.md).
 
@@ -11,7 +11,7 @@ Desde la raíz del repositorio, con Python 3.10 o posterior:
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -r ide/requirements.txt
-make  # construye ccom, incluida la bandera --check
+make  # construye ccom con --tokens-json y --check-json
 make ide PYTHON=.venv/bin/python
 ```
 
@@ -25,7 +25,7 @@ Si PySide6 ya está instalado, basta con `make ide`. También se puede abrir un 
 - Explorador de subcarpetas y `.cls` con carga asíncrona, exclusiones y navegación por teclado.
 - Avisos por cambios/borrado externo, recarga explícita y protección al sobrescribir.
 - Preferencias de proyecto, ccom, fuente y distribución persistentes; fuente configurable desde Ver.
-- Resaltado con tokens reales del núcleo y errores léxicos mientras escribes, incluidos comentarios multilínea y texto sin guardar. El análisis automático sintáctico/semántico usa ccom --check tras otra pausa breve.
+- Resaltado y errores léxicos desde Flex (`ccom --tokens-json`) mientras escribes, incluidos comentarios multilínea y texto sin guardar. El análisis automático sintáctico/semántico usa `ccom --check-json` tras otra pausa breve. Ambos necesitan un ccom compatible; no se usa el lexer Python como respaldo.
 - Compilación real con `ccom` (F5), sin bloquear la ventana; cancelar, límite de 30 s, salida completa y errores navegables (doble clic o Enter).
 - Ejecutar (F6) mediante `tools/sim_asm.py`, separado de Compilar, con traza, registros y estado final de variables en la pestaña Ejecución.
 - Salidas en `<carpeta del fuente>/build/ide/<identificador de ruta>/`, evitando colisiones entre fuentes.
@@ -73,11 +73,11 @@ Después de una pausa de **300 ms**, el lexer de `ide.nucleo` analiza una copia 
 - Las posiciones Unicode del núcleo se convierten a UTF-16; las de ccom siguen convirtiéndose desde UTF-8. Un error léxico del mismo rango informado por ambos se presenta una sola vez, con prioridad para ccom.
 - Documentos de más de **2 millones de caracteres** pausan este análisis con un mensaje explícito; todavía se pueden compilar con F5.
 
-Prueba rápida: crea una pestaña e introduce `Vm x : int = 3 ; @`. El error de `@` aparece sin guardar ni compilar; selecciónalo desde Problemas y bórralo. Desaparece tras la pausa. Una declaración sin `;` no se señala por el lexer; después la revisa el análisis sintáctico automático de ccom (E4). El parser predictivo ya está disponible como API Python; su uso para sugerencias depende del motor de E5; la política automática ya lo usa para validar candidatos en segundo plano.
+Prueba rápida: crea una pestaña e introduce `Vm x : int = 3 ; @`. El error de `@` aparece sin guardar ni compilar; selecciónalo desde Problemas y bórralo. Desaparece tras la pausa. Una declaración sin `;` no se señala por el lexer; después la revisa el análisis sintáctico automático de ccom (E4). El parser predictivo ya está disponible como API Python; las sugerencias M3 consultan Bison/LAC en C; la política automática verifica original/candidato mediante el parser C; Python conserva permisos y aplicación.
 
 ## Parser predictivo disponible para los motores
 
-`ide.nucleo.parser` ofrece `analizar_sintaxis(texto)` y `contexto_en(texto, cursor, inicio_fragmento=None)`: pila LL(1), primer error, terminales esperados y consulta de prefijos sin exigir un programa completo. No genera AST, no hace semántica ni edita el documento. Ver [API real, ejemplos y límites](docs/parser_predictivo.md). Se verifica con `make check-parser`; los motores siguen pendientes; ambas UI manuales están preparadas.
+`ide.nucleo.parser` ofrece `analizar_sintaxis(texto)` y `contexto_en(texto, cursor, inicio_fragmento=None)`: pila LL(1), primer error, terminales esperados y consulta de prefijos sin exigir un programa completo. No genera AST, no hace semántica ni edita el documento. Ver [API real, ejemplos y límites](docs/parser_predictivo.md). Se verifica con `make check-parser`; las sugerencias reales ya están conectadas a C; reparaciones M4 también está conectada al motor C.
 
 ## Sintaxis y semántica en vivo · E4
 
@@ -116,6 +116,8 @@ El panel **Clones → Analizar carpeta** (o **Ctrl+Shift+D**) compara los `.cls`
 
 Demostración: abre la carpeta `ide/ejemplos/clones`, pulsa Analizar carpeta con mínimo 20. Deben aparecer tres pares: uno Tipo I (`base`/`igual`) y dos Tipo II (cada uno con `renombrado`). Se incluyen archivos `.cls` reales y no se simulan los resultados.
 
+El detector usa **Flex y comparación en C** mediante `--clones-json`; Python reúne copias sin guardar y presenta los fragmentos. Los errores léxicos bloquean el análisis; no hay un tokenizador alternativo. Consulta cancelable con límite de 15 s. [Protocolo y límites M5](../docs/ccom_clones_json.md).
+
 ## Protección de archivos y proyecto · E7
 
 Si otro programa cambia o borra una fuente abierta, aparece un aviso con **Recargar**, **Conservar** y **Guardar como**. Tu texto no se reemplaza automáticamente. Guardar vuelve a comprobar la versión del disco; un conflicto requiere decisión explícita y un segundo cambio durante el guardado lo cancela.
@@ -128,7 +130,7 @@ Ver [comportamiento, exclusiones, límites y prueba manual](docs/proyecto_archiv
 
 ## Pendiente
 
-Motores reales de sugerencias/reparaciones (E5/E6; parser y ambas UI manuales ya implementados), correcciones automáticas, preferencias adicionales y empaquetado. El lexer ya está conectado al editor. No hay resultados simulados.
+Recuperación sintáctica M7 (M1–M6 completados), correcciones automáticas, preferencias adicionales y empaquetado. El lexer ya está conectado al editor. No hay resultados simulados.
 
 El resaltado usa el lexer del núcleo; conserva la paleta inicial inspirada en la extensión y el icono Calser existente. No copia el tema Seti.
 
@@ -182,13 +184,13 @@ Ver [detalles y validación de proyecto](docs/proyecto_archivos.md). Suite combi
 
 ## Preparación para los motores de asistencia
 
-El [contrato compartido](docs/contrato_asistencia.md) fija tipos y firmas para sugerencias/reparaciones en `ide/nucleo/asistencia.py`, sin Qt. Los compañeros deben importarlos desde ahí. Los motores todavía no están implementados ni conectados.
+El [contrato compartido](docs/contrato_asistencia.md) fija tipos y firmas para sugerencias/reparaciones en `ide/nucleo/asistencia.py`, sin Qt. Los compañeros deben importarlos desde ahí. Las sugerencias ya están implementadas en C y conectadas mediante `ide/sugerencias_ccom.py`; reparaciones M4 también usa su proveedor C.
 
 El aplicador ya está disponible mediante `editor.contexto_asistencia()` y `editor.aplicar_ediciones(...)`, además de `aplicar_sugerencia` / `aplicar_reparacion` en `ide/interfaz/ediciones.py`. Comprueba todo antes de modificar, convierte rangos Python a UTF-16 y conserva el historial con una operación de Deshacer por propuesta. No guarda el documento ni activa correcciones automáticas. Los resultados de documento, revisión, texto, cursor o selección anteriores se rechazan.
 
-Los pasos **1–6** están preparados: contrato, aplicador, coordinador, ambas UI manuales y preferencias/política de asistencia. **Ctrl+Espacio dentro del editor** o Editar → Sugerencias de código solicita opciones. La lista muestra etiqueta/categoría/detalle; flechas y RePág/AvPág recorren, Enter/Tab o clic aceptan, y Esc cancela sin modificar. Escribir cierra la lista y deja pasar la tecla; puede volver a consultar por pausa si se habilita en preferencias. El foco permanece en el editor y las respuestas se descartan al editar, mover cursor/selección, cambiar pestaña o cerrar.
+Los pasos **1–6** están preparados: contrato, aplicador, coordinador, ambas UI manuales y preferencias/política de asistencia. **Ctrl+Espacio dentro del editor**, **clic derecho → Sugerencias de código** o Editar → Sugerencias de código solicita opciones. El clic derecho consulta en la posición pulsada y conserva las operaciones estándar de edición. La lista muestra etiqueta/categoría/detalle; flechas y RePág/AvPág recorren, Enter/Tab o clic aceptan, y Esc cancela sin modificar. Escribir cierra la lista y deja pasar la tecla; puede volver a consultar por pausa si se habilita en preferencias. El foco permanece en el editor y las respuestas se descartan al editar, mover cursor/selección, cambiar pestaña o cerrar.
 
-En uso normal no se muestran datos inventados: si falta el motor aparece el mensaje correspondiente en la barra de estado. Al entregar `ide/nucleo/sugerencias.py:sugerir` y `ide/nucleo/correccion.py:proponer_reparaciones` con los tipos y firmas acordados, el coordinador los carga en segundo plano. Sus respuestas pasan validación; los errores de importación/contrato se distinguen de la ausencia de opciones.
+En uso normal no se muestran datos inventados: si falta el motor aparece el mensaje correspondiente en la barra de estado. El coordinador carga `ide/sugerencias_ccom.py:sugerir` en segundo plano, capturando el ccom configurado. Reparaciones carga `ide/reparaciones_ccom.py:proponer_reparaciones` del mismo modo. Sus respuestas pasan validación; los errores de importación/contrato se distinguen de la ausencia de opciones.
 
 El coordinador serializa ambos motores, limita texto/cola/opciones y solicita cancelación después de 3 segundos. Un motor debe atender el callback: no se destruyen hilos por la fuerza ni se abre otro mientras el anterior sigue ejecutándose. El cierre espera hasta 1500 ms y se aplaza si aún trabaja. Las consultas manuales de reparaciones consumen sus respuestas sin aplicarlas automáticamente.
 
@@ -205,7 +207,7 @@ Sigue el **paso 7: integración real de los motores y revisión del catálogo**.
 
 La corrección automática también está desactivada por defecto. Requiere reglas revisadas y seleccionadas; la marca `automatica_segura` del motor no basta. Su disparador inicial es Enter al final de una línea y una pausa, con una sola inserción local de delimitador, precondiciones y aceptación de todo el texto corregido por el parser en segundo plano. Ctrl+Z revierte la reparación, no guarda ni encadena otra corrección. Las propuestas que no cumplen la política pueden revisarse manualmente.
 
-El catálogo real sigue vacío hasta integrar y probar las reglas del compañero; por eso el control automático aparece deshabilitado. No hay motores ni reglas simuladas en la aplicación normal. Ver [política, límites, cancelación y conexión del catálogo](docs/politica_asistencia.md).
+El catálogo M4 contiene una regla revisada de punto y coma. Para usarla, habilita corrección automática y selecciónala en preferencias; ambos permisos vienen desactivados por defecto. No hay motores ni reglas simuladas en la aplicación normal. Ver [política, límites, cancelación y conexión del catálogo](docs/politica_asistencia.md).
 
 
 ## Servicio estructurado del compilador · M1
@@ -215,3 +217,33 @@ El análisis automático obtiene categorías, mensajes y rangos desde `ccom --ch
 `--check` clásico y F5/F6 conservan su funcionamiento. El lexer en vivo y el LL(1) Python no se retiran en M1. El servicio transporta listas de errores léxicos/semánticos; la recuperación de varios errores sintácticos sigue pendiente.
 
 Protocolo y arquitectura: [ccom_check_json.md](../docs/ccom_check_json.md). Prueba específica: `make check-analysis-json`. Verificación de M1: 18 pruebas nuevas y 312 combinadas del IDE, suite completa del compilador correcta y 91 fuentes reales con respuestas compatibles.
+
+## Léxico y resaltado M2
+
+El editor envía una copia temporal del buffer a `ccom --tokens-json`; C clasifica tokens/comentarios y decide los errores. Python valida el JSON y adapta bytes UTF-8 a posiciones UTF-16 para pintar. No se guardan buffers ni se altera Deshacer. El proceso es cancelable y tiene límites de 5 s, 2 millones de caracteres y tamaño de respuesta. Los errores visibles tienen origen **ccom léxico**. Ver [contrato y arquitectura](../docs/ccom_tokens_json.md).
+
+## Sugerencias C · M3
+
+Escribe `F main [] : vo` y pulsa **Ctrl+Espacio**: ofrece `void`; **Tab/Enter** acepta y **Ctrl+Z** deshace, sin guardar. Flechas/clic seleccionan y Escape cancela. Para consultar al escribir, habilita **Editar → Preferencias de asistencia → sugerencias por pausa**. La pausa no acepta propuestas automáticamente.
+
+C obtiene fragmentos/comentarios de Flex y opciones válidas de Bison/LAC. Python solo valida el JSON y adapta posiciones para el aplicador. No se inventan identificadores ni números; el motor sugiere terminales concretos y no garantiza semántica. No propone dentro de comentarios ni cuando un error anterior bloquea el contexto. Ver [protocolo, arquitectura y límites](../docs/ccom_suggestions_json.md). Reparaciones M4 y su regla opcional de punto y coma también están conectadas a C.
+
+## Reparaciones C · M4
+
+Introduce un programa con `Vm x : int = 3` sin su punto y coma y pulsa **Alt+Enter** o **clic derecho → Reparaciones de código**. El panel ofrece una inserción validada por ccom; revisa Cambios/Motivo y pulsa Aplicar reparación. **Ctrl+Z** deshace y el archivo permanece sin guardar. El motor inicial propone únicamente cierres `; . ] )`, sin inventar operandos ni corregir semántica.
+
+La automatización viene apagada. **Editar → Preferencias de asistencia** permite habilitarla y seleccionar la regla revisada INSERCION_PUNTO_COMA; exige confirmar una línea y que el parser C acepte el documento corregido completo. Nunca se encadenan arreglos ni se guarda automáticamente. [Arquitectura, protocolo y límites M4](../docs/ccom_repairs_json.md).
+
+
+## Clones C · M5
+
+Abre `ide/ejemplos/clones`, entra a **Clones** y pulsa **Analizar carpeta** con mínimo 20. Se muestran tres pares (I, II, II). Editar un buffer y volver a analizar utiliza ese texto sin guardarlo; seleccionar un par permite comparar y abrir sus rangos. El compilador configurado en la ventana también se usa para clones.
+
+M5 elimina el regex y la comparación Python: `ide/clones.py` solo mantiene modelos, envío de instantáneas CCL1 y adaptación del JSON/rangos. El motor `src/clones.c` reutiliza Flex y conserva límites, cancelación y renombramientos consistentes. [Arquitectura y protocolo completos](../docs/ccom_clones_json.md).
+
+
+## Revisión y comprensión · M6
+
+La [revisión M6](docs/revision_m6.md) explica la frontera C/Python, qué código se conserva, memoria, posiciones y el orden para leer los archivos. El LL(1) permanece para estudio/API/pruebas; la interfaz no lo carga como backend. El contrato de modelos `nucleo/asistencia.py` sí es productivo. Se unificó la cabecera de los servicios JSON y se comentaron los servicios/adaptadores migrados.
+
+`make check-recorrido-ide` prueba varios documentos, colores/diagnósticos, clones, sugerencias, reparación/Deshacer y F5/F6 sin permitir importar los analizadores Python. Usa proyectos temporales y C real. Para revisión visual en tu pantalla, abre con `make ide` y repite ese orden. Última verificación global: **382 pruebas IDE** y suite completa de ccom correctas.

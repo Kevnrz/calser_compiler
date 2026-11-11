@@ -17,6 +17,8 @@
 
 #include "ast.h"
 #include "diagnostics.h"
+#include "suggestions.h"
+#include "syntax_service.h"
 
 extern int yylex(void);
 extern int yylineno;
@@ -56,6 +58,9 @@ static void syntax_reset(void);
 
 /* Palabras reservadas */
 
+/* Marcador privado del servicio: ninguna producción lo acepta. Inyectarlo al
+ * EOF temporal permite consultar LAC también cuando el prefijo ya es programa. */
+%token TOKEN_CURSOR
 %token TOKEN_F "F"
 %token TOKEN_VM "Vm"
 %token TOKEN_VI "Vi"
@@ -198,6 +203,14 @@ static void syntax_reset(void);
 %define parse.error custom
 %define parse.lac full
 %initial-action { syntax_reset(); }
+
+/* Propiedad de memoria de las consultas M3/M4: contexto termina en el cursor;
+ * verificación usa EOF real. Bison destruye cadenas/subárboles temporales tanto
+ * al fallar como al aceptar el símbolo inicial. El lexer libera sus strings en
+ * escaneos sin parser. En compilación normal main conserva y libera el AST;
+ * activar estos destructores allí rompería esa transferencia de propiedad. */
+%destructor { if (suggestions_active() || syntax_service_active()) ast_free($$); } <node>
+%destructor { if (suggestions_active() || syntax_service_active()) free($$); } <str>
 
 %start programa
 
@@ -1615,6 +1628,7 @@ static int syntax_lex(void) {
         syntax_blocks = NULL;
         syntax_capacity = 0;
     }
+    if (!token && suggestions_active()) return TOKEN_CURSOR;
     return token;
 }
 
@@ -1689,6 +1703,31 @@ static int yyreport_syntax_error(const yypcontext_t *context) {
     yysymbol_kind_t expected[YYNTOKENS];
     int count = yypcontext_expected_tokens(context, expected, YYNTOKENS);
     if (count < 0) return count;
+    /* M3 obtiene esperados LAC en el cursor; M4 obtiene cierres en el primer
+     * error real. Ambas ramas terminan sin el diagnóstico humano de la CLI. */
+    if (suggestions_active()) {
+        suggestions_context(unexpected == YYSYMBOL_TOKEN_CURSOR);
+        if (unexpected == YYSYMBOL_TOKEN_CURSOR) {
+            for (int i = 0; i < count; i++) {
+                if (expected[i] != YYSYMBOL_YYEOF && expected[i] != YYSYMBOL_YYerror &&
+                    expected[i] != YYSYMBOL_YYUNDEF && expected[i] != YYSYMBOL_TOKEN_IDENTIFIER &&
+                    expected[i] != YYSYMBOL_TOKEN_NUMBER && expected[i] != YYSYMBOL_TOKEN_CURSOR)
+                    suggestions_expected(yysymbol_name(expected[i]));
+            }
+        }
+        free(syntax_blocks);
+        syntax_blocks = NULL;
+        syntax_count = syntax_capacity = 0;
+        return 0;
+    }
+    if (syntax_service_active()) {
+        syntax_service_error(unexpected == YYSYMBOL_YYEOF);
+        for (int i = 0; i < count; i++) syntax_service_expected(yysymbol_name(expected[i]));
+        free(syntax_blocks);
+        syntax_blocks = NULL;
+        syntax_count = syntax_capacity = 0;
+        return 0;
+    }
     int semicolon = 0, paren = 0, bracket = 0;
     for (int i = 0; i < count; i++) {
         semicolon |= expected[i] == YYSYMBOL_TOKEN_SEMICOLON;
@@ -1758,6 +1797,8 @@ static int yyreport_syntax_error(const yypcontext_t *context) {
  *   fallos sintácticos normales pasan por yyreport_syntax_error.
  */
 void yyerror(const char *message) {
+    if (suggestions_active()) { suggestions_parser_error(); return; }
+    if (syntax_service_active()) { syntax_service_failed(); return; }
     if (!lexical_fatal) {
         YYLTYPE location = yylloc;
         if (location.first_line < 1 || location.first_line > diag_last_line())

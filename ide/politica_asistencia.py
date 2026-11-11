@@ -1,7 +1,15 @@
-"""Política conservadora del IDE. No genera propuestas ni confía solo en su etiqueta."""
+"""Permisos y condiciones del IDE para una reparación automática, sin parser propio.
+
+El trabajador de asistencia evalúa una copia inmutable con reglas seleccionadas.
+Se validan restricciones de edición, precondiciones y línea confirmada; C verifica
+la sintaxis del original y del candidato mediante comprobar_sintaxis. Fallar o
+cancelar cualquiera de las consultas deniega la automatización. No hay estado
+por documento aquí, ni guardado, ni aplicación: el controlador Qt revalida foco,
+revisión y permisos al recibir la propuesta. El catálogo revisado no equivale al
+permiso del usuario y automatic_safe por sí solo nunca autoriza modificar texto."""
 from dataclasses import dataclass
 from ide.ediciones import aplicar_ediciones
-from ide.nucleo.parser import analizar_sintaxis
+from ide.reparaciones_ccom import comprobar_sintaxis
 
 PREDETERMINADAS = {'habilitada': True, 'sugerencias_pausa': False, 'pausa_ms': 700,
                    'reparaciones_automaticas': False, 'reglas_automaticas': []}
@@ -39,10 +47,12 @@ class ReglaAutomatica:
 
 # Añadir solo reglas reales revisadas con sus pruebas positivas y negativas.
 # No importar un catálogo declarado por el motor como autorización automática.
-REGLAS_AUTOMATICAS: tuple[ReglaAutomatica, ...] = ()
+REGLAS_AUTOMATICAS: tuple[ReglaAutomatica, ...] = (
+    ReglaAutomatica('INSERCION_PUNTO_COMA', 'Punto y coma único validado por ccom', ';'),
+)
 
 
-def evaluar_automatizacion(contexto, resultado, reglas, *, cancelar=None):
+def evaluar_automatizacion(contexto, resultado, reglas, *, cancelar=None, root=None, configurado=""):
     """Retornar (propuesta o None, motivo). Se ejecuta en el trabajador del motor."""
     if cancelar and cancelar():
         return None, 'Consulta cancelada'
@@ -70,12 +80,15 @@ def evaluar_automatizacion(contexto, resultado, reglas, *, cancelar=None):
                for p in r.precondiciones):
         return None, 'Falta una precondición no vacía sobre la línea confirmada'
     corregido = aplicar_ediciones(texto, r.ediciones, r.precondiciones)
-    antes = analizar_sintaxis(texto, cancelar=cancelar)
-    if antes.estado != 'error_sintactico':
-        return None, 'El original no presenta un error sintáctico comprobado'
-    despues = analizar_sintaxis(corregido, cancelar=cancelar)
-    if not despues.aceptado:
-        return None, 'El parser no acepta por completo el texto corregido'
+    try:
+        antes = comprobar_sintaxis(texto, cancelar=cancelar, root=root, configurado=configurado)
+        if antes != 'error_sintactico':
+            return None, 'El original no presenta un error sintáctico comprobado por C'
+        despues = comprobar_sintaxis(corregido, cancelar=cancelar, root=root, configurado=configurado)
+        if despues != 'aceptado':
+            return None, 'El parser C no acepta por completo el texto corregido'
+    except (ValueError, OSError, InterruptedError) as error:
+        return None, 'No se completó la validación C: ' + str(error)
     if cancelar and cancelar():
         return None, 'Consulta cancelada'
-    return r, 'Regla habilitada, precondiciones vigentes y programa aceptado por el parser'
+    return r, 'Regla habilitada, precondiciones vigentes y programa aceptado por el parser C'

@@ -1,9 +1,10 @@
 """Servicios para localizar ccom y convertir sus mensajes en diagnósticos.
 
-Este módulo no inicia el compilador. Las llamadas reales mediante QProcess
-están en Ventana.compilar (F5) y ComprobadorCcom.iniciar (análisis con --check).
-Ambos utilizan ejecutable para localizarlo. El análisis automático utiliza el
-protocolo --check-json; la compilación manual conserva el lector de texto clásico.
+Este módulo no inicia el compilador. Centraliza localización del ejecutable,
+lectura textual de F5 y validación JSON común. ComprobadorCcom usa QProcess
+para --check-json; los adaptadores M2–M5 usan servicio_ccom desde trabajadores.
+Los estados y decisiones del lenguaje provienen de C; el regex de diagnosticos
+solo lee mensajes de la CLI clásica y no reconoce código Calser.
 
 La entrada de diagnosticos es texto de salida del compilador, no código Calser.
 Solo se reconocen los formatos previstos; la interfaz conserva por separado la
@@ -113,7 +114,7 @@ def _objeto_json(pares):
 
 def _requerir(condicion, mensaje):
     if not condicion:
-        raise ErrorProtocolo('Respuesta de --check-json incompatible: ' + mensaje)
+        raise ErrorProtocolo('Respuesta de ccom incompatible: ' + mensaje)
 
 
 def _texto_json(valor, limite=4096):
@@ -125,18 +126,15 @@ def _texto_json(valor, limite=4096):
         return False
 
 
-def diagnosticos_json(salida, source, texto, codigo):
-    """Valida protocolo v1 y devuelve Problema sin interpretar mensajes humanos.
+def informe_json(salida, source, codigo, operacion, *, limite=1_000_000):
+    """Cabecera común de los seis servicios JSON, sin interpretar Calser.
 
-    source/texto identifican la instantánea enviada, no se leen desde el disco.
-    Los rangos del servicio son bytes UTF-8 del original. Solo la marca visual
-    se amplía si un error léxico señala parte de un carácter; el rango nativo
-    queda guardado en rango_utf8. Las ediciones tienen otro contrato más estricto.
-
-    Un ejecutable antiguo, JSON inválido o un estado de error/límite se informa
-    con ErrorProtocolo; nunca se recurre silenciosamente al lector textual.
+    Comprueba UTF-8, duplicados, versión, operación, fuente y código real del
+    proceso. Cada adaptador valida después sus estados y datos particulares.
+    No se uniforman los estados: por ejemplo, `syntax` y `check` significan
+    cosas distintas. No lee archivos ni ejecuta procesos. Retorna un dict nuevo.
     """
-    _requerir(isinstance(salida, (str, bytes)) and len(salida) <= 1_000_000,
+    _requerir(isinstance(salida, (str, bytes)) and len(salida) <= limite,
               'informe ausente o demasiado grande')
     _requerir(type(codigo) is int and codigo in (0, 1), 'código de proceso inválido')
     try:
@@ -149,12 +147,33 @@ def diagnosticos_json(salida, source, texto, codigo):
     _requerir(isinstance(datos, dict), 'se esperaba un objeto')
     _requerir(type(datos.get('schema_version')) is int and datos['schema_version'] == 1,
               'versión de protocolo no soportada')
-    _requerir(datos.get('operation') == 'check' and datos.get('offset_unit') == 'utf8',
+    _requerir(datos.get('operation') == operacion and datos.get('offset_unit') == 'utf8',
               'operación o unidad de posiciones no soportada')
     _requerir(isinstance(datos.get('source'), str) and datos['source'] == str(source),
               'el resultado pertenece a otra fuente')
     _requerir(type(datos.get('exit_code')) is int and datos['exit_code'] == codigo,
               'código de salida inconsistente')
+    return datos
+
+
+def diagnosticos_json(salida, source, texto, codigo, *, operacion="check"):
+    """Valida protocolo v1 y devuelve Problema sin interpretar mensajes humanos.
+
+    source/texto identifican la instantánea enviada, no se leen desde el disco.
+    Los rangos del servicio son bytes UTF-8 del original. Solo la marca visual
+    se amplía si un error léxico señala parte de un carácter; el rango nativo
+    queda guardado en rango_utf8. Las ediciones tienen otro contrato más estricto.
+
+    Un ejecutable antiguo, JSON inválido o un estado de error/límite se informa
+    con ErrorProtocolo; nunca se recurre silenciosamente al lector textual.
+    """
+    datos = informe_json(salida, source, codigo, operacion,
+                         limite=16_000_000 if operacion == 'lex' else 1_000_000)
+    return _problemas_json(datos, source, texto, codigo)
+
+
+def _problemas_json(datos, source, texto, codigo):
+    """Contenido M1/M2 tras validar su cabecera; conserva rangos nativos."""
     _requerir(type(datos.get('truncated')) is bool and _texto_json(datos.get('message')),
               'estado de completitud inválido')
     estado = datos.get('status')
@@ -209,3 +228,36 @@ def diagnosticos_json(salida, source, texto, codigo):
         problemas.append(Problema(Path(source).resolve(), linea, columna, d['message'], largo,
                                   codigo=identificador, categoria_explicita=etiqueta, rango_utf8=nativo))
     return problemas
+
+
+ESTILOS_LEXICOS = frozenset(('reservada', 'tipo', 'numero', 'booleano',
+                            'operador', 'identificador', 'comentario'))
+
+
+def lexico_json(salida, source, texto, codigo):
+    """Valida tokens clasificados por C; no deduce categorías de sus lexemas.
+
+    Los rangos son bytes UTF-8 [start,end), ordenados y sin solapamientos.
+    Comentarios pueden atravesar líneas; los errores conservan el contrato M1.
+    Un informe parcial o de otra operación se rechaza antes de aplicar colores.
+    """
+    datos = informe_json(salida, source, codigo, 'lex', limite=16_000_000)
+    problemas = _problemas_json(datos, source, texto, codigo)
+    _requerir(type(datos.get('fatal')) is bool, 'estado léxico fatal inválido')
+    tokens = datos.get('tokens')
+    _requerir(isinstance(tokens, list) and len(tokens) <= 100000, 'lista de tokens inválida')
+    raw = texto.encode('utf-8')
+    anterior = 0
+    for token in tokens:
+        _requerir(isinstance(token, dict), 'token inválido')
+        clase = token.get('kind')
+        _requerir(isinstance(clase, str) and clase in ESTILOS_LEXICOS, 'estilo léxico desconocido')
+        inicio, fin = token.get('start'), token.get('end')
+        _requerir(type(inicio) is int and type(fin) is int and anterior <= inicio < fin <= len(raw),
+                  'tokens desordenados, solapados o fuera del documento')
+        _requerir(raw[inicio] & 0xc0 != 0x80 and (fin == len(raw) or raw[fin] & 0xc0 != 0x80),
+                  'token corta un carácter UTF-8')
+        anterior = fin
+    _requerir(not datos['fatal'] or bool(problemas), 'fallo léxico sin diagnóstico')
+    _requerir(all(p.categoria == 'Léxico' for p in problemas), 'el servicio léxico devolvió otra fase')
+    return tokens, problemas, datos['fatal']

@@ -1,4 +1,12 @@
-"""Análisis de clones en segundo plano y comparación de fragmentos."""
+"""Panel de clones C: reúne copias, lanza el trabajador y presenta fragmentos.
+
+Analisis recorre archivos permitidos y superpone buffers con nombre sin guardar.
+No tokeniza ni compara: ide.clones envía el paquete privado al ccom configurado.
+Los resultados son Fragmento con caracteres Python, convertidos desde UTF-8.
+PanelClones conserva las copias usadas para mostrar rangos; editar, cambiar
+carpeta/mínimo/ejecutable invalida tabla y navegación. El trabajador no toca Qt
+fuera de sus señales y la cancelación llega al proceso mediante el adaptador.
+La ventana comprueba nuevamente el contenido antes de abrir una selección."""
 import os
 from pathlib import Path
 
@@ -15,9 +23,10 @@ class Analisis(QThread):
     fallo = Signal(str)
     cancelado = Signal()
 
-    def __init__(self, directory, buffers, minimum, parent):
+    def __init__(self, directory, buffers, minimum, parent, root=None, configurado=""):
         super().__init__(parent)
         self.directory, self.buffers, self.minimum = directory, buffers, minimum
+        self.root, self.configurado = root, configurado
 
     def run(self):
         try:
@@ -46,9 +55,9 @@ class Analisis(QThread):
             sources.update({p: text for p, text in self.buffers.items() if permitido(p)})
             if any(len(text.encode("utf-8")) > 2_000_000 for text in sources.values()):
                 raise LimiteAnalisis("Un documento supera 2 MB. Reduce el tamaño o la carpeta analizada.")
-            if sum(len(t) for t in sources.values()) > 20_000_000:
+            if sum(len(t.encode("utf-8")) for t in sources.values()) > 20_000_000:
                 raise LimiteAnalisis("Más de 20 MB de texto. Reduce la carpeta analizada.")
-            pairs = detectar(sources, self.minimum, self.isInterruptionRequested)
+            pairs = detectar(sources, self.minimum, self.isInterruptionRequested, root=self.root, configurado=self.configurado)
             if self.isInterruptionRequested():
                 raise Cancelado()
             self.resultado.emit(pairs, sources)
@@ -147,7 +156,7 @@ class PanelClones(QWidget):
         handle.setToolTip("Arrastra para repartir el espacio entre resultados y comparación")
         layout.addWidget(self.details, 1)
 
-    def analizar(self, directory, buffers):
+    def analizar(self, directory, buffers, *, root=None, configurado=""):
         if self.task and self.task.isRunning():
             return
         self.directory = Path(directory).resolve()
@@ -159,7 +168,7 @@ class PanelClones(QWidget):
         self.button.setEnabled(False)
         self.cancel.setEnabled(True)
         self.status.setText(f"Analizando {self.directory} · buffers abiertos + archivos en disco…")
-        self.task = Analisis(self.directory, dict(buffers), self.minimum.value(), self)
+        self.task = Analisis(self.directory, dict(buffers), self.minimum.value(), self, root, configurado)
         self.task.resultado.connect(self.recibir)
         self.task.fallo.connect(self.error)
         self.task.cancelado.connect(lambda: self.status.setText("Análisis cancelado. Vuelve a analizar para obtener resultados actuales."))

@@ -1,5 +1,8 @@
 """Parser LL(1) sin Qt: reconocimiento completo y estado de un prefijo.
 
+Estado M6: API de consulta/estudio y pruebas del LL(1), conservada por decisión
+explícita. La interfaz productiva usa Flex/Bison en ccom, no este módulo.
+
 La cima de todas las pilas públicas está a la DERECHA. Los rangos son offsets
 Python [inicio, fin). No se recupera ni edita el texto después de un error.
 """

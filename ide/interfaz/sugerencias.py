@@ -1,4 +1,12 @@
-"""Lista manual de sugerencias junto al cursor; sin motor provisional de producción."""
+"""Interacción de asistencia Qt: popup, permisos, revisión y disparadores.
+
+AsistenciaEditor conecta acciones/cursor/edición a CoordinadorAsistencia. Los
+proveedores consultan C en trabajadores; este controlador no reconoce sintaxis.
+El popup muestra modelos Sugerencia con índices Python y el aplicador convierte
+a UTF-16 al aceptar. Cambiar foco/pestaña/revisión invalida el contexto visible.
+Pausa opcional consulta sugerencias; Enter de línea puede solicitar reparación
+solo con preferencias/reglas vigentes. La respuesta automática se comprueba
+otra vez antes de aplicarse: no se guarda ni encadena y Deshacer no repara solo."""
 import weakref
 from PySide6.QtCore import QEvent, QObject, QPoint, Qt, QTimer, Signal
 from PySide6.QtWidgets import QApplication, QFrame, QLabel, QListWidget, QListWidgetItem, QVBoxLayout, QWidget
@@ -146,6 +154,7 @@ class AsistenciaEditor(QObject):
     def disponible_automatico(self, editor):
         return bool(self.configuracion['habilitada'] and editor and isValid(editor)
             and editor is self.ventana.editor() and editor.hasFocus() and self.ventana.isActiveWindow()
+            and not (editor.path and editor.path.suffix.lower() == '.asm')
             and not editor.isReadOnly()
             and not editor.textCursor().hasSelection() and not self.ventana.process
             and not self.ventana.run_process and not self.ventana.tiene_cambio_externo(editor))
@@ -238,6 +247,9 @@ class AsistenciaEditor(QObject):
         editor = self.ventana.editor()
         if editor is None or editor.isReadOnly():
             self.ventana.statusBar().showMessage('Selecciona un documento editable para solicitar asistencia')
+            return
+        if editor.path and editor.path.suffix.lower() == '.asm':
+            self.ventana.statusBar().showMessage('La asistencia de Calser no se aplica a entradas .asm')
             return
         self.cancelar_automaticas(editor.documento_id)
         self.cerrar_lista()

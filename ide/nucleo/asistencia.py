@@ -1,4 +1,11 @@
-"""Contrato compartido de sugerencias/reparaciones. Python puro, sin Qt ni motores."""
+"""Modelos productivos entre adaptadores C, coordinador y aplicador, sin Qt.
+
+Este módulo no importa los analizadores del paquete nucleo. Valida estructura
+(tipos, límites de rangos, estados y texto Unicode), no sintaxis de Calser.
+Contextos, ediciones y precondiciones usan caracteres Python [inicio, fin);
+los adaptadores convierten UTF-8 y el aplicador Qt convierte después a UTF-16.
+Las dataclasses transportan una respuesta; no ejecutan ni autorizan cambios.
+"""
 from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Protocol

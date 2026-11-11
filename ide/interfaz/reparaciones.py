@@ -1,4 +1,12 @@
-"""Propuestas de reparación explícitas con vista previa acotada y contexto vigente."""
+"""Presentación/aplicación de reparaciones nativas con contexto de documento.
+
+PanelReparaciones muestra estados, propuestas, cambios y motivos; no analiza
+Calser. El controlador de ventana pide el proveedor C mediante AsistenciaEditor
+y conserva el contexto de la copia. Aplicar vuelve a verificar identidad,
+revisión, cursor/selección y precondiciones, con una operación de Deshacer.
+Cambiar el documento o cancelar invalida la vista previa. El panel solo recibe
+modelos en caracteres Python; el aplicador traduce a UTF-16. Ni buscar propuestas
+ni aplicarlas guarda el archivo, y una propuesta manual no habilita automatizar."""
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QFont
 from PySide6.QtWidgets import (QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPlainTextEdit,
@@ -58,7 +66,7 @@ class PanelReparaciones(QWidget):
         self.cancelar_boton = QPushButton('Cancelar'); self.cancelar_boton.setEnabled(False)
         fila.addWidget(self.consultar); fila.addWidget(self.cancelar_boton); fila.addStretch()
         layout.addLayout(fila)
-        self.estado = QLabel('Alt+Enter o Buscar reparaciones consulta el motor. Ningún cambio se aplica automáticamente.')
+        self.estado = QLabel('Alt+Enter o Buscar reparaciones consulta el motor C. Revisa la vista previa antes de aplicar manualmente.')
         self.estado.setTextFormat(Qt.TextFormat.PlainText); self.estado.setWordWrap(True); layout.addWidget(self.estado)
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.lista = QListWidget(); self.lista.setMinimumSize(120, 60)
@@ -81,7 +89,7 @@ class PanelReparaciones(QWidget):
         pie = QHBoxLayout()
         self.aplicar_boton = QPushButton('Aplicar reparación'); self.aplicar_boton.setEnabled(False)
         pie.addWidget(self.aplicar_boton)
-        aviso = QLabel('Manual · Ctrl+Z deshace · sin guardar')
+        aviso = QLabel('Ctrl+Z deshace · sin guardar')
         aviso.setWordWrap(True); aviso.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         aviso.setStyleSheet('color: #aeb8c9; font-size: 11px;'); pie.addWidget(aviso,1)
         layout.addLayout(pie)
@@ -143,7 +151,7 @@ class PanelReparaciones(QWidget):
             return
         r = item.data(Qt.ItemDataRole.UserRole)
         self.descripcion.setText(breve(r.descripcion,1000))
-        metadatos = [f'Regla: {r.codigo}', 'Aplicación manual: el motor no modifica el editor.']
+        metadatos = [f'Regla: {r.codigo}', 'El motor propone cambios; el IDE exige permiso y contexto vigente para aplicarlos.']
         if r.automatica_segura:
             metadatos.append('El motor la marca como candidata automática; este panel exige Aplicar igualmente.')
         if r.razones:
@@ -181,6 +189,9 @@ class ReparacionesVentana:
         self.results_action.setChecked(True); self.panels.setCurrentWidget(self.reparaciones_panel)
         if editor is None or editor.isReadOnly():
             self.reparaciones_panel.limpiar('Selecciona un documento editable para buscar reparaciones')
+            return
+        if editor.path and editor.path.suffix.lower() == '.asm':
+            self.reparaciones_panel.limpiar('Las reparaciones de Calser no se aplican a entradas .asm')
             return
         editor.setFocus()
         contexto = editor.contexto_asistencia()

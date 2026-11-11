@@ -1,7 +1,6 @@
 # Parser predictivo LL(1): API disponible y entrega a los motores
 
-Implementado en `ide/nucleo/parser.py`, rama de trabajo `feat/parser-ll1`.
-Fecha: 2026-11-05. Responsable del parser: Saddy. Un mismo compañero implementará los motores de sugerencias y reparaciones.
+Estado M6 (2026-11-11): API Python de consulta/estudio y pruebas diferenciales, conservada por autorización explícita. Se implementó originalmente en `feat/parser-ll1` el 2026-11-05. **El editor ya utiliza C** para análisis, sugerencias, reparaciones y clones; no hay integración gráfica pendiente de este parser ni fallback al LL(1). [Frontera actual](revision_m6.md), [contratos productivos](contrato_asistencia.md).
 
 ## Decisiones cerradas
 
@@ -11,7 +10,7 @@ Fecha: 2026-11-05. Responsable del parser: Saddy. Un mismo compañero implementa
 - **4A:** resultados, diagnósticos y estado predictivo; sin árbol ni AST. Traza opcional limitada.
 - **5B:** implementar el parser primero y documentar su API real para que los motores se adapten.
 
-Este módulo es Python puro. Reutiliza `lexico.py`, `gramatica.py` y `tabla.py`; no cambia la gramática ni ccom. No usa Qt, no guarda archivos y no aplica reparaciones. No está conectado todavía a los widgets: E3/E4 siguen proporcionando el análisis visible. La interfaz de sugerencias y correcciones llegará al integrar los motores de E5/E6.
+Este módulo es Python puro. Reutiliza `lexico.py`, `gramatica.py` y `tabla.py`; no cambia la gramática ni ccom. No usa Qt, no guarda archivos y no aplica reparaciones. Permanece fuera de los widgets: el análisis visible y los motores M1–M5 reutilizan ccom. Los ejemplos siguientes describen exclusivamente esta API de consulta.
 
 ## Uso inmediato
 
@@ -148,7 +147,7 @@ Offsets en caracteres Python desde 0, rangos `[inicio, fin)`. Líneas y columnas
 
 Qt usa UTF-16 y ccom bytes UTF-8: los adaptadores de CALSIDE convierten las posiciones. No usar estos offsets directamente como posiciones Qt con texto Unicode.
 
-CALSIDE capturará documento, revisión, texto y cursor; debe descartar respuestas de otra revisión antes de mostrar sugerencias o aplicar reparaciones. El parser no conoce widgets ni identidad de documento. El motor de reparaciones reanaliza copias llamando a `analizar_sintaxis`; esta API no ofrece todavía reanudación desde una pila ni recuperación por sincronización.
+CALSIDE captura documento, revisión, texto y cursor y descarta respuestas antiguas, pero sus reparaciones productivas reanalizan copias con `--syntax-json` en C. Esta API LL(1) puede reanalizar una copia explícitamente para estudio; no conoce widgets ni identidad de documento y no ofrece reanudación desde una pila ni recuperación por sincronización.
 
 No se ha creado `modelos.py`: las estructuras del parser viven en `parser.py`. Importarlas desde ahí sin duplicarlas. Los modelos de sugerencias y de ediciones pertenecen al compañero; si se extraen tipos comunes después, conservar importaciones compatibles.
 

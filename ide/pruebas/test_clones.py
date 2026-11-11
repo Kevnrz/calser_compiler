@@ -3,6 +3,8 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from pathlib import Path
 import tempfile
+import sys
+import json
 import time
 import unittest
 
@@ -120,6 +122,33 @@ class IntegracionClones(unittest.TestCase):
         editor.insertPlainText("# cambio\n")
         self.assertEqual(panel.list.topLevelItemCount(),0)
         self.assertTrue(panel.obsolete)
+
+    def test_ccom_configurado_y_error_lexico_de_buffer_sin_guardar(self):
+        text='Vm x : int = 5 ; x = x + 1 ;'
+        for name in ('a.cls','b.cls'):
+            (self.folder/name).write_text(text)
+        log=self.folder/'argumentos.json'
+        executable=self.folder/'ccom con espacio'
+        real=self.window.root/'ccom'
+        executable.write_text(f'#!{sys.executable}\nimport os,sys,json,pathlib\n'
+                              f'pathlib.Path({str(log)!r}).write_text(json.dumps(sys.argv[1:]))\n'
+                              f'os.execv({str(real)!r},[{str(real)!r},*sys.argv[1:]])\n')
+        executable.chmod(0o755)
+        self.window.configured_ccom=str(executable)
+        self.window.cargar_carpeta(self.folder)
+        self.window.clones_panel.minimum.setValue(10)
+        self.window.analizar_clones();self.esperar()
+        panel=self.window.clones_panel
+        self.assertEqual(len(panel.pairs),1)
+        args=json.loads(log.read_text())
+        self.assertEqual(args[:2],['--clones-json','10'])
+        self.assertFalse(Path(args[-1]).exists())
+        editor=self.window.abrir(self.folder/'b.cls')
+        editor.insertPlainText('@ ')
+        self.window.analizar_clones();self.esperar()
+        self.assertEqual(panel.list.topLevelItemCount(),0)
+        self.assertIn('lexicos',panel.status.text())
+        self.assertEqual((self.folder/'b.cls').read_text(),text)
 
     def test_cambio_externo_impide_navegar_rango_antiguo(self):
         text='Vm x : int = 5 ; x = x + 1 ;'

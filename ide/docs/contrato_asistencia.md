@@ -1,8 +1,6 @@
 # Contrato de asistencia de CALSIDE · versión 1
 
-> **Actualización M1 (2026-11-11):** el análisis automático usa `ccom --check-json` y conserva el front-end real en C. Saddy aclaró que el LL(1) y el simulador pueden seguir en Python; no se exige migrarlos. Las demás etapas se describen en el [plan de integración](plan_migracion_logica_c.md).
-
-Estado: tipos compartidos, aplicador, coordinador y UI manuales de sugerencias y reparaciones implementados. Preferencias, pausa y política automática también preparadas; faltan motores reales y catálogo revisado. Este documento fija el contrato del lado de CALSIDE; compartirlo junto con el código para que las entregas de los motores lo utilicen.
+> **Estado M6, 2026-11-11:** contrato Python de datos vigente, consumido por los adaptadores de motores **C** y los widgets. No implica implementar reglas Calser en Python. `asistencia.py` no carga el lexer/parser LL(1). Sugerencias: `ide.sugerencias_ccom`; reparaciones: `ide.reparaciones_ccom`; validación de lenguaje automática: `--syntax-json`. [Frontera y ciclo de vida](revision_m6.md).
 
 ## Archivos y responsabilidades
 
@@ -14,29 +12,29 @@ Estado: tipos compartidos, aplicador, coordinador y UI manuales de sugerencias y
 | `ide/interfaz/asistencia.py` | Coordinador serial de ambos motores, tareas, cancelación, límites y validación de respuestas. |
 | `ide/interfaz/sugerencias.py` | Lista junto al cursor y control manual de sugerencias en el editor. |
 | `ide/interfaz/reparaciones.py` | Panel manual con motivos, vista previa, cancelación y aplicación explícita. |
-| `ide/nucleo/sugerencias.py` | Motor pendiente: producir sugerencias basadas en `contexto_en`. |
-| `ide/nucleo/correccion.py` | Motor pendiente: producir reparaciones basadas en `analizar_sintaxis`. |
+| `ide/sugerencias_ccom.py` | Adaptador productivo del motor C Flex/Bison-LAC (`--suggest-json`). |
+| `ide/reparaciones_ccom.py` | Adaptador productivo de reparaciones y comprobación sintáctica C. |
 
-Importar los tipos compartidos; **no volver a definir** `EdicionTexto`, `Sugerencia`, `Reparacion` ni los resultados dentro de los motores. El parser conserva sus propios tipos en `ide/nucleo/parser.py`. No se cambió el parser ni se crearon motores provisionales.
+Importar los tipos compartidos; **no volver a definir** `EdicionTexto`, `Sugerencia`, `Reparacion` ni los resultados dentro de los motores. El LL(1) conserva sus propios tipos de consulta en `ide/nucleo/parser.py`, fuera de los modelos de propuestas productivas.
 
-Los motores reciben texto en memoria y devuelven datos. No acceden a widgets, guardan archivos ni invocan ccom. Una reparación no equivale a validación semántica. La UI presenta propuestas manuales; los disparadores y permisos de automatización están implementados en la [política del paso 6](politica_asistencia.md).
+Las funciones Python del contrato reciben texto en memoria y devuelven datos. Sus adaptadores invocan los servicios de ccom sobre copias temporales; las decisiones del lenguaje están en C. No acceden a widgets ni guardan los documentos originales. Una reparación no equivale a validación semántica. La UI presenta propuestas manuales; los disparadores y permisos de automatización están implementados en la [política del paso 6](politica_asistencia.md).
 
-## Funciones que deben entregar los motores
+## Funciones de los adaptadores implementados
 
 ```python
 from typing import Callable
 from ide.nucleo.asistencia import ResultadoSugerencias, ResultadoReparaciones
 
-# ide/nucleo/sugerencias.py
+# ide/sugerencias_ccom.py
 sugerir(texto: str, cursor: int, *,
         cancelar: Callable[[], bool] | None = None) -> ResultadoSugerencias
 
-# ide/nucleo/correccion.py
+# ide/reparaciones_ccom.py
 proponer_reparaciones(texto: str, *,
         cancelar: Callable[[], bool] | None = None) -> ResultadoReparaciones
 ```
 
-Son firmas del contrato, no funciones implementadas. Los protocolos `MotorSugerencias` y `MotorReparaciones` ya las describen. `cancelar=None` significa que no se proporcionó cancelación; cuando existe, consultar la función en bucles y pasarla al parser. Devolver `CANCELADO` si se interrumpe. Acotar pasos/candidatos/opciones y devolver `LIMITE` cuando no se pueda completar una respuesta fiable. No ocultar fallos internos como una lista vacía.
+Estas funciones están implementadas por los adaptadores C, compatibles con los protocolos `MotorSugerencias` y `MotorReparaciones`. Añaden `root=None` y `configurado=""` para localizar el ejecutable; el coordinador los captura. `cancelar=None` significa que no se proporcionó cancelación; cuando existe se pasa al transporte que termina y recoge el hijo. Devolver `CANCELADO` si se interrumpe. Acotar pasos/candidatos/opciones y devolver `LIMITE` cuando no se pueda completar una respuesta fiable. No ocultar fallos internos como una lista vacía.
 
 ## Posiciones y textos
 
@@ -214,18 +212,20 @@ Límite de vista previa: **12000 caracteres afectados**, sumando los eliminados 
 
 El controlador emite `reparacionesRecibidas(RespuestaAsistencia)` y el panel consume los tipos compartidos sin inventar resultados. La ausencia del módulo, el error, el bloqueo y la falta de opciones se muestran explícitamente. Los proveedores controlados solo existen en pruebas.
 
-El panel no publica diagnósticos ni reemplaza Problemas: conserva las prioridades actuales entre compilación manual, ccom automático y lexer. Aplicar ediciones invalida los diagnósticos antiguos mediante el flujo normal del editor y vuelve a programar su análisis. La prioridad de nuevos diagnósticos del parser frente a ccom se definirá al conectar los motores reales.
+El panel no publica diagnósticos ni reemplaza Problemas: conserva las prioridades actuales entre compilación manual, ccom automático y lexer. Aplicar ediciones invalida los diagnósticos antiguos mediante el flujo normal del editor y vuelve a programar su análisis. Los diagnósticos visibles del lenguaje proceden de ccom; las propuestas no crean otra lista de errores Python. La ruta léxica y el análisis completo se identifican por su origen y revisión.
 
-## Entrega e integración pendientes
+## Integración vigente
 
-1. [ ] Los compañeros entregan sus funciones, catálogo y pruebas con el parser real usando los tipos compartidos. Toda discrepancia con este contrato se documenta.
-2. [x] Coordinador en segundo plano con contexto, serialización, cancelación y descarte de solicitudes anteriores.
-3. [x] UI manual de sugerencias con pruebas controladas y aceptación mediante el aplicador.
-4. [x] UI de reparaciones y aplicación explícita de las propuestas (paso 5).
-5. [x] Preferencias, pausa opcional y política automática del paso 6. El catálogo real queda para revisión e integración con los motores.
-6. [ ] Conectar entregas reales, definir prioridad frente a ccom y validar casos reales antes de declarar E5/E6 terminadas.
+1. [x] Proveedores C de sugerencias y reparaciones conectados con modelos compartidos.
+2. [x] Coordinador serial con contexto, cancelación y descarte de respuestas antiguas.
+3. [x] Popup manual de sugerencias y aplicación validada.
+4. [x] Panel de reparaciones, vista previa y aplicación explícita.
+5. [x] Preferencias, pausa opcional y regla automática revisada de punto y coma.
+6. [x] Casos del lenguaje probados contra C real; dobles limitados a coordinación/transporte/UI.
 
-La automatización está desactivada por defecto y el catálogo de producción sigue vacío. El paso 6 implementa los permisos y el disparador conservador; véase [política, límites y aprobación del catálogo](politica_asistencia.md). El aplicador no decide que una reparación es segura.
+La automatización viene apagada; exige habilitarla y seleccionar INSERCION_PUNTO_COMA. El catálogo ya no está vacío. Una propuesta parcial nunca se automatiza. [Política y catálogo](politica_asistencia.md), [protocolo C de sugerencias](../../docs/ccom_suggestions_json.md), [protocolo de reparaciones/sintaxis](../../docs/ccom_repairs_json.md).
+
+## Registro histórico de las entregas iniciales
 
 Verificación: pasos 1/2, 23 pruebas nuevas y 227 combinadas en su entrega; pasos 3/4, **26 pruebas nuevas y 253 combinadas correctas** con `make check-ide`. El paso 5 añade **15 pruebas; 268 combinadas correctas**, incluyendo revisión sin editar, aplicar/Deshacer/Rehacer sin guardar, cancelación, foco del panel, contexto antiguo, pestañas cerradas, estados sin motor y distribución inferior/derecha. Se cubren proveedores ausentes/rotos, contratos inválidos, hilos seriales, sustitución de pendientes, cancelación, timeout, cierre aplazado, foco, teclado/ratón, Unicode, contexto obsoleto, geometría y ninguna aplicación implícita de reparaciones manuales. El paso 6 añade **26 pruebas; 294 combinadas correctas**, incluyendo automatización con reglas controladas de prueba, comprobación del parser en segundo plano, Deshacer sin bucles y cancelación al cambiar permisos/foco/contexto.
 

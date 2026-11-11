@@ -128,3 +128,12 @@ make check-ide
 M1: **312 pruebas del IDE correctas**, incluidas **18 nuevas** de protocolo y UI. La suite completa del compilador también pasó. Se validaron además las respuestas de las **91 fuentes `.cls` de la carpeta principal de pruebas** con el adaptador del IDE, sin incompatibilidades.
 
 Las pruebas específicas cubren fases reales, varios errores, errores generales, tildes/emoji, CRLF, rutas con espacios/comillas, límites, opciones inválidas, artefactos intactos, respuestas malformadas/versiones incompatibles y navegación. Las pruebas previas de procesos conservan cancelación, timeout, cierre, Guardar como, limpieza de temporales y prioridad de F5.
+
+## Operación léxica complementaria (M2)
+
+El resaltado del editor consulta [--tokens-json](ccom_tokens_json.md): utiliza el mismo lexer, sin parser, y añade comentarios/rangos para presentación. Su operación es `lex`; no sustituye ni altera el contrato `operation: check` de este documento.
+
+
+## Revisión de integración M6
+
+La cabecera JSON común se valida en `ide/ccom.py:informe_json`; los campos/estados específicos permanecen en cada adaptador. Los analizadores LL(1) Python se conservan para consulta/pruebas, fuera del backend gráfico. [Decisiones, memoria, comentarios y recorrido real](../ide/docs/revision_m6.md).

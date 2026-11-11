@@ -1,152 +1,36 @@
-# Integrar el núcleo en CALSIDE
+# Conexión vigente del backend de CALSIDE
 
-**Actualización 2026-11-05:** la entrega 1 ya está incorporada. Saddy implementó el parser y la consulta de contexto en `ide/nucleo/parser.py`; la API vigente para los motores está en [parser_predictivo.md](parser_predictivo.md). Un mismo compañero continuará con sugerencias y reparaciones. Los pasos de merge siguientes documentan la entrega original; no requieren repetirse.
+Actualizado en M6, 2026-11-11. La entrega y el merge originales ya ocurrieron; no hay que repetirlos. La arquitectura actual reutiliza ccom para las decisiones del lenguaje. La excepción acordada permite mantener LL(1) y simulador en Python; el LL(1) se conserva para consulta/pruebas, fuera del recorrido gráfico.
 
-Saddy: en `develop` están `ide/nucleo/` (`lexico.py`, `gramatica.py` y
-`tabla.py`), las pruebas `ide/pruebas/test_lexico.py` y `test_tabla.py`, y
-`ide/docs/` con la gramática y esta guía. El núcleo usa Python estándar,
-sin dependencias. PySide6 está aceptado para la interfaz como excepción a D5.
+## Qué llama la interfaz
 
-Para ajustarlo a tu estructura, `ide/__init__.py` y `makefile` quedaron
-idénticos a los tuyos; las pruebas importan desde `ide.nucleo` y se ejecutan
-con `make check-ide`. Se quitó `ide/pruebas/__init__.py`. El README del núcleo
-se movió de `ide/README.md` a `ide/nucleo/README.md` para no chocar con tu
-`ide/README.md` de la interfaz.
+| Acción | Servicio real | Adaptación Python |
+| --- | --- | --- |
+| Léxico y colores | Flex, `--tokens-json` | `adaptador_nucleo.py`, `interfaz/analisis.py`. |
+| Análisis automático | Flex/Bison/semántico, `--check-json` | `ccom.py`, `interfaz/comprobacion.py`. |
+| Sugerencias | Bison/LAC y Flex, `--suggest-json` | `sugerencias_ccom.py`. |
+| Reparaciones | Candidatos y reanálisis C, `--repair-json` | `reparaciones_ccom.py`, panel/aplicador. |
+| Comprobación de regla automática | Parser C, `--syntax-json` | `politica_asistencia.py`: preferencias y contexto. |
+| Clones | Flex y comparación C, `--clones-json` | `clones.py`: varias instantáneas y posiciones. |
 
-## Traerlo a tu rama
+Los adaptadores comparten `ccom.informe_json` para la cabecera; después validan su contenido. El transporte M2–M5 está en `servicio_ccom.py` dentro de trabajadores; el análisis automático M1 conserva QProcess. Los textos se envían como copias privadas sin guardar buffers. La ventana aporta el ccom configurado y descarta revisiones antiguas.
 
-Desde la raíz:
+Los únicos imports productivos desde `ide.nucleo` son modelos/validadores de `asistencia.py`. No conectar de nuevo `lexico.analizar` al resaltado ni `parser.contexto_en` a las sugerencias gráficas. Para consultar el parser LL(1) directamente, ver [su API](parser_predictivo.md) y [su papel actual](../nucleo/README.md).
 
-```bash
-git fetch origin
-git checkout feat/calside
-git merge origin/develop
-```
+## Posiciones y memoria
 
-Verificado con un merge de prueba de develop y feat/calside (commit 92e0aa7): sin conflictos. Si agregás commits a tu rama antes del merge, el resultado puede cambiar.
+C: bytes UTF-8 `[start,end)`. Contratos de ediciones: caracteres Python. Qt: unidades UTF-16. Los adaptadores convierten posiciones; el aplicador verifica el contexto y agrupa una propuesta en un Deshacer. Los diagnósticos visuales no sustituyen el rango real del token ni la posición de una edición.
 
-El `README.md` de la raíz se mezcla solo; tu `ide/README.md`, `makefile` e
-`ide/__init__.py` quedan como los tenés.
+Los servicios nativos atienden una consulta por proceso, liberan sus buffers/AST y no tocan archivos de usuario. Cancelar mata/recoge el hijo y elimina la copia; el IDE conserva documentos e historial. El LL(1) Python no se carga si ccom falla: se informa la ausencia/incompatibilidad.
 
-## API disponible
+## Verificación
 
-Los siguientes ejemplos se ejecutan en Python desde la raíz del repositorio.
-`analizar(texto)` devuelve `(tokens, errores)`, dos listas.
-Cada `Token` expone `tipo`, `lexema`, `linea`, `columna`, `columna_fin`
-(última columna ocupada, inclusiva) y `valor` (nombre para `id`, entero para
-`num`, `None` para los demás). Los tipos son nombres de terminales de la
-gramática: `id`, `num`, `Vm`, `[`, `==`, etc.
-
-```python
-from ide.nucleo.lexico import analizar
-
-tokens, errores = analizar("Vm x : int = 3;")
-print([(t.tipo, t.lexema, t.linea, t.columna, t.columna_fin, t.valor)
-       for t in tokens])
-print(errores)
-```
-
-Salida:
-
-```text
-[('Vm', 'Vm', 1, 1, 2, None), ('id', 'x', 1, 4, 4, 'x'), (':', ':', 1, 6, 6, None), ('int', 'int', 1, 8, 10, None), ('=', '=', 1, 12, 12, None), ('num', '3', 1, 14, 14, 3), (';', ';', 1, 15, 15, None)]
-[]
-```
-
-Cada `ErrorLexico` expone `mensaje`, `linea`, `columna`, `largo` y `fatal`.
-Un carácter desconocido se descarta y permite continuar; un comentario de
-bloque sin cerrar produce un error fatal y corta el análisis:
-
-```python
-from ide.nucleo.lexico import analizar
-
-tokens, errores = analizar("x @ #[ sin cerrar")
-print([t.tipo for t in tokens])
-for e in errores:
-    print((e.mensaje, e.linea, e.columna, e.largo, e.fatal))
-```
-
-Salida:
-
-```text
-['id']
-("caracter no reconocido: '@'", 1, 3, 1, False)
-('comentario abierto en la linea 1 nunca se cierra', 1, 5, 2, True)
-```
-
-`construir_tabla(CALSER)` devuelve una `TablaLL1`: `es_ll1` indica ausencia
-de conflictos; `entrada(no_terminal, terminal)` devuelve una producción o
-`None`; `fila(no_terminal)` devuelve un diccionario de terminal a producción;
-`anulables()` devuelve los no terminales que pueden derivar la cadena vacía.
-
-```python
-from ide.nucleo.gramatica import CALSER
-from ide.nucleo.tabla import construir_tabla
-
-tabla = construir_tabla(CALSER)
-print(tabla.es_ll1)
-print(tabla.entrada("tras_a", "["))
-print(tabla.entrada("tras_a", "id"))
-print({a: str(p) for a, p in tabla.fila("resto_c").items()})
-print(len(tabla.anulables()), "resto_c" in tabla.anulables())
-```
-
-Salida:
-
-```text
-True
-tras_a -> [ expr ] ; cuerpo resto_c
-None
-{'A': 'resto_c -> A tras_a', '.': 'resto_c -> ε'}
-21 True
-```
-
-## Conexión con tu plan y posiciones
-
-En `ide/docs/plan_ide.md` de tu rama, F09 (resaltado y errores léxicos durante
-la edición) ya puede llamar a `analizar(texto)`. Tu plan propone un adaptador
-`ide/nucleo.py`; ese nombre choca con el paquete `ide/nucleo/`, así que
-conviene otro, por ejemplo `ide/adaptador_nucleo.py`, donde traducir tokens
-y errores al modelo de Qt.
-
-**Parser disponible:** análisis completo y contexto en el cursor implementados por Saddy, sin conexión visual nueva.
-**Pendiente:** motor de sugerencias para F11 y motor de reparaciones para F12, ambos a cargo del compañero. Consumirán la [API real del parser](parser_predictivo.md); la integración gráfica se hará en E5/E6.
-
-El núcleo cuenta caracteres de Python: línea y columna desde 1, tabulación
-igual a una columna. Qt cuenta unidades UTF-16 en sus posiciones de texto;
-al pasar a un desplazamiento local desde 0, las cuentas coinciden para
-caracteres del BMP. Con caracteres fuera del BMP, como emojis, hay que
-convertir: el desplazamiento Python `i` en una línea equivale a
-`len(linea[:i].encode("utf-16-le")) // 2` unidades UTF-16. Para un token,
-`i = token.columna - 1`; su extremo exclusivo usa `token.columna_fin`.
-Comentarios y espacios no generan tokens: el resaltado de comentarios debe
-obtener sus rangos aparte. Un comentario sin cerrar da un `ErrorLexico` fatal
-y conserva solo los tokens anteriores al comentario.
-
-## Ajustes sugeridos en tu rama
-
-Si te queda cómodo, revertí estos cuatro cambios ajenos al IDE:
-
-- `pruebas/e62_crypto_alineacion.cls`: el cambio de `4098` a `8000`.
-- `pruebas/e07_dimension_cero.cls`: las líneas en blanco agregadas al final.
-- `ejercicios/ejercicio1_factorial/ejercicio1.asm`.
-- `editors/vscode/package.py`.
-
-Es un pedido sin obligación: si no lo hacés, se restauran mediante un PR
-aparte después de que entre tu rama. También conviene dejar un solo módulo
-de clones: hoy tu rama tiene `ide/clones.py` e `ide/interfaz/clones.py`.
-
-## Verificación del núcleo
-
-Desde la raíz, cualquiera de los dos comandos ejecuta las 20 pruebas:
-
-```bash
+```sh
+make
+make ide
+make check
 make check-ide
-python3 -m unittest discover -s ide/pruebas -v
+make check-recorrido-ide
 ```
 
-Resultado esperado: `Ran 20 tests` y `OK`. En `develop`, `make ide` falla
-hasta que entre tu rama; es esperado y no hace falta ejecutarlo aquí.
-
-Después de tu merge, `make check-ide` también corre tus pruebas, que necesitan
-PySide6.
+[Guía unificada](guia_sistema_calside.md), [decisiones y limpieza M6](revision_m6.md), [etapas](plan_migracion_logica_c.md). La recuperación de varios errores sintácticos es M7; no la completa el hecho de transportar una lista JSON.

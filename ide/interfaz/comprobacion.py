@@ -1,4 +1,14 @@
-"""Front-end ccom sobre copias temporales: cola serial y QProcess cancelable."""
+"""Análisis completo automático M1 mediante QProcess y copias sin guardar.
+
+La ventana programa SolicitudCcom con documento/revisión y texto inmutable.
+ComprobadorCcom conserva una activa y la última pendiente por documento: usa
+señales/timers de Qt en el hilo gráfico, sin bloquear para esperar el proceso.
+C decide sintaxis/semántica; ccom.diagnosticos_json valida la respuesta. Un fallo
+de protocolo no se convierte en éxito ni en un análisis LL(1) de respaldo.
+El temporal y QProcess pertenecen al comprobador hasta recoger el resultado;
+invalidar/cerrar mata el hijo y limpiar_temporal borra la copia. Suspender durante
+F5 conserva solo las solicitudes vigentes. Los bytes UTF-8 se adaptan al modelo
+Problema antes de publicarse; la ventana vuelve a comprobar identidad/revisión."""
 from dataclasses import dataclass, replace
 from pathlib import Path
 import tempfile

@@ -5,5 +5,16 @@
 #define DIAGNOSTICS_JSON_H
 #include <stdio.h>
 void diag_json_begin(void);
+/* begin/finish corresponden a una consulta M1/M2 por proceso, no son
+ * reentrantes. Captura mensajes copiados; kind de Flex es estático prestado.
+ * finish desconecta el observador y libera captura. No autoriza reparaciones.
+ * Cancelación: el padre termina el proceso; este módulo no toca widgets.
+ * Escapado JSON compartido; no interpreta lenguaje ni modifica la captura. */
+void diag_json_write_string(FILE *out, const char *text);
+void diag_json_write_bytes(FILE *out, const char *text, size_t length);
+/* Modo léxico independiente del parser: el propio lexer emite los estilos y
+ * rangos de bytes; comentarios incluidos, sin copiar lexemas en el informe. */
+void diag_json_lexical_begin(void);
+void diag_json_token(const char *kind, size_t start, size_t end);
 int diag_json_finish(FILE *out, const char *source, int exit_code);
 #endif

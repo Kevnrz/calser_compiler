@@ -98,6 +98,7 @@ class AsistenciaEditor(QObject):
         self.contexto_visible = None
         self.opciones_inline = ()
         self.indice_inline = 0
+        self.salida_plantilla = None
         self.actual = None
         self.reglas = REGLAS_AUTOMATICAS
         self.configuracion = validar_preferencias(ventana.datos_preferencias.get('asistencia'))
@@ -127,6 +128,7 @@ class AsistenciaEditor(QObject):
             self.contextoInvalidado.emit(self.actual)
 
     def configurar(self, datos):
+        self.salida_plantilla = None
         self.configuracion = validar_preferencias(datos)
         self.cancelar_programada()
         self.coordinador.invalidar()
@@ -173,8 +175,8 @@ class AsistenciaEditor(QObject):
         reglas = tuple(r for r in self.reglas if r.codigo in d['reglas_automaticas'])
         if origen == 'linea_confirmada' and d['reparaciones_automaticas'] and reglas:
             tipo = 'reparaciones'
-        elif origen == 'escritura' and (d['sugerencias_inline'] or d['sugerencias_pausa']):
-            tipo, reglas = 'sugerencias', ()
+        elif origen in ('escritura', 'linea_confirmada') and (d['sugerencias_inline'] or d['sugerencias_pausa']):
+            tipo, reglas, origen = 'sugerencias', (), 'escritura'
         else:
             return
         self.programada = (editor.contexto_asistencia(), tipo, origen, reglas)
@@ -203,6 +205,10 @@ class AsistenciaEditor(QObject):
                 self.ventana.statusBar().showMessage('Reparación requiere revisión manual · Alt+Enter', 6000)
             elif respuesta.resultado.explicacion:
                 self.ventana.statusBar().showMessage(respuesta.resultado.explicacion, 6000)
+            if self.configuracion['sugerencias_inline'] and respuesta.resultado.estado in (EstadoAsistencia.OK, EstadoAsistencia.SIN_OPCIONES):
+                # Confirmar una línea también puede pedir una continuación
+                # explícita (por ejemplo '.'); no se aplica por sí sola.
+                self.programar(editor, 'escritura')
             return
         # La revisión completa del parser ocurrió en el trabajador. Aquí se
         # comprueban otra vez permisos, regla habilitada y snapshot antes de editar.
@@ -232,6 +238,8 @@ class AsistenciaEditor(QObject):
         self.popup.hide(); self.contexto_visible = None
 
     def invalidar(self, documento, *, tipo=None):
+        if self.salida_plantilla and self.salida_plantilla[0].documento == documento:
+            self.salida_plantilla = None
         if self.programada and self.programada[0].documento == documento and (tipo is None or self.programada[1] == tipo):
             self.cancelar_programada()
         self.coordinador.invalidar(documento, tipo=tipo)
@@ -334,6 +342,34 @@ class AsistenciaEditor(QObject):
         if editor:
             editor.sugerencia_inline.mostrar(self.opciones_inline[self.indice_inline][1])
 
+    def plantilla_vigente(self, editor):
+        return bool(self.salida_plantilla and self.configuracion['sugerencias_inline']
+                    and self.disponible_automatico(editor)
+                    and editor.contexto_asistencia() == self.salida_plantilla[0])
+
+    def continuar_tras_aceptar(self, editor, opcion):
+        """Continúa una acción explícita de Tab sin insertar más código solo.
+
+        El cursor interno y el final de la plantilla vienen de la propuesta C;
+        Tab puede salir de esa zona mientras el snapshot siga intacto. No hay
+        reconocimiento de parámetros ni reglas del lenguaje en este método.
+        """
+        if not self.configuracion['sugerencias_inline']:
+            return
+        if not isinstance(opcion, Reparacion) and opcion.cursor_relativo is not None and opcion.cursor_relativo < len(opcion.texto):
+            self.salida_plantilla = (editor.contexto_asistencia(), opcion.inicio + len(opcion.texto))
+            self.ventana.statusBar().showMessage('Escribe dentro de los corchetes o pulsa Tab para salir y continuar', 6000)
+        else:
+            self.programar(editor, 'escritura')
+
+    def salir_de_plantilla(self, editor):
+        contexto, final = self.salida_plantilla
+        self.salida_plantilla = None
+        cursor = editor.textCursor()
+        cursor.setPosition(len(contexto.texto[:final].encode('utf-16-le')) // 2)
+        editor.setTextCursor(cursor)
+        self.programar(editor, 'escritura')
+
     def aceptar_inline(self):
         if not self.opciones_inline or not self.contexto_visible:
             return
@@ -348,6 +384,8 @@ class AsistenciaEditor(QObject):
         resultado = aplicar(editor, contexto, opcion)
         self.ventana.statusBar().showMessage('Propuesta aplicada · Ctrl+Z deshace · sin guardar' if resultado.aplicada else resultado.explicacion, 4000)
         editor.setFocus()
+        if resultado.aplicada:
+            self.continuar_tras_aceptar(editor, opcion)
 
     def recibir(self, respuesta):
         contexto = respuesta.solicitud.contexto
@@ -373,7 +411,9 @@ class AsistenciaEditor(QObject):
         resultado = respuesta.resultado
         if respuesta.solicitud.origen != 'manual' and self.configuracion['sugerencias_inline']:
             mostrada = resultado.estado == EstadoAsistencia.OK and self.mostrar_inline(contexto, resultado.sugerencias)
-            if not mostrada and resultado.estado in (EstadoAsistencia.OK, EstadoAsistencia.SIN_OPCIONES, EstadoAsistencia.BLOQUEADO):
+            if not mostrada and resultado.estado in (EstadoAsistencia.SIN_OPCIONES, EstadoAsistencia.BLOQUEADO):
+                # Una lista válida sin opción preferida pide esperar al usuario,
+                # no intentar cerrar el programa con una reparación de '.'.
                 # ccom puede proponer un cierre omitido en esta misma posición.
                 # No mostrar ni aplicar una reparación de otra zona del archivo.
                 self.coordinador.solicitar('reparaciones', contexto, origen='vista_inline')
@@ -399,6 +439,8 @@ class AsistenciaEditor(QObject):
         resultado = aplicar_sugerencia(editor, contexto, opcion)
         self.ventana.statusBar().showMessage('Sugerencia aplicada · Ctrl+Z deshace' if resultado.aplicada else resultado.explicacion)
         editor.setFocus()
+        if resultado.aplicada:
+            self.continuar_tras_aceptar(editor, opcion)
 
     def eventFilter(self, widget, evento):
         tipo = evento.type()
@@ -431,9 +473,16 @@ class AsistenciaEditor(QObject):
                           Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Tab, Qt.Key.Key_Escape)
                 alternativa = inline and mods == Qt.KeyboardModifier.AltModifier and tecla in (Qt.Key.Key_BracketLeft, Qt.Key.Key_BracketRight)
                 aceptar_inline = inline and mods == Qt.KeyboardModifier.NoModifier and tecla == Qt.Key.Key_Tab
-                if tipo == QEvent.Type.ShortcutOverride and (consulta or reparar or alternativa or aceptar_inline or (inline and tecla == Qt.Key.Key_Escape) or (visible and tecla in teclas and mods == Qt.KeyboardModifier.NoModifier)):
+                plantilla = not inline and not visible and self.plantilla_vigente(editor)
+                salir_plantilla = plantilla and mods == Qt.KeyboardModifier.NoModifier and tecla == Qt.Key.Key_Tab
+                if tipo == QEvent.Type.ShortcutOverride and (consulta or reparar or alternativa or aceptar_inline or salir_plantilla or ((inline or plantilla) and tecla == Qt.Key.Key_Escape) or (visible and tecla in teclas and mods == Qt.KeyboardModifier.NoModifier)):
                     evento.accept(); return True
                 if tipo == QEvent.Type.KeyPress:
+                    if salir_plantilla:
+                        self.salir_de_plantilla(editor); evento.accept(); return True
+                    if plantilla and tecla == Qt.Key.Key_Right and mods == Qt.KeyboardModifier.NoModifier:
+                        # Dejar mover la flecha y consultar después del movimiento.
+                        QTimer.singleShot(0, lambda: self.programar(editor, 'escritura'))
                     if consulta:
                         self.solicitar(); evento.accept(); return True
                     if reparar:
@@ -443,7 +492,7 @@ class AsistenciaEditor(QObject):
                     if alternativa:
                         self.cambiar_inline(-1 if tecla == Qt.Key.Key_BracketLeft else 1)
                         evento.accept(); return True
-                    if tecla == Qt.Key.Key_Escape and (inline or visible or self.programada or self.coordinador.task or self.coordinador.pendientes):
+                    if tecla == Qt.Key.Key_Escape and (plantilla or inline or visible or self.programada or self.coordinador.task or self.coordinador.pendientes):
                         self.cerrar_lista(); self.invalidar(editor.documento_id)
                         evento.accept(); return True
                     if visible and mods == Qt.KeyboardModifier.NoModifier:

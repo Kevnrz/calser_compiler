@@ -124,15 +124,14 @@ class SugerenciaInline(unittest.TestCase):
         QTest.keyClick(self.editor, Qt.Key.Key_Tab)
         self.assertEqual(self.editor.toPlainText(), 'F main [] : void')
 
-    def test_main_completo_propone_corchetes_y_tab_deja_cursor_dentro(self):
+    def test_main_completo_propone_cabecera_compacta_y_cursor_fuera(self):
         self.preparar('F mai')
-        QTest.keyClicks(self.editor, 'n')
-        self.gris()
-        self.assertEqual(self.editor.sugerencia_inline.texto, '[]')
+        QTest.keyClicks(self.editor, 'n'); self.gris()
+        self.assertEqual(self.editor.sugerencia_inline.texto, '[]: ')
         self.assertEqual(self.editor.toPlainText(), 'F main')
         QTest.keyClick(self.editor, Qt.Key.Key_Tab)
-        self.assertEqual(self.editor.toPlainText(), 'F main[]')
-        self.assertEqual(self.editor.textCursor().position(), len('F main['))
+        self.assertEqual(self.editor.toPlainText(), 'F main[]: ')
+        self.assertEqual(self.editor.textCursor().position(), len('F main[]: '))
         self.editor.undo();self.assertEqual(self.editor.toPlainText(), 'F main')
 
     def test_linea_vacia_no_inventa_C_y_prefijo_V_si_completa(self):
@@ -150,3 +149,123 @@ class SugerenciaInline(unittest.TestCase):
         QTest.keyClicks(self.editor, 'V')
         self.gris()
         self.assertIn(self.editor.sugerencia_inline.texto, ('i','m'))
+
+    def test_tab_sale_del_par_y_continua_con_dos_puntos_y_punto_coma(self):
+        self.preparar('F sum')
+        QTest.keyClicks(self.editor, 'a'); self.gris()
+        QTest.keyClick(self.editor, Qt.Key.Key_Tab)
+        self.assertEqual(self.editor.toPlainText(), 'F suma[]')
+        self.assertEqual(self.editor.textCursor().position(), len('F suma['))
+        QTest.keyClick(self.editor, Qt.Key.Key_Tab)  # Salir sin escribir tabulación.
+        self.assertEqual(self.editor.toPlainText(), 'F suma[]')
+        self.assertEqual(self.editor.textCursor().position(), len('F suma[]'))
+        self.gris();self.assertEqual(self.editor.sugerencia_inline.texto, ':')
+        QTest.keyClick(self.editor, Qt.Key.Key_Tab)
+        self.assertEqual(self.editor.toPlainText(), 'F suma[]:')
+        QTest.keyClicks(self.editor, ' vo');self.gris()
+        QTest.keyClick(self.editor, Qt.Key.Key_Tab)
+        self.assertEqual(self.editor.toPlainText(), 'F suma[]: void')
+        self.gris();self.assertEqual(self.editor.sugerencia_inline.texto, ';')
+        QTest.keyClick(self.editor, Qt.Key.Key_Tab)
+        self.assertEqual(self.editor.toPlainText(), 'F suma[]: void;')
+        self.editor.undo();self.assertEqual(self.editor.toPlainText(), 'F suma[]: void')
+
+    def test_flecha_sale_del_par_y_editar_cancela_salto_especial(self):
+        self.preparar('F sum')
+        QTest.keyClicks(self.editor, 'a');self.gris()
+        QTest.keyClick(self.editor, Qt.Key.Key_Tab)
+        QTest.keyClick(self.editor, Qt.Key.Key_Right)
+        self.gris();self.assertEqual(self.editor.sugerencia_inline.texto, ':')
+        QTest.keyClick(self.editor, Qt.Key.Key_Escape)
+        self.assertFalse(self.editor.sugerencia_inline.isVisible())
+        self.editor.setPlainText('F sum')
+        cursor=self.editor.textCursor();cursor.movePosition(QTextCursor.MoveOperation.End);self.editor.setTextCursor(cursor)
+        QTest.keyClicks(self.editor, 'a');self.gris()
+        QTest.keyClick(self.editor, Qt.Key.Key_Tab)
+        QTest.keyClicks(self.editor, 'int')
+        self.assertIsNone(self.control.salida_plantilla)
+        self.editor.undo()
+        self.assertIsNone(self.control.salida_plantilla)
+
+    def test_main_continua_void_y_se_detiene_tras_cabecera_y_tras_punto(self):
+        self.preparar('F mai')
+        QTest.keyClicks(self.editor, 'n');self.gris()
+        QTest.keyClick(self.editor, Qt.Key.Key_Tab)
+        self.gris();self.assertEqual(self.editor.sugerencia_inline.texto, 'void')
+        QTest.keyClick(self.editor, Qt.Key.Key_Tab)
+        self.gris();self.assertEqual(self.editor.sugerencia_inline.texto, ';')
+        QTest.keyClick(self.editor, Qt.Key.Key_Tab)
+        self.assertEqual(self.editor.toPlainText(),'F main[]: void;')
+        self.esperar(lambda:not self.control.timer_pausa.isActive())
+        self.esperar(lambda:self.control.coordinador.task is None and not self.control.coordinador.pendientes)
+        self.assertFalse(self.editor.sugerencia_inline.isVisible())
+        self.assertFalse(self.control.opciones_inline)
+        QTest.keyClicks(self.editor, '.')
+        self.esperar(lambda:not self.control.timer_pausa.isActive())
+        self.esperar(lambda:self.control.coordinador.task is None and not self.control.coordinador.pendientes)
+        self.assertFalse(self.editor.sugerencia_inline.isVisible())
+        self.assertEqual(self.editor.toPlainText(),'F main[]: void;.')
+
+    def test_retorno_generico_muestra_tipos_y_permite_elegir(self):
+        self.preparar('F suma[]:')
+        QTest.keyClicks(self.editor, ' ');self.gris()
+        self.assertEqual(self.editor.sugerencia_inline.texto,'bool')
+        QTest.keyClick(self.editor,Qt.Key.Key_BracketRight,Qt.KeyboardModifier.AltModifier)
+        self.assertEqual(self.editor.sugerencia_inline.texto,'int')
+        QTest.keyClick(self.editor,Qt.Key.Key_Tab)
+        self.assertEqual(self.editor.toPlainText(),'F suma[]: int')
+
+    def test_contexto_nativo_main_no_se_filtra_al_cuerpo(self):
+        from ide.sugerencias_ccom import sugerir
+        for texto in ('F main[]: void; L', 'F main[]: void; C', 'F main[]: void; R main'):
+            opciones = sugerir(texto, len(texto)).sugerencias
+            self.assertEqual(opciones[0].texto,'[]')
+            self.assertEqual(opciones[0].cursor_relativo,1)
+        texto='F main[]: void; Vm x : '
+        opciones=sugerir(texto,len(texto)).sugerencias
+        self.assertEqual([o.texto for o in opciones if o.preferida_inline],['bool','int'])
+        for texto in ('F main[]: void;', 'F main[]: void;.'):
+            opciones=sugerir(texto,len(texto)).sugerencias
+            self.assertTrue(opciones)
+            self.assertFalse(any(o.preferida_inline for o in opciones))
+
+    def test_enter_despues_de_E_punto_coma_propone_cierre_y_no_otro_F(self):
+        texto=('F main[]: void;\n Vm resultado : int;\n resultado = suma[30,10];\n E;\n.\n'
+               'F suma[int a, int b]: int c;\n c = a + b;\n E;')
+        for automaticas in (False,True):
+            with self.subTest(correccion_automatica=automaticas):
+                self.preparar(texto[:-1])
+                self.control.configurar({**self.control.configuracion,
+                    'reparaciones_automaticas':automaticas,'reglas_automaticas':['INSERCION_PUNTO_COMA']})
+                QTest.keyClicks(self.editor,';')
+                self.esperar(lambda:not self.control.timer_pausa.isActive())
+                self.esperar(lambda:self.control.coordinador.task is None and not self.control.coordinador.pendientes)
+                self.assertFalse(self.editor.sugerencia_inline.isVisible())
+                self.assertEqual(self.editor.toPlainText(),texto)
+                QTest.keyClick(self.editor,Qt.Key.Key_Return)
+                antes=self.editor.toPlainText()
+                self.gris();self.assertEqual(self.editor.sugerencia_inline.texto,'.')
+                self.assertEqual(self.editor.toPlainText(),antes)
+                QTest.keyClick(self.editor,Qt.Key.Key_Tab)
+                self.assertEqual(self.editor.toPlainText(),antes+'.')
+                self.esperar(lambda:not self.control.timer_pausa.isActive())
+                self.esperar(lambda:self.control.coordinador.task is None and not self.control.coordinador.pendientes)
+                self.assertFalse(self.editor.sugerencia_inline.isVisible())
+                self.editor.undo();self.assertEqual(self.editor.toPlainText(),antes)
+
+    def test_parentesis_de_llamada_tiene_mensaje_y_posicion_correctos(self):
+        from ide import ccom
+        from ide.servicio_ccom import consultar
+        texto=('F main[]: void;\n Vm resultado : int;\n resultado = suma(30,10);\n E;\n.\n'
+               'F suma[int a, int b]: int c;\n c = a + b;\n E;\n.\n')
+        salida,fuente,codigo=consultar(texto,['--check-json'])
+        problemas=ccom.diagnosticos_json(salida,fuente,texto,codigo)
+        self.assertIn("se esperaba '['",problemas[0].descripcion)
+        self.assertIn('nombre(...)',problemas[0].descripcion)
+        self.assertNotIn("se esperaba ';'",problemas[0].descripcion)
+        self.assertEqual(problemas[0].linea,3)
+        self.assertEqual(problemas[0].rango_utf8[0],texto.encode().index(b'(30'))
+        correcto=texto.replace('suma(30,10)','suma[30,10]')
+        salida,fuente,codigo=consultar(correcto,['--check-json'])
+        self.assertEqual(codigo,0)
+        self.assertFalse(ccom.diagnosticos_json(salida,fuente,correcto,codigo))

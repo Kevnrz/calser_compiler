@@ -22,6 +22,22 @@ make ide
 
 También: `python3 -m ide.main ruta/al/programa.cls`. No depende de VS Code. La entrega empaquetada para abrir desde un icono es E8, todavía pendiente.
 
+## Icono de la aplicación
+
+CALSIDE usa `assets/branding/logo_programa.png` como icono de sus ventanas:
+solo el hexágono exacto de la animación, con el segundo fragmento morado y
+fondo hexagonal `#191c24` con vértices redondeados. El exterior del fondo es
+transparente; su interior permanece opaco. El PNG mide 512×512 y su fuente
+vectorial queda en `assets/branding/logo_programa.svg`.
+En Wayland se identifica como `calside`; el escritorio resuelve el icono con
+`calside.desktop`. En este equipo se registró una entrada de desarrollo en
+`~/.local/share/applications/calside.desktop`, con `Icon` y `Path` apuntando a
+este repositorio y `Exec` al Python utilizado. Permite abrir CALSIDE desde el
+lanzador y mostrar su logo en el selector de ventanas. Si se traslada el
+repositorio o cambia el intérprete, hay que actualizar esas rutas. Este registro
+local no sustituye el empaquetado E8. Los iconos de archivos `.cls` conservan
+su recurso propio, `calser-file-icon.png`.
+
 ## Animación de inicio
 
 `python3 -m ide.main` (o `make ide`) muestra una secuencia de 4,4 s:
@@ -56,7 +72,7 @@ QT_QPA_PLATFORM=offscreen python3 -m unittest ide.pruebas.test_inicio ide.prueba
 - Archivo: abrir carpeta, nuevo, guardar, guardar como y cerrar con protección de cambios.
 - Explorador: jerarquía, menú contextual, selección múltiple, arrastre y búsqueda. Ctrl+B oculta/recupera el panel.
 - Editor: colores y diagnósticos desde C, sin guardar; cada problema navega a su ubicación. El parser puede recuperar varios errores sintácticos, con límites conservadores.
-- Al escribir al final de una línea aparece una continuación en gris tras una pausa: Tab acepta, Esc descarta y Alt+[ / Alt+] cambia la propuesta. `vo` puede mostrar `id` para completar `void`; `F main` propone `[]` y Tab deja el cursor dentro. Una línea vacía no elige una instrucción arbitraria; Ctrl+Espacio permite consultar sus alternativas. La vista no modifica el texto ni lo guarda. Si ccom propone un cierre faltante en el cursor, también puede aceptarse con Tab.
+- Al escribir al final de una línea aparece una continuación en gris tras una pausa: Tab acepta, Esc descarta y Alt+[ / Alt+] cambia la propuesta. `vo` puede mostrar `id` para completar `void`; `F main` propone `[]: ` de una vez y deja el cursor fuera, seguido de `void` y `;`. Las funciones normales proponen `[]` con cursor dentro; otro Tab o flecha derecha sale y consulta `:`. Después de `:` se ofrecen tipos; `main` prioriza `void`, como exige ccom. Tras aceptar una propuesta se consulta la siguiente continuación sin exigir un espacio. Tras el `;` de la cabecera no se propone cerrar con `.` ni iniciar otra función con `F`. Después de un `E;` explícito, el punto se propone únicamente al pasar a una línea posterior con Enter; no se muestra pegado a `E;`. Una línea vacía no elige una instrucción arbitraria; Ctrl+Espacio permite consultar sus alternativas. La vista no modifica el texto ni lo guarda. Si ccom propone un cierre faltante en el cursor, también puede aceptarse con Tab.
 - Ctrl+Espacio o clic derecho: lista de continuaciones válidas. Alt+Enter o clic derecho: reparaciones, vista previa y aplicación con Deshacer.
 - Editar → Preferencias de asistencia: vista gris activada por defecto, pausa configurable (350 ms iniciales) y corrección automática con Enter. Esta última viene apagada: al activarla se selecciona la regla revisada de `;`, sin un segundo paso obligatorio. Una preferencia de espera ya guardada se conserva.
 - Compilar ▾ / F5: modo análisis, compilación, AST o ensamblado. Opciones de compilación permite destino/banderas compatibles. F5 requiere guardar la fuente; no ejecuta.

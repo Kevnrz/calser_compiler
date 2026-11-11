@@ -14,4 +14,6 @@ int suggestions_active(void);
 void suggestions_context(int at_cursor);
 void suggestions_expected(const char *name);
 void suggestions_parser_error(void);
+/* Contexto de función publicado por la producción real de Bison. */
+void suggestions_function(const char *name);
 #endif

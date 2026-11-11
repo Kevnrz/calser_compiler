@@ -27,6 +27,12 @@ Si usas el entorno virtual, el último comando es `make ide PYTHON=.venv/bin/pyt
 
 Marca cada caso **Pendiente / OK / Fallo / No aplica**. Un fallo debe describir pasos, esperado y observado; no marcar OK después de un arreglo sin repetir el caso. Los problemas de legibilidad/distribución también se anotan.
 
+## Programas adicionales: arreglos, matrices y recorridos completos
+
+El conjunto [recorridos y resultados esperados](../ejemplos/revision_manual/recorridos/README.md) añade **12 programas válidos e independientes**, numerados del 01 al 12: operaciones, funciones, condiciones, ciclos, recursión, arreglos, búsqueda, suma/resta de matrices, transposición, producto rectangular y booleanos con corto circuito. La guía incluye variaciones para probar sugerencias, reparaciones y diagnósticos sobre copias.
+
+Se verificaron con `ccom --check`, compilación y ejecución en el simulador: **12/12**, comparando las variables finales con los valores documentados. Esto valida los ejemplos; su revisión interactiva humana queda **pendiente**. No altera los estados R01–R24. Empieza por `recorridos/01_operaciones.cls` y avanza en orden; las operaciones matriciales son los casos 09–11.
+
 ## Bloque A: archivos y edición — empezar aquí
 
 | Caso | Acción | Resultado esperado | Estado |
@@ -66,7 +72,7 @@ Las condiciones precisas están en [asistencia](asistencia.md#politica). Un cont
 
 ### Repetición añadida: propuestas en gris
 
-Con asistencia habilitada, escribir `F main [] : vo` al final de una línea y esperar: debe verse `id` gris sin cambiar el texto. Tab completa `void`; `F main` propone `[]` con el cursor dentro al aceptar; una línea vacía del cuerpo no sugiere `C` arbitrariamente. Ctrl+Z revierte; Esc descarta. Enter no acepta la vista. Probar también un `;` faltante al final de una declaración, comentarios, cambio de pestaña y Ctrl+Espacio para abrir la lista. Con análisis automático activado, esperar a que aparezca un diagnóstico: la propuesta gris debe seguir visible y Tab debe aceptarla si texto/cursor no cambiaron. La pausa por defecto es 350 ms; las preferencias anteriores pueden conservar otra espera. **Pendiente de revisión humana**, sin revocar los OK anteriores de la lista manual.
+Con asistencia habilitada, escribir `F main [] : vo` al final de una línea y esperar: debe verse `id` gris sin cambiar el texto. Tab completa `void`; `F main` propone `[]: ` con cursor fuera y después `void`; otras funciones proponen `[]` con cursor dentro y segundo Tab para salir a `:`. Tras `:` se ofrecen tipos; aceptar `void` consulta después `;` y luego debe detenerse, sin proponer `.` o `F`; tras escribir `E;` no debe mostrar un punto pegado; al pulsar Enter sí debe proponer `.` en la línea siguiente y detenerse después del cierre; una línea vacía del cuerpo no sugiere `C` arbitrariamente. Ctrl+Z revierte; Esc descarta. Enter no acepta la vista. Probar también un `;` faltante al final de una declaración, comentarios, cambio de pestaña y Ctrl+Espacio para abrir la lista. Con análisis automático activado, esperar a que aparezca un diagnóstico: la propuesta gris debe seguir visible y Tab debe aceptarla si texto/cursor no cambiaron. La pausa por defecto es 350 ms; las preferencias anteriores pueden conservar otra espera. **Pendiente de revisión humana**, sin revocar los OK anteriores de la lista manual.
 
 ## Bloque D: compilar y ejecutar
 

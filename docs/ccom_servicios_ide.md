@@ -281,6 +281,8 @@ Solo admite una fuente y `-v`/`--time`. No se combina con `--check`, `--check-js
 
 Solo `ok` contiene propuestas. Todos los demás estados incluyen explicación y lista vacía. Cancelar mata el proceso desde el adaptador; no exige que el hijo emita JSON al ser interrumpido. stdout se reserva para el JSON; progreso y tiempo van a stderr.
 
+Las llamadas de Calser usan `nombre[argumentos]`. Si aparece `(` después de un identificador y LAC esperaba `[`, el diagnóstico C señala ese paréntesis y explica `nombre[...]`, en lugar de priorizar el mensaje genérico de `;` faltante. Esto no cambia la sintaxis ni reescribe la llamada.
+
 ### Cómo calcula las propuestas
 
 1. `suggestions_run`, en `src/suggestions.c`, lee la fuente acotada e instala un observador de diagnósticos silencioso.
@@ -290,8 +292,8 @@ Solo `ok` contiene propuestas. Todos los demás estados incluyen explicación y 
 5. Así un programa completo también puede ofrecer continuaciones, sin confundir EOF con un error del usuario. No se derivan reglas a partir de mensajes humanos ni se copia una gramática a Python.
 6. C excluye identificadores genéricos, números genéricos, EOF y símbolos internos. Filtra por el prefijo escrito y ordena: palabras, delimitadores, operadores; alfabético dentro de cada grupo.
 7. Cada propuesta reemplaza el fragmento completo. En `vo|id` reemplaza `void`, evitando duplicar el sufijo. Si no hay una completación y Flex reconoció un token completo hasta el cursor, C vuelve a consultar LAC después de ese token. Así `F main` puede ofrecer su continuación sin exigir un espacio y `void` completo puede ofrecer `;`. No se avanza sobre un prefijo inválido.
-8. `inline_preferred` (booleano opcional) distingue propuestas útiles para la vista gris: un prefijo escrito o una única continuación. Una línea vacía con muchas instrucciones posibles conserva la lista manual, pero no elige `C` por orden alfabético. La ausencia del campo se interpreta como false.
-9. Cuando `[` es la única continuación, C puede devolver el par `[]` con `cursor_relative: 1`: al aceptar, el cursor queda dentro. Este campo opcional mide bytes UTF-8 del texto propuesto y el adaptador lo convierte a caracteres Python. No se duplica un delimitador que ya está a la derecha del cursor.
+8. `inline_preferred` (booleano opcional) distingue propuestas útiles para la vista gris: prefijos escritos, tipos y puntuación local. No se priorizan `.` ni `F` sin prefijo por el mero hecho de ser continuaciones únicas. C sí prioriza `.` después de los tokens `E;` cuando existe un salto de línea entre el terminador y el cursor, LAC lo ofrece y no existe ya ese punto a la derecha; `F` continúa sin preferencia automática. Una lista válida sin preferencia tampoco deriva a reparaciones para cerrar el cuerpo. Una línea vacía con muchas instrucciones posibles conserva la lista manual, pero no elige `C` por orden alfabético. La ausencia del campo se interpreta como false.
+9. Cuando `[` es la única continuación, C puede devolver el par `[]` con `cursor_relative: 1`: al aceptar, el cursor queda dentro. En la declaración de `main` devuelve `[]: ` con cursor relativo 4, o solo `[]` con cursor relativo 2 si ya hay dos puntos a la derecha. El contexto de función procede de una acción de Bison, y los tokens Flex delimitan el nombre declarado; el atajo no afecta `[` dentro del cuerpo. En el retorno de main se prioriza `void`; los tipos locales y de otras funciones siguen disponibles. Este campo opcional mide bytes UTF-8 del texto propuesto y el adaptador lo convierte a caracteres Python. No se duplica un delimitador que ya está a la derecha del cursor.
 
 Los comentarios de línea incluyen el punto antes de LF; los bloques abiertos incluyen EOF. Después de un bloque cerrado sí se puede consultar. No hay sugerencias dentro de comentarios.
 

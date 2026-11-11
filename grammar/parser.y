@@ -298,6 +298,7 @@ funciones
 funcion
     : TOKEN_F
       TOKEN_IDENTIFIER
+      { if (suggestions_active()) suggestions_function($2); }
       TOKEN_LBRACKET
       params
       TOKEN_RBRACKET
@@ -309,11 +310,12 @@ funcion
       {
           $$ = ast_function(
                     $2,
-                    $4,
-                    $7,
-                    $9
+                    $5,
+                    $8,
+                    $10
                 );
 
+          if (suggestions_active()) suggestions_function(NULL);
           free($2);
 
           ast_set_location($$, @2.first_line, @2.first_column);
@@ -1832,11 +1834,12 @@ static int yyreport_syntax_error(const yypcontext_t *context) {
         syntax_recovering = 1;
         return 0;
     }
-    int semicolon = 0, paren = 0, bracket = 0;
+    int semicolon = 0, paren = 0, bracket = 0, call_bracket = 0;
     for (int i = 0; i < count; i++) {
         semicolon |= expected[i] == YYSYMBOL_TOKEN_SEMICOLON;
         paren |= expected[i] == YYSYMBOL_TOKEN_RPAREN;
         bracket |= expected[i] == YYSYMBOL_TOKEN_RBRACKET;
+        call_bracket |= expected[i] == YYSYMBOL_TOKEN_LBRACKET;
     }
     YYLTYPE location = *yypcontext_location(context);
     char message[512];
@@ -1863,6 +1866,11 @@ static int yyreport_syntax_error(const yypcontext_t *context) {
                ((unexpected == YYSYMBOL_TOKEN_RBRACKET && syntax_blocks[syntax_count - 1].commas != 3) ||
                 (unexpected == YYSYMBOL_TOKEN_COMMA && syntax_blocks[syntax_count - 1].commas >= 3))) {
         snprintf(message, sizeof(message), "'S' requiere exactamente 4 partes: variable, inicio, fin, paso");
+    } else if (unexpected == YYSYMBOL_TOKEN_LPAREN &&
+               syntax_previous == TOKEN_IDENTIFIER && call_bracket) {
+        /* No confundir una llamada escrita con '(' con un ';' faltante:
+         * LAC también esperaba '[' después del identificador anterior. */
+        snprintf(message, sizeof(message), "se esperaba '[' despues del nombre; las funciones usan nombre[...], no nombre(...)");
     } else if (semicolon) {
         location = syntax_previous_location;
         location.first_line = location.last_line;

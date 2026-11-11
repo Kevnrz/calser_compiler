@@ -28,12 +28,14 @@ def main():
     # al crear QSettings para almacenar las preferencias del usuario.
     app.setApplicationName("CALSIDE")
     app.setOrganizationName("Calser")
+    # Wayland usa esta identidad para buscar calside.desktop y su Icon.
+    app.setDesktopFileName("calside")
     app.setStyle("Fusion")
 
     # Resolver desde este archivo permite encontrar herramientas y recursos
     # aunque el usuario inicie CALSIDE desde otro directorio de trabajo.
     root = Path(__file__).resolve().parents[1]
-    app.setWindowIcon(QIcon(str(root / "assets/branding/calser-file-icon.png")))
+    app.setWindowIcon(QIcon(str(root / "assets/branding/logo_programa.png")))
     # Conservar el coordinador durante todo el bucle Qt. Inicializa la ventana
     # por etapas mientras se anima la marca; clic/Esc solo omiten la presentación.
     inicio = Inicio(app, root, sys.argv[1:])

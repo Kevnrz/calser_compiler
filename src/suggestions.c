@@ -21,15 +21,17 @@
 #define MAX_OPTIONS 64
 static const char *text;
 static size_t length, cursor, fragment_start, fragment_end, token_count;
-static size_t first_error;
+static size_t first_error, return_end;
 static int in_comment, limited, probe, context_ok, internal_error, complete_fragment;
 static char words[MAX_OPTIONS][64];
 static size_t word_count;
+static int function_main, previous_f, main_name_at_cursor, previous_e, return_ended_at_cursor;
 extern FILE *yyin;
 
 int suggestions_active(void) { return probe; }
 void suggestions_context(int at_cursor) { context_ok = at_cursor; }
 void suggestions_parser_error(void) { internal_error = 1; }
+void suggestions_function(const char *name) { function_main = name && !strcmp(name, "main"); }
 
 /* Bison entrega sus alias concretos. Se eliminan las comillas externas, nunca
  * se infiere una producción a partir del mensaje humano de error. */
@@ -62,6 +64,16 @@ static void observe(const char *kind, size_t start, size_t end) {
         if (start < cursor && (cursor < end || (cursor == end && (!block || !closed)))) in_comment = 1;
         return;
     }
+    /* Flex ya identificó los tokens. Distinguir el nombre de una declaración
+     * F main de un '[' dentro de su cuerpo, sin extender la plantilla allí. */
+    if (end <= cursor && strcmp(kind, "invalido")) {
+        main_name_at_cursor = previous_f && !strcmp(kind, "identificador") &&
+                              end - start == 4 && !memcmp(text + start, "main", 4);
+        previous_f = !strcmp(kind, "reservada") && end - start == 1 && text[start] == 'F';
+        return_ended_at_cursor = previous_e && end - start == 1 && text[start] == ';';
+        if (return_ended_at_cursor) return_end = end;
+        previous_e = !strcmp(kind, "reservada") && end - start == 1 && text[start] == 'E';
+    }
     int word = !strcmp(kind, "reservada") || !strcmp(kind, "tipo") ||
                !strcmp(kind, "booleano") || !strcmp(kind, "identificador") || !strcmp(kind, "numero");
     int invalid_prefix = !strcmp(kind, "invalido") && end == start + 1 &&
@@ -91,7 +103,9 @@ static int offer(const char *word) {
     if (prefix && (n < prefix || memcmp(word, text + fragment_start, prefix))) return 0;
     if (fragment_end == cursor && prefix == n && prefix) return 0;
     /* No duplicar un delimitador que ya está inmediatamente a la derecha. */
-    if (!prefix && n == 1 && !isalpha((unsigned char) word[0]) && cursor < length && text[cursor] == word[0]) return 0;
+    size_t next = cursor;
+    while (next < length && isspace((unsigned char) text[next])) next++;
+    if (!prefix && n == 1 && !isalpha((unsigned char) word[0]) && next < length && text[next] == word[0]) return 0;
     return 1;
 }
 static size_t option_count(void) {
@@ -100,11 +114,32 @@ static size_t option_count(void) {
     return count;
 }
 static int query_context(size_t position) {
-    word_count = 0; context_ok = internal_error = 0;
+    word_count = 0; context_ok = internal_error = function_main = 0;
     probe = 1;
     int result = lexer_parse_text(text, position);
     probe = 0;
     return result;
+}
+
+/* Una continuación sintáctica no implica intención de cerrar una función
+ * o iniciar otra. La lista conserva todas las opciones; el gris solo guía
+ * prefijos, tipos y puntuación local. Este criterio pertenece al motor C. */
+static int inline_preferred(const char *word, size_t count) {
+    size_t prefix = cursor - fragment_start;
+    if (prefix) return 1;
+    /* El cierre se propone en una línea posterior a E;, nunca pegado a él. */
+    if (!strcmp(word, ".")) return return_ended_at_cursor &&
+        memchr(text + return_end, '\n', cursor - return_end) != NULL;
+    if (!strcmp(word, "F")) return 0;
+    if (!strcmp(word, ";")) return 1;
+    int types = 1, return_types = 0;
+    for (size_t i = 0; i < word_count; i++) {
+        if (!offer(words[i])) continue;
+        if (!strcmp(words[i], "void")) return_types = 1;
+        if (strcmp(words[i], "bool") && strcmp(words[i], "int") && strcmp(words[i], "void")) types = 0;
+    }
+    if (types) return !function_main || !return_types || !strcmp(word, "void");
+    return count == 1 && priority(word) == 1;
 }
 
 static int emit(FILE *out, const char *source, const char *status, const char *explanation) {
@@ -123,18 +158,22 @@ static int emit(FILE *out, const char *source, const char *status, const char *e
             if (!offer(word)) continue;
             /* Un '[' inequívoco puede presentarse como par editable, sin
              * inventar nombres/valores. No duplicar un cierre ya existente. */
+            size_t next = cursor;
+            while (next < length && isspace((unsigned char) text[next])) next++;
             int pair = !prefix && count == 1 && !strcmp(word, "[") &&
-                       !(cursor < length && text[cursor] == ']');
-            const char *insert = pair ? "[]" : word;
+                       !(next < length && text[next] == ']');
+            int main_header = pair && function_main && main_name_at_cursor;
+            int existing_colon = next < length && text[next] == ':';
+            const char *insert = main_header && !existing_colon ? "[]: " : pair ? "[]" : word;
             if (emitted++) fputc(',', out);
             fputs("{\"label\":", out); diag_json_write_string(out, insert);
             fputs(",\"text\":", out); diag_json_write_string(out, insert);
             fprintf(out, ",\"start\":%zu,\"end\":%zu,\"category\":", fragment_start, fragment_end);
             diag_json_write_string(out, priority(word) == 0 ? "palabra" : priority(word) == 1 ? "delimitador" : "operador");
-            fprintf(out, ",\"inline_preferred\":%s", prefix || count == 1 ? "true" : "false");
-            if (pair) fputs(",\"cursor_relative\":1", out);
+            fprintf(out, ",\"inline_preferred\":%s", inline_preferred(word, count) ? "true" : "false");
+            if (pair) fprintf(out, ",\"cursor_relative\":%d", main_header ? (existing_colon ? 2 : 4) : 1);
             fputs(",\"detail\":", out);
-            diag_json_write_string(out, pair ? "Par de corchetes esperado; el cursor queda dentro para escribir parametros." : "Continuacion permitida por el parser de ccom (Bison/LAC).");
+            diag_json_write_string(out, main_header ? "Cabecera de main sin parametros; continuar con retorno void." : pair ? "Par de corchetes esperado; el cursor queda dentro para escribir parametros." : "Continuacion permitida por el parser de ccom (Bison/LAC).");
             fputc('}', out);
         }
     }
@@ -149,6 +188,8 @@ int suggestions_run(FILE *out, const char *source, size_t requested_cursor) {
     in_comment = limited = probe = context_ok = internal_error = 0;
     first_error = (size_t) -1;
     complete_fragment = 0;
+    previous_f = main_name_at_cursor = previous_e = return_ended_at_cursor = 0;
+    return_end = 0;
     FILE *file = fopen(source, "rb");
     if (!file) return emit(out, source, "error", "No se pudo abrir la fuente.");
     char *buffer = malloc(MAX_SOURCE + 1);

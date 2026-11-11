@@ -2,6 +2,79 @@
 
 Registro consolidado · 2026-11-11. Este archivo guarda decisiones, entregas, verificaciones y documentos sustituidos. **Las secciones históricas pueden describir estados anteriores; no son instrucciones vigentes ni pendientes actuales.** Para trabajar usar [plan actual](plan_ide.md), [guía del sistema](guia_sistema_calside.md) y [revisión manual](revision_manual.md).
 
+## Fondo hexagonal redondeado para logo_programa — 2026-11-11
+
+El fondo cuadrado se sustituye por un hexágono oscuro #191c24 con seis
+vértices redondeados. Solo el exterior queda transparente, para que el icono
+tenga esa silueta; el fondo y centro siguen opacos. El emblema segmentado se
+conserva idéntico al de inicio, incluidos el segundo fragmento morado y sus
+medidas. Se actualizan `assets/branding/logo_programa.svg`, su PNG 512×512 y
+la descripción en `ide/README.md`; Qt y el escritorio ya usan esas rutas.
+
+Verificación puntual: SVG válido, emblema vectorial idéntico al anterior,
+exterior transparente, centro opaco #191c24 e inspección visual correcta.
+Sin cambios ejecutables, suite completa ni commits.
+
+## Icono propio logo_programa — 2026-11-11
+
+El icono de CALSIDE pasa a `assets/branding/logo_programa.png` (512×512,
+sin canal alfa, fondo sólido #191c24). Se extraen directamente del SVG de
+inicio los seis fragmentos del hexágono, conservando geometría, grosores y
+segundo fragmento morado. La fuente editable se guarda en `logo_programa.svg`.
+Se actualizan `ide/main.py`, README y la entrada local `calside.desktop`;
+los logos anteriores y los iconos de archivos se conservan.
+
+Inspección visual correcta; comprobación puntual de dimensiones, opacidad,
+fondo y herencia del icono Qt correcta. Entrada de escritorio validada y base
+actualizada; `git diff --check` sin errores. Reiniciar CALSIDE para aplicar a
+las nuevas ventanas. Sin suite completa ni commits.
+
+## Icono de aplicación y reconocimiento en Wayland — 2026-11-11
+
+Se usa `assets/branding/calser-logo.png` como icono global de CALSIDE en
+`ide/main.py`; los archivos `.cls` conservan su icono anterior. Se fija
+`desktopFileName=calside` y se registra en este equipo
+`~/.local/share/applications/calside.desktop`, con Icon/Path dirigidos al
+repositorio y Exec al Python actual. Esto permite que Hyprland/Wayland resuelva
+el icono del selector de ventanas y ofrece una entrada en el lanzador. El
+registro es local de desarrollo, no el empaquetado E8; si cambian las rutas hay
+que actualizarlas. Se documenta en `ide/README.md`.
+
+Verificaciones puntuales: `desktop-file-validate` sin errores, base de
+escritorio actualizada, rutas existentes y punto de entrada Qt sin pantalla
+con identidad correcta e icono heredado por un QWidget idéntico al PNG
+solicitado. `git diff --check` correcto. Hace falta reiniciar CALSIDE para que
+las nuevas ventanas anuncien la identidad. Sin suite completa ni commits;
+se conservan los cambios locales de otras tareas.
+
+## Punto de cierre en línea posterior — 2026-11-11
+
+A petición del usuario, C solo prioriza el punto después de `E;` si el cursor está en una línea posterior. Se conserva la posición del terminador reconocido por Flex y se comprueba el salto de línea del intervalo; no se interpreta Calser en Python. Enter muestra el punto gris en la nueva línea y Tab lo acepta. No se inserta automáticamente ni se recomienda un nuevo F.
+
+Se reconstruye ccom y se ejecuta únicamente el recorrido de `E;` sin punto gris en la misma línea → Enter con punto gris → Tab y Deshacer, tanto con corrección automática activada como desactivada. Una prueba focalizada correcta; sin suite completa. Repetición humana pendiente.
+
+## Diagnóstico de llamada y cierre después de E; — 2026-11-11
+
+El usuario muestra `suma(30,10)` diagnosticado como falta de `;` y un cierre sin `.` después de `E;`. La llamada es inválida en Calser, que usa `suma[30,10]`, pero el mensaje era engañoso: Bison priorizaba `;` aunque LAC también esperaba `[`. Se añade un diagnóstico C específico para `(` después de identificador con `[` esperado, conservando la ubicación del paréntesis. No se cambia la gramática ni se reescribe código del usuario.
+
+La preferencia nativa de punto pasa a ser contextual: después de los tokens explícitos `E;` puede mostrar `.` si LAC lo permite y no existe ya a la derecha. No se ofrece tras la cabecera vacía ni se encadena `F`. Enter puede consultar continuaciones; cuando la corrección con Enter es optativa y no aplica, también se permite mostrar la continuación sin aplicarla sola.
+
+Tres comprobaciones focalizadas correctas: dos funciones con punto omitido tras `E;`, tanto con corrección automática activada como desactivada; mensaje/rango correcto de llamada con paréntesis y aceptación de la variante con corchetes; conservación de la parada después de la cabecera. ccom reconstruido correctamente; sin suite completa. Repetición humana pendiente.
+
+## Intención de las propuestas y cabecera compacta de main — 2026-11-11
+
+El usuario reporta bloqueo de tipos después de `:` y cadena automática `; → . → F`. Se corrige el criterio del motor C: tipos y puntuación local tienen preferencia, pero un cierre/inicio de función no adquiere preferencia por ser la única opción gramatical. Una lista válida sin opción preferida tampoco deriva a reparaciones, que antes podían ofrecer el punto para cerrar un cuerpo vacío.
+
+Bison publica el contexto del nombre de función durante las consultas. C propone `[]: ` con cursor fuera para main, que semánticamente no recibe parámetros y retorna void; las funciones normales conservan el par editable y los tipos de retorno. Los tokens reales delimitan la declaración de main para no transformar corchetes de lazos, condiciones o llamadas de su cuerpo; las declaraciones locales conservan sus tipos. El caso de dos puntos ya existentes evita duplicarlos.
+
+Validación focalizada: cuatro recorridos UI correctos (cabecera de main sin . ni F posteriores, tipos genéricos, salida de par genérico y terminador local), contexto nativo del cuerpo y repetición del flujo de main correctos; `ccom --check pruebas/p02_factorial.cls` correcto y reconstrucción de Flex/Bison/ccom sin errores. Sin suite completa. Repetición humana pendiente.
+
+## Continuidad tras aceptar corchetes — 2026-11-11
+
+El usuario observa que después de aceptar `[]` el cursor queda dentro y no aparece `:`. La zona interior corresponde a parámetros; el controlador no consultaba tras aceptar una propuesta ni al salir de esa zona sin escribir. Se añade seguimiento del snapshot y del final de la plantilla recibida de C: segundo Tab sale sin editar, la flecha derecha también rearma la consulta y ccom ofrece la continuación después del par. Aceptar explícitamente otras propuestas consulta su siguiente continuación (por ejemplo, `void` seguido de `;`), sin insertar más texto automáticamente.
+
+El salto de plantilla se invalida con cambios de texto/cursor/selección, foco, pestaña o preferencias. No se añaden analizadores Python ni se encadenan reparaciones automáticas de Enter. Dos recorridos con ccom real correctos: cadena `main → [] → salir → : → void → ;` con Deshacer y salida por flecha/cancelación al editar. Sin suite completa; repetición humana pendiente.
+
 ## Continuaciones útiles: main y líneas vacías — 2026-11-11
 
 El usuario observa una `C` arbitraria en la línea vacía del cuerpo y ausencia de `[]` después de `main`. La primera era la primera opción alfabética entre muchas continuaciones válidas; la segunda ocurría porque el motor seguía tratando el identificador completo como prefijo de una reservada. Se corrige en C: si no hay completación y el token terminó en el cursor, se consulta LAC después del token. Un `[` inequívoco puede presentarse como par `[]` con cursor dentro, sin duplicar puntuación existente.
@@ -2598,3 +2671,9 @@ Verificación: **384 pruebas IDE**, suite completa del compilador y casos M7 baj
 
 
 </details>
+
+## 2026-11-11 — Corpus ampliado para revisión manual
+
+Se agregaron 12 programas independientes en `ide/ejemplos/revision_manual/recorridos`, con comentarios y una guía de resultados: operadores, llamadas adelantadas/anidadas, ramas, ciclos L/S, recursión con R, recorrido/copia/búsqueda de arreglos, suma/resta de matrices, transposición rectangular, producto matricial y corto circuito. La guía propone mutaciones individuales para asistencia y errores sin convertir el corpus válido en un conjunto de fuentes dañadas.
+
+Verificación específica del corpus: 12/12 pasan `ccom --check`, generación de artefactos y simulación; los valores finales coinciden con los esperados, con terminación normal y sin avisos de separación. Se usaron los auxiliares existentes de `pruebas/programas/probar.py`, con salidas temporales. No se ejecutó la suite completa. La revisión humana sigue pendiente; los estados manuales anteriores se conservan.

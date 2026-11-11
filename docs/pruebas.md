@@ -121,6 +121,10 @@ Este target no necesita Python. Las pruebas completas conservan sus ejecutores.
 La representación intermedia de tres direcciones tiene además `make check-tac`,
 incluido en `make check`: ejecuta `probar_tac` (seis casos de alto nivel) y
 `probar_tac_isa` (ISA virtual/física), y compara dos salidas esperadas con `diff`.
+También ejecuta `probar_tac_pseudo`: las doce operaciones de destino pendientes
+de expansión, sus propiedades genéricas, selectores, auxiliares físicos,
+rechazos de forma/etapa y el control obligatorio previo a emisión. Comprueba
+la impresión `pseudo.*` en un flujo temporal sin cambiar los dos esperados.
 Los binarios C comprueban definiciones/usos, globales, ABI, argumentos, memoria,
 edición, reconstrucción y rechazos. El target también compila
 `pruebas/tac/ejemplo.cls` con ccom. No usa Python; la construcción habitual con
@@ -131,7 +135,8 @@ edición, reconstrucción y rechazos. El target también compila
 
 `make check-tac-build`, incluido en `make check`, construye `probar_tac_build`
 y ejecuta `pruebas/tac_build/probar_cli.py`. El binario C parsea y analiza cada
-fuente, construye TAC en memoria y llama `tac_validate`. Compara imagen inicial
+fuente, construye TAC en memoria y llama `tac_validate`. Verifica línea/columna
+de las instrucciones sin cambiar el listado. Compara imagen inicial
 con la del generador y verifica que AST, símbolos, área de datos y estado del
 emisor no cambien durante la construcción. Se libera TAC antes del semántico.
 

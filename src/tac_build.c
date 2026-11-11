@@ -42,7 +42,7 @@ const Symbol *tb_symbol(ASTNode *node) {
     return node ? (const Symbol *)node->symbol : NULL;
 }
 
-/* Agrega una instrucción al camino abierto y conserva su línea de origen. */
+/* Agrega una instrucción al camino abierto y conserva línea/columna de origen. */
 TacInstruction *tb_emit(TacBuilder *builder, ASTNode *node, TacOpcode op,
                          TacOperand dest, TacOperand src1, TacOperand src2) {
     if (builder->failed || !builder->block) {
@@ -50,6 +50,7 @@ TacInstruction *tb_emit(TacBuilder *builder, ASTNode *node, TacOpcode op,
     }
     TacInstruction *instruction = tac_append(builder->block, op, dest, src1, src2);
     instruction->source_line = node ? node->line : 0;
+    instruction->source_column = node ? node->column : 0;
     return instruction;
 }
 

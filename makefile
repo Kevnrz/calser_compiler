@@ -9,7 +9,7 @@ BUILD_DIR = build
 GEN_DIR = $(BUILD_DIR)/generated
 OBJ_DIR = $(BUILD_DIR)/obj
 
-SOURCES = main tac tac_edit tac_cfg tac_validate tac_isa tac_print tac_build tac_build_expr tac_build_stmt tac_build_flow tac_build_init ast ast_constant symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler
+SOURCES = main tac tac_edit tac_cfg tac_validate tac_isa tac_pseudo tac_print tac_build tac_build_expr tac_build_stmt tac_build_flow tac_build_init ast ast_constant symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler
 OBJECTS = $(addprefix $(OBJ_DIR)/,$(addsuffix .o,$(SOURCES))) \
           $(OBJ_DIR)/parser.tab.o $(OBJ_DIR)/lex.yy.o
 
@@ -131,7 +131,7 @@ validar-bundles: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 tools/validar_bundles.py
 
 # Representación intermedia de tres direcciones independiente del compilador.
-TAC_SOURCES = src/tac.c src/tac_edit.c src/tac_cfg.c src/tac_validate.c src/tac_isa.c src/tac_print.c src/isa_table.c
+TAC_SOURCES = src/tac.c src/tac_edit.c src/tac_cfg.c src/tac_validate.c src/tac_isa.c src/tac_pseudo.c src/tac_print.c src/isa_table.c
 TAC_HEADERS = include/tac.h src/tac_internal.h include/isa_table.h include/symbol_table.h
 
 $(BUILD_DIR)/probar_tac: $(TAC_SOURCES) pruebas/tac/probar.c $(TAC_HEADERS) | $(BUILD_DIR)
@@ -140,11 +140,15 @@ $(BUILD_DIR)/probar_tac: $(TAC_SOURCES) pruebas/tac/probar.c $(TAC_HEADERS) | $(
 $(BUILD_DIR)/probar_tac_isa: $(TAC_SOURCES) pruebas/tac/probar_isa.c $(TAC_HEADERS) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
 
-check-tac: $(BUILD_DIR)/probar_tac $(BUILD_DIR)/probar_tac_isa $(TARGET)
+$(BUILD_DIR)/probar_tac_pseudo: $(TAC_SOURCES) pruebas/tac/probar_pseudo.c $(TAC_HEADERS) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
+
+check-tac: $(BUILD_DIR)/probar_tac $(BUILD_DIR)/probar_tac_isa $(BUILD_DIR)/probar_tac_pseudo $(TARGET)
 	$(BUILD_DIR)/probar_tac > $(BUILD_DIR)/tac_obtenido.txt
 	diff -u pruebas/tac/esperado.txt $(BUILD_DIR)/tac_obtenido.txt
 	$(BUILD_DIR)/probar_tac_isa > $(BUILD_DIR)/tac_obtenido_isa.txt
 	diff -u pruebas/tac/esperado_isa.txt $(BUILD_DIR)/tac_obtenido_isa.txt
+	$(BUILD_DIR)/probar_tac_pseudo
 	./$(TARGET) pruebas/tac/ejemplo.cls -o $(BUILD_DIR)/tac_ejemplo.bin
 	@echo "check-tac: 6 casos de alto nivel, ISA virtual/fisica, consultas y validacion: OK"
 
@@ -171,6 +175,7 @@ clean:
 	rm -f $(BUILD_DIR)/probar_semantica_isa
 	rm -f $(BUILD_DIR)/tac_obtenido.txt $(BUILD_DIR)/tac_obtenido_isa.txt
 	rm -f $(BUILD_DIR)/probar_tac_isa $(BUILD_DIR)/tac_ejemplo.bin $(BUILD_DIR)/tac_ejemplo.hex $(BUILD_DIR)/tac_ejemplo.mem
+	rm -f $(BUILD_DIR)/probar_tac_pseudo
 	rm -f $(TARGET) $(OBJECTS) $(OBJECTS:.o=.d)
 	rm -f $(GEN_DIR)/parser.tab.c $(GEN_DIR)/parser.tab.h $(GEN_DIR)/lex.yy.c
 	rm -f $(BUILD_DIR)/probar_tac $(BUILD_DIR)/emitir_aritmetica $(BUILD_DIR)/emitir_arreglos $(BUILD_DIR)/emitir_crypto $(BUILD_DIR)/probar_ir $(BUILD_DIR)/revisar_ir $(BUILD_DIR)/emitir_organizador $(BUILD_DIR)/probar_dependencias

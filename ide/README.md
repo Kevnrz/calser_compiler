@@ -1,5 +1,7 @@
 # CALSIDE · prototipo inicial
 
+> **M1 completado (2026-11-11):** el análisis automático usa el servicio `ccom --check-json`. El LL(1) y el simulador siguen en Python con la autorización aclarada por Saddy. [Plan y etapas pendientes](docs/plan_migracion_logica_c.md).
+
 Para entender la arquitectura, los flujos y el papel de cada archivo, consulta la [guía unificada del sistema y recorrido de comentarios](docs/guia_sistema_calside.md).
 
 Aplicación de escritorio PySide6. Conserva los controles nativos para mover, minimizar, maximizar y cerrar. La esquina morada es estática; la animación de papel queda para una iteración posterior.
@@ -32,8 +34,10 @@ El compilador se busca en la ruta elegida en Compilar → Configurar ccom, despu
 
 ## Compilar y ejecutar
 
-1. **Compilar (F5)** guarda y compila el documento activo con ccom, generando `.asm` y `.mem` además de las otras salidas. No ejecuta el programa.
+1. **Compilar ▾ / F5** ejecuta el modo seleccionado: compilar programa, analizar sin artefactos, exportar AST JSON o ensamblar una entrada `.asm`. El modo inicial compila con listado `.asm` para F6. **Opciones de compilación…** permite elegir destino y banderas compatibles; la selección se guarda en preferencias. Se solicita guardar el documento antes de operar. El modo AST comprueba sintaxis, sin certificar semántica. Ensamblar pide una entrada `.asm` si no hay una activa. Ningún modo ejecuta el programa.
 2. **Ejecutar (F6)** ejecuta la última compilación vigente de ese documento en el simulador del repositorio. No guarda ni recompila automáticamente. Si no existe una compilación correcta de esta sesión, hay cambios pendientes/externos o faltan/cambiaron los artefactos, solicita compilar otra vez.
+
+Solo una compilación completa correcta con listado `.asm` y salidas renovadas permite F6. Cambiar a análisis, exportar AST, ensamblar o compilar sin `-s` no registra un ejecutable. El destino automático sigue en `build/ide/<hash de fuente>/`; un destino personalizado pide confirmación antes de reemplazar archivos existentes. Las salidas no pueden sobrescribir la entrada ni documentos abiertos. Las opciones manuales no cambian el análisis automático. No se ofrecen IR/TAC u optimizaciones de otras ramas todavía.
 
 La pestaña **Ejecución** muestra stdout/stderr del simulador (registros, memoria y resumen), la traza y el estado final de las variables. Por ejemplo, el programa de suma de 2 y 3 muestra `resultado = 5`. Las salidas de ccom permanecen en su pestaña independiente.
 
@@ -77,7 +81,7 @@ Prueba rápida: crea una pestaña e introduce `Vm x : int = 3 ; @`. El error de 
 
 ## Sintaxis y semántica en vivo · E4
 
-Tras el lexer (300 ms) y una pausa adicional de **600 ms**, CALSIDE ejecuta **`ccom --check`** en segundo plano sobre una copia temporal del buffer, incluidos los documentos sin nombre. La copia se elimina al terminar, cancelar o fallar. El archivo original y sus artefactos permanecen intactos.
+Tras el lexer (300 ms) y una pausa adicional de **600 ms**, CALSIDE ejecuta **`ccom --check-json`** en segundo plano sobre una copia temporal del buffer, incluidos los documentos sin nombre. La copia se elimina al terminar, cancelar o fallar. El archivo original y sus artefactos permanecen intactos.
 
 - Los resultados se identifican como **ccom automático** y se presentan en Problemas, subrayados y descripciones, sin cambiar de pestaña ni robar el foco.
 - Las rutas temporales se remapean al documento original o a Sin título. El directorio de trabajo corresponde al del fuente cuando existe; el enlazado de módulos futuro deberá respetar también el contexto de importación.
@@ -174,7 +178,7 @@ Doble clic o Enter sobre un resultado abre el archivo. Las coincidencias de cód
 
 La búsqueda se realiza en segundo plano con espera breve al escribir y cancelación de solicitudes antiguas. Ignora enlaces simbólicos y carpetas de dependencias/compilación excluidas. Se limita a 500 coincidencias, 20000 entradas recorridas, 2 MB por archivo y 20 MB de contenido, con aviso si hay omisiones, límites o archivos ilegibles. **↻** permite volver a consultar cambios externos, incluso en subcarpetas todavía no cargadas por el árbol.
 
-Ver [detalles y validación de proyecto](docs/proyecto_archivos.md). Suite combinada: **294 pruebas correctas**, incluidas 26 de preferencias/política de asistencia, 15 de reparaciones, 15 de carpetas, 12 de selección/arrastre, 10 de orden/presentación, 14 de búsqueda, 13 de ejecución, 23 de contratos/ediciones y 26 de coordinación/UI de asistencia.
+Ver [detalles y validación de proyecto](docs/proyecto_archivos.md). Suite combinada: **312 pruebas correctas**, incluidas 26 de preferencias/política de asistencia, 15 de reparaciones, 15 de carpetas, 12 de selección/arrastre, 10 de orden/presentación, 14 de búsqueda, 13 de ejecución, 23 de contratos/ediciones y 26 de coordinación/UI de asistencia.
 
 ## Preparación para los motores de asistencia
 
@@ -192,7 +196,7 @@ El coordinador serializa ambos motores, limita texto/cola/opciones y solicita ca
 
 Puedes leer/copiar la vista previa sin invalidarla. Editar el código, mover su cursor/selección o cambiar/cerrar pestaña deshabilita la aplicación de propuestas antiguas. El panel se adapta abajo/derecha. Las propuestas con más de 12000 caracteres afectados no se aplican desde esta vista: el cambio completo debe poder revisarse. El panel no añade diagnósticos nuevos a Problemas ni altera sus prioridades.
 
-Sigue el **paso 7: integración real de los motores y revisión del catálogo**. Sin el módulo real se muestra que no está disponible; las propuestas controladas solo se usan en pruebas. Verificación actual: **294 pruebas correctas**, incluidas 26 nuevas de preferencias/política, 15 del panel de reparaciones, 26 de coordinador/UI y las 23 anteriores de contratos/ediciones.
+Sigue el **paso 7: integración real de los motores y revisión del catálogo**. Sin el módulo real se muestra que no está disponible; las propuestas controladas solo se usan en pruebas. Verificación actual: **312 pruebas correctas**, incluidas 26 nuevas de preferencias/política, 15 del panel de reparaciones, 26 de coordinador/UI y las 23 anteriores de contratos/ediciones.
 
 
 ## Preferencias de asistencia (paso 6)
@@ -202,3 +206,12 @@ Sigue el **paso 7: integración real de los motores y revisión del catálogo**.
 La corrección automática también está desactivada por defecto. Requiere reglas revisadas y seleccionadas; la marca `automatica_segura` del motor no basta. Su disparador inicial es Enter al final de una línea y una pausa, con una sola inserción local de delimitador, precondiciones y aceptación de todo el texto corregido por el parser en segundo plano. Ctrl+Z revierte la reparación, no guarda ni encadena otra corrección. Las propuestas que no cumplen la política pueden revisarse manualmente.
 
 El catálogo real sigue vacío hasta integrar y probar las reglas del compañero; por eso el control automático aparece deshabilitado. No hay motores ni reglas simuladas en la aplicación normal. Ver [política, límites, cancelación y conexión del catálogo](docs/politica_asistencia.md).
+
+
+## Servicio estructurado del compilador · M1
+
+El análisis automático obtiene categorías, mensajes y rangos desde `ccom --check-json`; no interpreta frases de stderr para construir esos problemas. La salida del panel sigue siendo legible y las fuentes sin guardar se analizan sobre copias temporales. Una versión antigua/incompatible del compilador produce una explicación, nunca un falso «sin errores». Reconstruir con `make` después de actualizar.
+
+`--check` clásico y F5/F6 conservan su funcionamiento. El lexer en vivo y el LL(1) Python no se retiran en M1. El servicio transporta listas de errores léxicos/semánticos; la recuperación de varios errores sintácticos sigue pendiente.
+
+Protocolo y arquitectura: [ccom_check_json.md](../docs/ccom_check_json.md). Prueba específica: `make check-analysis-json`. Verificación de M1: 18 pruebas nuevas y 312 combinadas del IDE, suite completa del compilador correcta y 91 fuentes reales con respuestas compatibles.

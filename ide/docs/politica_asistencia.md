@@ -1,5 +1,7 @@
 # Preferencias y política de asistencia — paso 6
 
+> **Actualización M1 (2026-11-11):** el análisis automático usa `ccom --check-json` y conserva el front-end real en C. Saddy aclaró que el LL(1) y el simulador pueden seguir en Python; no se exige migrarlos. Las demás etapas se describen en el [plan de integración](plan_migracion_logica_c.md).
+
 Estado: preparación del IDE implementada. Motores reales y aprobación de su catálogo pendientes de integración (paso 7). No se declara E5/E6 completa sin esas entregas.
 
 ## Uso

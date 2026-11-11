@@ -20,6 +20,7 @@
 
 #include "semantic.h"
 #include "diagnostics.h"
+#include "diagnostics_json.h"
 #include "label_table.h"
 #include "codegen.h"
 #include "generate.h"
@@ -55,6 +56,7 @@ typedef struct {
     const char *input;         /* archivo fuente (.cls) o, con -x, .asm      */
     char       *output;        /* -o; por defecto: fuente sin extensión .bin */
     int show_time;             /* --time */
+    int check_json;           /* --check-json: mismo front-end, protocolo v1 */
     int check_only;            /* --check: fases léxica, sintáctica y semántica */
     int verbose;               /* -v */
     int emit_asm;              /* -s */
@@ -68,7 +70,7 @@ typedef struct {
 
 #define EXIT_USAGE 2
 
-#define USAGE "uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-p] [-x] [--check] [--ast-json <json>] [--no-schedule] [--time] <archivo> [-o <salida>]"
+#define USAGE "uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-p] [-x] [--check|--check-json] [--ast-json <json>] [--no-schedule] [--time] <archivo> [-o <salida>]"
 
 /*
  * print_help — describe las opciones sin requerir ni procesar una entrada.
@@ -95,6 +97,8 @@ static void print_help(void) {
          "  --time               Muestra la duracion total en ms en stderr.\n"
          "  --check              Solo analisis lexico, sintactico y semantico;\n"
          "                       no genera archivos. Compatible con -v y --time.\n"
+         "  --check-json         Mismo analisis que --check; respuesta JSON v1 en\n"
+         "                       stdout, sin archivos. Compatible con -v y --time.\n"
          "\nSalidas: .bin, .hex y .mem; con -s tambien .asm.\n"
          "Sin -o se usa el nombre de la entrada con extension .bin.\n"
          "El exito y las rutas generadas se informan en stderr; stdout\n"
@@ -1002,6 +1006,7 @@ static int parse_options(int argc, char **argv, Options *options) {
         {"no-schedule", no_argument, NULL, 1001},
         {"time", no_argument, NULL, 1002},
         {"check", no_argument, NULL, 1003},
+        {"check-json", no_argument, NULL, 1004},
         {NULL, 0, NULL, 0}
     };
     while ((option = getopt_long(argc, argv, "ho:vstmxp", long_options, NULL)) != -1) {
@@ -1028,6 +1033,7 @@ static int parse_options(int argc, char **argv, Options *options) {
             case 1001: options->no_schedule = 1; break;
             case 1002: options->show_time = 1; break;
             case 1003: options->check_only = 1; break;
+            case 1004: options->check_only = options->check_json = 1; break;
             case 'v': options->verbose = 1;       break;
             case 's': options->emit_asm = 1;      break;
             case 't': options->print_ast = 1;     break;
@@ -1139,6 +1145,7 @@ int main(int argc, char **argv) {
     }
 
     int code;
+    if (options.check_json) diag_json_begin();
 
     if (options.assemble_only) {
 
@@ -1151,6 +1158,9 @@ int main(int argc, char **argv) {
     else {
         code = compile(&options);
     }
+
+    if (options.check_json)
+        code = diag_json_finish(stdout, options.input, code);
 
     if (code == 0)
         report_success(&options);

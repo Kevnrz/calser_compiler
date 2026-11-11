@@ -1,5 +1,7 @@
 # Contexto de implementación: motor de sugerencias
 
+> **Actualización M1 (2026-11-11):** el análisis automático usa `ccom --check-json` y conserva el front-end real en C. Saddy aclaró que el LL(1) y el simulador pueden seguir en Python; no se exige migrarlos. Las demás etapas se describen en el [plan de integración](plan_migracion_logica_c.md).
+
 Responsable: compañero de sugerencias. Corresponde al motor de E5/F11; Saddy implementa el parser predictivo.
 
 ## Resultado esperado

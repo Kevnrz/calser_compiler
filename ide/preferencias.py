@@ -26,6 +26,9 @@ def validar(datos):
     if not isinstance(datos, dict) or type(datos.get('version')) is not int or datos.get('version') != 1:
         return {}
     limpio = {'version': 1}
+    if 'compilacion' in datos:
+        from ide.compilacion import validar as validar_compilacion
+        limpio['compilacion'] = validar_compilacion(datos['compilacion'])
     if 'asistencia' in datos:
         limpio['asistencia'] = validar_preferencias(datos['asistencia'])
     for campo in ('proyecto', 'ccom', 'familia'):

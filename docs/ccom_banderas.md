@@ -5,15 +5,16 @@ ccom [opciones] <archivo> [-o <salida>]
 ```
 
 Las opciones pueden ir antes o después del archivo. Sin opciones, `ccom`
-compila en silencio: si no hay errores no imprime nada, escribe los archivos
-de salida y sale con código 0. Los errores siempre salen por stderr, con
-cualquier bandera.
+escribe sus archivos de salida y sale con código 0, confirmando el éxito y las
+rutas generadas en stderr. La salida clásica mantiene los errores en stderr;
+`--check-json` entrega los diagnósticos individuales en JSON por stdout.
 
 ## Banderas
 
 | Bandera | Qué hace | Dónde sale | Estado |
 |---|---|---|---|
 | `-h`, `--help` | Muestra todas las banderas, ejemplos y códigos de salida, sin requerir entrada | stdout | Disponible |
+| `--check-json` | Mismo front-end que `--check`, con diagnósticos estructurados v1; sin artefactos | JSON en stdout; logs en stderr | Disponible |
 | `--check` | Solo análisis léxico, sintáctico y semántico, sin archivos de salida | diagnósticos en stderr | Disponible |
 | `--time` | Muestra la duración total en milisegundos, con estado completado o fallido | stderr | Disponible |
 | `--no-schedule` | Desactiva el organizador local y conserva la emisión de una operación más separación; útil para comparar | archivos | Disponible |
@@ -37,7 +38,7 @@ Se pueden combinar: `ccom -t -m prog.cls` imprime el AST y después las tablas.
 
 Ejecuta las mismas fases léxica, sintáctica y semántica que la compilación normal. No genera código, no ensambla, no exporta AST y no crea ni modifica `.bin`, `.hex`, `.mem`, `.asm` o `.json`. Es el modo usado por CALSIDE para revisar copias temporales de texto sin guardar.
 
-Códigos: **0** análisis correcto; **1** error de análisis o lectura; **2** uso incorrecto. Mantiene el formato de diagnósticos con archivo, línea, columna y señalador. Un análisis correcto no produce salida salvo que se pidan `-v` o `--time`.
+Códigos: **0** análisis correcto; **1** error de análisis o lectura; **2** uso incorrecto. Mantiene el formato de diagnósticos con archivo, línea, columna y señalador. Un análisis correcto confirma `ccom: Análisis correcto: sin errores.` en stderr; stdout permanece vacío.
 
 Solo se combina con `-v` y `--time`; las opciones de salida, ensamblado y listados (`-o`, `-s`, `-x`, `-p`, `-t`, `-m`, `--ast-json`, `--no-schedule`) se rechazan con código 2 antes de abrir salidas. La medición se identifica como `tiempo de analisis`. Un éxito no certifica generación de código ni ejecución: para eso se usa la compilación normal.
 
@@ -46,7 +47,7 @@ Prueba del contrato y conservación de archivos: `make check-analysis` (también
 ## Ejemplos
 
 ```bash
-./ccom prog.cls              # compila; solo muestra errores
+./ccom prog.cls              # compila y confirma el resultado
 ./ccom -t prog.cls           # árbol
 ./ccom -m prog.cls           # tabla de símbolos y de etiquetas
 ./ccom -v prog.cls           # avance por fase
@@ -279,3 +280,14 @@ Las operaciones completadas confirman su éxito en `stderr`, incluso sin `-v`:
 - Exportación AST sola: confirma únicamente la exportación JSON, sin afirmar semántica ni generación de código.
 
 Un JSON combinado con compilación también figura entre los archivos generados. Los errores de análisis, uso o escritura no anuncian éxito; una escritura parcial tampoco se presenta como compilación correcta. La ayuda no añade una confirmación. Los códigos 0/1/2 y el contenido de `stdout` se conservan. Con `--time`, la medición sigue al final de `stderr`.
+
+
+## Análisis estructurado para CALSIDE (`--check-json`)
+
+```sh
+./ccom --check-json programa.cls
+```
+
+Usa las fases C existentes sin generar archivos. Su respuesta versionada distingue análisis correcto, errores del programa, fallo del servicio e informe limitado; incluye una lista de diagnósticos con códigos, categorías y rangos UTF-8. Admite `-v` y `--time`, y rechaza opciones de generación/listados igual que `--check`.
+
+Contrato completo y ejemplos: [ccom_check_json.md](ccom_check_json.md). Verificación: `make check-analysis-json`, incluida en `make check`.

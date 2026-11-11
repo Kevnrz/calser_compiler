@@ -40,6 +40,13 @@ class Problema:
     unidad: str = "utf8"
     documento: str | None = None
 
+    # El servicio JSON ya clasifica en C. Conservar sus datos evita volver a
+    # deducir la categoría del texto humano. rango_utf8 guarda el rango nativo,
+    # aunque la marca visual se amplíe para no partir un carácter Unicode.
+    codigo: str | None = None
+    categoria_explicita: str | None = None
+    rango_utf8: tuple[int, int] | None = None
+
     @property
     def tiene_posicion(self):
         """Indica si se puede intentar ubicar el problema en una línea/columna.
@@ -53,11 +60,14 @@ class Problema:
 
     @property
     def categoria(self):
-        """Clasifica el prefijo del mensaje para agruparlo y presentarlo.
+        """Usa la categoría estructurada, o el prefijo de lectores clásicos.
 
-        Se admiten variantes con y sin tilde. Si el mensaje no identifica una
-        etapa léxica, sintáctica o semántica, se presenta como Compilación.
+        JSON ya aporta la clasificación hecha por C. Para mensajes textuales
+        anteriores se admiten variantes con/sin tilde y se utiliza Compilación
+        cuando no se reconoce una etapa léxica, sintáctica o semántica.
         """
+        if self.categoria_explicita is not None:
+            return self.categoria_explicita
         category = self.mensaje.partition(":")[0].lower()
         if "lexico" in category or "léxico" in category:
             return "Léxico"
@@ -75,5 +85,7 @@ class Problema:
         Si el prefijo no comienza por «error», se conserva el mensaje completo
         para no eliminar información de un formato que no reconocemos.
         """
+        if self.categoria_explicita is not None:
+            return self.mensaje
         prefix, separator, rest = self.mensaje.partition(":")
         return rest.strip() if separator and prefix.lower().startswith("error") else self.mensaje

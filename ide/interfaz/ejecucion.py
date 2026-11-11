@@ -42,8 +42,8 @@ class EjecucionVentana:
         self.run_timer.timeout.connect(self.agotar_ejecucion)
 
     def registrar_compilacion_ejecutable(self, editor):
-        asm = self.compilation_destination / (editor.path.stem + '.asm')
-        memoria = self.compilation_destination / (editor.path.stem + '.mem')
+        asm = self.compilation_output.with_suffix('.asm')
+        memoria = self.compilation_output.with_suffix('.mem')
         try:
             a, m = archivos.estado(asm), archivos.estado(memoria)
             if not a.existe or not m.existe:
@@ -59,7 +59,7 @@ class EjecucionVentana:
         editor = self.editor()
         info = self.compilados.get(editor)
         if info is None or not info.vigente(editor):
-            self.error('Compila antes de ejecutar', 'Usa Compilar (F5) para generar una compilación correcta del documento actual. Luego usa Ejecutar (F6). No se ejecutará una versión anterior.')
+            self.error('Compila antes de ejecutar', 'Selecciona Compilar programa con listado .asm y usa F5 para generar una compilación correcta del documento actual. Luego usa Ejecutar (F6). No se ejecutará una versión anterior.')
             return False
         if any(self.ruta_ocupada(p) for p in (info.fuente, info.asm, info.memoria)):
             self.error('Operación en curso', 'Espera a que termine la operación en los archivos del programa.')
@@ -106,6 +106,9 @@ class EjecucionVentana:
         return True
 
     def controles_ejecucion(self, activa):
+        self.opciones_compilacion_action.setEnabled(not activa)
+        for accion in self.acciones_modos.values():
+            accion.setEnabled(not activa)
         self.compile_button.setEnabled(not activa)
         self.compile_action.setEnabled(not activa)
         self.run_button.setEnabled(not activa)

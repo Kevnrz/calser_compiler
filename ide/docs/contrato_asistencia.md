@@ -1,5 +1,7 @@
 # Contrato de asistencia de CALSIDE · versión 1
 
+> **Actualización M1 (2026-11-11):** el análisis automático usa `ccom --check-json` y conserva el front-end real en C. Saddy aclaró que el LL(1) y el simulador pueden seguir en Python; no se exige migrarlos. Las demás etapas se describen en el [plan de integración](plan_migracion_logica_c.md).
+
 Estado: tipos compartidos, aplicador, coordinador y UI manuales de sugerencias y reparaciones implementados. Preferencias, pausa y política automática también preparadas; faltan motores reales y catálogo revisado. Este documento fija el contrato del lado de CALSIDE; compartirlo junto con el código para que las entregas de los motores lo utilicen.
 
 ## Archivos y responsabilidades

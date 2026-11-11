@@ -1,6 +1,8 @@
 # CALSIDE: guía unificada del sistema
 
-Estado de referencia: **6 de noviembre de 2026, después del paso 6 de preparación de asistencia**. Describe el código presente en esta copia del repositorio, incluidos los cambios locales de esa preparación. Última verificación registrada: **294 pruebas correctas** con `make check-ide`.
+> **Actualización M1 (2026-11-11):** el análisis automático usa `ccom --check-json` y conserva el front-end real en C. Saddy aclaró que el LL(1) y el simulador pueden seguir en Python; no se exige migrarlos. Las demás etapas se describen en el [plan de integración](plan_migracion_logica_c.md).
+
+Estado base: **6 de noviembre de 2026, después del paso 6 de asistencia**, actualizado con **M1 el 2026-11-11**. El análisis automático usa ahora `--check-json`; el LL(1) y el simulador Python permanecen. Última verificación: **312 pruebas correctas** con `make check-ide` y suite completa del compilador correcta. Contrato del nuevo servicio: [ccom_check_json.md](../../docs/ccom_check_json.md).
 
 Este documento sirve para entender el IDE antes de modificarlo y como recorrido para revisar y comentar sus archivos. La lista de revisión del final todavía no significa que todos los archivos hayan recibido nuevos comentarios.
 
@@ -199,13 +201,13 @@ El lexer produce tokens y errores. El adaptador los convierte en tramos de color
 
 Después de recibir el léxico de esa revisión, `Ventana.programar_comprobacion` comprueba que esté habilitada, haya contenido y no existan errores léxicos. Entonces programa otra pausa de **600 ms** en `ComprobadorCcom`.
 
-El comprobador escribe una copia temporal del buffer, ejecuta `ccom --check copia.cls`, recoge stdout/stderr y convierte los diagnósticos. Reasocia las rutas de la copia al documento original. No guarda el documento del usuario ni genera sus artefactos de compilación. También permite analizar documentos sin nombre.
+El comprobador escribe una copia temporal del buffer, ejecuta `ccom --check-json copia.cls`, valida los diagnósticos estructurados de stdout y conserva los logs de stderr. Reasocia las rutas de la copia al documento original. No guarda el documento del usuario ni genera sus artefactos de compilación. También permite analizar documentos sin nombre.
 
 Las pausas se reinician con las ediciones; los 300 + 600 ms describen el recorrido previsto, no un plazo de respuesta garantizado: influyen el tiempo del lexer y las tareas en cola.
 
 ### Presentación de problemas
 
-`Problema`, en `ide/diagnosticos.py`, es el modelo común: archivo/documento, origen, categoría, mensaje, rango y unidad de columna. `ccom.diagnosticos` interpreta el formato humano del compilador; el adaptador léxico construye diagnósticos del núcleo.
+`Problema`, en `ide/diagnosticos.py`, es el modelo común: archivo/documento, origen, categoría, mensaje, rango y unidad de columna. `ccom.diagnosticos_json` valida el protocolo del análisis automático; `ccom.diagnosticos` mantiene la lectura textual para F5. El adaptador léxico construye diagnósticos del núcleo. La categoría JSON ya viene decidida por C; Python no la deduce del mensaje.
 
 `Ventana.actualizar_problemas` combina los resultados válidos de las pestañas. Evita duplicados exactos entre ccom manual y automático y da prioridad a ccom sobre un error léxico equivalente del núcleo. No elimina indiscriminadamente todos los diagnósticos de otro origen.
 
@@ -215,7 +217,7 @@ La asistencia no publica actualmente otra fuente de diagnósticos del parser en 
 
 ## 6. Compilar y ejecutar
 
-### F5: compilar
+### F5: operación manual seleccionada
 
 `Ventana.compilar` realiza este recorrido:
 
@@ -223,7 +225,7 @@ La asistencia no publica actualmente otra fuente de diagnósticos del parser en 
 2. Localiza `ccom`: ruta configurada, ejecutable de la raíz del repositorio y finalmente PATH.
 3. Solicita guardar si el documento no tiene nombre o está modificado; comprueba cambios externos.
 4. Captura editor, revisión, ruta y versión del disco.
-5. Crea una salida por ruta de fuente: `<carpeta del fuente>/build/ide/<hash de ruta de 10 caracteres>/`.
+5. Valida el perfil de `ide/compilacion.py` y las salidas protegidas. Por defecto crea una salida por ruta de fuente: `<carpeta del fuente>/build/ide/<hash de ruta de 10 caracteres>/`.
 6. Suspende el comprobador automático y lanza un `QProcess`, aproximadamente:
 
    ```sh
@@ -232,9 +234,9 @@ La asistencia no publica actualmente otra fuente de diagnósticos del parser en 
 
 7. Presenta stdout/stderr mientras el proceso trabaja; mantiene la interfaz disponible.
 8. Al terminar comprueba que el resultado siga correspondiendo a la fuente/revisión del inicio. Si quedó antiguo, lo informa y no lo registra como ejecutable vigente.
-9. Extrae problemas; si terminó correctamente registra los artefactos para F6 y reanuda la comprobación automática.
+9. Extrae problemas; solo una compilación completa con -s y artefactos renovados registra F6. Reanuda la comprobación automática.
 
-F5 tiene un límite de **30 segundos** y permite cancelar. La generación de `.bin`, `.hex`, `.mem` y `.asm` corresponde a ccom y sus opciones; el IDE solicita `-s` para disponer del listado necesario para ejecutar.
+F5 tiene un límite de **30 segundos** y permite cancelar. La generación de `.bin`, `.hex`, `.mem` y `.asm` corresponde a ccom y sus opciones; el perfil inicial solicita `-s` para disponer del listado necesario para ejecutar. El botón dividido y el menú comparten QAction/F5: permiten analizar (`--check`), compilar, exportar AST JSON (solo sintaxis) y ensamblar `.asm` con `-x`. `ide/interfaz/opciones_compilacion.py` construye el diálogo de destino y casillas compatibles; `ide/preferencias.py` filtra su persistencia. El análisis automático mantiene su recorrido independiente con `--check-json`. Ver [detalles M1B](plan_migracion_logica_c.md#resultado-de-m1b-2026-11-11).
 
 Los mensajes de éxito del compilador y el mensaje final del IDE son realimentación del proceso. No son el resultado de ejecutar el programa.
 
@@ -452,6 +454,7 @@ Los nombres son rutas relativas a la raíz del repositorio. Hay **40 módulos Py
 | `ide/main.py` | `main`. | Explicar el orden de creación, raíz, argumentos y bucle de eventos. |
 | `ide/archivos.py` | `EstadoArchivo`, `cargar`, `guardar`. | Versiones, lectura consistente, temporal/reemplazo y límite de concurrencia con otros escritores. |
 | `ide/diagnosticos.py` | `Problema`. | Modelo común; unidades, posición ausente, categoría y descripción. |
+| `ide/compilacion.py` | `validar`, `preparar`, `MODOS`, `OPCIONES`. | Perfiles manuales, compatibilidad de casillas, destinos y lista de argumentos; sin analizar el lenguaje. |
 | `ide/ccom.py` | `ejecutable`, `diagnosticos`. | Orden de resolución y formatos admitidos; líneas que no son diagnósticos se conservan en la salida. |
 | `ide/adaptador_nucleo.py` | `Tramo`, `ResultadoLexico`, `analizar_documento`. | Frontera entre tokens Python, colores, comentarios y posiciones UTF-16. |
 | `ide/ediciones.py` | `validar_ediciones`, `aplicar_ediciones`, conversiones. | Rangos del original, superposición, precondiciones, Unicode y traslado de posiciones. |
@@ -489,6 +492,7 @@ Los nombres son rutas relativas a la raíz del repositorio. Hay **40 módulos Py
 | `ide/interfaz/busqueda.py` | `BusquedaProyecto`, `TareaBusqueda`. | Temporizador, generación, trabajador y navegación desde resultados. |
 | `ide/interfaz/analisis.py` | `CoordinadorAnalisis`, `TareaLexica`. | Una activa/última pendiente por documento y descarte por revisión al integrar. |
 | `ide/interfaz/comprobacion.py` | `ComprobadorCcom`, `SolicitudCcom`, `ResultadoCcom`. | Temporales, cola, suspensión por F5/F6, remapeo de rutas, límites y limpieza. |
+| `ide/interfaz/opciones_compilacion.py` | `OpcionesCompilacion`. | Diálogo de operación/destino/casillas; devuelve datos filtrados sin lanzar procesos. |
 | `ide/interfaz/ejecucion.py` | `CompilacionEjecutable`, `EjecucionVentana`. | Vigencia de fuente/artefactos, copia por corrida, traza y controles del proceso. |
 | `ide/interfaz/clones.py` | `PanelClones`, `Analisis`. | Reunir fuentes/buffers, ejecutar detector, comparar y marcar obsolescencia. |
 | `ide/interfaz/asistencia.py` | `CoordinadorAsistencia`, `TareaAsistencia`. | Importación diferida, validación, serialización, origen de consultas y evaluación automática en el trabajador. |
@@ -516,7 +520,7 @@ Los nombres son rutas relativas a la raíz del repositorio. Hay **40 módulos Py
 
 ## 13. Pruebas: dónde comprobar cada parte
 
-Hay **18 archivos de pruebas**. Los proveedores de motores controlados se definen allí; no son parte de la aplicación normal.
+Hay **19 archivos de pruebas**. Los proveedores de motores controlados se definen allí; no son parte de la aplicación normal.
 
 | Archivo en `ide/pruebas/` | Área que ayuda a verificar al comentar |
 | --- | --- |
@@ -526,6 +530,7 @@ Hay **18 archivos de pruebas**. Los proveedores de motores controlados se define
 | `test_parser.py` | Reconocimiento, contexto de cursor, errores, límites y cancelación del parser. |
 | `test_analisis_vivo.py` | Adaptador, Unicode, marcas, revisiones y resultados tardíos. |
 | `test_comprobacion.py` | Copia temporal, ccom automático, fallos, límites y prioridades. |
+| `test_protocolo_ccom.py` | Servicio JSON real, categorías explícitas, rangos/Unicode, listas de problemas y respuestas incompatibles. |
 | `test_clones.py` | Equivalencia Tipo I/II, correspondencias y límites del detector. |
 | `test_proyecto.py` | Disco, conflictos, guardado, preferencias y recuperación. |
 | `test_menu_archivos.py` | Acciones de archivo, portapapeles y conservación de pestañas. |
@@ -533,6 +538,7 @@ Hay **18 archivos de pruebas**. Los proveedores de motores controlados se define
 | `test_seleccion_archivos.py` | Multiselección, lotes y arrastre. |
 | `test_orden_explorador.py` | Tarjeta de arrastre, orden visual y persistencia. |
 | `test_busqueda.py` | Buffers, filtros, límites, cancelación y navegación de búsqueda. |
+| `test_compilacion.py` | Cuatro perfiles gráficos reales, destinos, compatibilidad, preferencias y protección de F6 frente a artefactos antiguos. |
 | `test_ejecucion.py` | Vigencia de compilación, simulador, traza y fallos de corrida. |
 | `test_ediciones.py` | Contratos, rangos, Unicode, precondiciones y Deshacer. |
 | `test_asistencia.py` | Coordinador, proveedores ausentes/rotos, teclado, foco y cancelación. |
@@ -549,7 +555,7 @@ make check-parser
 QT_QPA_PLATFORM=offscreen python3 -m unittest ide.pruebas.test_ediciones
 ```
 
-`make check-ide` usa Qt sin pantalla y verifica las 294 pruebas de la última entrega; ese número cambiará al añadir casos. La prueba manual y la validación en otra máquina siguen siendo necesarias para entrega/empaquetado. Si se cambia ccom o su gramática, además corresponden sus pruebas específicas; aprobar pruebas del IDE no demuestra por sí solo toda la corrección del compilador.
+`make check-ide` usa Qt sin pantalla y verifica las 312 pruebas de la última entrega; ese número cambiará al añadir casos. La prueba manual y la validación en otra máquina siguen siendo necesarias para entrega/empaquetado. Si se cambia ccom o su gramática, además corresponden sus pruebas específicas; aprobar pruebas del IDE no demuestra por sí solo toda la corrección del compilador.
 
 ## 14. Recorrido para comentar archivo por archivo
 
@@ -613,7 +619,7 @@ Las casillas significan **revisión de comentarios completada**, no funcionalida
 - [ ] **10. Contratos y aplicación:** `ide/nucleo/asistencia.py`, `ide/ediciones.py`, `ide/interfaz/ediciones.py`.
 - [ ] **11. Interacción de asistencia:** `ide/interfaz/asistencia.py`, `ide/interfaz/sugerencias.py`, `ide/interfaz/reparaciones.py`, `ide/politica_asistencia.py`, `ide/interfaz/preferencias_asistencia.py`.
 - [ ] **12. Terminal y proceso auxiliar:** `ide/interfaz/terminal.py`, `ide/interfaz/terminal_pty.py`.
-- [ ] **13. Pruebas y documentación:** revisar los 18 archivos de la sección 13, README, esta guía y contratos. Explicar fixtures, proveedores controlados y el comportamiento que demuestra cada caso importante.
+- [ ] **13. Pruebas y documentación:** revisar los 19 archivos de la sección 13, README, esta guía y contratos. Explicar fixtures, proveedores controlados y el comportamiento que demuestra cada caso importante.
 
 Después de cada grupo se puede registrar aquí fecha, archivos revisados y dudas descubiertas. No marcar un grupo solo porque ya existe un docstring de una línea.
 
@@ -632,7 +638,7 @@ Después de cada grupo se puede registrar aquí fecha, archivos revisados y duda
 
 Los pasos **1–6 de preparación de asistencia están implementados del lado del IDE**. El paso 7 consiste en recibir/conectar motores reales, probarlos con el parser y ccom, revisar su catálogo y decidir la presentación/prioridad de diagnósticos adicionales. E5/E6 completas dependen de esa verificación, no solo de que existan los widgets.
 
-Otros pendientes incluyen empaquetado, validación en otra máquina, opciones avanzadas de compilación/artefactos, mejoras de preferencias y las animaciones propuestas. La terminal PTY está implementada para Linux; no se promete soporte equivalente en otros sistemas sin probarlo.
+Otros pendientes incluyen empaquetado, validación en otra máquina, integración futura de IR/TAC y optimizaciones, mejoras de preferencias y las animaciones propuestas. La terminal PTY está implementada para Linux; no se promete soporte equivalente en otros sistemas sin probarlo.
 
 Esta guía es la entrada unificada; los siguientes documentos conservan el detalle especializado:
 

@@ -149,6 +149,9 @@ class ProyectoVentana:
         configurado = d.get('ccom', '')
         invalido = configurado and not (Path(configurado).is_file() and os.access(configurado, os.X_OK))
         self.configured_ccom = '' if invalido else configurado
+        from ide.compilacion import validar
+        self.perfil_compilacion = validar(d.get('compilacion'))
+        self.actualizar_perfil_compilacion()
         if d.get('panel_derecho', False):
             self.mover_panel()
         self.files_button.setChecked(d.get('explorador', True))
@@ -191,6 +194,7 @@ class ProyectoVentana:
     def guardar_preferencias(self):
         if not preferencias.guardar(self.settings, {
             'asistencia': self.asistencia.configuracion,
+            'compilacion': self.perfil_compilacion,
             'version': 1, 'proyecto': str(self.project), 'ccom': self.configured_ccom,
             'carpetas_abiertas': self.tree.carpetas_abiertas(),
             'orden_explorador': self.tree.orden_presentacion(),

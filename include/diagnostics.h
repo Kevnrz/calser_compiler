@@ -13,6 +13,22 @@
 #define DIAGNOSTICS_H
 
 #include <stdarg.h>
+#include <stddef.h>
+
+/* Ubicación estructurada: offsets UTF-8 [start,end), línea/columna base 1.
+ * located=0 indica que no hay una ubicación representable. Un rango vacío puede señalar EOF o
+ * un terminador faltante. Los datos se calculan sobre las líneas cargadas. */
+typedef struct {
+    int located, line, column;
+    size_t start, end;
+} DiagPosition;
+
+/* El observador recibe argumentos prestados solo durante la llamada. Debe
+ * usar va_copy si formatea el mensaje y copiar cualquier dato que conserve.
+ * Se instala antes de analizar; diag_init/diag_free no lo desconectan. */
+typedef void (*DiagObserver)(const char *category, DiagPosition position,
+                             const char *format, va_list args, void *data);
+void diag_set_observer(DiagObserver observer, void *data, int emit_text);
 
 /* ==========================================================================
  * CARGA Y REPORTE DE ERRORES

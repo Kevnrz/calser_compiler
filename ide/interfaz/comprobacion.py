@@ -135,7 +135,7 @@ class ComprobadorCcom(QObject):
             self.process.finished.connect(self.finalizar)
             self.estado.emit(request, "Analizando…")
             self.limite.start(self.timeout_ms)
-            self.process.start(executable, ["--check", str(self.snapshot)])
+            self.process.start(executable, ["--check-json", str(self.snapshot)])
 
     def agregar(self, destination, data):
         if len(destination) + len(data) > 1_000_000:
@@ -175,17 +175,23 @@ class ComprobadorCcom(QObject):
         if not message and status == QProcess.ExitStatus.CrashExit:
             message = f"No se completó el análisis: {self.process.errorString()}"
         elif not message and code == 2:
-            message = "ccom no admite --check o rechazó sus opciones. Ejecuta make o configura una versión compatible."
+            message = "ccom no admite --check-json o rechazó sus opciones. Ejecuta make o configura una versión compatible."
         elif not message and code not in (0, 1):
             message = f"ccom terminó con código inesperado {code}."
         problems = []
         if not message:
-            for problem in ccom.diagnosticos(error_text, self.snapshot, self.cwd):
-                if problem.archivo == self.snapshot:
-                    problem = replace(problem, archivo=request.fuente, documento=request.documento)
-                problems.append(replace(problem, origen="ccom automático"))
-            if code == 1 and not problems:
-                message = "ccom rechazó el documento sin un diagnóstico reconocible; consulta Análisis de ccom."
+            try:
+                recibidos = ccom.diagnosticos_json(bytes(self.stdout), self.snapshot, request.texto, code)
+                problems = [replace(p, archivo=request.fuente, documento=request.documento,
+                                    origen="ccom automático") for p in recibidos]
+                # La salida normal presenta diagnósticos, no el transporte JSON.
+                lineas = []
+                for p in problems:
+                    posicion = f":{p.linea}:{p.columna}" if p.tiene_posicion else ""
+                    lineas.append(f"{display}{posicion}: {p.categoria}: {p.descripcion}")
+                log = ("\n".join(lineas) + "\n" + error_text).replace(str(self.snapshot), display)
+            except ccom.ErrorProtocolo as error:
+                message = str(error)
         cancelled = self.cancelado or self.cerrando or not self.habilitado
         process, self.process = self.process, None
         self.actual = None

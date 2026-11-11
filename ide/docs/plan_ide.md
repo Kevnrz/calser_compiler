@@ -1,5 +1,7 @@
 # Plan de CALSIDE · IDE de Calser
 
+> **Actualización M1 (2026-11-11):** el análisis automático usa `ccom --check-json` y conserva el front-end real en C. Saddy aclaró que el LL(1) y el simulador pueden seguir en Python; no se exige migrarlos. Las demás etapas se describen en el [plan de integración](plan_migracion_logica_c.md).
+
 Guía de arquitectura, conexiones e inventario para revisar/comentar el código: [guia_sistema_calside.md](guia_sistema_calside.md).
 
 Versión 2 · actualizado el **5 de noviembre de 2026**.
@@ -21,6 +23,10 @@ Referencias:
 **Separación de objetivos:** completar los requisitos del IDE no equivale a terminar el proyecto completo de Compiladores/Arquitectura. Optimizaciones, IR, cachés y simulador tienen sus propias tareas. Las métricas pueden integrarse después; no son condición para la primera versión completa del IDE.
 
 ## 2. Estado real al actualizar este documento
+
+Actualización M1B (2026-11-11): botón Compilar dividido, F5 según modo seleccionado, diálogo de destino/opciones compatibles y preferencias. Cuatro modos reales: análisis, compilación, AST JSON sintáctico y ensamblado .asm; F6 requiere compilación completa con listado y artefactos renovados. Ver [plan de integración](plan_migracion_logica_c.md#resultado-de-m1b-2026-11-11).
+
+Actualización M1 (2026-11-11): `ccom --check-json` implementado y conectado al análisis automático. Diagnósticos tipados y listas/rangos validados, sin regex de mensajes en ese recorrido. 312 pruebas del IDE y suite completa del compilador correctas. F5/F6, lexer en vivo, LL(1) y simulador se conservan. Ver [contrato del servicio](../../docs/ccom_check_json.md).
 
 Rama: `feat/calside`. El merge de `origin/develop` se completó en `c8b1997`. En esa revisión pasaron **44 pruebas** mediante `make check-ide`: 24 de CALSIDE y 20 del núcleo. Es una referencia de validación de esta revisión, no un conteo que deba mantenerse fijo.
 
@@ -109,7 +115,7 @@ Estados: **implementado** = existe en el prototipo y tiene verificación; **parc
 | F16 | P1 | Recuperación ante fallos | Implementado en las funciones disponibles: errores de lectura/escritura, procesos, cancelación y archivo borrado; texto conservado ante fallos. Los motores pendientes tendrán sus propias pruebas. |
 | F17 | P1 | Cambios externos | Implementado: sondeo de huella en segundo plano, cambio/borrado/reemplazo, recargar/conservar/copia y comprobación al guardar. Ver límite de concurrencia del sistema de archivos en `proyecto_archivos.md`. |
 | F18 | P2 | Preferencias | Parcial: ruta de ccom, fuente, proyecto, paneles, análisis automático y asistencia (control general, pausa, reglas) persistentes, con configuración validada. Tema y timeout configurables quedan para mejoras posteriores. |
-| F19 | P2 | Artefactos y opciones del compilador | Parcial: genera `.asm` y salidas; falta abrirlas desde la UI y exponer únicamente banderas existentes. |
+| F19 | P1 | Artefactos y opciones del compilador | Requisito confirmado por el profesor (2026-11-11): selector de modo en Compilar/F5, destino y opciones compatibles. Parcial: la compilación fija actual funciona; falta la selección gráfica. Ver M1B y sección 13 de [migración](plan_migracion_logica_c.md). |
 | F20 | P2 | Métricas dentro del IDE | Pendiente y opcional para el IDE: depende del contrato de datos de las optimizaciones. |
 | F21 | P0 | Ocultar/recuperar explorador | Implementado: ×, botón Archivos, Ctrl+B y menú Ver sincronizados. |
 | F22 | P0 | Mover resultados abajo/derecha | Implementado: conserva pestañas, contenido y procesos. |

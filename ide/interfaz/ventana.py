@@ -1,6 +1,5 @@
 """Ventana CALSIDE: archivos, diagnósticos, terminales y clones."""
 from pathlib import Path
-import hashlib
 import os
 import codecs
 from html import escape
@@ -14,7 +13,7 @@ from PySide6.QtWidgets import (
     QSizePolicy, QToolButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
-from ide import archivos, ccom
+from ide import archivos, ccom, compilacion
 from ide.interfaz.editor import Editor
 from ide.interfaz.iconos import icono_archivo
 from ide.interfaz.explorador import Explorador
@@ -51,6 +50,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         self.root = Path(root)
         self.project = self.root
         self.configured_ccom = ""
+        self.perfil_compilacion = compilacion.validar({})
         self.process = None
         self.operacion_carpetas = None
         self.iniciar_ejecucion()
@@ -81,7 +81,9 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
             QPushButton { background: #2c313e; border: 1px solid #424a59; border-radius: 5px; padding: 7px 12px; }
             QPushButton:hover { border-color: #efbb65; }
             QPushButton:disabled { color: #8992a1; }
-            QPushButton#compilar { background: #403525; color: #f0bf72; border-color: #665137; }
+            QToolButton#compilar { padding-right: 24px; }
+            QToolButton#compilar::menu-button { width: 18px; border-left: 1px solid #665137; }
+            QPushButton#compilar, QToolButton#compilar { background: #403525; color: #f0bf72; border-color: #665137; }
             QSplitter::handle { background: #303644; width: 2px; height: 2px; }
             QToolTip { background: #303644; color: #ffffff; border: 1px solid #666077; }
         """)
@@ -143,9 +145,9 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         self.files_button.setCheckable(True)
         self.files_button.setChecked(True)
         tools.addWidget(self.files_button)
-        self.compile_button = QPushButton("▷  Compilar  F5")
+        self.compile_button = QToolButton()
+        self.compile_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         self.compile_button.setObjectName("compilar")
-        self.compile_button.clicked.connect(self.compilar)
         tools.addWidget(self.compile_button)
         self.run_button = QPushButton("▶  Ejecutar  F6")
         self.run_button.setToolTip("Ejecutar la compilación vigente en el simulador")
@@ -342,6 +344,19 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         view.addAction(self.auto_action)
         build = self.menus.addMenu("Compilar")
         self.compile_action = self.accion(build, "Compilar archivo activo", "F5", self.compilar)
+        self.compile_button.setDefaultAction(self.compile_action)
+        self.compile_button.setMenu(build)
+        from PySide6.QtGui import QActionGroup
+        self.modos_compilacion = QActionGroup(self)
+        self.acciones_modos = {}
+        for modo, texto in compilacion.MODOS.items():
+            accion = self.accion(build, texto, None, lambda checked=False, m=modo: self.seleccionar_modo(m))
+            accion.setCheckable(True)
+            self.modos_compilacion.addAction(accion)
+            self.acciones_modos[modo] = accion
+        self.opciones_compilacion_action = self.accion(build, "Opciones de compilación…", None, self.configurar_compilacion)
+        build.addSeparator()
+        self.actualizar_perfil_compilacion()
         self.run_action = self.accion(build, "Ejecutar archivo activo", "F6", self.ejecutar)
         self.accion(build, "Configurar ccom…", None, self.configurar_ccom)
 
@@ -419,7 +434,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         editor.cursorPositionChanged.connect(self.actualizar_estado)
         editor.contenidoCambiado.connect(lambda: self.edicion(editor))
         editor.textChanged.connect(self.busqueda_proyecto.actualizar_si_activa)
-        editor.analisisSolicitado.connect(self.analizador.solicitar)
+        editor.analisisSolicitado.connect(lambda documento, revision, texto: self.solicitar_analisis_editor(editor, documento, revision, texto))
         editor.estadoAnalisisCambiado.connect(self.actualizar_estado)
         editor.programar_analisis()
         editor.setFocus()
@@ -461,8 +476,26 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         if self.compilation and self.compilation[0] is editor:
             self.statusBar().showMessage("Documento modificado · los resultados anteriores pueden estar desactualizados")
 
+    def solicitar_analisis_editor(self, editor, documento, revision, texto):
+        # .asm es una entrada del ensamblador, no un programa Calser: no enviar
+        # su texto al lexer/parser de .cls ni mostrar sus marcas como errores.
+        if editor.path and editor.path.suffix.lower() == '.asm':
+            editor.estado_analisis = 'No aplica a .asm'
+            editor.estado_ccom = 'Usa Ensamblar (F5)'
+            editor.highlighter.actualizar({})
+            editor.errores_lexicos = []
+            self.auto_results.pop(editor, None)
+            self.comprobador.invalidar(editor.documento_id)
+            self.actualizar_problemas()
+            self.actualizar_estado()
+            return
+        self.analizador.solicitar(documento, revision, texto)
+
     def recibir_analisis(self, result):
         editor = next((self.tabs.widget(i) for i in range(self.tabs.count()) if self.tabs.widget(i).documento_id == result.documento), None)
+        if editor and editor.path and editor.path.suffix.lower() == '.asm':
+            self.solicitar_analisis_editor(editor, editor.documento_id, editor.revision, editor.toPlainText())
+            return
         if editor and editor.aplicar_analisis(result):
             self.actualizar_problemas()
             self.programar_comprobacion(editor)
@@ -474,7 +507,9 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
             self.actualizar_estado()
 
     def programar_comprobacion(self, editor):
-        if not self.auto_action.isChecked():
+        if editor.path and editor.path.suffix.lower() == '.asm':
+            editor.estado_ccom = 'Usa Ensamblar (F5)'
+        elif not self.auto_action.isChecked():
             editor.estado_ccom = "Desactivado"
         elif not editor.toPlainText().strip():
             editor.estado_ccom = "Sin contenido"
@@ -522,7 +557,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
 
     def registro_comprobacion(self, request, message, log):
         name = str(request.fuente or "Sin título")
-        self.auto_output.setPlainText(f"Análisis automático · {name} · revisión {request.revision}\nccom --check [copia temporal]\n{message}\n\n{log}")
+        self.auto_output.setPlainText(f"Análisis automático · {name} · revisión {request.revision}\nccom --check-json [copia temporal]\n{message}\n\n{log}")
 
     def actualizar_problemas(self):
         """Conserva diagnósticos de otros documentos y retira solo los obsoletos."""
@@ -764,19 +799,58 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
                 self.statusBar().showMessage("No se encontraron coincidencias")
 
     def configurar_ccom(self):
+        if self.process or self.run_process:
+            return
         filename, _ = QFileDialog.getOpenFileName(self, "Seleccionar ejecutable ccom", str(self.root))
         if filename:
             self.configured_ccom = filename
+            self.actualizar_perfil_compilacion()
             for i in range(self.tabs.count()):
                 editor = self.tabs.widget(i)
                 self.auto_results.pop(editor, None)
                 self.programar_comprobacion(editor)
             self.actualizar_problemas()
 
+    def actualizar_perfil_compilacion(self):
+        self.perfil_compilacion = compilacion.validar(self.perfil_compilacion)
+        modo = self.perfil_compilacion['modo']
+        self.acciones_modos[modo].setChecked(True)
+        etiqueta = {'compilar': 'Compilar', 'analizar': 'Analizar', 'ast': 'Exportar AST', 'ensamblar': 'Ensamblar'}[modo]
+        self.compile_action.setText(f'▷ {etiqueta}  F5')
+        self.compile_button.setMinimumWidth(self.compile_button.fontMetrics().horizontalAdvance(self.compile_action.text()) + 48)
+        self.context.setText(f'Análisis en vivo · F5: {etiqueta.lower()} · F6 ejecuta')
+        self.compile_action.setToolTip(compilacion.MODOS[modo] + ' · Opciones de compilación para elegir destino y banderas')
+
+    def seleccionar_modo(self, modo):
+        if self.process or self.run_process:
+            self.actualizar_perfil_compilacion()
+            return
+        if modo != self.perfil_compilacion['modo']:
+            self.perfil_compilacion = compilacion.validar({**self.perfil_compilacion, 'modo': modo, 'destino': '', 'asm': True})
+        self.actualizar_perfil_compilacion()
+        self.guardar_preferencias()
+
+    def configurar_compilacion(self):
+        if self.process or self.run_process:
+            return
+        from ide.interfaz.opciones_compilacion import OpcionesCompilacion
+        dialogo = OpcionesCompilacion(self.perfil_compilacion, self)
+        if dialogo.exec() == dialogo.DialogCode.Accepted:
+            self.perfil_compilacion = dialogo.datos()
+            self.actualizar_perfil_compilacion()
+            self.guardar_preferencias()
+        dialogo.deleteLater()
+
     def compilar(self):
         if self.process or self.run_process:
             return
+        self.actualizar_perfil_compilacion()
         editor = self.editor()
+        if self.perfil_compilacion['modo'] == 'ensamblar' and (not editor or not editor.path or editor.path.suffix.lower() != '.asm'):
+            entrada, _ = QFileDialog.getOpenFileName(self, 'Entrada ensamblador', str(self.project), 'Ensamblador (*.asm)')
+            if not entrada:
+                return
+            editor = self.abrir(Path(entrada))
         if editor and editor.path and self.ruta_ocupada(editor.path):
             self.error("Operación en curso", "Espera a que termine la operación de carpetas antes de compilar.")
             return
@@ -791,13 +865,37 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
                 if not self.guardar(editor=editor):
                     return
             self.compilation_disk = editor.estado_disco
-            destination = editor.path.parent / "build" / "ide" / hashlib.sha256(str(editor.path).encode()).hexdigest()[:10]
-            destination.mkdir(parents=True, exist_ok=True)
-        except OSError as error:
-            self.error("No se pudo crear la carpeta de salida", error)
+            perfil, destino, arguments, salidas = compilacion.preparar(self.perfil_compilacion, editor.path)
+            abiertos = {self.tabs.widget(i).path.resolve() for i in range(self.tabs.count()) if self.tabs.widget(i).path}
+            if any(p in abiertos or self.ruta_ocupada(p) for p in salidas):
+                raise ValueError('Una salida coincide con un documento abierto o con una operación de archivos.')
+            protegidos = abiertos | {editor.path.resolve()}
+            for salida in salidas:
+                if salida.is_symlink() or (salida.exists() and not salida.is_file()):
+                    raise ValueError('Una salida no es un archivo regular o es un enlace simbólico.')
+                if salida.exists() and any(p.exists() and salida.samefile(p) for p in protegidos):
+                    raise ValueError('Una salida sobrescribiría un documento abierto o la entrada.')
+            existentes = [p for p in salidas if p.exists()]
+            if perfil['destino'] and existentes:
+                respuesta = QMessageBox.question(self, 'Sobrescribir salidas',
+                    'Se reemplazarán estos archivos:\n' + '\n'.join(map(str, existentes)),
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+                if respuesta != QMessageBox.StandardButton.Yes:
+                    return
+            if destino:
+                destino.parent.mkdir(parents=True, exist_ok=True)
+            anteriores = {p: archivos.estado(p) for p in salidas}
+        except (OSError, ValueError) as error:
+            self.error("No se pudo preparar la operación", error)
             return
+        # Las fechas/identidades permiten rechazar artefactos heredados si un ccom
+        # alternativo termina con éxito sin escribir las salidas solicitadas.
+        self.salidas_anteriores = anteriores
+        self.trabajo_compilacion = perfil
+        self.compilation_output = destino
+        self.compilation_outputs = salidas
         self.compilados.pop(editor, None)
-        self.compilation_destination = destination
+        self.compilation_destination = destino.parent if destino else None
         self.stderr = ""
         self.stdout_decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
         self.stderr_decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
@@ -808,8 +906,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         editor.estado_ccom = "Compilando con F5"
         self.results.pop(editor, None)
         self.actualizar_problemas()
-        arguments = [str(editor.path), "-o", str(destination / (editor.path.stem + ".bin")), "-s"]
-        self.output.setPlainText(f"Ejecutable: {executable}\nArgumentos: {arguments}\nDirectorio: {editor.path.parent}\n\n")
+        self.output.setPlainText(f"Modo: {compilacion.MODOS[perfil['modo']]}\nDestino: {destino or 'Sin artefactos'}\nEjecutable: {executable}\nArgumentos: {arguments}\nDirectorio: {editor.path.parent}\n\n")
         self.panels.setCurrentWidget(self.output)
         self.process = QProcess(self)
         self.process.setWorkingDirectory(str(editor.path.parent))
@@ -817,11 +914,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         self.process.readyReadStandardError.connect(self.leer_stderr)
         self.process.finished.connect(self.terminar)
         self.process.errorOccurred.connect(self.error_proceso)
-        self.compile_button.setEnabled(False)
-        self.compile_action.setEnabled(False)
-        self.run_button.setEnabled(False)
-        self.run_action.setEnabled(False)
-        self.stop_button.setEnabled(True)
+        self.controles_ejecucion(True)
         self.statusBar().showMessage("Compilando… puedes seguir editando")
         self.timer.start(30000)
         self.process.start(executable, arguments)
@@ -861,9 +954,23 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
             self.actualizar_problemas()
             if self.problems.topLevelItemCount():
                 self.panels.setCurrentWidget(self.problems)
-        if current and code == 0 and not crashed:
+        perfil = self.trabajo_compilacion
+        if code == 0 and not crashed:
+            try:
+                for salida, anterior in self.salidas_anteriores.items():
+                    actual = archivos.estado(salida)
+                    if not actual.existe or actual == anterior:
+                        raise OSError(f'ccom no renovó la salida solicitada: {salida}')
+            except OSError as error:
+                code = 1
+                self.escribir_salida(f'\n{error}\n')
+        if current and code == 0 and not crashed and perfil['modo'] == 'compilar' and perfil['asm']:
             self.registrar_compilacion_ejecutable(editor)
-        message = "Proceso interrumpido" if crashed else ("Compilación correcta" if code == 0 else f"Compilación fallida · código {code}")
+        exitos = {'compilar': 'Compilación correcta', 'analizar': 'Análisis correcto: sin errores',
+                  'ast': 'AST exportado · solo sintaxis; semántica no comprobada', 'ensamblar': 'Ensamblado correcto'}
+        message = "Proceso interrumpido" if crashed else (exitos[perfil['modo']] if code == 0 else f"{'Compilación fallida' if perfil['modo'] == 'compilar' else 'Operación fallida'} · código {code}")
+        if code == 0 and not crashed and self.compilation_outputs:
+            self.escribir_salida('\nSalidas de esta operación:\n' + '\n'.join(str(p) for p in self.compilation_outputs if p.is_file()) + '\n')
         if not current:
             message += " · resultado de una versión anterior; vuelve a compilar"
         self.escribir_salida(f"\n{message}\n")
@@ -887,11 +994,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
             if self.tabs.indexOf(editor) >= 0 and editor.revision == revision:
                 editor.estado_ccom = "Ver compilación" if self.auto_action.isChecked() else "Desactivado"
                 self.actualizar_estado()
-        self.compile_button.setEnabled(True)
-        self.compile_action.setEnabled(True)
-        self.run_button.setEnabled(True)
-        self.run_action.setEnabled(True)
-        self.stop_button.setEnabled(False)
+        self.controles_ejecucion(False)
 
     def cancelar(self):
         if self.run_process:

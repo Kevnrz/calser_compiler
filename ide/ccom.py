@@ -2,12 +2,14 @@
 
 Este módulo no inicia el compilador. Las llamadas reales mediante QProcess
 están en Ventana.compilar (F5) y ComprobadorCcom.iniciar (análisis con --check).
-Ambos utilizan ejecutable para localizarlo y diagnosticos para leer sus errores.
+Ambos utilizan ejecutable para localizarlo. El análisis automático utiliza el
+protocolo --check-json; la compilación manual conserva el lector de texto clásico.
 
 La entrada de diagnosticos es texto de salida del compilador, no código Calser.
 Solo se reconocen los formatos previstos; la interfaz conserva por separado la
 salida completa para que resúmenes o explicaciones no interpretadas sigan visibles.
 """
+import json
 import os
 import re
 import shutil
@@ -88,3 +90,122 @@ def diagnosticos(text, source, cwd):
         result.append(Problema(path.resolve(), None if general else max(1, int(row)),
                                None if general else max(1, int(column)), message, length))
     return result
+
+
+class ErrorProtocolo(ValueError):
+    """Respuesta incompatible, incompleta o fallo explícito del servicio C."""
+
+
+_CATEGORIAS_JSON = {'lexical': ('Léxico', 'CCOM_LEXICAL'),
+                    'syntax': ('Sintáctico', 'CCOM_SYNTAX'),
+                    'semantic': ('Semántico', 'CCOM_SEMANTIC'),
+                    'compilation': ('Compilación', 'CCOM_COMPILATION')}
+
+
+def _objeto_json(pares):
+    objeto = {}
+    for clave, valor in pares:
+        if clave in objeto:
+            raise ErrorProtocolo('Respuesta JSON con campos duplicados')
+        objeto[clave] = valor
+    return objeto
+
+
+def _requerir(condicion, mensaje):
+    if not condicion:
+        raise ErrorProtocolo('Respuesta de --check-json incompatible: ' + mensaje)
+
+
+def _texto_json(valor, limite=4096):
+    if not isinstance(valor, str):
+        return False
+    try:
+        return len(valor.encode('utf-8')) <= limite
+    except UnicodeError:
+        return False
+
+
+def diagnosticos_json(salida, source, texto, codigo):
+    """Valida protocolo v1 y devuelve Problema sin interpretar mensajes humanos.
+
+    source/texto identifican la instantánea enviada, no se leen desde el disco.
+    Los rangos del servicio son bytes UTF-8 del original. Solo la marca visual
+    se amplía si un error léxico señala parte de un carácter; el rango nativo
+    queda guardado en rango_utf8. Las ediciones tienen otro contrato más estricto.
+
+    Un ejecutable antiguo, JSON inválido o un estado de error/límite se informa
+    con ErrorProtocolo; nunca se recurre silenciosamente al lector textual.
+    """
+    _requerir(isinstance(salida, (str, bytes)) and len(salida) <= 1_000_000,
+              'informe ausente o demasiado grande')
+    _requerir(type(codigo) is int and codigo in (0, 1), 'código de proceso inválido')
+    try:
+        contenido = salida.decode('utf-8') if isinstance(salida, bytes) else salida
+        datos = json.loads(contenido, object_pairs_hook=_objeto_json,
+                           parse_constant=lambda valor: _requerir(False, 'constante JSON inválida'))
+    except (ValueError, UnicodeError, TypeError, RecursionError) as error:
+        raise ErrorProtocolo('ccom terminó sin un diagnóstico reconocible en JSON; '
+                            'ejecuta make o configura una versión compatible.') from error
+    _requerir(isinstance(datos, dict), 'se esperaba un objeto')
+    _requerir(type(datos.get('schema_version')) is int and datos['schema_version'] == 1,
+              'versión de protocolo no soportada')
+    _requerir(datos.get('operation') == 'check' and datos.get('offset_unit') == 'utf8',
+              'operación o unidad de posiciones no soportada')
+    _requerir(isinstance(datos.get('source'), str) and datos['source'] == str(source),
+              'el resultado pertenece a otra fuente')
+    _requerir(type(datos.get('exit_code')) is int and datos['exit_code'] == codigo,
+              'código de salida inconsistente')
+    _requerir(type(datos.get('truncated')) is bool and _texto_json(datos.get('message')),
+              'estado de completitud inválido')
+    estado = datos.get('status')
+    _requerir(estado in ('ok', 'errors', 'error', 'limit'), 'estado desconocido')
+    _requerir(type(datos.get('error_count')) is int and datos['error_count'] >= 0,
+              'contador de errores inválido')
+    opciones = datos.get('diagnostics')
+    _requerir(isinstance(opciones, list) and len(opciones) <= 128, 'lista de diagnósticos inválida')
+    if estado in ('error', 'limit'):
+        _requerir(codigo == 1 and bool(datos['message'].strip()), 'fallo del servicio sin explicación')
+        raise ErrorProtocolo(datos['message'])
+    _requerir(not datos['truncated'], 'informe truncado')
+    _requerir(datos['error_count'] == len(opciones), 'contador y lista no coinciden')
+    _requerir((estado == 'ok' and codigo == 0 and not opciones)
+              or (estado == 'errors' and codigo == 1 and bool(opciones)),
+              'estado, diagnósticos y código no coinciden')
+    raw = texto.encode('utf-8')
+    problemas = []
+    for d in opciones:
+        _requerir(isinstance(d, dict), 'diagnóstico inválido')
+        categoria = d.get('category')
+        _requerir(isinstance(categoria, str) and categoria in _CATEGORIAS_JSON, 'categoría desconocida')
+        etiqueta, identificador = _CATEGORIAS_JSON[categoria]
+        _requerir(d.get('code') == identificador and d.get('severity') == 'error',
+                  'código o severidad no soportado')
+        _requerir(_texto_json(d.get('message')) and bool(d['message'].strip()), 'mensaje inválido')
+        _requerir('range' in d, 'falta el campo de rango')
+        rango = d['range']
+        nativo = None
+        linea = columna = None
+        largo = 0
+        if rango is not None:
+            _requerir(isinstance(rango, dict), 'rango inválido')
+            _requerir(all(type(rango.get(k)) is int for k in ('start', 'end', 'line', 'column')),
+                      'posiciones no enteras')
+            inicio, fin = rango['start'], rango['end']
+            _requerir(0 <= inicio <= fin <= len(raw), 'rango fuera de la instantánea')
+            fila = raw.count(b'\n', 0, inicio) + 1
+            base = raw.rfind(b'\n', 0, inicio) + 1
+            _requerir(rango['line'] == fila and rango['column'] == inicio - base + 1,
+                      'línea/columna no coinciden con el rango')
+            _requerir(b'\n' not in raw[inicio:fin], 'el rango atraviesa líneas')
+            nativo = (inicio, fin)
+            # Un @ es un byte; un carácter no ASCII inválido para Calser puede
+            # producir varios errores por byte. Se conserva cada diagnóstico,
+            # pero su presentación nunca selecciona solo media letra/emoji.
+            while inicio > 0 and inicio < len(raw) and raw[inicio] & 0xc0 == 0x80:
+                inicio -= 1
+            while fin < len(raw) and raw[fin] & 0xc0 == 0x80:
+                fin += 1
+            linea, columna, largo = fila, inicio - base + 1, fin - inicio
+        problemas.append(Problema(Path(source).resolve(), linea, columna, d['message'], largo,
+                                  codigo=identificador, categoria_explicita=etiqueta, rango_utf8=nativo))
+    return problemas

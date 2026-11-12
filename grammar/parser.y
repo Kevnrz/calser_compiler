@@ -17,6 +17,10 @@
 
 #include "ast.h"
 #include "diagnostics.h"
+#include "suggestions.h"
+#include "syntax_service.h"
+#include "parser_service.h"
+#include "lexer_service.h"
 
 extern int yylex(void);
 extern int yylineno;
@@ -56,6 +60,9 @@ static void syntax_reset(void);
 
 /* Palabras reservadas */
 
+/* Marcador privado del servicio: ninguna producción lo acepta. Inyectarlo al
+ * EOF temporal permite consultar LAC también cuando el prefijo ya es programa. */
+%token TOKEN_CURSOR
 %token TOKEN_F "F"
 %token TOKEN_VM "Vm"
 %token TOKEN_VI "Vi"
@@ -193,11 +200,26 @@ static void syntax_reset(void);
 %locations
 
 /* CE1108 §8.2; calser_diseno §8.3/§8.5 (mensajes y primer error).
- * Libro, cap. 4: diagnóstico en el parser, sin producciones de recuperación.
+ * Libro, cap. 4: diagnóstico y sincronización conservadora M7.
  * LAC obtiene esperados válidos tras reducciones, sin ejecutar sus acciones. */
 %define parse.error custom
 %define parse.lac full
 %initial-action { syntax_reset(); }
+
+/* Propiedad de memoria de las consultas M3/M4: contexto termina en el cursor;
+ * verificación usa EOF real. Bison destruye cadenas/subárboles temporales tanto
+ * al fallar como al aceptar el símbolo inicial. El lexer libera sus strings en
+ * escaneos sin parser. En compilación normal main conserva y libera el AST;
+ * el destructor específico de programa respeta esa transferencia a main. */
+%destructor { ast_free($$); } <node>
+/* El símbolo inicial transfiere el árbol a main incluso si contiene huecos;
+ * main lo libera y bloquea fases posteriores. Las consultas no transfieren AST. */
+%destructor { if (suggestions_active() || syntax_service_active()) ast_free($$); } programa
+%destructor { free($$); } <str>
+
+%code {
+static int syntax_recover(int *token, YYSTYPE *value, int body);
+}
 
 %start programa
 
@@ -237,6 +259,13 @@ globales
           ast_add_child($1, $2);
           $$ = $1;
       }
+    | globales error TOKEN_SEMICOLON
+      {
+          if (!syntax_recover(&yychar, &yylval, 0)) { ast_free($1); YYABORT; }
+          $$ = $1;
+          yyerrok;
+      }
+
     ;
 
 
@@ -269,6 +298,7 @@ funciones
 funcion
     : TOKEN_F
       TOKEN_IDENTIFIER
+      { if (suggestions_active()) suggestions_function($2); }
       TOKEN_LBRACKET
       params
       TOKEN_RBRACKET
@@ -280,15 +310,23 @@ funcion
       {
           $$ = ast_function(
                     $2,
-                    $4,
-                    $7,
-                    $9
+                    $5,
+                    $8,
+                    $10
                 );
 
+          if (suggestions_active()) suggestions_function(NULL);
           free($2);
 
           ast_set_location($$, @2.first_line, @2.first_column);
       }
+    | TOKEN_F error TOKEN_DOT
+      {
+          if (!syntax_recover(&yychar, &yylval, 0)) YYABORT;
+          $$ = NULL; /* Cabecera inválida: función omitida del AST parcial. */
+          yyerrok;
+      }
+
     ;
 
 
@@ -486,6 +524,16 @@ cuerpo
           ast_add_child($1, $2);
           $$ = $1;
       }
+    | cuerpo error
+      {
+          /* Conserva . / A como lookahead para que la gramática real cierre
+           * el bloque. Los descartes liberan identificadores; no se inventan
+           * expresiones ni nodos de sentencia durante la recuperación. */
+          if (!syntax_recover(&yychar, &yylval, 1)) { ast_free($1); YYABORT; }
+          $$ = $1;
+          yyerrok;
+      }
+
     ;
 
 
@@ -1477,7 +1525,7 @@ acceso
 %%
 
 
-/* Diagnósticos de calser_diseno §8.5, sin recuperación (§8.3).
+/* Diagnósticos de calser_diseno §8.5 y recuperación acotada M7.
  * C, todas sus A y su residual comparten un único cierre '.'. */
 #undef yylex
 
@@ -1492,6 +1540,18 @@ typedef struct {
 
 static SyntaxBlock *syntax_blocks;
 static int syntax_count, syntax_capacity, syntax_delimiters;
+static int syntax_errors, syntax_recovering, syntax_query_stop, syntax_limited;
+static int syntax_anchor_token;
+static size_t syntax_anchor_offset;
+#define SYNTAX_ERROR_LIMIT 32
+#define SYNTAX_SKIP_LIMIT 4096
+int parser_syntax_errors(void) { return syntax_errors; }
+int parser_recovery_limited(void) { return syntax_limited; }
+void parser_finish(void) {
+    free(syntax_blocks);
+    syntax_blocks = NULL;
+    syntax_count = syntax_capacity = 0;
+}
 static int syntax_previous;
 static YYLTYPE syntax_previous_location;
 static int syntax_pending;
@@ -1513,6 +1573,9 @@ static YYLTYPE syntax_pending_location;
  *   se llama desde %initial-action.
  */
 static void syntax_reset(void) {
+    root = NULL;
+    syntax_errors = syntax_recovering = syntax_query_stop = syntax_limited = 0;
+    syntax_anchor_token = 0; syntax_anchor_offset = 0;
     free(syntax_blocks);
     syntax_blocks = NULL;
     syntax_count = syntax_capacity = syntax_delimiters = 0;
@@ -1605,7 +1668,10 @@ static void syntax_accept(int token, YYLTYPE location) {
  *   de #undef.
  */
 static int syntax_lex(void) {
-    if (syntax_pending) syntax_accept(syntax_pending, syntax_pending_location);
+    /* Tras capturar LAC, las consultas terminan: no reinyectar el cursor
+     * indefinidamente mientras Bison intenta buscar un ancla de recuperación. */
+    if (syntax_query_stop) return 0;
+    if (syntax_pending && !syntax_recovering) syntax_accept(syntax_pending, syntax_pending_location);
     int token = yylex();
     syntax_pending = token;
     syntax_pending_location = yylloc;
@@ -1615,27 +1681,72 @@ static int syntax_lex(void) {
         syntax_blocks = NULL;
         syntax_capacity = 0;
     }
+    if (!token && suggestions_active()) return TOKEN_CURSOR;
     return token;
 }
 
 /*
- * syntax_report — emite diagnóstico sintáctico y libera el observador.
+ * syntax_report — emite un diagnóstico y marca recuperación sin perder bloques.
  *
  * Entrada:
  *   location  posición para señalador.
  *   message  mensaje no NULL.
  * Salida:
  *   ninguna (solo efectos).
- *   Efectos: invoca diag_error, libera syntax_blocks y reinicia contadores.
+ *   Efectos: invoca diag_error e incrementa errores; parser_finish libera bloques.
  * Restricciones:
  *   ninguna.
  */
 static void syntax_report(YYLTYPE location, const char *message) {
+    if (syntax_errors >= SYNTAX_ERROR_LIMIT) return;
+    syntax_errors++;
+    if (syntax_errors == SYNTAX_ERROR_LIMIT) syntax_limited = 1;
+    syntax_recovering = 1;
     diag_error("error sintactico", location.first_line, location.first_column,
                location.last_column - location.first_column + 1, "%s", message);
-    free(syntax_blocks);
-    syntax_blocks = NULL;
-    syntax_count = syntax_capacity = 0;
+
+}
+
+/* Sincronización acotada, no otra gramática. Consultas M3/M4 conservan su
+ * primer error y abortan: una recuperación no puede convertirlas en aceptación.
+ * El cuerpo puede reusar cierres pendientes; una F inesperada se deja sin
+ * inventar un cierre de función. Headers/globales ya consumieron su ancla. */
+static int syntax_recover(int *token, YYSTYPE *value, int body) {
+    if (suggestions_active() || syntax_service_active() || lexical_fatal ||
+        syntax_errors >= SYNTAX_ERROR_LIMIT) return 0;
+    if (body) {
+        unsigned skipped = 0;
+        for (;;) {
+            if (*token == YYEMPTY) *token = syntax_lex();
+            if (*token == 0 || *token == TOKEN_F) return 0;
+            if (*token == TOKEN_SEMICOLON) {
+                *token = YYEMPTY;
+                syntax_pending = 0;
+                break;
+            }
+            int closure = *token == TOKEN_DOT || (*token == TOKEN_A && syntax_count &&
+                          syntax_blocks[syntax_count - 1].token == TOKEN_C);
+            if (closure && !(*token == syntax_anchor_token && lexer_current_start() == syntax_anchor_offset)) {
+                syntax_anchor_token = *token;
+                syntax_anchor_offset = lexer_current_start();
+                break;
+            }
+            /* Una ancla que la gramática sigue rechazando se descarta: nunca
+             * volver a reducir cuerpo/error sobre el mismo lookahead. */
+            if (++skipped > SYNTAX_SKIP_LIMIT) {
+                syntax_limited = 1;
+                syntax_report(yylloc, "limite de recuperacion: mas de 4096 tokens sin sincronizacion");
+                return 0;
+            }
+            if (*token == TOKEN_IDENTIFIER) { free(value->str); value->str = NULL; }
+            *token = YYEMPTY;
+        }
+    }
+    /* Descartar aperturas incompletas observadas en la sentencia inválida. */
+    while (syntax_count && syntax_blocks[syntax_count - 1].header) syntax_count--;
+    syntax_delimiters = syntax_count ? syntax_blocks[syntax_count - 1].delimiters : 0;
+    syntax_recovering = 0;
+    return 1;
 }
 
 /*
@@ -1676,7 +1787,7 @@ static void token_word(yysymbol_kind_t token, char *out, size_t size) {
  *   0 si reporta o suprime; valor negativo si falla consulta de esperados.
  *   Efectos: reporta primer error y libera observador; suprime cascada de lexical_fatal.
  * Restricciones:
- *   Bison con LAC; no hay producciones de recuperación.
+ *   Bison con LAC; recuperaciones M7 sin semántica sobre AST parcial.
  */
 static int yyreport_syntax_error(const yypcontext_t *context) {
     if (lexical_fatal) {
@@ -1689,11 +1800,46 @@ static int yyreport_syntax_error(const yypcontext_t *context) {
     yysymbol_kind_t expected[YYNTOKENS];
     int count = yypcontext_expected_tokens(context, expected, YYNTOKENS);
     if (count < 0) return count;
-    int semicolon = 0, paren = 0, bracket = 0;
+    /* M3 obtiene esperados LAC en el cursor; M4 obtiene cierres en el primer
+     * error real. Ambas ramas terminan sin el diagnóstico humano de la CLI. */
+    if (suggestions_active()) {
+        syntax_query_stop = 1;
+        suggestions_context(unexpected == YYSYMBOL_TOKEN_CURSOR);
+        if (unexpected == YYSYMBOL_TOKEN_CURSOR) {
+            for (int i = 0; i < count; i++) {
+                if (expected[i] != YYSYMBOL_YYEOF && expected[i] != YYSYMBOL_YYerror &&
+                    expected[i] != YYSYMBOL_YYUNDEF && expected[i] != YYSYMBOL_TOKEN_IDENTIFIER &&
+                    expected[i] != YYSYMBOL_TOKEN_NUMBER && expected[i] != YYSYMBOL_TOKEN_CURSOR)
+                    suggestions_expected(yysymbol_name(expected[i]));
+            }
+        }
+        free(syntax_blocks);
+        syntax_blocks = NULL;
+        syntax_count = syntax_capacity = 0;
+        return 0;
+    }
+    if (syntax_service_active()) {
+        syntax_query_stop = 1;
+        syntax_service_error(unexpected == YYSYMBOL_YYEOF);
+        for (int i = 0; i < count; i++) syntax_service_expected(yysymbol_name(expected[i]));
+        free(syntax_blocks);
+        syntax_blocks = NULL;
+        syntax_count = syntax_capacity = 0;
+        return 0;
+    }
+    /* Si un cierre retenido no sirve en este estado, recuperar avanzando sin
+     * repetir su diagnóstico. No confundir EOF con la posición del último token. */
+    if (syntax_anchor_token && syntax_pending == syntax_anchor_token &&
+        lexer_current_start() == syntax_anchor_offset) {
+        syntax_recovering = 1;
+        return 0;
+    }
+    int semicolon = 0, paren = 0, bracket = 0, call_bracket = 0;
     for (int i = 0; i < count; i++) {
         semicolon |= expected[i] == YYSYMBOL_TOKEN_SEMICOLON;
         paren |= expected[i] == YYSYMBOL_TOKEN_RPAREN;
         bracket |= expected[i] == YYSYMBOL_TOKEN_RBRACKET;
+        call_bracket |= expected[i] == YYSYMBOL_TOKEN_LBRACKET;
     }
     YYLTYPE location = *yypcontext_location(context);
     char message[512];
@@ -1720,6 +1866,11 @@ static int yyreport_syntax_error(const yypcontext_t *context) {
                ((unexpected == YYSYMBOL_TOKEN_RBRACKET && syntax_blocks[syntax_count - 1].commas != 3) ||
                 (unexpected == YYSYMBOL_TOKEN_COMMA && syntax_blocks[syntax_count - 1].commas >= 3))) {
         snprintf(message, sizeof(message), "'S' requiere exactamente 4 partes: variable, inicio, fin, paso");
+    } else if (unexpected == YYSYMBOL_TOKEN_LPAREN &&
+               syntax_previous == TOKEN_IDENTIFIER && call_bracket) {
+        /* No confundir una llamada escrita con '(' con un ';' faltante:
+         * LAC también esperaba '[' después del identificador anterior. */
+        snprintf(message, sizeof(message), "se esperaba '[' despues del nombre; las funciones usan nombre[...], no nombre(...)");
     } else if (semicolon) {
         location = syntax_previous_location;
         location.first_line = location.last_line;
@@ -1758,6 +1909,8 @@ static int yyreport_syntax_error(const yypcontext_t *context) {
  *   fallos sintácticos normales pasan por yyreport_syntax_error.
  */
 void yyerror(const char *message) {
+    if (suggestions_active()) { suggestions_parser_error(); return; }
+    if (syntax_service_active()) { syntax_service_failed(); return; }
     if (!lexical_fatal) {
         YYLTYPE location = yylloc;
         if (location.first_line < 1 || location.first_line > diag_last_line())

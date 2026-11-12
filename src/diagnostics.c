@@ -26,6 +26,18 @@ static char **diag_lines = NULL;
 static int diag_line_count = 0;
 
 static int diag_errors = 0;
+/* Offsets de inicio antes de quitar CR/LF: el protocolo cuenta bytes reales. */
+static size_t *diag_offsets = NULL;
+static DiagObserver diag_observer = NULL;
+static void *diag_observer_data = NULL;
+static int diag_emit_text = 1;
+
+void diag_set_observer(DiagObserver observer, void *data, int emit_text) {
+    diag_observer = observer;
+    diag_observer_data = data;
+    diag_emit_text = emit_text;
+}
+
 
 /* ==========================================================================
  * CARGA Y REPORTE DE ERRORES
@@ -49,8 +61,11 @@ void diag_init(const char *filename) {
     size_t size = 0;
     ssize_t length;
     int capacity = 0;
+    size_t offset = 0;
 
     while ((length = getline(&buffer, &size, file)) != -1) {
+
+        size_t raw_length = (size_t) length;
 
         // Quitar el salto de línea (y el \r de los archivos de Windows).
         while (length > 0 &&
@@ -69,6 +84,12 @@ void diag_init(const char *filename) {
             }
 
             diag_lines = lines;
+            size_t *offsets = realloc(diag_offsets, capacity * sizeof(size_t));
+            if (!offsets) {
+                fprintf(stderr, "Error: out of memory\n");
+                exit(EXIT_FAILURE);
+            }
+            diag_offsets = offsets;
         }
 
         char *copy = malloc((size_t) length + 1);
@@ -80,6 +101,8 @@ void diag_init(const char *filename) {
 
         memcpy(copy, buffer, (size_t) length + 1);
 
+        diag_offsets[diag_line_count] = offset;
+        offset += raw_length;
         diag_lines[diag_line_count] = copy;
         diag_line_count++;
     }
@@ -99,6 +122,24 @@ void diag_verror(const char *category,
         (line > 0 && line <= diag_line_count) ? diag_lines[line - 1] : NULL;
 
     diag_errors++;
+    if (diag_observer) {
+        DiagPosition position = {0};
+        /* No inventar posiciones para diagnósticos generales. Al final de una
+         * línea se conserva una inserción vacía, sin subrayar el siguiente token. */
+        if (source && column > 0 && (size_t) column <= strlen(source) + 1) {
+            size_t local = (size_t) column - 1;
+            size_t count = length > 0 ? (size_t) length : 1;
+            size_t available = strlen(source) - local;
+            if (count > available) count = available;
+            position = (DiagPosition) {1, line, column,
+                diag_offsets[line - 1] + local, diag_offsets[line - 1] + local + count};
+        }
+        va_list copy;
+        va_copy(copy, args);
+        diag_observer(category, position, fmt, copy, diag_observer_data);
+        va_end(copy);
+    }
+    if (!diag_emit_text) return;
 
     /*
      * §8.2:
@@ -178,6 +219,8 @@ void diag_free(void) {
         free(diag_lines[i]);
 
     free(diag_lines);
+    free(diag_offsets);
+    diag_offsets = NULL;
 
     diag_lines = NULL;
     diag_line_count = 0;

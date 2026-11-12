@@ -9,7 +9,7 @@ BUILD_DIR = build
 GEN_DIR = $(BUILD_DIR)/generated
 OBJ_DIR = $(BUILD_DIR)/obj
 
-SOURCES = main tac_passes tac_metrics tac_lower tac_lower_value tac_lower_control tac_intervals tac_allocate tac_allocate_sites tac_emit tac_emit_pseudo tac tac_loop_marks tac_live tac_locations tac_loops tac_edit tac_cfg tac_validate tac_isa tac_pseudo tac_print tac_build tac_build_expr tac_build_stmt tac_build_flow tac_build_init ast ast_constant symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table isa_constant codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler
+SOURCES = main tac_passes tac_metrics tac_lower tac_lower_value tac_lower_control tac_intervals tac_allocate tac_allocate_sites tac_emit tac_emit_pseudo tac tac_loop_marks tac_live tac_locations tac_loops tac_edit tac_cfg tac_validate tac_isa tac_pseudo tac_print tac_build tac_build_expr tac_build_stmt tac_build_flow tac_build_init ast ast_constant symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table isa_constant codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler clones repairs syntax_service suggestions diagnostics_json
 OBJECTS = $(addprefix $(OBJ_DIR)/,$(addsuffix .o,$(SOURCES))) \
           $(OBJ_DIR)/parser.tab.o $(OBJ_DIR)/lex.yy.o
 
@@ -248,7 +248,7 @@ check-o1: $(TARGET) $(BUILD_DIR)/probar_tac_passes
 	$(BUILD_DIR)/probar_tac_passes
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/tac_passes/probar_cli.py
 
-check: check-o1 check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+check: check-ide-options check-o1 check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles check-recovery check-clones-json check-repairs-json check-suggestions-json check-tokens-json check-success check-analysis check-analysis-json
 
 clean:
 	rm -f $(BUILD_DIR)/probar_tac_passes
@@ -274,9 +274,58 @@ clean:
 
 # Prototipo gráfico CALSIDE (PySide6).
 PYTHON ?= python3
-.PHONY: ide check-ide
+.PHONY: ide check-ide check-parser
 ide:
 	$(PYTHON) -m ide.main
 
 check-ide:
 	PYTHONDONTWRITEBYTECODE=1 QT_QPA_PLATFORM=offscreen $(PYTHON) -m unittest discover -s ide/pruebas -v
+
+check-parser:
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s ide/pruebas -p test_parser.py -v
+
+# Front-end sin generación para el análisis automático del IDE.
+.PHONY: check-analysis
+check-analysis: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) pruebas/analisis/probar.py
+
+# Confirmación textual y rutas de operaciones correctas de ccom.
+.PHONY: check-success
+check-success: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) pruebas/exito/probar.py
+
+# Protocolo estructurado del front-end real para CALSIDE (M1).
+.PHONY: check-analysis-json
+check-analysis-json: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) pruebas/analisis_json/probar.py
+
+# Tokens del lexer real y presentación del IDE, sin parser ni artefactos.
+.PHONY: check-tokens-json
+check-tokens-json: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) pruebas/tokens_json/probar.py
+
+.PHONY: check-suggestions-json
+check-suggestions-json: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) pruebas/sugerencias_json/probar.py
+
+.PHONY: check-repairs-json
+check-repairs-json: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) pruebas/reparaciones_json/probar.py
+
+.PHONY: check-clones-json
+check-clones-json: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) pruebas/clones_json/probar.py
+
+# Recorrido gráfico aislado con todos los proveedores C y el simulador reales.
+.PHONY: check-recorrido-ide
+check-recorrido-ide: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 QT_QPA_PLATFORM=offscreen $(PYTHON) tools/probar_recorrido_ide.py
+
+.PHONY: check-recovery
+check-recovery: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) pruebas/recuperacion/probar.py
+
+# Integración C6: las consultas no aceptan opciones de compilación.
+.PHONY: check-ide-options
+check-ide-options: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) pruebas/integracion_ide/probar.py

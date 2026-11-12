@@ -1,4 +1,8 @@
 """
+
+Estado M6: API de consulta/estudio y pruebas del LL(1), conservada por decisión
+explícita. La interfaz productiva usa Flex/Bison en ccom, no este módulo.
+
 lexico.py — analizador léxico de Calser para el IDE.
 
 Reproduce las reglas de grammar/lexer.l (libro §3.5.3, enunciado CE1108
@@ -17,7 +21,7 @@ Reproduce las reglas de grammar/lexer.l (libro §3.5.3, enunciado CE1108
 
 Diferencia con Flex: las columnas cuentan caracteres, no bytes. Una "á"
 ocupa una columna y da un solo error (Flex da dos, uno por byte). Para el
-editor es lo correcto.
+modelo LL(1) se conserva esa convención; Qt recibe las posiciones del backend C.
 
 El tipo de cada token es el nombre del terminal en la gramática
 (gramatica.py): "id", "num", "F", "Vm", "[", "==", "|", ...

@@ -1,6 +1,6 @@
 """
 Pruebas de nucleo/tabla.py contra los ejemplos de Aho et al. y contra los
-números de ide/docs/gramatica_ll1.md. Correr desde la raíz del repo:
+números de ide/docs/ll1/gramatica_ll1.md. Correr desde la raíz del repo:
     make check-ide
 """
 

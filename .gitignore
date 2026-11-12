@@ -87,3 +87,16 @@ pruebas/*.asm
 prueba_mano*
 *.zip
 *.log
+notasrandom.md
+
+# Entornos locales y paquetes generados
+.venv/
+venv/
+dist/
+
+# Exclusiones locales solicitadas (no ocultan cambios de archivos ya versionados)
+/editors/vscode/package.py
+/ejercicios/ejercicio1_factorial/ejercicio1.asm
+/pruebas/e07_dimension_cero.cls
+/pruebas/e62_crypto_alineacion.cls
+/pruebas/e62_crypto_alineacion2.cls

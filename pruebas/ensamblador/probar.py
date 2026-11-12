@@ -230,7 +230,8 @@ def test_round_trip(directory):
     # Sin -s no se escribe el .asm, pero sí .bin, .hex y .mem.
     base = directory / 'sin_s'
     result = run(directory / 'p08.cls', '-o', base.with_suffix('.bin'))
-    assert result.returncode == 0 and result.stdout == '' and result.stderr == '', result
+    assert result.returncode == 0 and result.stdout == '', result
+    assert 'Compilación correcta.' in result.stderr, result.stderr
     assert not base.with_suffix('.asm').exists()
     assert all(base.with_suffix(suffix).exists() for suffix in ('.bin', '.hex', '.mem'))
     print('PASS ida y vuelta: %d programas; .asm anotado; -x da el mismo .hex; '

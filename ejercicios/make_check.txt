@@ -1,4 +1,5 @@
 $ make -s check
+PASS C6: 182 combinaciones rechazadas con codigo 2, archivos intactos y O1 vigente
 PASS gestor E: orden fijo, errores con pasada, validacion y operaciones no-NOP
 PASS CLI E: opciones, union/orden, JSON, HIGH inicial, etiquetas y ROM conservadora
 PASS emisión D: permutaciones, preservación, rl, etiquetas, nombre y ROM
@@ -134,6 +135,11 @@ PASS vivacidad: uniones, ciclos, raíces HIGH/ISA, globales, preserves y destrui
 PASS live: 39 programas HIGH/ISA virtual, 3 temporales; 79 rechazos; representación e imagen intactas
 PASS lazos/edición: dominadores, unión, profundidad, sin retroceso, irreducible y rechazos atómicos
 PASS loops: 39 programas HIGH/ISA virtual, 3 temporales; 79 rechazos; representación e imagen intactas
+ccom: Compilación correcta.
+ccom: Archivos generados:
+  build/tac_ejemplo.bin
+  build/tac_ejemplo.hex
+  build/tac_ejemplo.mem
 check-tac: 6 casos de alto nivel, ISA virtual/fisica, consultas y validacion: OK
 PASS construccion TAC: 22 esperados, memoria, CLI y artefactos identicos
 PASS TAC p02: f = 120
@@ -268,4 +274,12 @@ PASS factorial: 120; ciclos 337 → 231 (31.45% menos)
 PASS paralelismo: ambas ALU ejecutadas 14 veces; cero avisos
 PASS entradas adicionales: -1, 0, 1, 2, 10 y 12, en ambos modos
 Reporte: build/validacion_bundles/reporte.md
+PASS M7: errores multiples, cierres/ramas, Unicode, limites, consultas y artefactos; 120 mutaciones sin bloqueo.
+PASS clones C: tipos I/II, Flex, Unicode/CRLF, paquete, limites, CLI y artefactos.
+PASS M4: cierres LAC, copias completas, precondiciones, EOF parcial, comentarios, Unicode y CLI
+PASS --suggest-json: prefijos LAC, fragmentos, comentarios, Unicode, errores, limites y CLI
+PASS --tokens-json: Flex, comentarios, UTF-8, EOF, limites, CLI y salidas intactas
+PASS confirmación: análisis, compilación, ensamblado, AST, salidas y errores
+PASS --check: lexico/sintaxis/semantica, errores de uso y archivos intactos
+PASS --check-json: protocolo, multiples diagnosticos, Unicode, limites, CLI y cero artefactos
 codigo de salida: 0

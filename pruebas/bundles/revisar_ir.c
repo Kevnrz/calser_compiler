@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "codegen.h"
 #include "diagnostics.h"
+#include "parser_service.h"
 #include "generate.h"
 #include "semantic.h"
 #include "label_table.h"
@@ -14,8 +15,9 @@ int main(int argc, char **argv) {
     if (!yyin) return 1;
     diag_init(argv[1]);
     int result = yyparse();
+    parser_finish();
     fclose(yyin);
-    if (result || lexical_errors) return 1;
+    if (result || lexical_errors || parser_syntax_errors()) return 1;
     if (!semantic_analyze(root)) return 1;
     LabelTable labels;
     label_table_init(&labels);

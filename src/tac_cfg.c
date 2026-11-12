@@ -4,6 +4,8 @@
  * Referencias: Aho §8.4.1; CALL/jas conservan continuación dentro del bloque.
  */
 #include "tac_internal.h"
+#include "tac_loops.h"
+#include "tac_analysis_internal.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -209,5 +211,105 @@ int tac_rebuild_edges(TacFunction *function, char *error, size_t capacity) {
             tac_connect(block, expected[k]);
         }
     }
+    return 1;
+}
+
+/* Entrada: función válida y bloque propio. Salida: alcanzabilidad desde entry.
+ * Efectos: recorrido temporal sin alterar el grafo. Restricciones: no exige reducibilidad.
+ */
+static int reachable_block(const TacFunction *function, const TacBlock *target) {
+    size_t count = 0;
+    for (const TacBlock *b = function->first; b; b = b->next)
+        count++;
+    TacBlock **queue = tac_analysis_array(count, sizeof *queue);
+    size_t begin = 0;
+    size_t end = 1;
+    queue[0] = function->entry;
+    int found = 0;
+    while (begin < end && !found) {
+        TacBlock *b = queue[begin++];
+        found = b == target;
+        for (size_t s = 0; s < b->successor_count; s++) {
+            if (!tac_has_edge(queue, end, b->successors[s]))
+                queue[end++] = b->successors[s];
+        }
+    }
+    free(queue);
+    return found;
+}
+
+/* Entrada: instrucción y bloque destino. Salida: si contiene LABEL al destino.
+ * Efectos: ninguno. Restricciones: revisa D/A/B y el objetivo ISA, sin interpretar texto.
+ */
+static int references_block(const TacInstruction *instruction, const TacBlock *block) {
+    TacOperand operands[] = {instruction->dest, instruction->src1, instruction->src2,
+                             instruction->isa.target};
+    for (unsigned k = 0; k < 4; k++) {
+        if (operands[k].kind == TAC_LABEL && operands[k].value.block == block)
+            return 1;
+    }
+    return 0;
+}
+
+/* Entrada: función válida y bloque propio no entry. Salida: si puede retirarse.
+ * Efectos: solo diagnóstico. Restricciones: no deja LABEL/marcas ni altera caída alcanzable.
+ */
+static int removable_block(const TacFunction *function, const TacBlock *block,
+                            const TacBlock *previous, char *error, size_t cap) {
+    for (const TacLoopMark *m = function->loop_marks; m; m = m->next) {
+        if (m->header == block || m->body == block || m->latch == block)
+            return tac_error(error, cap, "bloque referenciado por marca de lazo");
+    }
+    for (const TacBlock *b = function->first; b; b = b->next) {
+        if (b == block)
+            continue;
+        for (const TacInstruction *i = b->first; i; i = i->next) {
+            if (references_block(i, block))
+                return tac_error(error, cap, "bloque referenciado por LABEL");
+        }
+    }
+    if (previous) {
+        TacOpInfo info = {.flow = TAC_FLOW_NEXT};
+        if (previous->last)
+            tac_instruction_info(previous->last, &info);
+        if (info.flow == TAC_FLOW_NEXT || info.flow == TAC_FLOW_IF) {
+            if (!block->next)
+                return tac_error(error, cap, "quitar bloque dejaría caída sin destino");
+            if (reachable_block(function, previous))
+                return tac_error(error, cap, "quitar bloque alteraría caída alcanzable");
+        }
+    }
+    return 1;
+}
+
+/* Entrada: función/programa válidos y bloque. Salida: 1 quitado; 0 sin cambios.
+ * Efectos: verifica todo primero; luego desconecta, desenlaza y libera el bloque.
+ * Restricciones: entry no se elimina; reconstruir y validar después (Aho §8.4.1).
+ */
+int tac_block_remove(TacFunction *function, TacBlock *block, char *error, size_t capacity) {
+    if (capacity)
+        error[0] = '\0';
+    if (!function || !block || !tac_has_block(function, block) ||
+        !tac_validate(function->program, error, capacity))
+        return tac_error(error, capacity, "quitar bloque requiere pertenencia y CFG válidos");
+    if (block == function->entry)
+        return tac_error(error, capacity, "no se elimina el bloque de entrada");
+    TacBlock *previous = function->first;
+    while (previous->next != block)
+        previous = previous->next;
+    if (!removable_block(function, block, previous, error, capacity))
+        return 0;
+    while (block->successor_count)
+        tac_disconnect(block, block->successors[0]);
+    while (block->predecessor_count)
+        tac_disconnect(block->predecessors[0], block);
+    previous->next = block->next;
+    if (function->last == block)
+        function->last = previous;
+    while (block->first)
+        tac_remove(block, block->first);
+    free(block->successors);
+    free(block->predecessors);
+    free(block);
     return 1;
 }

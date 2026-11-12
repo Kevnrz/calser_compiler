@@ -6,6 +6,17 @@
 #include "tac_internal.h"
 #include <stdlib.h>
 
+/* Entrada: programa y función buscada. Salida: pertenencia. Efectos: ninguno.
+ * Restricciones: no desreferencia el puntero buscado, solo la lista del programa.
+ */
+int tac_has_function(const TacProgram *program, const TacFunction *function) {
+    for (const TacFunction *f = program->first; f; f = f->next) {
+        if (f == function)
+            return 1;
+    }
+    return 0;
+}
+
 /* Comprueba pertenencia sin desreferenciar el puntero buscado. */
 int tac_has_block(const TacFunction *function, const TacBlock *block) {
     for (const TacBlock *current = function->first; current; current = current->next) {
@@ -163,5 +174,93 @@ int tac_remove(TacBlock *block, TacInstruction *instruction) {
         block->last = previous;
     }
     free(current);
+    return 1;
+}
+
+/* Entrada: bloque, previo y datos ISA. Salida: nodo propio o NULL por pertenencia.
+ * Efectos: inserta e inicializa; no expande. Restricciones: validar forma después.
+ */
+TacInstruction *tac_insert_isa_after(TacBlock *block, TacInstruction *previous,
+    const IsaInstruction *instruction, TacOperand dest, TacOperand src1, TacOperand src2,
+    int64_t displacement, TacOperand target, TacSelectors selectors) {
+    TacInstruction *result = tac_insert_after(block, previous, TAC_ISA, dest, src1, src2);
+    if (result) {
+        result->isa.instruction = instruction;
+        result->isa.displacement = displacement;
+        result->isa.target = target;
+        result->selectors = selectors;
+    }
+    return result;
+}
+
+/* Entrada: bloque, previo y datos PSEUDO. Salida: nodo propio o NULL por pertenencia.
+ * Efectos: inserta sin asignar auxiliares. Restricciones: validar forma después.
+ */
+TacInstruction *tac_insert_pseudo_after(TacBlock *block, TacInstruction *previous,
+    TacPseudoKind kind, TacOperand dest, TacOperand src1, TacOperand src2,
+    TacSelectors selectors, uint16_t scratch_clobbers) {
+    TacInstruction *result = tac_insert_after(block, previous, TAC_PSEUDO, dest, src1, src2);
+    if (result) {
+        result->pseudo.kind = kind;
+        result->pseudo.scratch_clobbers = scratch_clobbers;
+        result->selectors = selectors;
+    }
+    return result;
+}
+
+/* Entrada: dos operandos. Salida: igualdad exacta. Efectos: ninguno.
+ * Restricciones: valores por identidad; no usa la dirección de almacenamiento.
+ */
+static int equal_operand(TacOperand a, TacOperand b) {
+    if (a.kind != b.kind)
+        return 0;
+    switch (a.kind) {
+        case TAC_NONE: return 1;
+        case TAC_INTEGER: return a.value.integer == b.value.integer;
+        case TAC_VARIABLE:
+        case TAC_FUNCTION: return a.value.symbol == b.value.symbol;
+        case TAC_LABEL: return a.value.block == b.value.block;
+        case TAC_TEMP:
+        case TAC_PHYS: return a.value.id == b.value.id;
+    }
+    return 0;
+}
+
+/* Entrada: bloque, instrucción propia y sustitución. Salida: éxito y cantidad.
+ * Efectos: valida una copia antes de modificar cualquier campo del original.
+ * Restricciones: rechaza lecturas ligadas a definición; Aho §10.2.3.
+ */
+int tac_replace_reads(TacBlock *block, TacInstruction *instruction,
+    TacOperand from, TacOperand to, size_t *replaced, char *error, size_t capacity) {
+    if (capacity)
+        error[0] = '\0';
+    if (replaced)
+        *replaced = 0;
+    if (!block || !instruction || !tac_has_instruction(block, instruction) ||
+        !tac_validate_instruction(block->function, instruction, error, capacity))
+        return tac_error(error, capacity, "reemplazo requiere instrucción propia válida");
+    TacOpInfo info;
+    tac_instruction_info(instruction, &info);
+    TacInstruction candidate = *instruction;
+    TacOperand *operands[] = {&candidate.dest, &candidate.src1, &candidate.src2};
+    size_t count = 0;
+    for (unsigned k = 0; k < 3; k++) {
+        unsigned mask = 1u << k;
+        if (!(info.reads & mask) || !equal_operand(*operands[k], from))
+            continue;
+        if (operands[k]->kind == TAC_VARIABLE && (info.address_bases & mask))
+            continue;
+        if (info.writes & mask)
+            return tac_error(error, capacity, "lectura ligada a definición: reemplazo rechazado");
+        *operands[k] = to;
+        count++;
+    }
+    if (!tac_validate_instruction(block->function, &candidate, error, capacity))
+        return 0;
+    instruction->dest = candidate.dest;
+    instruction->src1 = candidate.src1;
+    instruction->src2 = candidate.src2;
+    if (replaced)
+        *replaced = count;
     return 1;
 }

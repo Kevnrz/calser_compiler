@@ -1,4 +1,8 @@
 $ make -s check
+PASS vivacidad: uniones, ciclos, raíces HIGH/ISA, globales, preserves y destruidos separados
+PASS live: 39 programas HIGH/ISA virtual, 3 temporales; 79 rechazos; representación e imagen intactas
+PASS lazos/edición: dominadores, unión, profundidad, sin retroceso, irreducible y rechazos atómicos
+PASS loops: 39 programas HIGH/ISA virtual, 3 temporales; 79 rechazos; representación e imagen intactas
 check-tac: 6 casos de alto nivel, ISA virtual/fisica, consultas y validacion: OK
 PASS construccion TAC: 22 esperados, memoria, CLI y artefactos identicos
 PASS TAC p02: f = 120
@@ -98,7 +102,7 @@ PASS constantes: inicializadores, Vi, profundidad, 32 bits, signos y rechazos si
 PASS constantes ISA: 12 casos, pasos, auxiliares y rechazos sin modificar salida
 ........
 ----------------------------------------------------------------------
-Ran 8 tests in 0.010s
+Ran 8 tests in 0.012s
 
 OK
 PASS ayuda: -h/--help, opciones, ejemplos, errores y archivos intactos

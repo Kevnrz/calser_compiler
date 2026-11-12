@@ -236,11 +236,6 @@ int tac_pseudo_validate(const TacFunction *function, const TacInstruction *instr
 TacInstruction *tac_append_pseudo(TacBlock *block, TacPseudoKind kind,
                                  TacOperand dest, TacOperand src1, TacOperand src2,
                                  TacSelectors selectors, uint16_t scratch_clobbers) {
-    TacInstruction *result = tac_append(block, TAC_PSEUDO, dest, src1, src2);
-    if (result) {
-        result->pseudo.kind = kind;
-        result->pseudo.scratch_clobbers = scratch_clobbers;
-        result->selectors = selectors;
-    }
-    return result;
+    return tac_insert_pseudo_after(block, block ? block->last : NULL, kind,
+        dest, src1, src2, selectors, scratch_clobbers);
 }

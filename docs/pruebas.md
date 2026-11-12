@@ -227,3 +227,31 @@ haciéndolo para el generador actual, con las mismas plantillas P1. El auxiliar
 se verifica con C11 estricto (`-Wall -Wextra -pedantic -Werror`) y ASan/UBSan.
 La equivalencia del generador se comprueba con capturas de los 118 fuentes en
 modo normal y `--no-schedule`, incluyendo `-s -i`, sin `--time` ni normalización.
+
+## Análisis C1: vivacidad, lazos y edición
+
+`make check-tac-live` ejecuta `build/probar_tac_live` y el auxiliar
+`build/analizar_tac live`. Los casos manuales verifican USE/DEF, LIVE_IN/OUT,
+vivos por instrucción, ciclos, uniones, redefiniciones, globales en CALL/RETURN,
+raíces HIGH e ignoradas como registros ISA, candidatos de preservación,
+clobbers separados, ifmov/feis y clasificación de Vm por ámbitos.
+
+`make check-tac-loops` ejecuta `build/probar_tac_loops` y el mismo auxiliar en
+modo `loops`. Verifica dominadores, unión de retrocesos de igual cabecera,
+profundidad anidada, inalcanzables, diagnóstico irreducible, marca válida sin
+retroceso, descarte explícito y consistencia en un solo sentido. La edición
+prueba inserciones ISA/PSEUDO, rechazo ligado de ifmov/feis y reemplazos inválidos
+sin modificación parcial; quitar bloques rechaza LABEL (también objetivos ISA),
+marcas, entry y caídas alcanzables. Quita un bloque inalcanzable sin referencias.
+
+Ambos targets están en `make check`. `pruebas/tac_analysis/probar.py` recorre los
+118 fuentes actuales: analiza los 39 válidos en HIGH y en ISA virtual, y exige
+los 79 rechazos del frontend. Tres fuentes temporales adicionales comprueban S/L
+anidados y ambos tipos con cuerpo terminado en E, sin retroceso. R y copias de
+arreglos se analizan como lazos naturales sin exigir marcas. Las capturas de
+objetos, marcas, ámbitos, símbolos e imagen son idénticas antes/después de analizar.
+
+Para verificar otro auxiliar: `python3 pruebas/tac_analysis/probar.py live
+--binario /ruta/analizar_tac`, o `loops`. Los tres binarios nuevos se verifican
+con C11 estricto y ASan/UBSan. C1 no implementa intervalos, asignación, derrame,
+optimizaciones, banderas ni emisión: esos estados quedan documentados aparte.

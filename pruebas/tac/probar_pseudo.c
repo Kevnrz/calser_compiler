@@ -274,6 +274,12 @@ static void invalid_forms(void) {
     instruction->pseudo.scratch_clobbers = UINT16_C(0xff00);
     invalid(&fixture, "virtual");
     instruction->pseudo.scratch_clobbers = 0;
+    TacOperand saved_dest = instruction->dest;
+    instruction->dest = instruction->src1;
+    invalid(&fixture, "destino aritmético PSEUDO coincide con fuente");
+    instruction->dest = instruction->src2;
+    invalid(&fixture, "destino aritmético PSEUDO coincide con fuente");
+    instruction->dest = saved_dest;
     instruction->isa.target = tac_label(fixture.block);
     invalid(&fixture, "metadatos ISA");
     instruction->isa.target = tac_none();

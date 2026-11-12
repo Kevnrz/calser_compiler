@@ -676,7 +676,7 @@ void ast_print(ASTNode *root, int depth) {
  * Restricciones:
  *   ninguna.
  */
-static void json_string(FILE *out, const char *text) {
+void json_string(FILE *out, const char *text) {
     fputc('"', out);
     for (const unsigned char *p = (const unsigned char *) text; *p; p++) {
         if (*p == '"' || *p == '\\') { fputc('\\', out); fputc(*p, out); }

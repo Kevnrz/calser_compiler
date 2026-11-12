@@ -17,12 +17,12 @@ extern int yyparse(void);
 extern int lexical_errors;
 
 /*
- * json_string — escapa cadenas sin depender del texto del listado TAC.
+ * result_json_string — escapa cadenas sin depender del texto del listado TAC.
  * Entrada: cadena no NULL. Salida: ninguna.
  * Efectos: escribe una cadena JSON en stdout.
  * Restricciones: el llamador comprueba errores del flujo al terminar.
  */
-static void json_string(const char *text) {
+static void result_json_string(const char *text) {
     putchar('"');
     for (const unsigned char *p = (const unsigned char *)text; *p; p++) {
         if (*p == '"' || *p == '\\') {
@@ -62,9 +62,9 @@ static int unique_name(const char *name) {
  */
 static void print_result(const TacRunResult *result) {
     fputs("{\"status\":", stdout);
-    json_string(tac_run_status_name(result->status));
+    result_json_string(tac_run_status_name(result->status));
     printf(",\"steps\":%" PRIu64 ",\"diagnostic\":", result->steps);
-    json_string(result->diagnostic);
+    result_json_string(result->diagnostic);
     fputs(",\"values\":{", stdout);
     int comma = 0;
     if (result->status == TAC_RUN_OK) {
@@ -77,7 +77,7 @@ static void print_result(const TacRunResult *result) {
                     putchar(',');
                 }
                 comma = 1;
-                json_string(symbol->name);
+                result_json_string(symbol->name);
                 fputs(":[", stdout);
                 for (int offset = 0; offset < symbol->width; offset += 4) {
                     uint32_t word = 0;

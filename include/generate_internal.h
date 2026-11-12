@@ -7,6 +7,7 @@
  * interfaz pública (generate_code).
  *
  * Usa: ast.h, symbol_table.h, label_table.h, codegen_arith.h, codegen_crypto.h.
+ * generate_support.c consulta isa_constant.h para los pasos de constantes.
  * Lo usa: generate.c, generate_support.c, generate_expr.c, generate_stmt.c y
  * generate_init.c.
  * Referencias: libro §6.4, §7.2; isa.md §6, §8, §9.
@@ -19,6 +20,7 @@
 
 #include "ast.h"
 #include "codegen_arith.h"
+#include "generate_emit.h"
 #include "codegen_crypto.h"
 #include "label_table.h"
 #include "symbol_table.h"
@@ -57,7 +59,6 @@ typedef struct GenCtx {
  * DIAGNÓSTICOS, REGISTROS, MEMORIA Y PILA (generate_support.c)
  * ======================================================================= */
 
-
 /*
  * gen_report_error — reporta un error de generación.
  *
@@ -85,19 +86,6 @@ void gen_report_error(GenCtx *gen, ASTNode *node, const char *message);
  *   index no negativo; los hijos opcionales NULL no ocupan posición.
  */
 ASTNode *gen_child_at(ASTNode *node, int index);
-
-/*
- * gen_reg_name — obtiene el alias de un registro ISA.
- *
- * Entrada:
- *   reg  número ISA.
- * Salida:
- *   cadena literal; rz si reg está fuera de 0–15.
- *   Efectos: ninguno.
- * Restricciones:
- *   ninguna.
- */
-const char *gen_reg_name(int reg);
 
 /*
  * gen_reset_registers — libera las reservas de temporales del generador.
@@ -148,7 +136,8 @@ void gen_free_reg(GenCtx *gen, int reg);
  *   Efectos: emite instrucciones y reserva/libera un temporal auxiliar si hace falta.
  * Restricciones:
  *   fuera del inmediato de 18 bits necesita un temporal libre; rd debe
- *   seguir reservado.
+ *   seguir reservado. Consulta isa_constant_plan sin delegar emisión ni
+ *   diagnósticos; conserva el empaquetado P1 (Aho §8.1–8.2).
  */
 int gen_mov(GenCtx *gen, int rd, long immediate, ASTNode *node);
 
@@ -211,33 +200,6 @@ int gen_load_symbol(GenCtx *gen, int rd, Symbol *symbol, ASTNode *node);
 int gen_store_symbol(GenCtx *gen, Symbol *symbol, int rs, ASTNode *node);
 
 /*
- * gen_stack_push — apila una palabra en rx.
- *
- * Entrada:
- *   reg  registro ISA cuyo valor se conserva.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: emite sw y avance de rx en cuatro bytes.
- * Restricciones:
- *   rx apunta a la primera casilla libre; no verifica desborde en
- *   ejecución.
- */
-void gen_stack_push(int reg);
-
-/*
- * gen_stack_pop — desapila una palabra desde rx.
- *
- * Entrada:
- *   reg  registro ISA que recibe la palabra.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: emite retroceso de rx y lw.
- * Restricciones:
- *   debe existir una palabra apilada; no verifica subdesborde.
- */
-void gen_stack_pop(int reg);
-
-/*
  * gen_node_label — copia una etiqueta de control de la tabla.
  *
  * Entrada:
@@ -258,7 +220,6 @@ int gen_node_label(GenCtx *gen, char *buffer, size_t size, ASTNode *node,
 /* ==========================================================================
  * EXPRESIONES Y LLAMADAS (generate_expr.c)
  * ======================================================================= */
-
 
 /*
  * gen_expression — evalúa una expresión del AST anotado.
@@ -360,7 +321,6 @@ void gen_expr_setup(GenCtx *gen);
  * SENTENCIAS Y CONTROL DE FLUJO (generate_stmt.c)
  * ======================================================================= */
 
-
 /*
  * gen_block — genera las sentencias de un bloque en orden.
  *
@@ -402,7 +362,6 @@ void gen_end_of_main(GenCtx *gen);
 /* ==========================================================================
  * INICIALIZACIÓN DE VARIABLES (generate_init.c)
  * ======================================================================= */
-
 
 /*
  * gen_initialize_declaration — inicializa todas las casillas de una declaración.

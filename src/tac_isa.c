@@ -130,12 +130,6 @@ TacInstruction *tac_append_isa(TacBlock *block, const IsaInstruction *instructio
                               TacOperand dest, TacOperand src1, TacOperand src2,
                               int64_t displacement, TacOperand target,
                               TacSelectors selectors) {
-    TacInstruction *result = tac_append(block, TAC_ISA, dest, src1, src2);
-    if (result) {
-        result->isa.instruction = instruction;
-        result->isa.displacement = displacement;
-        result->isa.target = target;
-        result->selectors = selectors;
-    }
-    return result;
+    return tac_insert_isa_after(block, block ? block->last : NULL, instruction,
+        dest, src1, src2, displacement, target, selectors);
 }

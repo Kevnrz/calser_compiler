@@ -1,0 +1,151 @@
+/* D: expansión P1 y preservación desde el plan C2; Aho §7.2, §8.6 y §8.8.
+ * Las plantillas y su calendarización fija permanecen en codegen_arith/crypto.
+ */
+#include "tac_emit_internal.h"
+#include "codegen_crypto.h"
+
+typedef struct {
+    int dest;
+    int source;
+} RegisterCopy;
+
+/* Entrada: plan, frame y modo. Salida: 1 emitido, 0 con diagnóstico.
+ * Efectos: guarda/restaura solo preservados en sus casillas ABI.
+ * Restricciones: un único ayudante D; duplicación conocida con save_live y
+ * restore_live de CRYPTO P1, pendiente de limpieza después de integrar C2.3.
+ */
+static int preserve(TacEmitter *e, const TacFunction *f, const TacInstruction *i,
+                     const TacEmissionSite *site, int restore) {
+    if (!site)
+        return te_error(e, i, "sitio sin plan de preservación");
+    if (!site->preserved_count)
+        return 1;
+    const FrameLayout *frame = &f->symbol->frame;
+    int64_t end = (int64_t)frame->area_base + frame->area_size;
+    if (frame->area_base < 0 || frame->temp_base < frame->area_base ||
+        frame->temp_base % 4 || (int64_t)frame->temp_base + 48 > end || end > CG_DATA_BYTES)
+        return te_error(e, i, "área de preservación inválida");
+    if (!restore)
+        cg_gap();
+    for (size_t k = 0; k < site->preserved_count; k++) {
+        unsigned r = site->preserved[k].physical_register;
+        cg_op(SLOT_LSU, "%s %s, %d(rz)", restore ? "lw" : "sw", gen_reg_name((int)r),
+            frame->temp_base + 4 * ((int)r - TAC_P1_TEMP_FIRST));
+    }
+    return 1;
+}
+
+/* Entrada: hasta tres copias con destinos distintos. Salida: ninguna.
+ * Efectos: elimina identidades, emite copias seguras y rompe ciclos con r4.
+ * Restricciones: destinos CRYPTO 6/7/9/10, nunca r4. Una fuente r4 se consume
+ * antes de quedar solo ciclos; vivos externos ya guardados. Aho §8.6.
+ */
+static void parallel_copies(RegisterCopy copies[3], size_t count) {
+    for (size_t k = 0; k < count;) {
+        if (copies[k].dest == copies[k].source)
+            copies[k] = copies[--count];
+        else
+            k++;
+    }
+    while (count) {
+        size_t ready = count;
+        for (size_t k = 0; k < count && ready == count; k++) {
+            int needed = 0;
+            for (size_t n = 0; n < count; n++)
+                needed |= copies[n].source == copies[k].dest;
+            if (!needed)
+                ready = k;
+        }
+        if (ready != count) {
+            cg_op(SLOT_ALU0, "add %s, %s, rz", gen_reg_name(copies[ready].dest),
+                  gen_reg_name(copies[ready].source));
+            copies[ready] = copies[--count];
+        } else {
+            int old = copies[0].dest;
+            cg_op(SLOT_ALU0, "add t0, %s, rz", gen_reg_name(old));
+            for (size_t k = 0; k < count; k++)
+                if (copies[k].source == old)
+                    copies[k].source = TAC_P1_TEMP_FIRST;
+        }
+    }
+}
+
+/* Entrada: PSEUDO CRYPTO física. Salida: 1 éxito, 0 con diagnóstico.
+ * Efectos: prepara argumentos y llama la plantilla original con contador común.
+ * Restricciones: la plantilla no guarda vivos; el llamador sí. Un gap explícito
+ * separa también argumentos ya situados en su registro fijo.
+ */
+static int crypto(TacEmitter *e, const TacInstruction *i) {
+    static const CGCryptoOperation operations[] = {
+        CG_CRYPTO_AUTH, CG_CRYPTO_LOGOUT, CG_CRYPTO_KV_WRITE, CG_CRYPTO_KV_LOCK,
+        CG_CRYPTO_SANC, CG_CRYPTO_ENCRYPT, CG_CRYPTO_DECRYPT
+    };
+    CGCryptoTemplate operation = {.operation = operations[i->pseudo.kind - TAC_PSEUDO_AUTH],
+        .registers = {-1, -1, -1}, .k = i->selectors.k, .w = i->selectors.w};
+    int loop = operation.operation == CG_CRYPTO_ENCRYPT || operation.operation == CG_CRYPTO_DECRYPT;
+    int argument = operation.operation != CG_CRYPTO_LOGOUT && operation.operation != CG_CRYPTO_KV_LOCK;
+    RegisterCopy copies[3];
+    size_t count = 0;
+    if (loop) {
+        TacOperand sources[] = {i->dest, i->src1, i->src2};
+        const int fixed[] = {6, 7, 9};
+        for (size_t k = 0; k < 3; k++) {
+            operation.registers[k] = fixed[k];
+            copies[count++] = (RegisterCopy){fixed[k], (int)sources[k].value.id};
+        }
+    } else if (argument) {
+        operation.registers[0] = 10;
+        copies[count++] = (RegisterCopy){10, (int)i->src1.value.id};
+    }
+    parallel_copies(copies, count);
+    cg_gap(); /* La primera lectura de un bundle fijo no puede ver una escritura pendiente. */
+    if (cg_crypto_emit_template(&operation, &e->arithmetic.next_label))
+        return te_error(e, i, "falló la plantilla CRYPTO");
+    return 1;
+}
+
+/* Entrada: aritmética física y plan. Salida: 1 éxito, 0 con diagnóstico.
+ * Efectos: llama cg_arith_emit con auxiliares ordenados por registro.
+ * Restricciones: máscaras garantizadas por C2; no duplicar su validación.
+ */
+static int arithmetic(TacEmitter *e, const TacInstruction *i, const TacEmissionSite *site) {
+    int work[8];
+    size_t count = 0;
+    for (unsigned r = TAC_P1_TEMP_FIRST; r <= TAC_P1_TEMP_LAST; r++)
+        if (site->scratch_mask & (1u << r))
+            work[count++] = (int)r;
+    static const CGArithKind kinds[] = {CG_ARITH_MUL, CG_ARITH_DIV, CG_ARITH_MOD, CG_ARITH_POWER};
+    CGArithKind kind = kinds[i->pseudo.kind - TAC_PSEUDO_MUL];
+    if (!cg_arith_emit(&e->arithmetic, kind, (int)i->src1.value.id, (int)i->src2.value.id,
+                      (int)i->dest.value.id, work, kind == CG_ARITH_MUL ? NULL : e->error_label))
+        return te_error(e, i, "falló la expansión aritmética");
+    return 1;
+}
+
+/* Entrada: jas o PSEUDO, función y contexto. Salida: 1 éxito, 0 con diagnóstico.
+ * Efectos: preserva, expande o emite llamada/EXIT; comparte etiquetas globalmente.
+ * Restricciones: sin evaluación AST ni reserva de registros; Aho §7.2 y §8.8.
+ */
+int te_emit_special(TacEmitter *e, const TacFunction *f, const TacInstruction *i) {
+    if (i->op == TAC_PSEUDO && i->pseudo.kind == TAC_PSEUDO_EXIT) {
+        cg_op(SLOT_BRU, "jef %s", e->end_label);
+        return 1;
+    }
+    const TacEmissionSite *site = tac_allocation_site(e->input->allocation, i);
+    if (!preserve(e, f, i, site, 0))
+        return 0;
+    if (i->op == TAC_ISA) {
+        const char *callee = te_function_label(e, i->isa.target.value.symbol);
+        if (!callee)
+            return te_error(e, i, "llamada sin etiqueta de función");
+        gen_stack_push(TAC_P1_RL);
+        cg_op(SLOT_BRU, "jas rl, %s", callee);
+        gen_stack_pop(TAC_P1_RL);
+    } else if (i->pseudo.kind >= TAC_PSEUDO_MUL && i->pseudo.kind <= TAC_PSEUDO_POW) {
+        if (!arithmetic(e, i, site))
+            return 0;
+    } else if (!crypto(e, i)) {
+        return 0;
+    }
+    return preserve(e, f, i, site, 1);
+}

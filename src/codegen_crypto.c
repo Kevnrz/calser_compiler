@@ -1,7 +1,8 @@
 /*
  * codegen_crypto.c — Fase 4: expansión de operaciones de cifrado.
  *
- * Preserva temporales vivos antes de evaluar argumentos. Emite plantillas
+ * cg_crypto preserva vivos y evalúa el AST; cg_crypto_emit_template recibe
+ * registros preparados. Ambas entradas comparten las mismas plantillas P1
  * de bundles fijos para bóveda, autenticación y cuatro rondas Feistel.
  *
  * Usa: codegen.h, AST anotado y evaluador del llamador.
@@ -182,13 +183,101 @@ static void emit_loop(const char *start, const char *end, int key, int decrypt) 
     cg_gap(); /* Separar t3 de la siguiente sentencia cuando el salto no se toma. */
 }
 
-/* cg_crypto — véase el contrato en codegen_crypto.h. */
-int cg_crypto(CGCryptoContext *ctx, ASTNode *node) {
+/* Datos del AST y mnemónicos de las operaciones simples; no duplican plantillas. */
+typedef struct {
+    const char *name;
+    int arguments;
+    const char *simple;
+} CryptoOperationInfo;
+
+static const CryptoOperationInfo operations[] = {
+    [CG_CRYPTO_AUTH] = {.name = "autenticar", .arguments = 1, .simple = "auth"},
+    [CG_CRYPTO_LOGOUT] = {.name = "cerrar_sesion", .arguments = 0, .simple = "logout"},
+    [CG_CRYPTO_KV_WRITE] = {.name = "cargar_llave", .arguments = 3, .simple = "kv_write"},
+    [CG_CRYPTO_KV_LOCK] = {.name = "sellar", .arguments = 0, .simple = "kv_lock"},
+    [CG_CRYPTO_SANC] = {.name = "cambiar_ancla", .arguments = 1, .simple = "sanc"},
+    [CG_CRYPTO_ENCRYPT] = {.name = "cifrar", .arguments = 4},
+    [CG_CRYPTO_DECRYPT] = {.name = "descifrar", .arguments = 4},
+};
+
+/*
+ * valid_template — comprueba forma, selectores y contador sin emitir.
+ * Entrada:
+ *   plantilla y contador prestados, o NULL.
+ * Salida:
+ *   1 si cumplen el contrato público; 0 en otro caso.
+ * Efectos:
+ *   ninguno.
+ * Restricciones:
+ *   los registros son los fijos del P1; no decide dónde mover valores.
+ */
+static int valid_template(const CGCryptoTemplate *operation, const unsigned *next_label) {
+    if (operation == NULL || next_label == NULL ||
+        (unsigned)operation->operation >= sizeof operations / sizeof operations[0])
+        return 0;
+    const CryptoOperationInfo *info = &operations[operation->operation];
+    int loop = info->arguments == 4;
+    int expected[] = {info->arguments ? 10 : -1, -1, -1};
+    if (loop) {
+        expected[0] = 6;
+        expected[1] = 7;
+        expected[2] = 9;
+    }
+    for (unsigned i = 0; i < 3; i++) {
+        if (operation->registers[i] != expected[i])
+            return 0;
+    }
+    int key = loop || operation->operation == CG_CRYPTO_KV_WRITE;
+    int word = operation->operation == CG_CRYPTO_KV_WRITE;
+    if (key ? operation->k < 0 || operation->k > 3 : operation->k != -1)
+        return 0;
+    if (word ? operation->w < 0 || operation->w > 3 : operation->w != -1)
+        return 0;
+    return !loop || *next_label != UINT_MAX;
+}
+
+/* cg_crypto_emit_template — véase el contrato en codegen_crypto.h. */
+int cg_crypto_emit_template(const CGCryptoTemplate *operation, unsigned *next_label) {
+    if (!valid_template(operation, next_label))
+        return 1;
+    const CryptoOperationInfo *info = &operations[operation->operation];
+    if (info->arguments == 4) {
+        int decrypt = operation->operation == CG_CRYPTO_DECRYPT;
+        char start[96], end[96];
+        unsigned id = (*next_label)++;
+        snprintf(start, sizeof(start), ".L_crypto_%s_%u", decrypt ? "descifra" : "cifra", id);
+        snprintf(end, sizeof(end), ".L_crypto_fin_%s_%u", decrypt ? "descifra" : "cifra", id);
+        emit_loop(start, end, operation->k, decrypt);
+    } else if (info->arguments == 0) {
+        cg_bundle(NULL, info->simple, NULL, NULL);
+    } else {
+        char instruction[96];
+        if (operation->operation == CG_CRYPTO_KV_WRITE)
+            snprintf(instruction, sizeof(instruction), "kv_write t6, %ld, %ld",
+                     (long)operation->k, (long)operation->w);
+        else
+            snprintf(instruction, sizeof(instruction), "%s t6", info->simple);
+        cg_bundle(NULL, instruction, NULL, NULL);
+    }
+    return 0;
+}
+
+/*
+ * prepare_arguments — valida el AST antes de guardar vivos o evaluar.
+ * Entrada:
+ *   contexto y nodo prestados; arrays y plantilla de salida escribibles.
+ * Salida:
+ *   0 con argumentos y plantilla preparados; 1 por contrato inválido.
+ * Efectos:
+ *   escribe args y operation; no emite ni cambia el contexto.
+ * Restricciones:
+ *   valida aridad, selectores y contador antes de save_live, como en P1.
+ */
+static int prepare_arguments(const CGCryptoContext *ctx, ASTNode *node,
+                             ASTNode *args[4], CGCryptoTemplate *operation) {
     if (ctx == NULL || node == NULL || node->kind != AST_CRYPTO || node->text == NULL ||
         (ctx->live_mask & ~TEMP_MASK) != 0 || !valid_area(ctx))
         return 1;
-
-    ASTNode *args[4] = {NULL, NULL, NULL, NULL};
     int count = 0;
     if (node->child != NULL) {
         if (node->child->kind != AST_ARGUMENTS || node->child->next != NULL)
@@ -199,52 +288,69 @@ int cg_crypto(CGCryptoContext *ctx, ASTNode *node) {
             args[count++] = a;
         }
     }
-
-    const char *op = node->text;
-    int encrypt = strcmp(op, "cifrar") == 0;
-    int decrypt = strcmp(op, "descifrar") == 0;
-    int load_key = strcmp(op, "cargar_llave") == 0;
-    const char *simple = NULL;
-    int expected;
-    if (encrypt || decrypt) expected = 4;
-    else if (load_key) expected = 3;
-    else if (strcmp(op, "autenticar") == 0) { simple = "auth"; expected = 1; }
-    else if (strcmp(op, "cambiar_ancla") == 0) { simple = "sanc"; expected = 1; }
-    else if (strcmp(op, "cerrar_sesion") == 0) { simple = "logout"; expected = 0; }
-    else if (strcmp(op, "sellar") == 0) { simple = "kv_lock"; expected = 0; }
-    else return 1;
-
-    if (count != expected || (expected != 0 && ctx->eval == NULL) ||
-        (load_key && (!selector(args[0]) || !selector(args[1]))) ||
-        ((encrypt || decrypt) && (!selector(args[3]) || ctx->next_label == UINT_MAX)))
+    unsigned kind;
+    for (kind = 0; kind < sizeof operations / sizeof operations[0]; kind++) {
+        if (strcmp(node->text, operations[kind].name) == 0)
+            break;
+    }
+    if (kind == sizeof operations / sizeof operations[0])
         return 1;
+    const CryptoOperationInfo *info = &operations[kind];
+    if (count != info->arguments || (count != 0 && ctx->eval == NULL))
+        return 1;
+    *operation = (CGCryptoTemplate){.operation = (CGCryptoOperation)kind,
+                                  .registers = {count ? 10 : -1, -1, -1}, .k = -1, .w = -1};
+    if (info->arguments == 4) {
+        if (!selector(args[3]))
+            return 1;
+        operation->registers[0] = 6;
+        operation->registers[1] = 7;
+        operation->registers[2] = 9;
+        operation->k = (int)args[3]->number;
+    } else if (kind == CG_CRYPTO_KV_WRITE) {
+        if (!selector(args[0]) || !selector(args[1]))
+            return 1;
+        operation->k = (int)args[0]->number;
+        operation->w = (int)args[1]->number;
+    }
+    return valid_template(operation, &ctx->next_label) ? 0 : 1;
+}
 
+/*
+ * evaluate_arguments — coloca los valores en los registros fijos de la plantilla.
+ * Entrada:
+ *   contexto, argumentos y plantilla ya validados.
+ * Salida:
+ *   0 si evalúa todos los valores; 1 al primer fallo del callback.
+ * Efectos:
+ *   emite evaluaciones y separaciones, conservando orden y máscaras del P1.
+ * Restricciones:
+ *   save_live ya ejecutado; no restaura ni consume etiquetas ante un fallo.
+ */
+static int evaluate_arguments(CGCryptoContext *ctx, ASTNode *args[4],
+                              const CGCryptoTemplate *operation) {
+    int count = operations[operation->operation].arguments;
+    if (count == 4) {
+        return evaluate(ctx, args[0], 6, 0) ||
+               evaluate(ctx, args[1], 7, 1u << 6) ||
+               evaluate(ctx, args[2], 9, (1u << 6) | (1u << 7));
+    }
+    if (count == 0)
+        return 0;
+    return evaluate(ctx, operation->operation == CG_CRYPTO_KV_WRITE ? args[2] : args[0], 10, 0);
+}
+
+/* cg_crypto — véase el contrato en codegen_crypto.h. */
+int cg_crypto(CGCryptoContext *ctx, ASTNode *node) {
+    ASTNode *args[4] = {NULL, NULL, NULL, NULL};
+    CGCryptoTemplate operation;
+    if (prepare_arguments(ctx, node, args, &operation))
+        return 1;
     save_live(ctx);
-    if (encrypt || decrypt) {
-        if (evaluate(ctx, args[0], 6, 0) ||
-            evaluate(ctx, args[1], 7, 1u << 6) ||
-            evaluate(ctx, args[2], 9, (1u << 6) | (1u << 7)))
-            return 1;
-        char start[96], end[96];
-        unsigned id = ctx->next_label++;
-        snprintf(start, sizeof(start), ".L_crypto_%s_%u", decrypt ? "descifra" : "cifra", id);
-        snprintf(end, sizeof(end), ".L_crypto_fin_%s_%u", decrypt ? "descifra" : "cifra", id);
-        emit_loop(start, end, (int) args[3]->number, decrypt);
-    }
-    else if (expected == 0) {
-        cg_bundle(NULL, simple, NULL, NULL);
-    }
-    else {
-        if (evaluate(ctx, load_key ? args[2] : args[0], 10, 0))
-            return 1;
-        char instruction[96];
-        if (load_key)
-            snprintf(instruction, sizeof(instruction), "kv_write t6, %ld, %ld",
-                     args[0]->number, args[1]->number);
-        else
-            snprintf(instruction, sizeof(instruction), "%s t6", simple);
-        cg_bundle(NULL, instruction, NULL, NULL);
-    }
+    if (evaluate_arguments(ctx, args, &operation))
+        return 1;
+    if (cg_crypto_emit_template(&operation, &ctx->next_label))
+        return 1;
     restore_live(ctx);
     return 0;
 }

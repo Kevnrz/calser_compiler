@@ -4,6 +4,7 @@
  * Referencias: Aho §6.2.1-2, §10.2.3; enunciado §4.1.
  */
 #include "tac_internal.h"
+#include "tac_loops.h"
 #include <stdarg.h>
 #include <stdlib.h>
 
@@ -722,6 +723,7 @@ void tac_program_free(TacProgram *program) {
     TacFunction *function = program->first;
     while (function) {
         TacFunction *next_function = function->next;
+        tac_loop_marks_discard(function);
         TacBlock *block = function->first;
         while (block) {
             TacBlock *next_block = block->next;

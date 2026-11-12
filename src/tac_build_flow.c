@@ -4,6 +4,7 @@
  * Reserva destinos estructurados y bloques de caída; no necesita backpatching.
  */
 #include "tac_build_internal.h"
+#include "tac_loops.h"
 #include <stdlib.h>
 
 /* Materializa el lógico mediante flujo, nunca mediante AND/OR de evaluación plena. */
@@ -61,8 +62,14 @@ static void loop_l(TacBuilder *builder, ASTNode *node) {
     TacBlock *body = tb_reserve_block(builder);
     tb_emit(builder, node, TAC_IF_EQ, tac_label(end), value, tac_integer(0));
     builder->block = body;
+    size_t depth = ++builder->loop_depth;
     tb_statements(builder, tb_child(node, 1));
+    builder->loop_depth--;
+    TacBlock *latch = builder->block;
     tb_jump(builder, node, test);
+    TacLoopMark mark = {.kind = TAC_LOOP_L, .header = test, .body = body,
+                        .latch = latch, .structural_depth = depth};
+    tac_loop_mark_add(builder->function, &mark);
     builder->block = end;
 }
 
@@ -95,12 +102,19 @@ static void loop_s(TacBuilder *builder, ASTNode *node) {
     tb_emit(builder, node, step > 0 ? TAC_IF_GE : TAC_IF_LE, tac_label(end),
             tac_variable(control), tac_variable(limit));
     builder->block = body;
+    size_t depth = ++builder->loop_depth;
     tb_statements(builder, tb_child(node, 4));
+    builder->loop_depth--;
+    TacBlock *latch = builder->block;
     if (builder->block) {
         tb_emit(builder, node, TAC_ADD, tac_variable(control),
                 tac_variable(control), tac_integer(step));
         tb_jump(builder, node, test);
     }
+    TacLoopMark mark = {.kind = TAC_LOOP_S, .header = test, .body = body,
+        .latch = latch, .structural_depth = depth, .control = control, .limit = limit,
+        .initial = start, .bound = finish, .step = step};
+    tac_loop_mark_add(builder->function, &mark);
     builder->block = end;
 }
 

@@ -11,11 +11,19 @@
 
 static int calls;
 static int fail_eval;
+static int eval_destinations[3];
+static unsigned eval_preserves[3];
+static ASTNode *eval_expressions[3];
 
 static int evaluate(void *user, ASTNode *expr, int dst, unsigned preserve) {
     (void) user;
     calls++;
-    if (fail_eval || dst < 4 || dst > 15 || (preserve & (1u << dst)))
+    if (calls <= 3) {
+        eval_destinations[calls - 1] = dst;
+        eval_preserves[calls - 1] = preserve;
+        eval_expressions[calls - 1] = expr;
+    }
+    if ((fail_eval && calls == fail_eval) || dst < 4 || dst > 15 || (preserve & (1u << dst)))
         return 1;
     if (expr->kind == AST_IDENTIFIER) {
         Symbol *symbol = expr->symbol;
@@ -73,6 +81,251 @@ static int operation(CGCryptoContext *ctx, const char *name, ASTNode *args, int 
 static Symbol function = {.kind = SYMBOL_FUNCTION,
                           .frame = {.area_base = 32, .area_size = 80, .temp_base = 64}};
 
+/*
+ * fixed_slot — comprueba una instrucción dentro de un bundle indivisible.
+ * Entrada:
+ *   índice IR, slot y texto esperado.
+ * Salida:
+ *   ninguna; exige identidad de clase y texto.
+ * Efectos:
+ *   aborta si la plantilla separó o cambió el bundle.
+ * Restricciones:
+ *   consultar antes de la siguiente emisión, que puede mover el IR.
+ */
+static void fixed_slot(int index, unsigned slot, const char *text) {
+    const CGIRRecord *record = cg_ir_record(index);
+    assert(record && record->kind == CG_IR_FIXED_BUNDLE);
+    assert(strcmp(record->data.slots[slot].text, text) == 0);
+}
+
+/*
+ * loop_records — verifica la plantilla completa, incluidas rondas y bundle final.
+ * Entrada:
+ *   inicio en IR, llave, dirección de cifrado e identificador de etiquetas.
+ * Salida:
+ *   ninguna; exige registros, slots, separaciones y etiquetas exactos.
+ * Efectos:
+ *   solo consulta IR.
+ * Restricciones:
+ *   no genera la plantilla ni compara únicamente el ensamblador final.
+ */
+static void loop_records(int base, int key, int decrypt, unsigned id) {
+    const CGIRKind kinds[] = {
+        CG_IR_FIXED_BUNDLE, CG_IR_GAP, CG_IR_FIXED_BUNDLE, CG_IR_LABEL,
+        CG_IR_FIXED_BUNDLE, CG_IR_FIXED_BUNDLE, CG_IR_FIXED_BUNDLE,
+        CG_IR_FIXED_BUNDLE, CG_IR_FIXED_BUNDLE, CG_IR_FIXED_BUNDLE, CG_IR_GAP,
+        CG_IR_FIXED_BUNDLE, CG_IR_GAP, CG_IR_FIXED_BUNDLE,
+        CG_IR_FIXED_BUNDLE, CG_IR_FIXED_BUNDLE, CG_IR_LABEL, CG_IR_GAP
+    };
+    for (unsigned i = 0; i < sizeof kinds / sizeof kinds[0]; i++) {
+        const CGIRRecord *record = cg_ir_record(base + (int)i);
+        assert(record && record->kind == kinds[i]);
+        if (record->kind == CG_IR_GAP)
+            assert(record->data.gap_reason == CG_GAP_EXPLICIT);
+        if (record->kind == CG_IR_FIXED_BUNDLE) {
+            unsigned occupied = i == 0 || i == 6 || i == 8 ? 1u :
+                                i == 2 ? 4u : i == 4 || i == 5 || i == 14 ? 8u :
+                                i == 15 ? 13u : 2u;
+            for (unsigned slot = 0; slot < 4; slot++) {
+                if (!(occupied & (1u << slot)))
+                    fixed_slot(base + (int)i, slot, "nopi");
+            }
+        }
+    }
+    char start[96], end[96], text[128];
+    snprintf(start, sizeof start, ".L_crypto_%s_%u", decrypt ? "descifra" : "cifra", id);
+    snprintf(end, sizeof end, ".L_crypto_fin_%s_%u", decrypt ? "descifra" : "cifra", id);
+    assert(strcmp(cg_ir_record(base + 3)->data.label, start) == 0);
+    assert(strcmp(cg_ir_record(base + 16)->data.label, end) == 0);
+    fixed_slot(base, 0, "mov t4, 0");
+    snprintf(text, sizeof text, "bge rz, t5, %s", end);
+    fixed_slot(base + 2, 2, text);
+    fixed_slot(base + 4, 3, decrypt ? "lw t0, 4(t2)" : "lw t0, 0(t2)");
+    fixed_slot(base + 5, 3, decrypt ? "lw t1, 0(t2)" : "lw t1, 4(t2)");
+    fixed_slot(base + 6, 0, "saddi t2, t2, 8");
+    const int rounds[] = {7, 9, 11, 13};
+    for (int i = 0; i < 4; i++) {
+        snprintf(text, sizeof text, "feis t%d, t%d, t%d, %d, %d",
+                 i % 2, i % 2, 1 - i % 2, key, decrypt ? 3 - i : i);
+        fixed_slot(base + rounds[i], 1, text);
+    }
+    fixed_slot(base + 8, 0, "saddi t4, t4, 1");
+    fixed_slot(base + 14, 3, decrypt ? "sw t0, 4(t3)" : "sw t0, 0(t3)");
+    fixed_slot(base + 15, 0, "saddi t3, t3, 8");
+    snprintf(text, sizeof text, "blt t4, t5, %s", start);
+    fixed_slot(base + 15, 2, text);
+    fixed_slot(base + 15, 3, decrypt ? "sw t1, 0(t3)" : "sw t1, 4(t3)");
+}
+
+/*
+ * rejected_template — exige rechazo atómico de argumentos inválidos.
+ * Entrada:
+ *   descripción y contador, posiblemente NULL.
+ * Salida:
+ *   ninguna; exige error sin cambiar emisión ni contador.
+ * Efectos:
+ *   intenta emitir una plantilla inválida.
+ * Restricciones:
+ *   no requiere AST, callback ni área de guardado de vivos.
+ */
+static void rejected_template(const CGCryptoTemplate *operation, unsigned *next_label) {
+    int records = cg_ir_count();
+    int lines = cg_line_count();
+    unsigned saved = next_label ? *next_label : 0;
+    assert(cg_crypto_emit_template(operation, next_label) == 1);
+    assert(cg_ir_count() == records && cg_line_count() == lines);
+    assert(!next_label || *next_label == saved);
+}
+
+/*
+ * template_contracts — ejercita las siete plantillas sin AST ni evaluador.
+ * Entrada:
+ *   ninguna.
+ * Salida:
+ *   ninguna; exige emisión exacta, validación y contador compartido.
+ * Efectos:
+ *   crea y libera flujos del emisor.
+ * Restricciones:
+ *   los valores se consideran preparados; aquí se comprueba la forma de emisión.
+ */
+static void template_contracts(void) {
+    const CGCryptoTemplate cases[] = {
+        {.operation = CG_CRYPTO_AUTH, .registers = {10, -1, -1}, .k = -1, .w = -1},
+        {.operation = CG_CRYPTO_LOGOUT, .registers = {-1, -1, -1}, .k = -1, .w = -1},
+        {.operation = CG_CRYPTO_KV_WRITE, .registers = {10, -1, -1}, .k = 2, .w = 3},
+        {.operation = CG_CRYPTO_KV_LOCK, .registers = {-1, -1, -1}, .k = -1, .w = -1},
+        {.operation = CG_CRYPTO_SANC, .registers = {10, -1, -1}, .k = -1, .w = -1},
+        {.operation = CG_CRYPTO_ENCRYPT, .registers = {6, 7, 9}, .k = 2, .w = -1},
+        {.operation = CG_CRYPTO_DECRYPT, .registers = {6, 7, 9}, .k = 2, .w = -1},
+    };
+    const char *simple[] = {"auth t6", "logout", "kv_write t6, 2, 3", "kv_lock", "sanc t6"};
+    for (unsigned i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        cg_init();
+        unsigned next = 17;
+        int saved_calls = calls;
+        assert(cg_crypto_emit_template(&cases[i], &next) == 0);
+        assert(calls == saved_calls);
+        if (i < 5) {
+            assert(cg_ir_count() == 1 && next == 17);
+            for (unsigned slot = 0; slot < 4; slot++)
+                fixed_slot(0, slot, slot == 1 ? simple[i] : "nopi");
+        } else {
+            assert(cg_ir_count() == 18 && next == 18);
+            loop_records(0, 2, i == 6, 17);
+        }
+        rejected_template(NULL, &next);
+        rejected_template(&cases[i], NULL);
+        const int invalid_registers[] = {-2, 0, 16};
+        for (unsigned slot = 0; slot < 3; slot++) {
+            for (unsigned r = 0; r < 3; r++) {
+                CGCryptoTemplate bad = cases[i];
+                bad.registers[slot] = invalid_registers[r];
+                rejected_template(&bad, &next);
+            }
+        }
+        for (unsigned field = 0; field < 2; field++) {
+            CGCryptoTemplate bad = cases[i];
+            int present = field == 0 ? bad.k != -1 : bad.w != -1;
+            if (field == 0)
+                bad.k = present ? -1 : 0;
+            else
+                bad.w = present ? -1 : 0;
+            rejected_template(&bad, &next);
+            if (field == 0)
+                bad.k = 4;
+            else
+                bad.w = 4;
+            rejected_template(&bad, &next);
+        }
+        CGCryptoTemplate bad = cases[i];
+        bad.operation = (CGCryptoOperation)-1;
+        rejected_template(&bad, &next);
+        bad.operation = (CGCryptoOperation)99;
+        rejected_template(&bad, &next);
+        next = UINT_MAX;
+        if (i >= 5)
+            rejected_template(&cases[i], &next);
+        else
+            assert(cg_crypto_emit_template(&cases[i], &next) == 0 && next == UINT_MAX);
+        cg_free();
+    }
+    cg_init();
+    unsigned next = 41;
+    assert(cg_crypto_emit_template(&cases[5], &next) == 0);
+    assert(cg_crypto_emit_template(&cases[6], &next) == 0);
+    assert(next == 43 && cg_ir_count() == 36);
+    loop_records(0, 2, 0, 41);
+    loop_records(18, 2, 1, 42);
+    cg_free();
+    for (int key = 0; key < 4; key++) {
+        for (int word = 0; word < 4; word++) {
+            cg_init();
+            CGCryptoTemplate operation = cases[2];
+            operation.k = key;
+            operation.w = word;
+            next = 1;
+            assert(cg_crypto_emit_template(&operation, &next) == 0 && next == 1);
+            char text[64];
+            snprintf(text, sizeof text, "kv_write t6, %d, %d", key, word);
+            fixed_slot(0, 1, text);
+            cg_free();
+        }
+    }
+}
+
+/*
+ * callback_failures — comprueba orden y fallo en el segundo o tercer argumento.
+ * Entrada:
+ *   ninguna.
+ * Salida:
+ *   ninguna; exige fallo sin restauración ni consumo de etiquetas.
+ * Efectos:
+ *   usa el evaluador de prueba y deja emisión parcial que luego descarta.
+ * Restricciones:
+ *   guarda r10 como vivo para detectar su restauración indebida.
+ */
+static void callback_failures(void) {
+    for (int fail = 2; fail <= 3; fail++) {
+        cg_init();
+        calls = 0;
+        fail_eval = fail;
+        CGCryptoContext ctx = {.eval = evaluate, .function = &function,
+                               .live_mask = 1u << 10, .next_label = 8};
+        ASTNode args[] = {{.kind = AST_NUMBER, .number = 4096},
+                          {.kind = AST_NUMBER, .number = 8192},
+                          {.kind = AST_NUMBER, .number = 1},
+                          {.kind = AST_NUMBER, .number = 0}};
+        assert(operation(&ctx, "cifrar", args, 4) == 1);
+        assert(calls == fail && ctx.next_label == 8);
+        const int destinations[] = {6, 7, 9};
+        const unsigned preserves[] = {0, 1u << 6, (1u << 6) | (1u << 7)};
+        for (int i = 0; i < fail; i++) {
+            assert(eval_destinations[i] == destinations[i]);
+            assert(eval_preserves[i] == preserves[i]);
+            assert(eval_expressions[i] == &args[i]);
+        }
+        int stores = 0;
+        int results = 0;
+        for (int i = 0; i < cg_ir_count(); i++) {
+            const CGIRRecord *record = cg_ir_record(i);
+            assert(record->kind != CG_IR_LABEL && record->kind != CG_IR_FIXED_BUNDLE);
+            if (record->kind != CG_IR_OPERATION)
+                continue;
+            const char *text = record->data.instruction.text;
+            if (strncmp(text, "sw ", 3) == 0) {
+                assert(strcmp(text, "sw r10, 88(rz)") == 0);
+                stores++;
+            } else {
+                assert(strncmp(text, "mov ", 4) == 0);
+                results++;
+            }
+        }
+        assert(stores == 1 && results == fail - 1);
+        cg_free();
+    }
+    fail_eval = 0;
+}
+
 static int contracts(void) {
     CGCryptoContext ctx = {.eval = evaluate, .function = &function, .next_label = 1};
     ASTNode number = {.kind = AST_NUMBER, .number = 7};
@@ -123,7 +376,10 @@ static int contracts(void) {
     assert(operation(&ctx, "autenticar", &number, 1) == 1);
     assert(calls == 1 && ctx.next_label == 1);
     cg_free();
-    puts("PASS contrato crypto y fallo del evaluador");
+    fail_eval = 0;
+    template_contracts();
+    callback_failures();
+    puts("PASS contrato crypto, siete plantillas directas y fallos del evaluador");
     return 0;
 }
 

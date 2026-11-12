@@ -180,6 +180,11 @@ static int valid_arithmetic_registers(const TacInstruction *instruction, TacStag
         if (mask) {
             return tac_error(error, cap, "auxiliares físicos en PSEUDO virtual");
         }
+        if (operands[0].kind == TAC_TEMP &&
+            ((operands[1].kind == TAC_TEMP && operands[0].value.id == operands[1].value.id) ||
+             (operands[2].kind == TAC_TEMP && operands[0].value.id == operands[2].value.id))) {
+            return tac_error(error, cap, "destino aritmético PSEUDO coincide con fuente");
+        }
         return 1;
     }
     unsigned count = 0;
@@ -236,11 +241,6 @@ int tac_pseudo_validate(const TacFunction *function, const TacInstruction *instr
 TacInstruction *tac_append_pseudo(TacBlock *block, TacPseudoKind kind,
                                  TacOperand dest, TacOperand src1, TacOperand src2,
                                  TacSelectors selectors, uint16_t scratch_clobbers) {
-    TacInstruction *result = tac_append(block, TAC_PSEUDO, dest, src1, src2);
-    if (result) {
-        result->pseudo.kind = kind;
-        result->pseudo.scratch_clobbers = scratch_clobbers;
-        result->selectors = selectors;
-    }
-    return result;
+    return tac_insert_pseudo_after(block, block ? block->last : NULL, kind,
+        dest, src1, src2, selectors, scratch_clobbers);
 }

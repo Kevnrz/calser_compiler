@@ -51,3 +51,24 @@ int data_area_free(void) {
 int data_area_stack_short(void) {
     return !memory_reported && DATA_LIMIT - next_address < STACK_MIN_BYTES;
 }
+
+/* data_area_reserve_spill — extensión independiente del frame original.
+ * Entrada: símbolo FUNCTION sin derrame, bytes alineados no negativos.
+ * Salida: 1 si reserva válida; 0 ante contrato inválido o falta de datos.
+ * Efectos: avanza el cursor mediante data_area_alloc y escribe spill_base/size.
+ * Restricciones: solo O1/O2; un fallo termina la compilación, sin restauración.
+ * El llamador repite data_area_stack_short al terminar; Aho §7.1.1.
+ */
+int data_area_reserve_spill(Symbol *function, int bytes) {
+    if (!function || function->kind != SYMBOL_FUNCTION || bytes < 0 || bytes % 4 ||
+        function->frame.spill_size || bytes > DATA_LIMIT || data_area_end() > DATA_LIMIT) {
+        return 0;
+    }
+    function->frame.spill_base = -1;
+    if (!bytes) {
+        return 1;
+    }
+    function->frame.spill_size = bytes;
+    int overflow = data_area_alloc(bytes, &function->frame.spill_base);
+    return !overflow && data_area_end() <= DATA_LIMIT;
+}

@@ -13,6 +13,7 @@ typedef struct {
     char *error;
     size_t capacity;
     size_t next_auxiliary;
+    size_t loop_depth;
     int failed;
 } TacBuilder;
 

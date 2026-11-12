@@ -77,7 +77,7 @@ static int valid_array_roles(const TacInstruction *instruction, const TacOpInfo 
 }
 
 /* Valida una operación antes de inspeccionar sus campos dependientes de forma. */
-static int valid_instruction(const TacFunction *function,
+int tac_validate_instruction(const TacFunction *function,
                              const TacInstruction *instruction,
                              char *error, size_t cap) {
     TacOpInfo info;
@@ -169,7 +169,7 @@ static int valid_block_form(const TacFunction *function, const TacBlock *block,
     size_t pending = 0;
     for (const TacInstruction *instruction = block->first; instruction;
          instruction = instruction->next) {
-        if (!valid_instruction(function, instruction, error, cap)) {
+        if (!tac_validate_instruction(function, instruction, error, cap)) {
             return 0;
         }
         if (instruction->op == TAC_PARAM) {
@@ -310,7 +310,8 @@ int tac_validate(const TacProgram *program, char *error, size_t capacity) {
  * Efectos:
  *   valida todo el programa sin modificarlo ni expandir operaciones.
  * Restricciones:
- *   el futuro emisor debe llamar antes de emitir; Aho §8.6 y §8.8.
+ *   aplica a IR ya expandido. D acepta PSEUDO y las expande directamente
+ *   hacia codegen tras tac_validate; no aplica este filtro a su entrada. Aho §8.6–8.8.
  */
 int tac_validate_for_emission(const TacProgram *program, char *error, size_t capacity) {
     if (!tac_validate(program, error, capacity)) {

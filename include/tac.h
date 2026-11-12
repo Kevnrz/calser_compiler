@@ -45,6 +45,7 @@ typedef struct TacProgram TacProgram;
 typedef struct TacFunction TacFunction;
 typedef struct TacBlock TacBlock;
 typedef struct TacInstruction TacInstruction;
+typedef struct TacLoopMark TacLoopMark;
 
 typedef enum {
     TAC_STAGE_HIGH,          /* Operaciones Calser; TEMP se imprime tN. */
@@ -201,6 +202,8 @@ struct TacFunction {
     TacBlock *last;
     TacBlock *entry;                  /* Entrada, igual a first; raíz del CFG para los análisis. */
     TacFunction *next;                /* Siguiente función del programa; recorrido e impresión. */
+    /* Colección propia solo HIGH; descartar antes de invalidar bloques (unrolling). */
+    TacLoopMark *loop_marks;
 };
 
 struct TacProgram {
@@ -253,6 +256,23 @@ TacInstruction *tac_insert_after(TacBlock *block, TacInstruction *previous,
                                TacOperand src1, TacOperand src2);
 /* Quita/libera: 1 si pertenecía al bloque, 0 si ajena/NULL. */
 int tac_remove(TacBlock *block, TacInstruction *instruction);
+/* Transaccionales: 0 con diagnóstico y sin cambios. replace solo toca lecturas
+ * no ligadas; excluye bases simbólicas. block_remove rechaza entry, LABEL ajenos,
+ * marcas y caídas alcanzables alteradas. Reconstruir/validar después de editar CFG.
+ */
+int tac_replace_reads(TacBlock *block, TacInstruction *instruction,
+    TacOperand from, TacOperand to, size_t *replaced, char *error, size_t capacity);
+int tac_block_remove(TacFunction *function, TacBlock *block, char *error, size_t capacity);
+/* previous NULL = principio; previo ajeno = NULL. Inicializa los mismos datos
+ * que append; puede dejar forma temporalmente inválida, validar después.
+ */
+TacInstruction *tac_insert_isa_after(TacBlock *block, TacInstruction *previous,
+    const IsaInstruction *instruction, TacOperand dest, TacOperand src1, TacOperand src2,
+    int64_t displacement, TacOperand target, TacSelectors selectors);
+TacInstruction *tac_insert_pseudo_after(TacBlock *block, TacInstruction *previous,
+    TacPseudoKind kind, TacOperand dest, TacOperand src1, TacOperand src2,
+    TacSelectors selectors, uint16_t scratch_clobbers);
+
 TacInstruction *tac_append_isa(TacBlock *block, const IsaInstruction *instruction,
                               TacOperand dest, TacOperand src1, TacOperand src2,
                               int64_t displacement, TacOperand target,
@@ -276,7 +296,8 @@ int tac_disconnect(TacBlock *from, TacBlock *to);
 int tac_rebuild_edges(TacFunction *function, char *error, size_t capacity);
 int tac_validate(const TacProgram *program, char *error, size_t capacity);
 /* Exige forma válida, etapa ISA_PHYSICAL y ninguna PSEUDO pendiente de expansión.
- * Es el control obligatorio del futuro emisor antes de entregar ISA al ensamblador.
+ * Control de IR ya expandido. D valida su entrada con tac_validate y expande
+ * PSEUDO directamente a codegen; no aplica este filtro a esa entrada.
  */
 int tac_validate_for_emission(const TacProgram *program, char *error, size_t capacity);
 /* Requiere programa válido; el llamador comprueba ferror del FILE prestado. */

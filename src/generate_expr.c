@@ -24,7 +24,7 @@
 
 
 /*
- * emit_arith_callback — adapta operaciones aritméticas y de arreglos al emisor.
+ * gen_arith_emit_op — adapta operaciones aritméticas y de arreglos al emisor.
  *
  * Entrada:
  *   user  dato del callback, no utilizado.
@@ -36,7 +36,7 @@
  *   slots -1, 0, 2 y 3; la etiqueta debe terminar en dos puntos y caber en
  *   128 bytes.
  */
-static int emit_arith_callback(void *user, const CGArithOp *op) {
+int gen_arith_emit_op(void *user, const CGArithOp *op) {
     (void)user;
 
     if (op == NULL)
@@ -1158,8 +1158,8 @@ void gen_expr_setup(GenCtx *gen) {
     gen->crypto = (CGCryptoContext) {.eval = emit_crypto_argument, .next_label = 1};
     gen->crypto.user = gen;
 
-    // La aritmética y los arreglos emiten por emit_arith_callback.
-    gen->arithmetic.emit = emit_arith_callback;
+    // La aritmética y los arreglos emiten por gen_arith_emit_op.
+    gen->arithmetic.emit = gen_arith_emit_op;
     gen->arithmetic.user = NULL;
     gen->arithmetic.next_label = 0;
 }

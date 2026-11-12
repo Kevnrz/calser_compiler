@@ -36,6 +36,11 @@ Si un diagnóstico encuentra un bloque sin función o fuera de su lista, usa su
 ID interno porque no hay una posición válida.
 Las constantes de alto nivel no se truncan: C2.3 deberá aplicar la semántica de
 32 bits y materializar las que no caben en un inmediato de 18 bits con signo.
+La selección de pasos de materialización vive en `isa_constant_plan`
+(`include/isa_constant.h`, `src/isa_constant.c`), compartida entre `gen_mov` y la
+bajada a ISA virtual. Devuelve uno o cuatro pasos con roles DEST/SCRATCH,
+sin elegir registros, bundles ni huecos. El generador conserva su empaquetado P1;
+la bajada vincula esos roles a TEMP y propaga línea/columna.
 
 ## Operaciones de alto nivel
 
@@ -305,27 +310,229 @@ el programa; guardar next antes de quitar el nodo visitado, reconstruir al
 terminar y llamar tac_validate. Esta devuelve 1 o 0 y diagnóstico legible.
 La liberación del programa no libera Scope, Symbol ni filas ISA prestadas.
 
-## Orden de pasadas y responsabilidades
+## Camino optimizante: contrato integral
 
-**unrolling → DCE → nivel ISA (MUL/DIV/MOD/POW y CRYPTO como una instrucción)
-→ reordenamiento + renombramiento → asignación de registros (con spilling)
-→ expansión con el código del P1 → calendarización en bundles**.
+Regla: **sin cambiar el comportamiento de -O0 ni romper contratos existentes;
+se permiten las extensiones acordadas**. -O0 mantiene el generador y el
+organizador P1. E conecta las banderas y el gestor con ccom; las cinco pasadas siguen vacías
+hasta C3. C1 ofrece análisis, marcas y edición.
 
-| Pasada | Qué recibe y qué conserva |
+**AST → construcción HIGH con marcas S/L → unrolling C3.1 → renombramiento local
+C3.3a → DCE C3.2 → bajada C2.3 → ISA virtual: reordenamiento C3.3b → asignación
+linear scan LRU C2.3 + spilling C3.4 → ISA física: emisión y expansión P1 →
+cg_schedule → ensamblador → .bin/.hex/.mem**.
+
+Hay dos calendarizaciones: list scheduling antes de asignar (ISA virtual) y
+`cg_schedule` después de expandir (físicos). La segunda también puede reordenar,
+además de empaquetar, conservando los bundles fijos de CRYPTO.
+
+| Pasada | Recibe → entrega | Restricciones | Métricas propias |
+| --- | --- | --- | --- |
+| C3.1 unrolling | HIGH con marcas → HIGH replicado con residuo | Factor configurable, heurística total/parcial; ignora marcas sin retroceso; respeta ROM | Lazos, factor e instrucciones antes/después |
+| C3.3a renombramiento | HIGH → HIGH, local al bloque | Solo Vm escalares propias; TEMP nuevo por redefinición, usos posteriores actualizados y escritura final si sigue viva; respeta escrituras condicionales | Definiciones renombradas |
+| C3.2 DCE | HIGH + vivacidad → HIGH sin muertos/inalcanzables | Raíces observables; CALL usa/define globales, RETURN las usa; no elimina stores, CRYPTO ni llamadas; DIV/MOD/POW solo con prueba de que no fallan | Instrucciones y bloques eliminados |
+| C2.3 bajada | HIGH → ISA virtual | Selección, sin plegado ni DCE; HIGH intacto | Instrucciones ISA antes de expandir, MUL cuenta una |
+| C3.3b reordenamiento | ISA virtual → mismo bloque con otro orden | DAG RAW/WAR/WAW de valores/memoria, direcciones rz+constante; CALL/CRYPTO barreras; nada cruza salto; respeta may_trap | Instrucciones reordenadas |
+| C2.3 asignación | ISA virtual → ISA física | Linear scan sobre intervalos, registro libre más antiguo (LRU), ABI, ocho auxiliares aritméticos; integra la política de spilling antes del error definitivo | Conteos comunes de instrucciones |
+| C3.4 spilling | Intervalos + profundidad natural → ISA física con cargas/guardados | Víctima que termina más lejos evitando mayor profundidad; área propia de derrame | Valores derramados, cargas y guardados |
+| C2.3 emisión | ISA física → flujo de cg_op/cg_bundle/cg_label/cg_gap | Expande PSEUDO con cg_arith_emit/cg_crypto_emit_template; preserva vivos, usa temp_base alrededor de aritmética cuando corresponde; ninguna PSEUDO llega al ensamblador | Instrucciones emitidas |
+| cg_schedule | ISA real física → bundles | Respeta efectos, separaciones y bundles fijos P1 | Bundles, slots NOP y bytes de instrucciones (16 por bundle) |
+
+`may_trap` se respeta **en ambas direcciones**: no adelantar una operación que
+pueda fallar por delante de un efecto observable anterior, ni atrasarla detrás
+de un efecto observable posterior; conservar también el orden de fallos
+potencialmente distinguibles. Esto exige aristas de efectos, no convertir toda
+aritmética en barrera. Una prueba de que no falla permite relajar esas aristas.
+MUL/DIV/MOD/POW son operaciones largas indivisibles en la calendarización virtual:
+sus instrucciones internas y lazos solo aparecen al emitir. No se intercalan
+otras instrucciones dentro de una PSEUDO ni se confunde su costo estimado con
+una latencia ISA exacta. CRYPTO sigue siendo barrera por su estado oculto.
+
+### Estado observable y vivacidad
+
+El estado observable es: globales, variables de main (escalares/arreglos),
+memoria externa 0x1000–0xFFFF y estado CRYPTO. No son observables las variables de
+otras funciones, la pila ni temp_base. Las comparaciones futuras con -O0 se
+hacen sobre ese estado, no sobre la asignación de registros o memoria privada.
+
+En HIGH el cliente pasa raíces VARIABLE escalares de main/globales, vivas a la
+salida de main. Arreglos y memoria externa son efectos de memoria, no valores a
+asignar a registros. En ISA las variables ya son memoria: las raíces VARIABLE
+se ignoran como registros; stores, llamadas y CRYPTO conservan sus efectos no
+eliminables. Los metadatos siguen describiendo memoria y estado oculto.
+
+`tac_live_analyze` calcula USE/DEF y LIVE_IN/OUT hasta punto fijo (Aho §9.2.5),
+y luego vivos antes/después de cada instrucción. Las claves son Symbol por
+identidad, TEMP por ID local y PHYS por número; nunca se comparan direcciones de
+casillas para identificar valores. Las vistas y conjuntos pertenecen al resultado.
+Conservar función/instrucciones/símbolos; liberar análisis antes de editar.
+
+El adaptador común `tac_locations` agrega globales HIGH y registros implícitos
+ISA a las consultas de tac.h. Cada instrucción separa (a) usos/definiciones y
+vivacidad lógica, (b) lecturas/escrituras, clobbers y auxiliares físicos y (c)
+candidatos de preservación vivos a través de una llamada/expansión. Clobbers
+nunca matan un virtual. En virtual los candidatos de aritmética son conservadores:
+C2 decidirá qué físicos se destruyen realmente. rz no ocupa una ubicación viva
+ni un registro asignable. `preserves` de ifmov/feis sí es uso lógico del destino;
+no se agrega como lectura física artificial, conservando el contrato ISA A.
+
+La consulta `tac_variable_is_rename_candidate` recibe la lista prestada de ámbitos
+(`scopes_first`). Exige SYMBOL_VARIABLE, MODIFIER_VM, dimensions=0,
+limit_address=-1, propietario Scope.owner igual a la función y no global. No
+modifica Symbol ni depende de nombres. Parámetros, retorno, control Vi de S y
+límite auxiliar no son candidatos.
+
+### Dos fuentes de lazos y vida de las marcas
+
+Cada TacFunction HIGH posee `loop_marks`, creada al traducir S/L. Una marca
+presta cabecera, cuerpo y latch opcional, y conserva profundidad sintáctica.
+En S presta control/límite y guarda operandos de inicio/fin **ya capturados** y
+paso: no contiene expresiones para reevaluar. No cambia IDs, CFG ni el .tac de -i.
+Las marcas no se copian a ISA.
+
+`tac_loops_analyze` recalcula alcanzabilidad y dominadores desde entry (Aho
+§9.6.1). Retroceso significa destino que domina al origen (§9.6.4); algoritmo
+9.46 (§9.6.6) para el lazo natural. Une lazos de igual cabecera antes de contar
+profundidad. Los inalcanzables tienen profundidad cero y no participan. Si al
+retirar retrocesos por dominancia queda un ciclo alcanzable, diagnostica grafo
+irreducible. El análisis sirve en HIGH e ISA y no depende de las marcas.
+
+La consistencia es en un solo sentido: una marca **con retroceso alcanzable**
+requiere su lazo natural; puede haber lazos sin marca (R y copias de arreglos).
+Las marcas sin latch o con latch inalcanzable quedan señaladas **sin retroceso**
+y son válidas, por ejemplo cuando el cuerpo termina en E. Las marcas de una
+cabecera inalcanzable se identifican aparte. El unrolling ignora ambos casos.
+El estado se consulta en el resultado sin mutar la marca ni el CFG.
+
+`tac_loop_marks_discard` libera la colección; también se libera al destruir la
+función. El gestor de E la descartará después de unrolling, o antes de la primera
+pasada invalidante si está desactivado. Las otras pasadas no mantienen marcas;
+nunca deben quedar referencias a bloques liberados. El descarte explícito existe
+en C1; no se implementa ni simula todavía el unrolling.
+
+### Edición y propiedad
+
+`tac_insert_isa_after` y `tac_insert_pseudo_after` comparten inicialización con
+append. NULL como previo inserta al inicio; previo ajeno devuelve NULL. No
+expanden ni asignan registros. `tac_replace_reads` prepara y valida una copia:
+solo cambia posiciones reads, excluye bases simbólicas y nunca cambia etiquetas,
+objetivos ni definiciones. Si coincide una lectura ligada a definición
+(preserves de ifmov/feis), rechaza todo sin cambios. Devuelve éxito y cantidad;
+sin coincidencias es éxito con cero.
+
+`tac_block_remove` verifica todo antes de editar. Rechaza entry, LABEL que
+quedarían apuntándolo (incluido isa.target), marcas y caídas alcanzables
+alteradas; tampoco deja al último bloque sin terminación válida. Las referencias
+internas del bloque retirado desaparecen con él. Desconecta aristas y conserva
+extremos; retirar regiones completas requiere que el cliente retire/redirija
+referencias primero. Después de editar control: tac_rebuild_edges y tac_validate.
+La clonación de bloques/instrucciones corresponde a C3.1, no a C1.
+
+### Infraestructura y entregas pendientes
+
+| Tarea | Responsabilidad / estado |
 | --- | --- |
-| Unrolling y DCE | HIGH: operaciones Calser, variables y TEMP tN |
-| Selección de C2.3 | HIGH → ISA_VIRTUAL: instrucciones reales y PSEUDO con TEMP vN |
-| Reordenamiento y renombramiento (C3.3) | ISA_VIRTUAL; PSEUDO sigue siendo una instrucción, con sus efectos consultables |
-| Asignación y spilling (C3.4) | ISA_VIRTUAL → ISA_PHYSICAL; resuelve auxiliares y conserva valores según las máscaras |
-| Expansión P1 | ISA_PHYSICAL con PSEUDO → instrucciones reales; agrega guardado/recuperación y flujo interno |
-| Calendarización | Solo ISA real con físicos; organiza bundles y conserva las plantillas fijas del P1 |
+| C2.3 C1, implementado | Vivacidad genérica y efectos separados; marcas; dominadores/lazos/profundidad; clasificación; edición y descarte |
+| C2.3 C2, implementado | Intervalos reutilizables, linear scan LRU, restricciones/preservación y reserva de área de derrame |
+| C3.1, pendiente | Clonación y unrolling con residuo |
+| C3.2, pendiente | Eliminación con raíces observables y prueba de seguridad de errores |
+| C3.3a/b, pendiente | Renombramiento local y DAG/list scheduling virtual |
+| C3.4, pendiente | Spilling sobre intervalos y profundidad natural |
+| C2.3 D, implementado (emisor compartido) | Emisión, ABI, preservación y expansión P1 |
+| C2.3 E, implementado | Gestor con firma/contexto común, cinco pasadas registradas vacías, validación tras cada pasada, banderas, métricas y control final de ROM |
+| C4.2 / I2, pendiente | Ciclos del simulador a CSV/gráficas por prueba / ciclos RTL |
 
-El spilling puede agregar cargas/almacenamientos antes de la expansión final y
-la calendarización. A solo define forma, consultas, validación y posición fuente;
-no implementa selección, asignación, expansión ni las banderas de optimización.
-`-O0` seguirá usando el generador actual; `-O1/-O2` usarán este camino cuando
-se implementen. C2.1 construye e imprime alto nivel, pero todavía no implementa
-expansión, asignación, optimizaciones ni adaptador al organizador.
+El área de derrame es una extensión **no contigua** propia de cada función,
+separada de temp_base y agregada después de las áreas existentes, sin reubicar
+símbolos ni imagen global. Solo -O1/-O2; el gestor deberá tomar la nueva dirección
+de pila y repetir el chequeo de 256 bytes libres después de reservar. R reutiliza
+el área; no hay recursión ordinaria. C1 no reserva ni modifica FrameLayout.
+Sin spilling, la asignación falla con `sin registros temporales disponibles`,
+con archivo:L:C. C2 elige los auxiliares y prepara el plan de preservación;
+D hará los guardados/restauraciones requeridos, no elegirá tarde ocho auxiliares.
+
+### §5. Banderas y errores: contrato de E
+
+E implementa estas banderas y métricas; las cinco pasadas están registradas
+con cuerpos vacíos hasta C3. Sin bandera de nivel, sigue el camino actual `-O0`, con salida
+idéntica byte a byte. `-O1` activa construcción, pasadas HIGH, bajada, pasadas ISA
+virtual, asignación, emisión D, calendarización y salidas existentes.
+
+- `--opt=lista` selecciona `unroll,rename,dce,reorder,spill` e implica `-O1`
+  aunque no se escriba ese nivel. Con `-O0` explícito es error de uso,
+  independientemente del orden de los argumentos.
+- Repetir el mismo nivel es válido; especificar niveles distintos es error de
+  uso. Varias opciones `--opt` unen sus listas sin repetir pasadas. La lista
+  vacía y cualquier nombre desconocido son errores de uso.
+- El orden de ejecución es fijo: `unroll`, `rename`, `dce` en HIGH, `reorder`
+  en ISA virtual y `spill` como política dentro de la asignación; nunca depende
+  del orden de `--opt`. E registra las cinco pasadas vacías y valida después de
+  cada una. Un fallo de validación es error interno, código 1, con el nombre
+  de la pasada y el archivo real.
+- `-O2` significará todas las pasadas, pero se rechaza como error de uso hasta
+  C3.5. `--unroll=N` exige `unroll` activo y un entero entre 2 y 16 inclusive.
+  Sin factor explícito se aplica la heurística del §11; no se fija un factor
+  predeterminado nuevo en E.
+- `--no-schedule` se permite en `-O1`: omite el empaquetado final y conserva la
+  salida conservadora. **También se comprueba el máximo de 4096 bundles sobre
+  esa salida**, porque el límite de ROM se aplica a lo entregado al ensamblador,
+  aunque no se haya calendarizado. Con calendarización se comprueba después de
+  ella, incluyendo expansiones, preservación y NOPs. No es el límite de región
+  de `cg_schedule`, ni agrega un chequeo nuevo al camino `-O0`.
+- `-i`/`--tac` conserva su significado: muestra el HIGH inicial, antes de las
+  pasadas, aunque haya pasadas HIGH activas.
+- `--ast-json` junto con `-O1` implica compilar aun sin otras opciones de salida.
+  El AST se sigue escribiendo antes del análisis semántico; no se retrasa su
+  escritura. El comportamiento actual sin `-O1` se conserva.
+- `-v` informa construcción, pasadas, bajada, asignación y emisión mediante
+  `report_phase`. `-m` muestra las etiquetas realmente emitidas, incluidas
+  `.L_o1_*`, funciones, expansiones y terminales, con sus direcciones finales:
+  `cg_ir_count`/`cg_ir_record` y `cg_label_address` sobre la salida final.
+  `-p` muestra los bundles de esa salida. El camino `-O0` no cambia.
+- `-x` junto con `-O1`, `-O2`, `--opt`, `--unroll` o `--metrics` es error de uso.
+  Todos los errores de uso de este contrato devuelven código 2.
+
+Los errores del camino `-O1` llevan siempre el nombre real del archivo.
+
+### §6. Métricas y JSON: contrato de E
+
+`--metrics archivo.json` exige el nivel efectivo `-O1`, incluido el obtenido
+mediante `--opt`; sin él es error de uso, código 2. Una compilación fallida no
+escribe JSON de métricas. `tiempo_ms.total` cubre toda la compilación hasta
+terminar las salidas, excluyendo la escritura del propio JSON.
+
+Las claves del objeto son fijas:
+
+```text
+programa, nivel, pasadas,
+alto_nivel: {inicial, despues: {<pasada>: n}},
+isa_antes_expandir, emitidas, bundles, nops, bytes, demanda, presion,
+mascara_registros,
+tiempo_ms: {total, pasadas: {<pasada>: ms}},
+contadores: {desenrollados, renombradas, eliminadas, bloques_eliminados,
+             reordenadas, derramados, cargas_derrame, guardados_derrame},
+ciclos_sim
+```
+
+`nivel` vale `"O1"`. `pasadas` enumera solo las ejecutadas, en orden fijo; los
+mapas por pasada contienen solo las ejecutadas que correspondan a ese mapa
+(`alto_nivel.despues` solo las de HIGH). No se agregan entradas para pasadas
+inactivas. `demanda` es el máximo de vivos antes de asignar, obtenido mediante
+una consulta única de C1; `presion` es el máximo de intervalos activos con
+registro en el asignador, tomando el máximo entre funciones. La máscara
+`"0x...."` de registros usados es informativa y no sustituye la presión.
+
+`emitidas` cuenta las operaciones no-NOP que llegan a `cg_schedule`, incluidos
+los slots no-NOP de bundles fijos, expansiones y preservación; si se desactiva
+el calendario, cuenta el mismo IR de entrada. `nops = 4 × bundles − emitidas`
+y `bytes = 16 × bundles` describen la salida final elegida. Los bytes no son el
+tamaño completo del `.bin` con cabecera e imagen. Las pasadas vacías dejan
+`desenrollados` como `[]` y los demás contadores en 0; `ciclos_sim` vale `null`.
+C4.2/I2 agregarán ciclos y presentación gráfica.
+
+El intérprete comprueba pasadas HIGH; sim_asm contra -O0 comprueba las de ISA;
+tac_validate se ejecutará tras cada pasada. El gestor E aplica este contrato; las transformaciones y el derrame efectivo
+siguen pendientes de C3.
 
 ## Guía y sexto ejemplo, paso a paso
 
@@ -378,7 +585,7 @@ solo esos binarios, diff y ccom; no Python. La suite forma parte de make check.
 `scopes_global()`. Usa los Symbol anotados, nunca vuelve a resolver nombres.
 `TacBuildResult` posee el TacProgram, la imagen inicial y los Symbol auxiliares;
 se libera antes de `semantic_free`. No modifica AST, ámbitos, direcciones,
-etiquetas ni estado del generador. La construcción solo ocurre con `-i` o `--tac`.
+etiquetas ni estado del generador. La construcción ocurre con `-i`/`--tac` y con `-O1`.
 
 La imagen inicial se imprime como `initial_data bytes=N`, seguida de palabras
 `@desplazamiento = valor` en hexadecimal. Conserva el mismo tamaño y palabras
@@ -468,6 +675,137 @@ de C1 no ejecutan TAC; las pruebas de valores de C2 usan el intérprete descrito
 El `.tac` sigue siendo un listado diagnóstico, no un formato deserializable ni
 un archivo para entregar entero a `cg_op`.
 
+## Bajada a ISA virtual (C2.3 B)
+
+`include/tac_lower.h` expone `tac_lower(high, error, capacity)`. Recibe el
+programa HIGH de `TacBuildResult` y devuelve otro `TacProgram` propio, en etapa
+ISA_VIRTUAL y validado. Ante forma o anotaciones insuficientes devuelve NULL;
+los diagnósticos de selección incluyen `linea L:C`. No modifica HIGH, AST,
+símbolos, imagen inicial ni estado del generador. Requiere símbolos semánticos
+con direcciones, `param_list` y `decl_node` anotados, no solo nombres.
+
+Ambos programas comparten símbolos y ámbito global prestados. La imagen inicial
+y los símbolos auxiliares de S siguen perteneciendo a `TacBuildResult`.
+Liberar primero ISA con `tac_program_free`, después el resultado HIGH con
+`tac_build_free` y al final el semántico. La salida tiene bloques propios:
+sus objetivos se mapean por puntero, conservando orden y caída de la función.
+Nunca se interpreta Bn como identidad ni se ordenan los sucesores.
+
+Cada TEMP de HIGH conserva su ID local en la función nueva. Los virtuales
+adicionales se reservan desde `next_temp`; no hay límite de doce ni registros
+físicos asignables en esta etapa. Cada instrucción seleccionada hereda línea
+y columna de su instrucción HIGH, incluso los pasos de constantes y direcciones.
+Una posición desconocida sigue siendo cero.
+
+La obtención de fuentes usa `rz` para INTEGER exactamente cero cuando el
+consumidor admite registros fijos, sin reservar un virtual. No propaga ceros
+conocidos de TEMP ni VARIABLE. Las PSEUDO aritméticas exigen fuentes TEMP por
+el contrato de `cg_arith_emit` (registros físicos 4–15); esta política se elige
+por sus propiedades de auxiliares. CRYPTO admite `rz` en sus fuentes de valor,
+pero conserva los selectores como literales. Las bases simbólicas de dirección
+cero usan el mismo ayudante. COPY hacia TEMP y ADDRESS conservan la definición
+del destino, incluso con `mov vN, 0`; ADD con inmediato derecho cero conserva
+`saddi`. El plan compartido de constantes no cambia.
+
+La tabla siguiente usa `g@32`, `a@64`, parámetro 0 en dirección 8 y retorno en 4
+como ejemplos; vN es ilustrativo. Las fuentes VARIABLE se cargan antes de la ALU
+y los resultados VARIABLE se escriben después. No hay plegado, DCE ni reducción
+de fuerza: incluso multiplicar un índice por cuatro conserva una PSEUDO MUL.
+
+| HIGH | Selección | Ejemplo ISA virtual |
+| --- | --- | --- |
+| COPY de literal | materialización directa | `t0 = 7` → `mov v0, 7` |
+| COPY de TEMP | ADD con rz | `t1 = t0` → `add v1, v0, rz` |
+| COPY desde VARIABLE | LW de su casilla | `t0 = g` → `lw v0, 32(rz)` |
+| COPY hacia VARIABLE | SW del valor materializado | `g = t0` → `sw v0, 32(rz)` |
+| ADDRESS | materializa la dirección, no el contenido | `t0 = address a` → `mov v0, 64` |
+| ADD | ADD o SADDI si la fuente derecha cabe en 18 bits | `t2 = t0 + 1` → `saddi v2, v0, 1` |
+| SUB | SUB | `sub v2, v0, v1` |
+| AND | AND | `and v2, v0, v1` |
+| OR | OR | `or v2, v0, v1` |
+| XOR | XOR | `xor v2, v0, v1` |
+| EQ | SEQ | `seq v2, v0, v1` |
+| NE | SNE | `sne v2, v0, v1` |
+| LT | SLT | `slt v2, v0, v1` |
+| LE | SLE | `sle v2, v0, v1` |
+| GT | SLT con fuentes intercambiadas | `slt v2, v1, v0` |
+| GE | SLE con fuentes intercambiadas | `sle v2, v1, v0` |
+| NEG | SUB desde cero | `sub v1, rz, v0` |
+| NOT | SEQ contra cero | `seq v1, v0, rz` |
+| LOAD, base simbólica | dirección absoluta si cabe | `t0 = a[4]` → `lw v0, 68(rz)` |
+| LOAD, offset constante | LW con desplazamiento | `t1 = t0[4]` → `lw v1, 4(v0)` |
+| LOAD, offset calculado | ADD de dirección y LW | `add v3, v0, v1; lw v2, 0(v3)` |
+| STORE | dirección seleccionada y SW | `t0[4] = t1` → `sw v1, 4(v0)` |
+| IF_EQ | BEQ | `beq v0, v1, B2` |
+| IF_NE | BNE | `bne v0, v1, B2` |
+| IF_LT | BLT | `blt v0, v1, B2` |
+| IF_LE | BGE con fuentes intercambiadas | `bge v1, v0, B2` |
+| IF_GT | BLT con fuentes intercambiadas | `blt v1, v0, B2` |
+| IF_GE | BGE | `bge v0, v1, B2` |
+| GOTO | JEF a LABEL propio | `jef B2` |
+| PARAM | SW a `callee.param_list[posición]` | `param t0, 0` → `sw v0, 8(rz)` |
+| CALL | JAS y captura inmediata del resultado | `jas rl, .L_func_f; lw v0, 4(rz)` |
+| RETURN de función | casilla de retorno y JEFR | `sw v0, 4(rz); jefR rz, rl` |
+| RETURN de main | PSEUDO EXIT | `pseudo.exit` |
+| MUL/DIV/MOD/POW | una PSEUDO con fuentes materializadas | `pseudo.mul v2, v0, v1` |
+| Cada CRYPTO | una PSEUDO con valores y selectores | `pseudo.cifrar v0, v1, v2, 2` |
+
+Para una base simbólica se combina su dirección con un offset inmediato cuando
+el acceso resultante cabe en 18 bits. En los demás casos se materializa la base;
+si el offset tampoco cabe, se materializa y suma a la base antes del LW/SW con
+desplazamiento cero. Un parámetro arreglo se lee y redefine como puntero en su
+casilla. El constructor ya capturó los argumentos de R antes de esas escrituras;
+la bajada conserva sus COPY y el salto al cuerpo, sin llamada nueva.
+
+`tl_constant` consume `isa_constant_plan`, sin copiar su descomposición. DEST
+es el TEMP del resultado y SCRATCH, otro TEMP. Sus pasos son TAC_ISA reales;
+no agrega bundles ni huecos. Por ejemplo, 200000 se construye como
+`mov v0, 6; mov v1, 15; sll v0, v0, v1; saddi v0, v0, 3392`.
+Un NEG presente en HIGH se conserva aunque su operando sea constante.
+
+Cada PARAM encuentra el CALL de su grupo y usa la posición explícita, sin
+suponer orden físico 0,1,2. La aridad debe coincidir con la firma semántica.
+CALL captura el retorno antes de cualquier otra llamada; si se descarta, no
+lo carga. RETURN no recarga una casilla que ya es el resultado de la función;
+si recibe otro valor, lo escribe antes de JEFR. Main siempre termina con EXIT.
+
+`make check-tac-lower` prueba selección manual y todo el corpus válido, incluidos
+CRYPTO y los cuatro R con arreglos. Compara doce listados y captura HIGH,
+sus metadatos, aristas e imagen antes/después sin normalización.
+
+E enlaza esta etapa con ccom para `-O1`. `-i` conserva HIGH y el intérprete
+no cambia. C1 agrega vivacidad y lazos; C2 asigna registros; D implementa
+conservación emitida de vivos/rl, expansión P1 y emisión.
+Por eso la salida virtual aún no es un programa físico ejecutable: el control
+`tac_validate_for_emission` la rechaza. Referencias: Aho §7.2, §8.1–8.2 y §8.6.
+
+## Plantillas CRYPTO compartidas con el generador P1
+
+`cg_crypto_emit_template` (`codegen_crypto.h`) recibe una `CGCryptoTemplate`
+con operación, tres registros físicos y selectores `k/w`, más un puntero al
+contador de etiquetas único por programa. No recibe AST ni callback, no mueve
+argumentos y no guarda/restaura vivos. Valida forma, registros fijos, selectores
+y contador antes de emitir; un rechazo no modifica emisión ni contador.
+`cg_crypto` conserva el recorrido del AST para -O0: validación previa, guardado,
+evaluación, llamada a la misma plantilla y restauración. `emit_loop` y sus
+bundles fijos se comparten sin duplicación.
+
+El emisor de -O1 preserva los vivos afectados **antes** de
+sobrescribir los registros fijos; colocar origen/destino/bloques en `{6, 7, 9}`
+(t2/t3/t5), o token/palabra/ancla en `{10, -1, -1}` (t6); y resolver movimientos
+como copias paralelas, incluidos ciclos y fuentes `rz`. Para operaciones sin
+valores se usa `{-1, -1, -1}`. Los selectores presentes son 0–3 y los ausentes -1.
+Debe garantizar la separación requerida antes de que la plantilla lea sus
+fuentes, conservar un contador compartido por todo el programa y recuperar
+los vivos después de emitir. El lazo modifica r4–r8 y lee r9. El resumen
+conservador `call_clobbers = 0xfff0` sigue incluyendo la preparación; no cambia.
+
+Las etiquetas `.L_crypto_*` mantienen su formato. Cifrar/descifrar consumen un
+identificador, aun cuando los bloques en ejecución sean cero o negativos;
+rechazan el contador `UINT_MAX`. Las demás operaciones no lo incrementan.
+La preparación física, spilling y emisión desde TAC quedan para los siguientes
+commits: esta separación no conecta -O1 con el ensamblador.
+
 ## Intérprete de pruebas de alto nivel (C2)
 
 `make check-tac-values` ejecuta `pruebas/tac_build/probar_valores.py` y el auxiliar
@@ -504,3 +842,150 @@ Esto permite detectar diferencias de traducción o de optimización sin generar
 ISA desde TAC. El intérprete solo se enlaza con el auxiliar de pruebas, no con
 ccom. Los controles adicionales verifican orden de evaluación, signos y desborde,
 errores aritméticos, rechazo de CRYPTO y detención por presupuesto.
+
+## C2: intervalos y asignación a registros físicos
+
+`tac_intervals.h` deriva intervalos de la vivacidad de C1 en ISA virtual. El
+algoritmo linear scan sigue a Poletto y Sarkar (1999), **fuera de Aho**:
+[Linear Scan Register Allocation](https://web.cs.ucla.edu/~palsberg/course/cs132/linearscan.pdf).
+La política LRU entre registros libres corresponde al contrato del proyecto
+(Aho §10.2.3); las restricciones de selección se describen en Aho §8.8.
+
+La numeración recorre la lista de bloques de cada función y sus instrucciones:
+lectura `2*i`, escritura `2*i+1`. Un bloque vacío consume también un índice y
+sus fronteras tienen posiciones propias. Los intervalos son cerrados; expiran
+si `fin < inicio_siguiente`. Cada TEMP tiene una sola envolvente que incluye
+usos, definiciones, `before/after`, `live_in/live_out` y retrocesos. Se conservan
+huecos, varias definiciones, definiciones muertas y bloques inalcanzables: no hay
+DCE, SSA ni partición de intervalos en C2.
+
+Las fuentes de MUL/DIV/MOD/POW ocupan también la posición de escritura. Así, el
+destino recibe un registro distinto incluso cuando las fuentes mueren allí. La
+bajada, si HIGH pide escribir el mismo TEMP que una fuente, crea un destino
+nuevo para la PSEUDO y después `add destino_original, nuevo, rz`. La validación
+ISA virtual rechaza destino TEMP igual a cualquiera de las fuentes TEMP.
+Una instrucción ISA ordinaria puede reutilizar una fuente muerta.
+
+`tac_allocate_registers(program, source_name, error, capacity)` asigna r4–r15;
+rz, rl, rx y rg quedan excluidos. Ordena intervalos por inicio/ID y activos por
+fin/ID. De los registros libres elige el que quedó libre primero; si empatan,
+el menor número físico. Los nunca usados son inicialmente los más antiguos.
+El punto interno estático `no_register_available` produce
+`archivo:L:C: error de generacion: sin registros temporales disponibles`.
+C3.4 reemplazará su cuerpo para integrar el derrame **dentro del recorrido**;
+no hay callback ni una pasada que derrame después del error.
+
+La asignación reescribe el mismo programa: TEMP pasa a PHYS en todos los
+operandos, incluidas lecturas ligadas de ifmov/feis; se escriben las máscaras
+`scratch_clobbers` y se cambia la etapa a ISA_PHYSICAL. Finalmente se ejecuta
+`tac_validate`. Si falla se abandona la compilación: el contrato permite que
+el programa quede inválido. El resultado posee planes y mapas, pero no el IR;
+se libera antes del programa y de sus símbolos. `source_name` es obligatorio,
+prestado y no NULL; se rechaza su ausencia antes del recorrido.
+
+Cada sitio jas/CRYPTO/aritmética tiene un plan para D. Los ocho auxiliares
+aritméticos son distintos y no coinciden con destino ni fuentes; se prefieren
+registros sin un valor vivo que preservar. Se registra únicamente la
+intersección de los candidatos `preserve` de C1 con los registros destruidos.
+Cada entrada conserva ID TEMP original y registro físico, en orden físico.
+Los clobbers nunca se convierten en definiciones de virtuales.
+
+C2 no emite guardados ni movimientos: D debe guardar en `temp_base` antes de
+preparar argumentos o expandir una plantilla y restaurar después. Para CRYPTO,
+D prepara los registros fijos 6/7/9/10, resolviendo movimientos cruzados. La
+métrica pública por función contiene solo máscara y cantidad de registros
+asignados a valores; no incluye auxiliares ni todos los clobbers.
+
+`FrameLayout.spill_base` (-1 sin reserva) y `spill_size` (bytes) describen un
+tramo independiente, no necesariamente contiguo al frame original ni a
+`temp_base`. `data_area_reserve_spill` usa `data_area_alloc`, solo en O1/O2;
+cero bytes no reserva. Tras la última reserva el gestor debe repetir
+`data_area_stack_short` y solo entonces inicializar rx desde `data_area_end`.
+Una reserva fallida termina la compilación, sin restauración. Una compilación
+nueva reinicia el cursor mediante el `data_area_reset` existente del semántico.
+R reutiliza la misma área estática y la imagen inicial no se desplaza; C3.4
+escribirá cada casilla antes de leerla. C2 ofrece y prueba la reserva, pero
+como todavía no derrama no solicita casillas automáticamente.
+
+La CLI `-O1` llama al asignador y a D, sin reservar derrame todavía;
+O0 e `-i` conservan su significado. D implementa expansión/emisión y preparación
+física de CRYPTO. Quedan pendientes
+de C3.4 los derrames; E integra banderas y JSON.
+
+
+## D: emisión de ISA física hacia codegen
+
+`include/tac_emit.h` recibe ISA_PHYSICAL y su plan de C2 sin editar, imagen
+inicial, LabelTable y nombre real obligatorio. `tac_emit_program` devuelve 1
+en éxito y 0 con diagnóstico: no modifica IR ni símbolos. Reinicia codegen,
+carga palabras con `cg_data_set`, repite `data_area_stack_short` y emite
+`mov rx, data_area_end()`. D no reserva derrame: C3.4 hará las reservas antes.
+
+Se emite main primero, luego las otras funciones; los bloques mantienen su
+orden. El mapa por puntero asigna `.L_o1_N` único en el programa. Las entradas
+de función y los terminales se consultan en LabelTable, conservando la ABI P1.
+La inicialización del retorno ya está en TAC; no se repite y R sigue entrando
+al cuerpo. `tac_validate_for_emission` sigue rechazando PSEUDO en IR expandido;
+D usa `tac_validate` y expande directamente hacia codegen, sin cambiar ese IR.
+
+Las formas ISA se adaptan a `cg_set_line`/`cg_op`; parser y semántica siguen en
+codegen_instruction/isa_table. `include/generate_emit.h` presta `gen_reg_name`,
+`gen_stack_push`, `gen_stack_pop` y `gen_arith_emit_op`, con la lógica P1 intacta.
+
+El único ayudante D de preservación usa `temp_base + 4*(r-4)` para cada vivo
+del plan. Jas guarda preservados, apila rl, llama, desapila rl y restaura.
+MUL/DIV/MOD/POW llaman `cg_arith_emit` con los ocho registros de scratch_mask.
+Un CGArithContext comparte next_label entre todas las funciones y CRYPTO.
+
+CRYPTO guarda antes de preparar registros fijos 6/7/9 o 10. Las copias paralelas
+eliminan identidades, consumen destinos no necesarios como fuentes y rompen
+ciclos con r4. Las fuentes r4 se consumen antes de romper ciclos; los vivos
+externos ya están guardados. Un `cg_gap` explícito separa la plantilla incluso
+si no hubo movimientos. `cg_crypto_emit_template` conserva los bundles P1.
+
+Finalmente se emiten ambos terminales fijos, se llama `cg_schedule` y se verifica
+ROM mediante `tac_emit_check_rom`: 4096 bundles pasan, 4097 fallan con el archivo
+real. Con `--no-schedule` se omite `cg_schedule` y se comprueba el mismo límite
+sobre el flujo conservador. No se agrega validación de conocidos.
+Tras éxito no se emite más. Se ensamblan `cg_line` y `cg_data` con el ensamblador
+existente, pasando también el nombre real para sus diagnósticos.
+
+E imprime -m sin tabla propia: recorrer `cg_ir_count`/`cg_ir_record`, seleccionar
+CG_IR_LABEL y consultar `cg_label_address(record->data.label)` después de schedule.
+Esto incluye bloques y expansiones. Consultar antes de cg_free o cg_init.
+Liberar los planes antes del ISA, ISA antes de TacBuildResult, y conservar
+símbolos/AST/LabelTable mientras se emite. La CLI invoca D con `-O1`.
+
+## E: integración, gestor y medición
+
+`src/tac_passes.c` contiene la tabla fija y una firma única con contexto prestado
+(IR, construcción, ámbitos, nombre real, selección y factor de unroll). El factor
+cero indica la heurística del §11; E no la ejecuta porque unroll está vacío.
+Las marcas se descartan después de unroll, o al entrar al punto HIGH si está
+inactivo. La política spill se registra antes de asignar, sin recorrido propio;
+no reemplaza el error de agotamiento del recorrido C2. C3.4 ampliará ese punto.
+
+`src/tac_metrics.c` es el único escritor JSON. Reutiliza `json_string` de AST
+(publicado sin cambiar su cuerpo). `tac_live_max_temporaries` es la consulta única
+de demanda, compartida por C2 y su auxiliar del corpus. El asignador registra el
+máximo de `active_count`; E solo agrega máximos entre funciones. La máscara puede
+incluir muchos registros usados sucesivamente aunque la presión sea baja.
+
+La CLI conserva una captura del HIGH inicial para `-i`, anterior a las pasadas.
+El JSON se escribe tras las salidas exitosas; un fallo no publica métricas.
+`check-o1` verifica opciones, gestor, JSON y salidas. `check-o1-equivalence` usa
+`ccom -O1 -s`; su adaptador lee dirección/ancho de GLOBAL y ámbitos de main en
+la tabla de símbolos del listado. `compare()` y la proyección observable de D
+siguen intactos. Se retiró el auxiliar de emisión desde fuente ya sin consumidor.
+
+### Pendientes de limpieza después de integrar C2.3
+
+- Búsqueda lineal de `block_label` en `src/tac_emit.c:80`, mismo patrón que
+  `tac_live_instruction`, `tac_intervals_positions` y `tac_allocation_site`.
+- Guardado/restauración de `src/tac_emit_pseudo.c:17` frente a
+  `src/codegen_crypto.c:78` (save_live) y `:98` (restore_live).
+- Terminal de `src/tac_emit.c:181` frente a `src/generate_stmt.c:752`
+  (gen_end_of_main) y `src/generate.c:216`. Se concentra una sola vez en D;
+  no se reorganizan estas duplicaciones conocidas durante esta entrega.
+
+Referencias: Aho §7.2, §8.6, §8.8 y §10.2.3.

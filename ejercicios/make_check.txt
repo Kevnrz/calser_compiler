@@ -1,4 +1,139 @@
 $ make -s check
+PASS gestor E: orden fijo, errores con pasada, validacion y operaciones no-NOP
+PASS CLI E: opciones, union/orden, JSON, HIGH inicial, etiquetas y ROM conservadora
+PASS emisión D: permutaciones, preservación, rl, etiquetas, nombre y ROM
+programa	resultado	bundles O1	bundles O0
+ejercicios/ejercicio1_factorial/ejercicio1.cls	OK	71	80
+ejercicios/ejercicio2_matriz/ejercicio2.cls	OK	171	162
+ejercicios/ejercicio3_cifrado/ejercicio3.cls	OK	667	927
+pruebas/arreglos/matriz3x4.cls	OK	208	242
+pruebas/etiquetas/globales_corto_circuito.cls	OK	27	23
+pruebas/matrices/cuadradas.cls	OK	620	604
+pruebas/matrices/rectangulares.cls	OK	506	455
+pruebas/p01_llamada_adelante.cls	OK	28	36
+pruebas/p02_factorial.cls	OK	71	80
+pruebas/p03_suma.cls	OK	68	75
+pruebas/p04_memoria.cls	OK	143	153
+pruebas/p05_arreglos_llamadas.cls	OK	167	178
+pruebas/p06_tipos.cls	OK	203	200
+pruebas/p07_retorno_recursion.cls	OK	230	261
+pruebas/p08_comentarios.cls	OK	17	26
+pruebas/p09_crypto.cls	OK	143	191
+pruebas/p10_llamadas_anidadas.cls	OK	55	77
+pruebas/p11_ejercicio3.cls	OK	667	927
+pruebas/p12_ejercicio2.cls	OK	171	162
+pruebas/programas/copia_arreglos.cls	OK	131	127
+pruebas/programas/corto_circuito.cls	OK	266	292
+pruebas/programas/e_en_s.cls	OK	114	148
+pruebas/programas/factorial_r.cls	OK	53	70
+pruebas/programas/lectura_1d.cls	OK	141	154
+pruebas/programas/r_arreglos.cls	OK	65	77
+pruebas/programas/r_arreglos_2d.cls	OK	123	107
+pruebas/programas/r_arreglos_local.cls	OK	74	95
+pruebas/programas/r_arreglos_parametro.cls	OK	70	87
+pruebas/programas/retorno_cero.cls	OK	45	65
+pruebas/programas/s_anidados.cls	OK	57	61
+pruebas/programas/s_negativo.cls	OK	30	32
+pruebas/programas/s_paso3.cls	OK	29	32
+pruebas/programas/s_paso_grande.cls	OK	33	43
+pruebas/programas/s_positivo.cls	OK	29	32
+pruebas/programas/sumar.cls	OK	29	42
+pruebas/tac/ejemplo.cls	OK	35	34
+pruebas/tac_build/casos/condicionales.cls	OK	55	55
+pruebas/tac_build/casos/expresiones.cls	OK	224	226
+pruebas/tac_build/casos/inicializadores.cls	OK	36	36
+Comparados: 39; datos externos: cero y patrón de 1024 bytes
+Programas que difieren o fallan:
+ninguno
+PASS intervalos: posiciones, lazo, ramas, vacío, inalcanzable, huecos y definiciones
+PASS asignación: capacidad, LRU, auxiliares, preservación, ligados, bajada y derrame
+archivo	función	vivos	solapamiento	MUL	DIV	MOD	POW	preservación	registros	resultado
+ejercicios/ejercicio1_factorial/ejercicio1.cls	factorial	2	3	1	0	0	0	0	12	OK
+ejercicios/ejercicio1_factorial/ejercicio1.cls	main	1	1	0	0	0	0	0	3	OK
+ejercicios/ejercicio2_matriz/ejercicio2.cls	buscar	3	4	6	0	0	0	0	12	OK
+ejercicios/ejercicio2_matriz/ejercicio2.cls	main	2	2	0	0	0	0	0	4	OK
+ejercicios/ejercicio3_cifrado/ejercicio3.cls	bloques_de	3	4	1	0	0	0	0	10	OK
+ejercicios/ejercicio3_cifrado/ejercicio3.cls	direccion	3	4	2	0	0	0	0	7	OK
+ejercicios/ejercicio3_cifrado/ejercicio3.cls	preparar_boveda	2	2	0	0	0	0	0	12	OK
+ejercicios/ejercicio3_cifrado/ejercicio3.cls	cifrar_archivo	4	4	0	1	1	0	2	12	OK
+ejercicios/ejercicio3_cifrado/ejercicio3.cls	descifrar_archivo	4	4	0	1	1	0	2	12	OK
+ejercicios/ejercicio3_cifrado/ejercicio3.cls	main	2	2	0	0	0	0	0	12	OK
+pruebas/arreglos/matriz3x4.cls	buscar	3	4	3	0	0	0	0	12	OK
+pruebas/arreglos/matriz3x4.cls	main	2	3	0	1	1	0	0	12	OK
+pruebas/etiquetas/globales_corto_circuito.cls	main	1	2	0	0	0	0	0	5	OK
+pruebas/matrices/cuadradas.cls	sumar	4	5	12	0	0	0	4	12	OK
+pruebas/matrices/cuadradas.cls	multiplicar	5	6	11	0	0	0	4	12	OK
+pruebas/matrices/cuadradas.cls	main	4	4	0	0	0	0	0	12	OK
+pruebas/matrices/rectangulares.cls	main	5	6	22	0	0	0	8	12	OK
+pruebas/p01_llamada_adelante.cls	main	1	1	0	0	0	0	0	2	OK
+pruebas/p01_llamada_adelante.cls	doble	2	2	0	0	0	0	0	3	OK
+pruebas/p02_factorial.cls	factorial	2	3	1	0	0	0	0	12	OK
+pruebas/p02_factorial.cls	main	1	1	0	0	0	0	0	3	OK
+pruebas/p03_suma.cls	suma	3	4	1	0	0	0	0	12	OK
+pruebas/p03_suma.cls	main	1	1	0	0	0	0	0	7	OK
+pruebas/p04_memoria.cls	maximo	3	4	4	0	0	0	0	12	OK
+pruebas/p04_memoria.cls	main	2	2	0	0	0	0	0	10	OK
+pruebas/p05_arreglos_llamadas.cls	suma_fila	4	5	2	0	0	0	1	12	OK
+pruebas/p05_arreglos_llamadas.cls	poner	3	3	1	0	0	0	0	6	OK
+pruebas/p05_arreglos_llamadas.cls	main	3	4	3	0	0	0	0	12	OK
+pruebas/p06_tipos.cls	es_par	2	3	0	0	1	0	0	4	OK
+pruebas/p06_tipos.cls	total	3	4	3	0	0	0	0	12	OK
+pruebas/p06_tipos.cls	main	5	5	0	0	0	0	0	12	OK
+pruebas/p07_retorno_recursion.cls	factorial	3	4	1	0	0	0	0	10	OK
+pruebas/p07_retorno_recursion.cls	doble	2	3	1	0	0	0	0	3	OK
+pruebas/p07_retorno_recursion.cls	main	3	4	0	1	1	1	1	12	OK
+pruebas/p08_comentarios.cls	main	2	2	0	0	0	0	0	5	OK
+pruebas/p09_crypto.cls	main	3	3	0	0	0	0	0	12	OK
+pruebas/p10_llamadas_anidadas.cls	identity	1	1	0	0	0	0	0	1	OK
+pruebas/p10_llamadas_anidadas.cls	add	2	2	0	0	0	0	0	3	OK
+pruebas/p10_llamadas_anidadas.cls	main	2	2	0	0	0	0	1	5	OK
+pruebas/p11_ejercicio3.cls	bloques_de	3	4	1	0	0	0	0	10	OK
+pruebas/p11_ejercicio3.cls	direccion	3	4	2	0	0	0	0	7	OK
+pruebas/p11_ejercicio3.cls	preparar_boveda	2	2	0	0	0	0	0	12	OK
+pruebas/p11_ejercicio3.cls	cifrar_archivo	4	4	0	1	1	0	2	12	OK
+pruebas/p11_ejercicio3.cls	descifrar_archivo	4	4	0	1	1	0	2	12	OK
+pruebas/p11_ejercicio3.cls	main	2	2	0	0	0	0	0	12	OK
+pruebas/p12_ejercicio2.cls	buscar	3	4	6	0	0	0	0	12	OK
+pruebas/p12_ejercicio2.cls	main	2	2	0	0	0	0	0	4	OK
+pruebas/programas/copia_arreglos.cls	doble	5	5	3	0	0	0	0	12	OK
+pruebas/programas/copia_arreglos.cls	fuera	2	2	0	0	0	0	0	3	OK
+pruebas/programas/copia_arreglos.cls	main	2	2	0	0	0	0	0	6	OK
+pruebas/programas/corto_circuito.cls	toca	1	1	0	0	0	0	0	3	OK
+pruebas/programas/corto_circuito.cls	main	2	3	0	0	0	0	0	12	OK
+pruebas/programas/e_en_s.cls	buscar	2	3	1	0	0	0	0	12	OK
+pruebas/programas/e_en_s.cls	main	2	2	0	0	0	0	0	12	OK
+pruebas/programas/factorial_r.cls	factorial	3	4	1	0	0	0	0	10	OK
+pruebas/programas/factorial_r.cls	main	1	1	0	0	0	0	0	3	OK
+pruebas/programas/lectura_1d.cls	f	1	1	0	0	0	0	0	2	OK
+pruebas/programas/lectura_1d.cls	main	3	4	4	0	0	0	0	12	OK
+pruebas/programas/r_arreglos.cls	suma	5	6	1	0	0	0	1	12	OK
+pruebas/programas/r_arreglos.cls	main	1	1	0	0	0	0	0	2	OK
+pruebas/programas/r_arreglos_2d.cls	suma	5	6	4	0	0	0	4	12	OK
+pruebas/programas/r_arreglos_2d.cls	main	1	1	0	0	0	0	0	2	OK
+pruebas/programas/r_arreglos_local.cls	suma	5	6	1	0	0	0	1	12	OK
+pruebas/programas/r_arreglos_local.cls	main	1	1	0	0	0	0	0	5	OK
+pruebas/programas/r_arreglos_parametro.cls	suma	5	6	1	0	0	0	1	12	OK
+pruebas/programas/r_arreglos_parametro.cls	main	1	1	0	0	0	0	0	5	OK
+pruebas/programas/retorno_cero.cls	nada	1	1	0	0	0	0	0	3	OK
+pruebas/programas/retorno_cero.cls	main	1	1	0	0	0	0	0	5	OK
+pruebas/programas/s_anidados.cls	main	3	4	1	0	0	0	0	12	OK
+pruebas/programas/s_negativo.cls	main	2	2	0	0	0	0	0	8	OK
+pruebas/programas/s_paso3.cls	main	2	2	0	0	0	0	0	8	OK
+pruebas/programas/s_paso_grande.cls	main	3	3	0	0	0	0	0	11	OK
+pruebas/programas/s_positivo.cls	main	2	2	0	0	0	0	0	8	OK
+pruebas/programas/sumar.cls	sumar	2	2	0	0	0	0	0	3	OK
+pruebas/programas/sumar.cls	main	1	1	0	0	0	0	0	3	OK
+pruebas/tac/ejemplo.cls	main	2	3	1	0	0	0	0	7	OK
+pruebas/tac_build/casos/condicionales.cls	main	2	2	0	0	0	0	0	12	OK
+pruebas/tac_build/casos/expresiones.cls	main	2	3	1	1	1	1	0	12	OK
+pruebas/tac_build/casos/inicializadores.cls	main	5	5	0	0	0	0	0	12	OK
+Corpus: 39 programas, 79 funciones, 79 rechazos frontend
+Fallos de asignación:
+ninguno
+PASS vivacidad: uniones, ciclos, raíces HIGH/ISA, globales, preserves y destruidos separados
+PASS live: 39 programas HIGH/ISA virtual, 3 temporales; 79 rechazos; representación e imagen intactas
+PASS lazos/edición: dominadores, unión, profundidad, sin retroceso, irreducible y rechazos atómicos
+PASS loops: 39 programas HIGH/ISA virtual, 3 temporales; 79 rechazos; representación e imagen intactas
 check-tac: 6 casos de alto nivel, ISA virtual/fisica, consultas y validacion: OK
 PASS construccion TAC: 22 esperados, memoria, CLI y artefactos identicos
 PASS TAC p02: f = 120
@@ -36,6 +171,8 @@ PASS TAC control exponente negativo: negative_exponent
 PASS TAC control CRYPTO rechazado: unsupported_crypto
 PASS TAC control limite de pasos: step_limit
 TAC valores: 22 programas aprobados, 2 omitidos, 10 controles aprobados, 0 fallos
+PASS selección manual: ALU, constantes, direcciones, saltos, PARAM/CALL/RETURN y PSEUDO
+PASS bajada ISA virtual: 39 programas del corpus y 1 temporal; 12 esperados; HIGH intacto; 79 rechazos del frontend
 PASS contrato y fallo del emisor
 PASS mul: 450 casos, dos expansiones por caso
 PASS div: 450 casos, dos expansiones por caso
@@ -45,7 +182,7 @@ PASS total: 1746 casos; slots, etiquetas, RAW y registros conservados
 PASS contratos y fallo del emisor
 PASS total: 1190 casos; direccion, lectura, escritura, referencia, copia y cero
 PASS matriz 3x4: direccion (1,1) = base + 20; slots y separacion RAW
-PASS contrato crypto y fallo del evaluador
+PASS contrato crypto, siete plantillas directas y fallos del evaluador
 PASS 184 casos crypto: referencia Feistel, descifrado, in-place, argumentos dinámicos,
      constantes de 32 bits, 12 temporales vivos, etiquetas únicas y cero avisos RAW
 PASS integración p09: .cls, .asm, .mem, datos y cero avisos RAW
@@ -93,9 +230,10 @@ PASS p09: 0x3000 == 0x1000, 0x2000 distinto, 0x4000-0x4007 == 0x1000-0x1007
 PASS p11: n1 = 8, n2 = 8, 0x3000 == 0x1000, 0x2000 distinto
 PASS diagnosticos de generacion: ruta, linea, columna, texto y sin salidas en ambos modos
 PASS constantes: inicializadores, Vi, profundidad, 32 bits, signos y rechazos sin corto circuito
+PASS constantes ISA: 12 casos, pasos, auxiliares y rechazos sin modificar salida
 ........
 ----------------------------------------------------------------------
-Ran 8 tests in 0.009s
+Ran 8 tests in 0.017s
 
 OK
 PASS ayuda: -h/--help, opciones, ejemplos, errores y archivos intactos

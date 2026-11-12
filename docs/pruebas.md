@@ -102,6 +102,14 @@ El módulo compartido vive en `include/ast_constant.h` y `src/ast_constant.c`;
 lo usa `generate_init.c` y queda disponible para el futuro constructor TAC,
 sin depender del generador ni del emisor. Este target no necesita Python.
 
+`make check-constantes-isa`, incluido en `make check`, ejecuta el binario C
+`build/probar_constantes_isa` desde `pruebas/constantes_isa/probar.c`. Prueba
+los doce valores de frontera y normalización de `isa_constant_plan`, el orden
+MOV/MOV/SLL/SADDI, los roles DEST/SCRATCH, los inmediatos de 18 bits y la
+cantidad de auxiliares. Recompone con aritmética definida de 32 bits y comprueba
+que dos entradas fuera de rango no modifican la salida. No depende del AST,
+del emisor ni de Python; la función compartida vive en `isa_constant.c`.
+
 La semántica de dependencias del ISA vive en `include/isa_table.h` y
 `src/isa_table.c`, compartida por el descriptor del organizador y disponible
 para la representación intermedia. `codegen_instruction.c` conserva el parseo y
@@ -154,6 +162,28 @@ Compara ASM/BIN/HEX/MEM con y sin `-i`, y TAC con/sin `--no-schedule`.
 `check-tac` comprueba además COPY hacia parámetros arreglo y sus definiciones.
 La construcción C1 se verifica por separado del intérprete y los valores de C2.
 
+## Selección HIGH a ISA virtual
+
+`make check-tac-lower`, incluido en `make check`, ejecuta dos binarios que no
+se enlazan con ccom. `build/probar_tac_lower` comprueba selección ALU y unaria,
+fronteras de constantes/desplazamientos, bases simbólicas/calculadas, IF_LE/IF_GT,
+PARAM fuera de orden, CALL/RETURN/EXIT, posiciones y las once PSEUDO complejas.
+
+`build/bajar_tac` parsea, analiza, construye HIGH y llama `tac_lower`, sin usar
+el generador. Captura HIGH e imagen antes/después y exige igualdad de bytes,
+incluidos IDs internos, posiciones y aristas. Distingue rechazo del frontend
+(código 3) de fallo de selección (código 1). `pruebas/tac_lower/probar.py` recorre
+los 118 fuentes de pruebas/ y ejercicios/: baja y valida los 39 válidos, exige
+los 79 rechazos esperados y comprueba doce listados de `pruebas/tac_lower/esperados/`.
+El caso adicional de constantes grandes se crea en una carpeta temporal, sin
+agregar otro .cls al corpus. Incluye CRYPTO y los cuatro R con arreglos.
+
+No asigna registros, conserva vivos, expande PSEUDO ni emite ensamblador.
+La función compartida `isa_constant_plan` produce los pasos de constantes;
+la bajada les asigna roles virtuales y copia línea/columna. Se libera ISA antes
+de TacBuildResult y del semántico. La compilación habitual conserva sus fuentes
+y el binario ccom; las pruebas se verifican además con C11 estricto y ASan/UBSan.
+
 ## Valores del TAC en memoria
 
 `make check-tac-values`, incluido en `make check`, construye únicamente el
@@ -179,3 +209,105 @@ publica valores. Para comprobar otro build, incluso sanitizado:
 Las fuentes de los controles y las salidas son temporales. No se modifican el
 constructor ni el generador cuando aparece una diferencia; la prueba informa
 caso, valor obtenido y esperado y termina con fallo.
+
+## Plantillas CRYPTO y evaluación del AST
+
+`make check-crypto` conserva los 184 escenarios de Feistel y los once escenarios
+de integración del compilador, incluido el ejercicio 3. `probar.py` ejecuta
+primero `build/emitir_crypto --contract`: verifica las siete plantillas mediante
+`cg_crypto_emit_template` sin AST ni callback, contratos inválidos sin emisión,
+registros físicos fijos, selectores, contador compartido y agotado, y slots de
+los bundles indivisibles. Comprueba los registros IR del lazo, separaciones,
+etiquetas y orden de rondas/desplazamientos del descifrado. Los fallos del
+callback en el segundo y tercer argumento comprueban orden, destinos, máscaras,
+guardado previo y ausencia de restauración o consumo de etiquetas.
+
+La función directa no prepara argumentos ni preserva vivos. `cg_crypto` sigue
+haciéndolo para el generador actual, con las mismas plantillas P1. El auxiliar
+se verifica con C11 estricto (`-Wall -Wextra -pedantic -Werror`) y ASan/UBSan.
+La equivalencia del generador se comprueba con capturas de los 118 fuentes en
+modo normal y `--no-schedule`, incluyendo `-s -i`, sin `--time` ni normalización.
+
+## Análisis C1: vivacidad, lazos y edición
+
+`make check-tac-live` ejecuta `build/probar_tac_live` y el auxiliar
+`build/analizar_tac live`. Los casos manuales verifican USE/DEF, LIVE_IN/OUT,
+vivos por instrucción, ciclos, uniones, redefiniciones, globales en CALL/RETURN,
+raíces HIGH e ignoradas como registros ISA, candidatos de preservación,
+clobbers separados, ifmov/feis y clasificación de Vm por ámbitos.
+
+`make check-tac-loops` ejecuta `build/probar_tac_loops` y el mismo auxiliar en
+modo `loops`. Verifica dominadores, unión de retrocesos de igual cabecera,
+profundidad anidada, inalcanzables, diagnóstico irreducible, marca válida sin
+retroceso, descarte explícito y consistencia en un solo sentido. La edición
+prueba inserciones ISA/PSEUDO, rechazo ligado de ifmov/feis y reemplazos inválidos
+sin modificación parcial; quitar bloques rechaza LABEL (también objetivos ISA),
+marcas, entry y caídas alcanzables. Quita un bloque inalcanzable sin referencias.
+
+Ambos targets están en `make check`. `pruebas/tac_analysis/probar.py` recorre los
+118 fuentes actuales: analiza los 39 válidos en HIGH y en ISA virtual, y exige
+los 79 rechazos del frontend. Tres fuentes temporales adicionales comprueban S/L
+anidados y ambos tipos con cuerpo terminado en E, sin retroceso. R y copias de
+arreglos se analizan como lazos naturales sin exigir marcas. Las capturas de
+objetos, marcas, ámbitos, símbolos e imagen son idénticas antes/después de analizar.
+
+Para verificar otro auxiliar: `python3 pruebas/tac_analysis/probar.py live
+--binario /ruta/analizar_tac`, o `loops`. Los tres binarios nuevos se verifican
+con C11 estricto y ASan/UBSan. C1 no implementa intervalos, asignación, derrame,
+optimizaciones, banderas ni emisión: esos estados quedan documentados aparte.
+
+## C2: intervalos, linear scan y extensión de derrame
+
+`make check-tac-intervals` prueba posiciones de lectura/escritura, retrocesos,
+ramas, bloques vacíos e inalcanzables, huecos y definiciones repetidas o muertas.
+
+`make check-tac-allocate` prueba 12/13 vivos, diagnóstico archivo:L:C, LRU,
+reutilización de fuentes muertas, exclusión de fuentes en PSEUDO aritméticas,
+ocho auxiliares y preservación, CALL, las siete CRYPTO, ifmov/feis y la bajada
+cuando destino y fuente coinciden. También comprueba la reserva estática de
+derrame: cero bytes, varias funciones, límites y los 256 bytes de pila.
+
+El auxiliar `build/asignar_tac archivo.cls` mide y asigna en memoria. Devuelve
+0 al asignar todas las funciones, 4 si hay presión y 3 ante rechazo del frontend.
+`pruebas/tac_allocate/probar.py` recorre el corpus completo, continúa tras cada
+fallo e imprime por función vivos reales, solapamiento de intervalos, cantidades
+MUL/DIV/MOD/POW, sitios con preservación, registros asignados y resultado.
+Los máximos incluyen los bloques inalcanzables conservados. La lista final de
+fallos nunca se omite; reportar presión no equivale a una asignación aprobada.
+Ambos targets forman parte de `make check`; estos auxiliares no se enlazan con
+ccom ni modifican sus salidas. Referencias: Aho §9.2.5 y §10.2.3; Poletto y
+Sarkar 1999, fuera de Aho, para intervalos y linear scan.
+
+
+## D: emisión y equivalencia observable
+
+`make check-tac-emit` comprueba permutaciones CRYPTO sin cruce, intercambio,
+ciclo de tres, fuente repetida y rz; casillas de preservación, rl en llamadas
+encadenadas, etiquetas únicas, nombre obligatorio y ROM 4096/4097 como función.
+El rechazo de source_name NULL del asignador se prueba en check-tac-allocate.
+
+`make check-o1-equivalence` usa `ccom -O1 -s` para construir, bajar, asignar,
+emitir, calendarizar y ensamblar. Lee dirección y ancho de globales/variables
+de main de la tabla de símbolos del listado, sin bandera nueva. El comparador usa sim_asm
+sin duplicar ISA: compara esos tramos, 0x1000–0xFFFF, auth/kv_lock/exc/anchor/vault
+y terminal lógico fin/error. Cada programa corre con los mismos datos externos
+en cero y con patrón de 1024 bytes, límite explícito de 2.000.000 bundles y cero
+avisos de separación. Imprime bundles O1/O0 y todos los fallos antes de devolver 1.
+
+E cambia solo el adaptador `compile_new` y el binario predeterminado de
+`pruebas/tac_emit/comparar.py`; la función `compare` y el target permanecen. Los dos targets forman parte de
+make check. E integra D en la CLI mediante `-O1`. Referencias: Aho
+§7.2 y §8.6; el tiempo/ciclos no son condición de equivalencia funcional.
+
+
+## E: opciones, gestor y métricas
+
+`make check-o1` ejecuta `build/probar_tac_passes` y
+`pruebas/tac_passes/probar_cli.py`. Comprueba orden fijo, error interno forzado
+con nombre de pasada, validación posterior y conteo no-NOP en bundles fijos.
+La CLI prueba uniones de listas y errores de uso (código 2), factores 2..16,
+claves/tipos/fórmulas JSON, demanda distinta de presión y máscara, escapes,
+HIGH inicial con `-i`, etiquetas finales con `-m`, AST antes del semántico,
+ausencia de métricas ante fallo y ROM en salida conservadora.
+`CCOM_TEST_BINARY` permite probar la misma CLI instrumentada con sanitizadores.
+El target forma parte de `make check`; no repite permutaciones ni ABI de D.

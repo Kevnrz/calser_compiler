@@ -20,6 +20,7 @@
 
 #include "ast.h"
 #include "codegen_arith.h"
+#include "generate_emit.h"
 #include "codegen_crypto.h"
 #include "label_table.h"
 #include "symbol_table.h"
@@ -87,18 +88,7 @@ void gen_report_error(GenCtx *gen, ASTNode *node, const char *message);
  */
 ASTNode *gen_child_at(ASTNode *node, int index);
 
-/*
- * gen_reg_name — obtiene el alias de un registro ISA.
- *
- * Entrada:
- *   reg  número ISA.
- * Salida:
- *   cadena literal; rz si reg está fuera de 0–15.
- *   Efectos: ninguno.
- * Restricciones:
- *   ninguna.
- */
-const char *gen_reg_name(int reg);
+
 
 /*
  * gen_reset_registers — libera las reservas de temporales del generador.
@@ -212,32 +202,9 @@ int gen_load_symbol(GenCtx *gen, int rd, Symbol *symbol, ASTNode *node);
  */
 int gen_store_symbol(GenCtx *gen, Symbol *symbol, int rs, ASTNode *node);
 
-/*
- * gen_stack_push — apila una palabra en rx.
- *
- * Entrada:
- *   reg  registro ISA cuyo valor se conserva.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: emite sw y avance de rx en cuatro bytes.
- * Restricciones:
- *   rx apunta a la primera casilla libre; no verifica desborde en
- *   ejecución.
- */
-void gen_stack_push(int reg);
 
-/*
- * gen_stack_pop — desapila una palabra desde rx.
- *
- * Entrada:
- *   reg  registro ISA que recibe la palabra.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: emite retroceso de rx y lw.
- * Restricciones:
- *   debe existir una palabra apilada; no verifica subdesborde.
- */
-void gen_stack_pop(int reg);
+
+
 
 /*
  * gen_node_label — copia una etiqueta de control de la tabla.

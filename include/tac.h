@@ -296,7 +296,8 @@ int tac_disconnect(TacBlock *from, TacBlock *to);
 int tac_rebuild_edges(TacFunction *function, char *error, size_t capacity);
 int tac_validate(const TacProgram *program, char *error, size_t capacity);
 /* Exige forma válida, etapa ISA_PHYSICAL y ninguna PSEUDO pendiente de expansión.
- * Es el control obligatorio del futuro emisor antes de entregar ISA al ensamblador.
+ * Control de IR ya expandido. D valida su entrada con tac_validate y expande
+ * PSEUDO directamente a codegen; no aplica este filtro a esa entrada.
  */
 int tac_validate_for_emission(const TacProgram *program, char *error, size_t capacity);
 /* Requiere programa válido; el llamador comprueba ferror del FILE prestado. */

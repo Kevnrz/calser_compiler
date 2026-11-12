@@ -25,7 +25,7 @@ static unsigned no_register_available(RegisterState *state, const TacInterval *r
     const TacInstruction *i = range->origin;
     tac_error(error, capacity,
         "%s:%d:%d: error de generacion: sin registros temporales disponibles",
-        source ? source : "ccom", i ? i->source_line : 0, i ? i->source_column : 0);
+        source, i ? i->source_line : 0, i ? i->source_column : 0);
     return 0;
 }
 
@@ -92,6 +92,10 @@ static void physical_operand(TacOperand *operand, const unsigned *registers) {
  */
 TacAllocationResult *tac_allocate_registers(TacProgram *program, const char *source,
                                  char *error, size_t capacity) {
+    if (!source) {
+        tac_error(error, capacity, "asignación requiere source_name no NULL");
+        return NULL;
+    }
     if (!program || program->stage != TAC_STAGE_ISA_VIRTUAL ||
         !tac_validate(program, error, capacity)) {
         tac_error(error, capacity, "asignación requiere ISA virtual validada");

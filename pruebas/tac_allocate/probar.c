@@ -51,8 +51,12 @@ static void capacity(void) {
             assert(!strcmp(error, "ruta/caso.cls:42:9: error de generacion: sin registros temporales disponibles"));
             for (TacInstruction *i = f.entry->first; i; i = i->next)
                 i->source_line = i->source_column = 0;
+            a = tac_allocate_registers(f.program, "ruta/caso.cls", error, sizeof error);
+            assert(!a && !strcmp(error, "ruta/caso.cls:0:0: error de generacion: sin registros temporales disponibles"));
             a = tac_allocate_registers(f.program, NULL, error, sizeof error);
-            assert(!a && !strcmp(error, "ccom:0:0: error de generacion: sin registros temporales disponibles"));
+            assert(!a && !strcmp(error, "asignación requiere source_name no NULL"));
+            assert(f.program->stage == TAC_STAGE_ISA_VIRTUAL);
+            assert(f.entry->first->dest.kind == TAC_TEMP);
         } else {
             assert(a);
             const TacAllocationMetrics *m = tac_allocation_metrics(a, f.function);

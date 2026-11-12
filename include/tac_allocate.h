@@ -21,7 +21,7 @@ typedef struct {
     unsigned register_count;           /* Cantidad de bits de la máscara. */
 } TacAllocationMetrics;
 
-/* Programa ISA_VIRTUAL validado, source_name prestado (NULL -> ccom).
+/* Programa ISA_VIRTUAL validado, source_name obligatorio y prestado.
  * Reescribe TEMP a PHYS, auxiliares y stage; valida al terminar.
  * NULL con diagnóstico: se abandona la compilación, IR puede quedar inválido.
  * No derrama, emite, modifica símbolos ni reserva datos. C3.4 extenderá el punto

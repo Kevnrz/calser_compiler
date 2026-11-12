@@ -277,3 +277,24 @@ fallos nunca se omite; reportar presión no equivale a una asignación aprobada.
 Ambos targets forman parte de `make check`; estos auxiliares no se enlazan con
 ccom ni modifican sus salidas. Referencias: Aho §9.2.5 y §10.2.3; Poletto y
 Sarkar 1999, fuera de Aho, para intervalos y linear scan.
+
+
+## D: emisión y equivalencia observable
+
+`make check-tac-emit` comprueba permutaciones CRYPTO sin cruce, intercambio,
+ciclo de tres, fuente repetida y rz; casillas de preservación, rl en llamadas
+encadenadas, etiquetas únicas, nombre obligatorio y ROM 4096/4097 como función.
+El rechazo de source_name NULL del asignador se prueba en check-tac-allocate.
+
+`make check-o1-equivalence` usa `build/emitir_tac fuente base` para construir,
+bajar, asignar, emitir, calendarizar y ensamblar. Imprime dirección y ancho de
+globales/variables de main, sin identidades de ámbito. El comparador usa sim_asm
+sin duplicar ISA: compara esos tramos, 0x1000–0xFFFF, auth/kv_lock/exc/anchor/vault
+y terminal lógico fin/error. Cada programa corre con los mismos datos externos
+en cero y con patrón de 1024 bytes, límite explícito de 2.000.000 bundles y cero
+avisos de separación. Imprime bundles O1/O0 y todos los fallos antes de devolver 1.
+
+E cambiará solo el adaptador `compile_new` de `pruebas/tac_emit/comparar.py`;
+la función `compare` y el target permanecen. Los dos targets forman parte de
+make check. D no agrega banderas ni entra en la CLI de ccom. Referencias: Aho
+§7.2 y §8.6; el tiempo/ciclos no son condición de equivalencia funcional.

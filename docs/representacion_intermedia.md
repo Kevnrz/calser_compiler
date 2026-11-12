@@ -438,7 +438,7 @@ La clonación de bloques/instrucciones corresponde a C3.1, no a C1.
 | C3.2, pendiente | Eliminación con raíces observables y prueba de seguridad de errores |
 | C3.3a/b, pendiente | Renombramiento local y DAG/list scheduling virtual |
 | C3.4, pendiente | Spilling sobre intervalos y profundidad natural |
-| C2.3 D, pendiente | Emisión, ABI, preservación y expansión P1 |
+| C2.3 D, implementado (auxiliares, sin CLI) | Emisión, ABI, preservación y expansión P1 |
 | C2.3 E, pendiente | Gestor con firma/contexto común, cinco pasadas registradas vacías, validación tras cada pasada, banderas, métricas y control final de ROM |
 | C4.2 / I2, pendiente | Ciclos del simulador a CSV/gráficas por prueba / ciclos RTL |
 
@@ -458,7 +458,7 @@ realmente emitidas (.L_o1_* y expansiones), resueltas después del calendario;
 -O0 no cambia. -p muestra bundles y --no-schedule omite el empaquetado final.
 Ninguna de estas banderas nuevas se implementa en C1.
 
-E comprobará ROM máxima de **4096 bundles después del empaquetado**, cuando ya
+D comprueba ROM máxima de **4096 bundles después del empaquetado**, cuando ya
 se conocen expansiones, preservación y NOPs; no equivale al límite de región de
 cg_schedule. El JSON común contará HIGH antes/después de pasadas, ISA antes de
 expandir, instrucciones emitidas, bundles/NOPs/bytes de instrucciones, tiempos
@@ -726,7 +726,7 @@ y contador antes de emitir; un rechazo no modifica emisión ni contador.
 evaluación, llamada a la misma plantilla y restauración. `emit_loop` y sus
 bundles fijos se comparten sin duplicación.
 
-El futuro emisor de -O1 deberá preservar los vivos afectados **antes** de
+El emisor de -O1 preserva los vivos afectados **antes** de
 sobrescribir los registros fijos; colocar origen/destino/bloques en `{6, 7, 9}`
 (t2/t3/t5), o token/palabra/ancla en `{10, -1, -1}` (t6); y resolver movimientos
 como copias paralelas, incluidos ciclos y fuentes `rz`. Para operaciones sin
@@ -816,7 +816,8 @@ operandos, incluidas lecturas ligadas de ifmov/feis; se escriben las máscaras
 `scratch_clobbers` y se cambia la etapa a ISA_PHYSICAL. Finalmente se ejecuta
 `tac_validate`. Si falla se abandona la compilación: el contrato permite que
 el programa quede inválido. El resultado posee planes y mapas, pero no el IR;
-se libera antes del programa y de sus símbolos. `source_name` es prestado.
+se libera antes del programa y de sus símbolos. `source_name` es obligatorio,
+prestado y no NULL; se rechaza su ausencia antes del recorrido.
 
 Cada sitio jas/CRYPTO/aritmética tiene un plan para D. Los ocho auxiliares
 aritméticos son distintos y no coinciden con destino ni fuentes; se prefieren
@@ -843,5 +844,58 @@ escribirá cada casilla antes de leerla. C2 ofrece y prueba la reserva, pero
 como todavía no derrama no solicita casillas automáticamente.
 
 La CLI aún no llama al asignador ni a la reserva: O0 e `-i` conservan su camino.
-Quedan pendientes de C3.4 los derrames; de D la expansión/emisión y preparación
-física de CRYPTO; de E las banderas, integración, JSON y control final de ROM.
+D implementa expansión/emisión y preparación física de CRYPTO. Quedan pendientes
+de C3.4 los derrames; de E las banderas, integración y JSON.
+
+
+## D: emisión de ISA física hacia codegen
+
+`include/tac_emit.h` recibe ISA_PHYSICAL y su plan de C2 sin editar, imagen
+inicial, LabelTable y nombre real obligatorio. `tac_emit_program` devuelve 1
+en éxito y 0 con diagnóstico: no modifica IR ni símbolos. Reinicia codegen,
+carga palabras con `cg_data_set`, repite `data_area_stack_short` y emite
+`mov rx, data_area_end()`. D no reserva derrame: C3.4 hará las reservas antes.
+
+Se emite main primero, luego las otras funciones; los bloques mantienen su
+orden. El mapa por puntero asigna `.L_o1_N` único en el programa. Las entradas
+de función y los terminales se consultan en LabelTable, conservando la ABI P1.
+La inicialización del retorno ya está en TAC; no se repite y R sigue entrando
+al cuerpo. `tac_validate_for_emission` sigue rechazando PSEUDO en IR expandido;
+D usa `tac_validate` y expande directamente hacia codegen, sin cambiar ese IR.
+
+Las formas ISA se adaptan a `cg_set_line`/`cg_op`; parser y semántica siguen en
+codegen_instruction/isa_table. `include/generate_emit.h` presta `gen_reg_name`,
+`gen_stack_push`, `gen_stack_pop` y `gen_arith_emit_op`, con la lógica P1 intacta.
+
+El único ayudante D de preservación usa `temp_base + 4*(r-4)` para cada vivo
+del plan. Jas guarda preservados, apila rl, llama, desapila rl y restaura.
+MUL/DIV/MOD/POW llaman `cg_arith_emit` con los ocho registros de scratch_mask.
+Un CGArithContext comparte next_label entre todas las funciones y CRYPTO.
+
+CRYPTO guarda antes de preparar registros fijos 6/7/9 o 10. Las copias paralelas
+eliminan identidades, consumen destinos no necesarios como fuentes y rompen
+ciclos con r4. Las fuentes r4 se consumen antes de romper ciclos; los vivos
+externos ya están guardados. Un `cg_gap` explícito separa la plantilla incluso
+si no hubo movimientos. `cg_crypto_emit_template` conserva los bundles P1.
+
+Finalmente se emiten ambos terminales fijos, se llama `cg_schedule` y se verifica
+ROM mediante `tac_emit_check_rom`: 4096 bundles pasan, 4097 fallan con el archivo
+real. No se cuenta el flujo conservador ni se agrega validación de conocidos.
+Tras éxito no se emite más. Se ensamblan `cg_line` y `cg_data` con el ensamblador
+existente, pasando también el nombre real para sus diagnósticos.
+
+E imprimirá -m sin tabla propia: recorrer `cg_ir_count`/`cg_ir_record`, seleccionar
+CG_IR_LABEL y consultar `cg_label_address(record->data.label)` después de schedule.
+Esto incluye bloques y expansiones. Consultar antes de cg_free o cg_init.
+Liberar los planes antes del ISA, ISA antes de TacBuildResult, y conservar
+símbolos/AST/LabelTable mientras se emite. La CLI actual todavía no invoca D.
+
+### Pendientes de limpieza después de integrar C2.3
+
+- Guardado/restauración de `src/tac_emit_pseudo.c:17` frente a
+  `src/codegen_crypto.c:78` (save_live) y `:98` (restore_live).
+- Terminal de `src/tac_emit.c:181` frente a `src/generate_stmt.c:752`
+  (gen_end_of_main) y `src/generate.c:216`. Se concentra una sola vez en D;
+  no se reorganizan estas duplicaciones conocidas durante esta entrega.
+
+Referencias: Aho §7.2, §8.6, §8.8 y §10.2.3.

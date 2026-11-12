@@ -228,9 +228,26 @@ check-tac-allocate: $(BUILD_DIR)/probar_tac_allocate $(BUILD_DIR)/asignar_tac
 	$(BUILD_DIR)/probar_tac_allocate
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/tac_allocate/probar.py
 
-check: check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+# D: emisión y comparación independientes de la CLI actual.
+TAC_EMIT_SOURCES = src/tac_emit.c src/tac_emit_pseudo.c
+TAC_EMIT_HEADERS = include/tac_emit.h src/tac_emit_internal.h include/generate_emit.h
+
+$(BUILD_DIR)/probar_tac_emit: pruebas/tac_emit/probar.c $(TAC_EMIT_SOURCES) $(TAC_ALLOCATE_SOURCES) $(TAC_EMIT_HEADERS) $(TAC_ALLOCATE_HEADERS) $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $(filter %.c %.o,$^) $(LDLIBS)
+
+$(BUILD_DIR)/emitir_tac: pruebas/tac_emit/desde_fuente.c $(TAC_EMIT_SOURCES) $(TAC_ALLOCATE_SOURCES) $(TAC_LOWER_SOURCES) $(TAC_EMIT_HEADERS) $(TAC_ALLOCATE_HEADERS) $(TAC_LOWER_HEADERS) $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $(filter %.c %.o,$^) $(LDLIBS)
+
+check-tac-emit: $(BUILD_DIR)/probar_tac_emit
+	$<
+
+check-o1-equivalence: $(TARGET) $(BUILD_DIR)/emitir_tac
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/tac_emit/comparar.py
+
+check: check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 clean:
+	rm -f $(BUILD_DIR)/probar_tac_emit $(BUILD_DIR)/emitir_tac
 	rm -f $(BUILD_DIR)/probar_tac_intervals $(BUILD_DIR)/probar_tac_allocate $(BUILD_DIR)/asignar_tac
 	rm -f $(BUILD_DIR)/probar_tac_live $(BUILD_DIR)/probar_tac_loops $(BUILD_DIR)/analizar_tac
 	rm -f $(BUILD_DIR)/bajar_tac $(BUILD_DIR)/probar_tac_lower
@@ -248,7 +265,7 @@ clean:
 
 -include $(OBJECTS:.o=.d)
 
-.PHONY: check-tac-intervals check-tac-allocate check-tac-live check-tac-loops all clean ejercicios check check-tac-lower check-tac-values check-tac-build check-semantica-isa check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+.PHONY: check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops all clean ejercicios check check-tac-lower check-tac-values check-tac-build check-semantica-isa check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 # Prototipo gráfico CALSIDE (PySide6).
 PYTHON ?= python3

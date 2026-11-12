@@ -87,7 +87,7 @@ ASTNode *gen_child_at(ASTNode *node, int index) {
     return child;
 }
 
-/* gen_reg_name — véase el contrato en generate_internal.h. */
+/* gen_reg_name — véase el contrato en generate_emit.h. */
 const char *gen_reg_name(int reg) {
     static const char *names[16] = {
         "rz", "rl", "rx", "rg",
@@ -244,7 +244,7 @@ int gen_store_symbol(GenCtx *gen, Symbol *symbol, int rs, ASTNode *node) {
     return 0;
 }
 
-/* gen_stack_push — véase el contrato en generate_internal.h. */
+/* gen_stack_push — véase el contrato en generate_emit.h. */
 void gen_stack_push(int reg) {
     cg_op(SLOT_LSU,
           "sw %s, 0(rx)",
@@ -254,7 +254,7 @@ void gen_stack_push(int reg) {
           "saddi rx, rx, 4");
 }
 
-/* gen_stack_pop — véase el contrato en generate_internal.h. */
+/* gen_stack_pop — véase el contrato en generate_emit.h. */
 void gen_stack_pop(int reg) {
     cg_op(SLOT_ALU0,
           "saddi rx, rx, -4");

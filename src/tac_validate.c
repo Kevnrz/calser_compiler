@@ -310,7 +310,8 @@ int tac_validate(const TacProgram *program, char *error, size_t capacity) {
  * Efectos:
  *   valida todo el programa sin modificarlo ni expandir operaciones.
  * Restricciones:
- *   el futuro emisor debe llamar antes de emitir; Aho §8.6 y §8.8.
+ *   aplica a IR ya expandido. D acepta PSEUDO y las expande directamente
+ *   hacia codegen tras tac_validate; no aplica este filtro a su entrada. Aho §8.6–8.8.
  */
 int tac_validate_for_emission(const TacProgram *program, char *error, size_t capacity) {
     if (!tac_validate(program, error, capacity)) {

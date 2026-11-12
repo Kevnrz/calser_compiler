@@ -47,7 +47,7 @@ PASS total: 1746 casos; slots, etiquetas, RAW y registros conservados
 PASS contratos y fallo del emisor
 PASS total: 1190 casos; direccion, lectura, escritura, referencia, copia y cero
 PASS matriz 3x4: direccion (1,1) = base + 20; slots y separacion RAW
-PASS contrato crypto y fallo del evaluador
+PASS contrato crypto, siete plantillas directas y fallos del evaluador
 PASS 184 casos crypto: referencia Feistel, descifrado, in-place, argumentos dinámicos,
      constantes de 32 bits, 12 temporales vivos, etiquetas únicas y cero avisos RAW
 PASS integración p09: .cls, .asm, .mem, datos y cero avisos RAW
@@ -98,7 +98,7 @@ PASS constantes: inicializadores, Vi, profundidad, 32 bits, signos y rechazos si
 PASS constantes ISA: 12 casos, pasos, auxiliares y rechazos sin modificar salida
 ........
 ----------------------------------------------------------------------
-Ran 8 tests in 0.009s
+Ran 8 tests in 0.010s
 
 OK
 PASS ayuda: -h/--help, opciones, ejemplos, errores y archivos intactos

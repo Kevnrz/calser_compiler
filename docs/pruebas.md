@@ -209,3 +209,21 @@ publica valores. Para comprobar otro build, incluso sanitizado:
 Las fuentes de los controles y las salidas son temporales. No se modifican el
 constructor ni el generador cuando aparece una diferencia; la prueba informa
 caso, valor obtenido y esperado y termina con fallo.
+
+## Plantillas CRYPTO y evaluación del AST
+
+`make check-crypto` conserva los 184 escenarios de Feistel y los once escenarios
+de integración del compilador, incluido el ejercicio 3. `probar.py` ejecuta
+primero `build/emitir_crypto --contract`: verifica las siete plantillas mediante
+`cg_crypto_emit_template` sin AST ni callback, contratos inválidos sin emisión,
+registros físicos fijos, selectores, contador compartido y agotado, y slots de
+los bundles indivisibles. Comprueba los registros IR del lazo, separaciones,
+etiquetas y orden de rondas/desplazamientos del descifrado. Los fallos del
+callback en el segundo y tercer argumento comprueban orden, destinos, máscaras,
+guardado previo y ausencia de restauración o consumo de etiquetas.
+
+La función directa no prepara argumentos ni preserva vivos. `cg_crypto` sigue
+haciéndolo para el generador actual, con las mismas plantillas P1. El auxiliar
+se verifica con C11 estricto (`-Wall -Wextra -pedantic -Werror`) y ASan/UBSan.
+La equivalencia del generador se comprueba con capturas de los 118 fuentes en
+modo normal y `--no-schedule`, incluyendo `-s -i`, sin `--time` ni normalización.

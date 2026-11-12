@@ -2,7 +2,11 @@
 
 El módulo `src/codegen_crypto.c` traduce las siete sentencias `AST_CRYPTO`
 con las plantillas de `docs/crypto_para_ccom.md` y la ISA de `docs/isa.md`.
-Está conectado al recorrido del AST y al evaluador de expresiones de `ccom`.
+`cg_crypto` valida el AST, guarda vivos, evalúa argumentos, llama a
+`cg_crypto_emit_template` y restaura vivos. La función de plantilla también
+puede llamarse directamente con registros físicos preparados, sin AST ni
+callback; no mueve argumentos ni guarda/restaura vivos. Las dos entradas usan
+la misma plantilla P1 y conservan sus bundles fijos y separaciones.
 
 ```bash
 make check-crypto
@@ -45,6 +49,14 @@ marcados en `preserve_mask`. Este módulo evalúa los argumentos en orden:
 | bloques | r9 / t5 | r6 y r7 |
 | token, palabra de llave, ancla | r10 / t6 | ninguno |
 
+La entrada directa recibe `CGCryptoTemplate`: operación, `registers[3]`, `k`
+y `w`, más un puntero al contador de etiquetas compartido por programa. Valida
+los registros fijos de la tabla: `{6, 7, 9}` para cifrar/descifrar,
+`{10, -1, -1}` para autenticar/cargar_llave/cambiar_ancla y `{-1, -1, -1}` para
+cerrar_sesion/sellar. Los selectores ausentes valen -1. Un contrato inválido no
+emite ni modifica el contador. Solo cifrar/descifrar consumen un identificador;
+rechazan `UINT_MAX`, incluso si la cantidad de bloques en ejecución fuera cero.
+
 `k` y `w` se extraen de los nodos `AST_NUMBER`; no pasan por el evaluador.
 El evaluador debe respetar las reglas normales del pipeline. Además el módulo
 pone una separación después de cada evaluación para proteger su frontera.
@@ -80,7 +92,11 @@ resultado contra una referencia independiente de Feistel, constantes de
 32 bits con signo, las cuatro llaves, límites negativos/cero, argumentos
 dinámicos, cifrado en el mismo lugar, temporales vivos, etiquetas únicas y
 separación. El emisor también prueba contratos inválidos y errores del
-evaluador. La autenticación verifica el token Lamport `x99 = 0xF47BD70B`
+evaluador. `build/emitir_crypto --contract` comprueba además las siete
+plantillas sin AST ni callback, contratos inválidos sin emisión, contador
+compartido y agotado, registros IR/slots y rondas del descifrado. Los fallos en
+el segundo y tercer argumento conservan etiquetas y no restauran vivos.
+La autenticación verifica el token Lamport `x99 = 0xF47BD70B`
 contra el ancla inicial `0xFEFF95FF` mediante Ascon-Hash256 truncado a 32 bits.
 
 ## Programa compilado por ccom
@@ -96,8 +112,8 @@ python3 -c 'from pathlib import Path; m = Path("/tmp/p09_crypto_final.bin").read
 ```
 
 Con `-s`, `ccom` escribe el ensamblador `.asm` y la imagen inicial de datos
-`.mem` junto al nombre indicado por `-o`; estos comandos no producen un binario
-ensamblado. La imagen contiene las variables globales constantes. Los
+`.mem` junto al nombre indicado por `-o`, además del binario ensamblado y su
+salida hexadecimal. La imagen contiene las variables globales constantes. Los
 inicializadores globales dinámicos se ejecutan al entrar a main; los locales
 se inicializan al recorrer su declaración. Las variables sin inicializador
 se ponen en cero.
@@ -109,7 +125,8 @@ dinámica, constantes de 32 bits e inicializadores, y fallos de escritura de
 salida. En p09 deben coincidir los bytes descifrados con los originales, no
 haber avisos de separación y terminar con `AUTH=0 KVLOCK=1 EXC=1`.
 
-La prueba de p09 satisface el criterio de integración del punto 4. No demuestra
-que estén terminadas todas las construcciones del lenguaje: las llamadas en
-expresiones y los accesos a arreglos dependen de completar el generador general.
-El ejercicio 3 requiere su programa concreto para validar ese recorrido.
+La integración ejecuta también `pruebas/p11_ejercicio3.cls`: consume el token
+Lamport, cifra y recupera los 1024 bytes originales, sin avisos RAW. El recorrido
+de programas y `make ejercicios` verifican además `n1 = n2 = 8`. Las llamadas
+en expresiones y los accesos a arreglos cuentan con pruebas del generador general;
+la prueba de p09 cubre específicamente el criterio de integración de CRYPTO.

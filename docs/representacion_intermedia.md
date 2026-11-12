@@ -573,9 +573,36 @@ sus metadatos, aristas e imagen antes/después sin normalización.
 
 Esta etapa se enlaza solo con los binarios de prueba, no con ccom. No cambia
 `-i`, el intérprete ni la CLI. Quedan para los siguientes commits liveness,
-asignación, conservación de vivos/rl, expansión P1, partición de CRYPTO y emisión.
+asignación, conservación de vivos/rl, expansión P1 y emisión.
 Por eso la salida virtual aún no es un programa físico ejecutable: el control
 `tac_validate_for_emission` la rechaza. Referencias: Aho §7.2, §8.1–8.2 y §8.6.
+
+## Plantillas CRYPTO compartidas con el generador P1
+
+`cg_crypto_emit_template` (`codegen_crypto.h`) recibe una `CGCryptoTemplate`
+con operación, tres registros físicos y selectores `k/w`, más un puntero al
+contador de etiquetas único por programa. No recibe AST ni callback, no mueve
+argumentos y no guarda/restaura vivos. Valida forma, registros fijos, selectores
+y contador antes de emitir; un rechazo no modifica emisión ni contador.
+`cg_crypto` conserva el recorrido del AST para -O0: validación previa, guardado,
+evaluación, llamada a la misma plantilla y restauración. `emit_loop` y sus
+bundles fijos se comparten sin duplicación.
+
+El futuro emisor de -O1 deberá preservar los vivos afectados **antes** de
+sobrescribir los registros fijos; colocar origen/destino/bloques en `{6, 7, 9}`
+(t2/t3/t5), o token/palabra/ancla en `{10, -1, -1}` (t6); y resolver movimientos
+como copias paralelas, incluidos ciclos y fuentes `rz`. Para operaciones sin
+valores se usa `{-1, -1, -1}`. Los selectores presentes son 0–3 y los ausentes -1.
+Debe garantizar la separación requerida antes de que la plantilla lea sus
+fuentes, conservar un contador compartido por todo el programa y recuperar
+los vivos después de emitir. El lazo modifica r4–r8 y lee r9. El resumen
+conservador `call_clobbers = 0xfff0` sigue incluyendo la preparación; no cambia.
+
+Las etiquetas `.L_crypto_*` mantienen su formato. Cifrar/descifrar consumen un
+identificador, aun cuando los bloques en ejecución sean cero o negativos;
+rechazan el contador `UINT_MAX`. Las demás operaciones no lo incrementan.
+La preparación física, spilling y emisión desde TAC quedan para los siguientes
+commits: esta separación no conecta -O1 con el ensamblador.
 
 ## Intérprete de pruebas de alto nivel (C2)
 

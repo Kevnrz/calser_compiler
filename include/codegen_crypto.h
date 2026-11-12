@@ -1,7 +1,7 @@
 /*
  * codegen_crypto.h — Fase 4: interfaz de expansión de operaciones de cifrado.
  *
- * Expone evaluador de argumentos, contexto y expansión de cifrado.
+ * Separa la evaluación del AST de las plantillas con registros preparados.
  * Los contratos indican entradas, resultados, efectos y límites de uso.
  *
  * Usa: ast.h, symbol_table.h.
@@ -32,6 +32,46 @@ typedef struct {
     unsigned live_mask;  /* Bits ISA 4..15; valores a preservar antes de evaluar. */
     unsigned next_label; /* Inicializar una vez por programa; compartir entre funciones. */
 } CGCryptoContext;
+
+typedef enum {
+    CG_CRYPTO_AUTH,
+    CG_CRYPTO_LOGOUT,
+    CG_CRYPTO_KV_WRITE,
+    CG_CRYPTO_KV_LOCK,
+    CG_CRYPTO_SANC,
+    CG_CRYPTO_ENCRYPT,
+    CG_CRYPTO_DECRYPT
+} CGCryptoOperation;
+
+typedef struct {
+    CGCryptoOperation operation; /* Selecciona una de las siete plantillas. */
+    /* AUTH/KV_WRITE/SANC: {10, -1, -1}; ENCRYPT/DECRYPT: {6, 7, 9}
+     * (origen, destino, bloques); LOGOUT/KV_LOCK: {-1, -1, -1}.
+     */
+    int registers[3];
+    int k; /* Selector de llave 0–3; -1 si no corresponde. */
+    int w; /* Selector de palabra 0–3; -1 si no corresponde. */
+} CGCryptoTemplate;
+
+/*
+ * cg_crypto_emit_template — emite una plantilla con argumentos preparados.
+ * Entrada:
+ *   operation: operación, registros físicos fijos y selectores válidos.
+ *   next_label: contador prestado, no NULL, compartido por todo el programa.
+ * Salida:
+ *   0 en éxito; 1 por contrato inválido, sin emitir ni cambiar el contador.
+ * Efectos:
+ *   emite los bundles, separaciones y etiquetas de la plantilla P1.
+ *   Cifrar/descifrar consumen exactamente un identificador, aun con bloques <= 0.
+ * Restricciones:
+ *   valores ya disponibles, con la separación necesaria antes de su lectura.
+ *   No evalúa AST, mueve argumentos ni guarda/restaura vivos. El llamador los
+ *   preserva; el lazo modifica r4–r8 y lee r9. AUTH/KV_WRITE/SANC leen r10;
+ *   LOGOUT/KV_LOCK no leen registros de argumentos.
+ *   Conserva bundles fijos. Selección y expansión: Aho §8.1–8.2.
+ */
+int cg_crypto_emit_template(const CGCryptoTemplate *operation,
+                            unsigned *next_label);
 
 /*
  * cg_crypto — expande una operación CRYPTO del AST.

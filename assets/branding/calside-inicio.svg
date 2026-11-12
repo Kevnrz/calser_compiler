@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+<title id="title">CALSIDE — segundo fragmento del hexágono morado</title>
+<desc id="desc">Solo el segundo fragmento completo del hexágono, contando desde arriba en sentido horario, es morado. Los otros cinco fragmentos son naranjas. IDE permanece morado.</desc>
+<rect width="1600" height="900" fill="#191c24" />
+<g transform="translate(384.686292,450)" fill="none" stroke="#f3ad3d" stroke-width="22.627417" stroke-linejoin="miter" stroke-linecap="butt" stroke-miterlimit="10">
+<path d="M-59.728064,-112.452041 L0.000000,-146.936055 L59.728064,-112.452041" stroke="#f3ad3d" />
+<path d="M67.522292,-107.952041 L127.250356,-73.468027 L127.250356,-4.500000" stroke="#ab83df" />
+<path d="M127.250356,4.500000 L127.250356,73.468027 L67.522292,107.952041" stroke="#f3ad3d" />
+<path d="M59.728064,112.452041 L0.000000,146.936055 L-59.728064,112.452041" stroke="#f3ad3d" />
+<path d="M-67.522292,107.952041 L-127.250356,73.468027 L-127.250356,4.500000" stroke="#f3ad3d" />
+<path d="M-127.250356,-4.500000 L-127.250356,-73.468027 L-67.522292,-107.952041" stroke="#f3ad3d" />
+</g>
+
+<path aria-label="C" fill="#f3ad3d" transform="translate(591.250356,370)" d="M80.000000,0.000000 L0.000000,80.000000 L80.000000,160.000000 L96.000000,144.000000 L32.000000,80.000000 L96.000000,16.000000 Z" />
+<path aria-label="A" fill="#f3ad3d" transform="translate(717.250356,370)" d="M0.000000,160.000000 L56.000000,0.000000 L112.000000,160.000000 L88.026681,160.000000 L56.000000,68.495196 L23.973319,160.000000 Z" />
+<path aria-label="L" fill="#f3ad3d" transform="translate(859.250356,370)" d="M0.000000,0.000000 L22.627417,0.000000 L22.627417,86.627417 L80.000000,144.000000 L64.000000,160.000000 L0.000000,96.000000 Z" />
+<path aria-label="S" fill="#f3ad3d" transform="translate(969.250356,370)" d="M56.000000,0.000000 L72.000000,16.000000 L32.000000,56.000000 L80.000000,104.000000 L24.000000,160.000000 L8.000000,144.000000 L48.000000,104.000000 L0.000000,56.000000 Z" />
+<path aria-label="I" fill="#ab83df" transform="translate(1079.250356,370)" d="M0,0 H22.627417 V160 H0 Z" />
+<path aria-label="D" fill="#ab83df" transform="translate(1227.877773,370) scale(-1,1)" d="M80.000000,0.000000 L0.000000,80.000000 L80.000000,160.000000 L96.000000,144.000000 L32.000000,80.000000 L96.000000,16.000000 Z" />
+<path aria-label="E" fill="#ab83df" transform="translate(1257.877773,370)" d="M80.000000,0.000000 L0.000000,80.000000 L80.000000,160.000000 L96.000000,144.000000 L43.313708,91.313708 L88.000000,91.313708 L88.000000,68.686292 L43.313708,68.686292 L96.000000,16.000000 Z" />
+</svg>

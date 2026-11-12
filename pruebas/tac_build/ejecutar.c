@@ -7,6 +7,7 @@
 #include "semantic.h"
 #include "semantic_scope.h"
 #include "diagnostics.h"
+#include "parser_service.h"
 #include <errno.h>
 #include <inttypes.h>
 #include <stdlib.h>
@@ -123,8 +124,9 @@ int main(int argc, char **argv) {
     }
     diag_init(argv[1]);
     int parsed = yyparse();
+    parser_finish();
     fclose(yyin);
-    if (parsed || lexical_errors) {
+    if (parsed || lexical_errors || parser_syntax_errors()) {
         ast_free(root);
         diag_free();
         return 1;

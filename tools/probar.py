@@ -68,6 +68,43 @@ SUITES = {
 }
 
 
+# C2.3 y C6: reutilizar las recetas de Make conserva sus verificaciones completas.
+# La preparación construye los auxiliares; -o evita reconstruirlos al ejecutar
+# la receta, también cuando el usuario elige --sin-compilar.
+for name, description, targets in (
+    ('o1', 'Gestor, opciones y métricas O1', ('ccom', 'build/probar_tac_passes')),
+    ('o1-equivalence', 'Equivalencia observable O1/O0', ('ccom',)),
+    ('tac-emit', 'Emisión ISA', ('build/probar_tac_emit',)),
+    ('tac-intervals', 'Intervalos de vida', ('build/probar_tac_intervals',)),
+    ('tac-allocate', 'Asignación de registros', ('build/probar_tac_allocate', 'build/asignar_tac')),
+    ('tac-live', 'Análisis de vida', ('build/probar_tac_live', 'build/analizar_tac')),
+    ('tac-loops', 'Análisis de ciclos', ('build/probar_tac_loops', 'build/analizar_tac')),
+    ('tac', 'IR y esperados de alto nivel e ISA', ('ccom', 'build/probar_tac', 'build/probar_tac_isa', 'build/probar_tac_pseudo')),
+    ('tac-build', 'Construcción desde AST y CLI', ('ccom', 'build/probar_tac_build')),
+    ('tac-values', 'Intérprete TAC de pruebas', ('build/interpretar_tac',)),
+    ('tac-lower', 'Selección ISA', ('build/bajar_tac', 'build/probar_tac_lower')),
+    ('diagnosticos-generacion', 'Diagnósticos de generación', ('ccom',)),
+    ('constantes', 'Evaluación constante', ('build/probar_constantes',)),
+    ('constantes-isa', 'Materialización de constantes ISA', ('build/probar_constantes_isa',)),
+    ('semantica-isa', 'Semántica ISA compartida', ('build/probar_semantica_isa',)),
+    ('analysis', 'Análisis sin generación', ('ccom',)),
+    ('analysis-json', 'Diagnósticos JSON', ('ccom',)),
+    ('tokens-json', 'Tokens Flex JSON', ('ccom',)),
+    ('suggestions-json', 'Sugerencias LAC', ('ccom',)),
+    ('repairs-json', 'Reparaciones verificadas', ('ccom',)),
+    ('clones-json', 'Clones en C', ('ccom',)),
+    ('recovery', 'Recuperación sintáctica', ('ccom',)),
+    ('success', 'Confirmaciones y rutas', ('ccom',)),
+    ('ide-options', 'Exclusividad de consultas y O1', ('ccom',)),
+    ('ide', 'Interfaz CALSIDE completa (requiere PySide6)', ('ccom',)),
+    ('parser', 'LL(1) de consulta', ('ccom',)),
+    ('recorrido-ide', 'Recorrido gráfico con servicios C', ('ccom',)),
+):
+    SUITES[name] = Suite(description, targets, (
+        ('make', '--no-print-directory', *(argument for target in targets for argument in ('-o', target)),
+         'PYTHON=' + PYTHON, 'check-' + name),))
+
+
 def execute(command, options):
     """Ejecuta sin shell desde la raiz; informa fallos y conserva los logs utiles."""
     environment = os.environ.copy()

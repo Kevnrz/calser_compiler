@@ -7,6 +7,7 @@
 #include "semantic.h"
 #include "semantic_scope.h"
 #include "diagnostics.h"
+#include "parser_service.h"
 #include "generate.h"
 #include "codegen.h"
 #include "data_area.h"
@@ -57,8 +58,9 @@ int main(int argc, char **argv) {
     assert(yyin);
     diag_init(argv[1]);
     int parsed = yyparse();
+    parser_finish();
     assert(!fclose(yyin));
-    assert(!parsed && !lexical_errors);
+    assert(!parsed && !lexical_errors && !parser_syntax_errors());
     assert(semantic_analyze(root));
     LabelTable labels;
     label_table_init(&labels);

@@ -20,6 +20,13 @@
 
 #include "semantic.h"
 #include "diagnostics.h"
+#include "diagnostics_json.h"
+#include "suggestions.h"
+#include "repairs.h"
+#include "clones.h"
+#include "syntax_service.h"
+#include "parser_service.h"
+#include <errno.h>
 #include "label_table.h"
 #include "codegen.h"
 #include "generate.h"
@@ -44,6 +51,7 @@ extern int lexical_errors;
  *
  *   -h, --help  muestra ayuda y termina sin compilar
  *   --time  muestra la duracion total en stderr
+ *   --check  ejecuta solo análisis léxico/sintáctico/semántico, sin salidas
  *   -t  imprime el AST
  *   -m  imprime la tabla de símbolos con direcciones y la de etiquetas
  *   -v  imprime en stderr el avance de cada fase
@@ -52,13 +60,21 @@ extern int lexical_errors;
  *   -p  muestra los bundles en ensamblador y en binario
  *   -x  la entrada es un .asm y se genera el binario, sin compilar Calser
  *
- * Sin errores siempre se escriben .bin, .hex y .mem con el nombre base de
- * -o.
+ * Sin --check, las compilaciones correctas escriben .bin, .hex y .mem con
+ * el nombre base de -o.
  */
 typedef struct {
     const char *input;         /* archivo fuente (.cls) o, con -x, .asm      */
     char       *output;        /* -o; por defecto: fuente sin extensión .bin */
     int show_time;             /* --time */
+    int repair_json, syntax_json, clones_json;
+    unsigned clone_minimum;
+    int suggest_json;
+    size_t suggest_cursor;
+    int check_text;           /* distingue --check explícito en modo léxico */
+    int tokens_json;          /* --tokens-json: solo lexer Flex y presentación */
+    int check_json;           /* --check-json: mismo front-end, protocolo v1 */
+    int check_only;            /* --check: fases léxica, sintáctica y semántica */
     int verbose;               /* -v */
     int emit_asm;              /* -s */
     int emit_tac;              /* -i / --tac */
@@ -78,7 +94,14 @@ typedef struct {
 
 #define EXIT_USAGE 2
 
-#define USAGE "uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-i|--tac] [-p] [-x] [--ast-json <json>] [--no-schedule] [--time] [-O0|-O1|-O2] [--opt=lista] [--unroll=N] [--metrics archivo.json] <archivo> [-o <salida>]"
+enum {
+    OPT_AST_JSON = 1000, OPT_NO_SCHEDULE, OPT_TIME,
+    OPT_PASSES, OPT_UNROLL, OPT_METRICS,
+    OPT_CHECK, OPT_CHECK_JSON, OPT_TOKENS_JSON, OPT_SUGGEST_JSON,
+    OPT_REPAIR_JSON, OPT_SYNTAX_JSON, OPT_CLONES_JSON
+};
+
+#define USAGE "uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-i|--tac] [-p] [-x] [--check|--check-json|--tokens-json|--suggest-json <cursor>|--repair-json|--syntax-json|--clones-json <min>] [--ast-json <json>] [--no-schedule] [--time] [-O0|-O1|-O2] [--opt=lista] [--unroll=N] [--metrics archivo.json] <archivo> [-o <salida>]"
 
 /*
  * print_help — describe las opciones sin requerir ni procesar una entrada.
@@ -110,14 +133,30 @@ static void print_help(void) {
          "  --unroll=N           Factor 2..16; exige unroll activo.\n"
          "  --metrics <json>     Metricas de una compilacion -O1 exitosa.\n"
          "  --time               Muestra la duracion total en ms en stderr.\n"
-         "\nSalidas: .bin, .hex y .mem; con -s tambien .asm; con -i tambien .tac.\n"
+         "  --check              Solo analisis lexico, sintactico y semantico;\n"
+         "                       no genera archivos. Compatible con -v y --time.\n"
+         "  --check-json         Mismo analisis que --check; respuesta JSON v1 en\n"
+         "                       stdout, sin archivos. Compatible con -v y --time.\n"
+         "  --tokens-json        Tokens, comentarios y errores del lexer Flex en\n"
+         "                       JSON v1, sin parser ni salidas. Admite -v y --time.\n"
+         "  --suggest-json <n>   Sugerencias Bison/LAC en el cursor UTF-8 (bytes).\n"
+         "                       Sin semantica ni artefactos. Admite -v y --time.\n"
+         "  --repair-json        Reparaciones de cierres validadas por el parser C.\n"
+         "  --syntax-json        Solo sintaxis completa en JSON, para verificacion.\n"
+         "                       Ambas sin semantica ni artefactos; -v/--time.\n"
+         "  --clones-json <n>    Clones Tipo I/II sobre un paquete CCL1 de instantaneas.\n"
+         "                       Minimo 5..100000 tokens; solo -v y --time.\n"
+         "\nConsultas: solo -v y --time; sin niveles, optimizacion, metricas ni -i.\n\nSalidas: .bin, .hex y .mem; con -s tambien .asm; con -i tambien .tac.\n"
          "Sin -o se usa el nombre de la entrada con extension .bin.\n"
+         "El exito y las rutas generadas se informan en stderr; stdout\n"
+         "se conserva para AST, tablas y bundles.\n"
          "\nEjemplos:\n"
          "  ccom programa.cls\n"
          "  ccom -i programa.cls -o salida.bin\n"
          "  ccom --time -s programa.cls -o salida.bin\n"
          "  ccom -x programa.asm\n"
          "  ccom --ast-json arbol.json programa.cls\n"
+         "  ccom --check programa.cls\n"
          "\nCodigos de salida:\n"
          "  0  Trabajo completado o ayuda mostrada.\n"
          "  1  Error de compilacion, ensamblado o archivos.\n"
@@ -142,6 +181,8 @@ static void report_elapsed(const Options *options, const struct timespec *start,
     double milliseconds = (double) (end.tv_sec - start->tv_sec) * 1000.0
                         + (double) (end.tv_nsec - start->tv_nsec) / 1000000.0;
     const char *operation = options->assemble_only ? "ensamblado" : "compilacion";
+    if (options->check_only)
+        operation = "analisis";
     if (!options->assemble_only && options->ast_json && !options->emit_asm &&
         !options->print_memory && !options->print_bundles && !options->emit_tac && !options->level)
         operation = "exportacion AST";
@@ -646,13 +687,16 @@ static int phase_parse(Compilation *compilation) {
     // §8.2: los errores muestran el archivo y la línea del programa.
     diag_init(options->input);
 
+    // Recuperar puede devolver 0 con errores: revisar también parser_syntax_errors().
+    // Contrato: docs/ccom_servicios_ide.md#contrato-yyparse.
     int result = yyparse();
 
     fclose(yyin);
 
-    // Solo hay AST que liberar si el parser terminó bien.
-    if (result == 0)
-        compilation->root = root;
+    // El árbol inicial, si llegó a construirse, pertenece a main. Un AST
+    // recuperado se libera normalmente, pero jamás se exporta ni se analiza.
+    compilation->root = root;
+    parser_finish();
 
     if (lexical_errors > 0) {
         fprintf(stderr,
@@ -666,7 +710,9 @@ static int phase_parse(Compilation *compilation) {
         return 0;
     }
 
-    if (result != 0) {
+    if (result != 0 || parser_syntax_errors() > 0) {
+        if (parser_recovery_limited())
+            fprintf(stderr, "Analisis sintactico incompleto: limite de recuperacion alcanzado.\n");
         report_phase(options, "fase 1-2: analisis lexico y sintactico", 0);
 
         compilation->exit_code = 1;
@@ -1133,7 +1179,12 @@ static int compile(const Options *options) {
     Compilation compilation = { .options = options };
     int code;
 
-    if (phase_parse(&compilation) &&
+    if (options->check_only) {
+        /* E4: ejecutar exactamente el front-end existente y liberar su AST/
+         * símbolos, sin exportar, generar código ni abrir archivos de salida. */
+        code = phase_parse(&compilation) && phase_semantic(&compilation)
+                   ? 0 : compilation.exit_code;
+    } else if (phase_parse(&compilation) &&
         phase_export_ast(&compilation) &&
         phase_semantic(&compilation) &&
         phase_labels(&compilation) &&
@@ -1179,13 +1230,20 @@ static int parse_options(int argc, char **argv, Options *options) {
     // antes o después del archivo (ccom prog.cls -o prog.bin).
     static const struct option long_options[] = {
         {"help", no_argument, NULL, 'h'},
-        {"ast-json", required_argument, NULL, 1000},
-        {"no-schedule", no_argument, NULL, 1001},
-        {"time", no_argument, NULL, 1002},
+        {"ast-json", required_argument, NULL, OPT_AST_JSON},
+        {"no-schedule", no_argument, NULL, OPT_NO_SCHEDULE},
+        {"time", no_argument, NULL, OPT_TIME},
         {"tac", no_argument, NULL, 'i'},
-        {"opt", required_argument, NULL, 1003},
-        {"unroll", required_argument, NULL, 1004},
-        {"metrics", required_argument, NULL, 1005},
+        {"opt", required_argument, NULL, OPT_PASSES},
+        {"unroll", required_argument, NULL, OPT_UNROLL},
+        {"metrics", required_argument, NULL, OPT_METRICS},
+        {"check", no_argument, NULL, OPT_CHECK},
+        {"check-json", no_argument, NULL, OPT_CHECK_JSON},
+        {"tokens-json", no_argument, NULL, OPT_TOKENS_JSON},
+        {"suggest-json", required_argument, NULL, OPT_SUGGEST_JSON},
+        {"repair-json", no_argument, NULL, OPT_REPAIR_JSON},
+        {"syntax-json", no_argument, NULL, OPT_SYNTAX_JSON},
+        {"clones-json", required_argument, NULL, OPT_CLONES_JSON},
         {NULL, 0, NULL, 0}
     };
     while ((option = getopt_long(argc, argv, "ho:vstmxpiO:", long_options, NULL)) != -1) {
@@ -1213,7 +1271,7 @@ static int parse_options(int argc, char **argv, Options *options) {
                     goto usage_error;
                 options->explicit_level |= 1 << (optarg[0] - '0');
                 break;
-            case 1003: {
+            case OPT_PASSES: {
                 options->opt_seen = 1;
                 const char *part = optarg;
                 do {
@@ -1227,7 +1285,7 @@ static int parse_options(int argc, char **argv, Options *options) {
                 } while (part);
                 break;
             }
-            case 1004: {
+            case OPT_UNROLL: {
                 char *end;
                 unsigned long factor = strtoul(optarg, &end, 10);
                 if (!*optarg || *end || factor < 2 || factor > 16)
@@ -1235,10 +1293,38 @@ static int parse_options(int argc, char **argv, Options *options) {
                 options->unroll_factor = (unsigned)factor;
                 break;
             }
-            case 1005: options->metrics_path = optarg; break;
-            case 1000: options->ast_json = optarg; break;
-            case 1001: options->no_schedule = 1; break;
-            case 1002: options->show_time = 1; break;
+            case OPT_METRICS: options->metrics_path = optarg; break;
+            case OPT_AST_JSON: options->ast_json = optarg; break;
+            case OPT_NO_SCHEDULE: options->no_schedule = 1; break;
+            case OPT_TIME: options->show_time = 1; break;
+            case OPT_CHECK: options->check_only = options->check_text = 1; break;
+            case OPT_CHECK_JSON: options->check_only = options->check_json = 1; break;
+            case OPT_TOKENS_JSON: options->check_only = options->tokens_json = 1; break;
+            case OPT_SUGGEST_JSON: {
+                char *end = NULL;
+                errno = 0;
+                unsigned long long value = strtoull(optarg, &end, 10);
+                if (errno || !*optarg || *end || strspn(optarg, "0123456789") != strlen(optarg) || value > SIZE_MAX) {
+                    fprintf(stderr, "ccom: cursor UTF-8 invalido\n");
+                    free(options->output); return EXIT_USAGE;
+                }
+                options->check_only = options->suggest_json = 1;
+                options->suggest_cursor = (size_t) value;
+                break;
+            }
+            case OPT_REPAIR_JSON: options->check_only = options->repair_json = 1; break;
+            case OPT_SYNTAX_JSON: options->check_only = options->syntax_json = 1; break;
+            case OPT_CLONES_JSON: {
+                char *end = NULL; errno = 0;
+                unsigned long value = strtoul(optarg, &end, 10);
+                if (errno || !*optarg || *end || strspn(optarg, "0123456789") != strlen(optarg) || value < 5 || value > 100000) {
+                    fprintf(stderr, "ccom: minimo de clones invalido (5..100000)\n");
+                    free(options->output); return EXIT_USAGE;
+                }
+                options->check_only = options->clones_json = 1;
+                options->clone_minimum = (unsigned) value;
+                break;
+            }
             case 'v': options->verbose = 1;       break;
             case 's': options->emit_asm = 1;      break;
             case 'i': options->emit_tac = 1;      break;
@@ -1273,6 +1359,26 @@ static int parse_options(int argc, char **argv, Options *options) {
 
     options->input = argv[optind];
 
+    int services = options->check_json + options->tokens_json + options->suggest_json + options->repair_json + options->syntax_json + options->clones_json;
+    if (services + options->check_text > 1) {
+        fprintf(stderr, "ccom: las operaciones de consulta son excluyentes\n");
+        free(options->output);
+        return EXIT_USAGE;
+    }
+    if (options->check_only) {
+        if (options->output || options->emit_asm || options->ast_json ||
+            options->no_schedule || options->print_ast || options->print_memory ||
+            options->assemble_only || options->print_bundles || options->emit_tac ||
+            options->explicit_level || options->opt_seen || options->unroll_factor ||
+            options->metrics_path) {
+            fprintf(stderr, "ccom: %s solo admite -v y --time; no admite opciones de salida o ensamblado\n",
+                    options->clones_json ? "--clones-json" : options->repair_json ? "--repair-json" : options->syntax_json ? "--syntax-json" : options->suggest_json ? "--suggest-json" : options->tokens_json ? "--tokens-json" : "--check");
+            free(options->output);
+            return EXIT_USAGE;
+        }
+        return -1;
+    }
+
     if (options->output == NULL) {
         options->output = default_output(options->input);
 
@@ -1287,6 +1393,48 @@ usage_error:
     free(options->output);
     fprintf(stderr, "%s\n", USAGE);
     return EXIT_USAGE;
+}
+
+/*
+ * report_success — confirma una operación completada, sin alterar stdout.
+ *
+ * Solo se llama con código 0 después de cerrar las salidas. El mensaje no
+ * sustituye los códigos de retorno; --time conserva su posición al final.
+ */
+static void report_success(const Options *options) {
+    if (options->check_only) {
+        fprintf(stderr, "ccom: Análisis correcto: sin errores.\n");
+        return;
+    }
+
+    int ast_only = !options->assemble_only && options->ast_json &&
+                   !options->emit_asm && !options->print_memory &&
+                   !options->print_bundles && !options->emit_tac && !options->level;
+
+    fprintf(stderr, "ccom: %s\n",
+            ast_only ? "AST exportado correctamente." :
+            options->assemble_only ? "Ensamblado correcto." : "Compilación correcta.");
+    fprintf(stderr, "ccom: Archivos generados:\n");
+
+    if (!ast_only) {
+        const char *extensions[] = { ".bin", ".hex", ".mem", ".asm", ".tac" };
+        int count = options->assemble_only ? 3 : 5;
+        for (int i = 0; i < count; i++) {
+            if ((i == 3 && !options->emit_asm) || (i == 4 && !options->emit_tac))
+                continue;
+            char *path = with_extension(options->output, extensions[i]);
+            if (path) {
+                fprintf(stderr, "  %s\n", path);
+                free(path);
+            } else {
+                fprintf(stderr, "  (ruta no disponible para %s)\n", extensions[i]);
+            }
+        }
+    }
+    if (options->ast_json && !options->assemble_only)
+        fprintf(stderr, "  %s\n", options->ast_json);
+    if (options->metrics_path && !options->assemble_only)
+        fprintf(stderr, "  %s\n", options->metrics_path);
 }
 
 /*
@@ -1316,8 +1464,39 @@ int main(int argc, char **argv) {
     }
 
     int code;
+    if (options.check_json) diag_json_begin();
+    if (options.tokens_json) diag_json_lexical_begin();
 
-    if (options.assemble_only) {
+    if (options.clones_json) {
+        code = clones_run(stdout, options.input, options.clone_minimum);
+        report_phase(&options, "clones lexicos", code == 0);
+    }
+    else if (options.repair_json || options.syntax_json) {
+        code = options.repair_json ? repairs_run(stdout, options.input) : syntax_json_run(stdout, options.input);
+        report_phase(&options, options.repair_json ? "reparaciones sintacticas" : "verificacion sintactica", code == 0);
+    }
+    else if (options.suggest_json) {
+        code = suggestions_run(stdout, options.input, options.suggest_cursor);
+        report_phase(&options, "sugerencias sintacticas", code == 0);
+    }
+    else if (options.tokens_json) {
+        extern int lexer_scan_only(void);
+        yyin = fopen(options.input, "r");
+        if (!yyin) { perror(options.input); code = 1; }
+        else {
+            struct stat source_stat;
+            if (fstat(fileno(yyin), &source_stat) != 0 || source_stat.st_size > 8000000) {
+                fprintf(stderr, "ccom: entrada lexica no disponible o superior a 8 MB\n");
+                code = 1;
+            } else {
+                diag_init(options.input);
+                code = lexer_scan_only();
+            }
+            fclose(yyin);
+        }
+        report_phase(&options, "fase 1: analisis lexico", code == 0);
+    }
+    else if (options.assemble_only) {
 
         // La entrada ya es el .asm: -s lo sobrescribiría.
         if (options.emit_asm)
@@ -1330,6 +1509,15 @@ int main(int argc, char **argv) {
     }
     else {
         code = compile(&options);
+    }
+
+    if (options.check_json || options.tokens_json)
+        code = diag_json_finish(stdout, options.input, code);
+
+    if (options.tokens_json) diag_free();
+    if (code == 0 && !options.suggest_json && !options.repair_json && !options.syntax_json && !options.clones_json) {
+        if (options.tokens_json) fprintf(stderr, "ccom: Analisis lexico correcto.\n");
+        else report_success(&options);
     }
 
     if (timed)

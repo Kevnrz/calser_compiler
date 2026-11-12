@@ -46,6 +46,8 @@ make
 ./ccom -v pruebas/p02_factorial.cls
 ```
 
+Las operaciones correctas muestran una confirmación en `stderr` y enumeran las salidas generadas. `--check` confirma el análisis sin crear archivos; `--ast-json` usado solo confirma la exportación, sin afirmar validación semántica. `stdout` conserva los formatos de AST, tablas y bundles.
+
 Una entrada correcta devuelve código `0`. Los errores de análisis devuelven
 `1`; los errores de uso de la línea de comandos devuelven `2`.
 
@@ -64,11 +66,30 @@ Una entrada correcta devuelve código `0`. Los errores de análisis devuelven
 | `-v` | Mostrar el avance de cada fase |
 | `-o <archivo>` | Nombre del binario de salida; es también el nombre base del `.hex` y el `.mem` |
 | `-s` | Escribir además el ensamblador `.asm` |
+| `-i`, `--tac` | Escribir además el listado de alto nivel `.tac` |
+| `-O0` | Generador predeterminado |
+| `-O1` | Camino HIGH/ISA y asignación de registros; pasadas todavía vacías |
+| `-O2` | Reservado; devuelve error de uso 2 |
+| `--opt=lista` | Implicar O1 y seleccionar unroll,rename,dce,reorder,spill |
+| `--unroll=N` | Factor 2..16; requiere unroll activo |
+| `--metrics <json>` | Escribir métricas tras una compilación O1 correcta |
 | `-p` | Mostrar cada bundle en ensamblador y en binario |
 | `-x` | Ensamblar una entrada `.asm` y generar `.bin`, `.hex` y `.mem`, sin compilar Calser |
 | `--ast-json <archivo>` | Exportar el AST para el visor gráfico |
+| `--check` | Analizar léxico, sintaxis y semántica sin generar archivos |
+| `--check-json` | El mismo análisis con diagnósticos JSON v1 |
+| `--tokens-json` | Tokens, comentarios y errores de Flex en JSON |
+| `--syntax-json` | Solo léxico y sintaxis completos en JSON |
+| `--suggest-json <cursor>` | Sugerencias LAC en un cursor expresado en bytes UTF-8 |
+| `--repair-json` | Reparaciones de cierres verificadas sobre copias |
+| `--clones-json <mínimo>` | Clones I/II de un paquete CCL1; mínimo 5..100000 tokens |
 | `--time` | Mostrar en stderr la duración total del trabajo en milisegundos |
 | `--no-schedule` | Usar emisión conservadora para comparar bundles y ciclos |
+
+Las siete consultas del IDE son excluyentes y solo admiten `-v` y `--time`.
+Combinarlas entre sí, con `-i`/`--tac`, niveles `-O0/-O1/-O2`, `--opt`,
+`--unroll`, `--metrics` u opciones de generación/listados devuelve código 2.
+La compilación normal conserva las opciones O1 y TAC.
 
 Para consultar todas las opciones sin compilar:
 
@@ -85,7 +106,7 @@ Para medir cuánto tarda la compilación del programa:
 El tiempo incluye análisis, generación, organización, ensamblado y escritura
 de salidas; también se informa si el trabajo falla. Se mide tiempo de pared
 con un reloj monotónico. Con `-x` se mide el ensamblado y con `--ast-json`
-solo se mide la exportación del AST.
+solo, sin opciones que continúen compilando, se mide la exportación del AST.
 
 Consulta los detalles en [Uso y banderas de ccom](docs/ccom_banderas.md).
 
@@ -360,3 +381,19 @@ los binarios. El listado contiene imagen inicial, funciones y bloques de alto
 nivel. `make check-tac-build` prueba construcción y CLI con 22 esperados, sin
 intérprete todavía. Ver [la documentación de TAC](docs/representacion_intermedia.md)
 y [las banderas](docs/ccom_banderas.md).
+
+## CALSIDE · IDE de Calser
+
+Aplicación propia de escritorio con Python/PySide6 para edición, proyecto, búsqueda, terminales y procesos. ccom aporta léxico, sintaxis/semántica, sugerencias, reparaciones y clones en C; el LL(1) Python se conserva como API de consulta/pruebas. Incluye perfiles gráficos F5, ejecución F6 mediante el simulador, recuperación de varios errores sintácticos y protección de cambios externos. M1–M7 implementados; revisión manual, empaquetado y otra máquina siguen su plan de cierre.
+
+Los motores del IDE permanecen dentro de ccom, en C. Desde la raíz:
+
+```sh
+make
+python3 -m venv .venv
+.venv/bin/python -m pip install -r ide/requirements.txt
+make PYTHON=.venv/bin/python ide
+```
+
+Pruebas gráficas: `QT_QPA_PLATFORM=offscreen make PYTHON=.venv/bin/python check-ide check-parser check-recorrido-ide`.
+ [Uso e instalación](ide/README.md) · [Guía del sistema](ide/docs/guia_sistema_calside.md) · [Plan vigente](ide/docs/plan_ide.md) · [Revisión manual](ide/docs/revision_manual.md) · [Bitácora](ide/docs/bitacora_ide.md) · [Protocolos C](docs/ccom_servicios_ide.md).

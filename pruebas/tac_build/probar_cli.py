@@ -62,6 +62,11 @@ def consecutive_blocks(text):
             number += 1
 
 
+def success_log(output, extensions, operation='Compilación correcta.'):
+    return ('ccom: ' + operation + '\nccom: Archivos generados:\n' +
+            ''.join(f'  {output.with_suffix(extension)}\n' for extension in extensions))
+
+
 def cases(folder):
     """Compara estructura en memoria y CLI con los esperados de cada fuente.
 
@@ -83,7 +88,9 @@ def cases(folder):
             tac = folder / 'with_tac.bin'
             before = run('-s', *mode, source, '-o', plain)
             after = run('-s', '-i', *mode, source, '-o', tac)
-            assert before.stdout == after.stdout and before.stderr == after.stderr
+            assert before.stdout == after.stdout
+            assert before.stderr == success_log(plain, ('.bin', '.hex', '.mem', '.asm'))
+            assert after.stderr == success_log(tac, ('.bin', '.hex', '.mem', '.asm', '.tac'))
             for extension in ('.asm', '.bin', '.hex', '.mem'):
                 assert plain.with_suffix(extension).read_bytes() == tac.with_suffix(extension).read_bytes(), (name, extension)
             assert tac.with_suffix('.tac').read_text() == expected, (name, mode)
@@ -109,11 +116,14 @@ def combinations(folder):
     assert json.is_file() and custom.with_suffix('.tac').is_file()
     plain = run('-s', '-t', '-m', '-p', source, '-o', custom)
     with_tac = run('-s', '-t', '-m', '-p', '-i', source, '-o', custom)
-    assert (plain.stdout, plain.stderr) == (with_tac.stdout, with_tac.stderr)
+    assert plain.stdout == with_tac.stdout
+    assert plain.stderr == success_log(custom, ('.bin', '.hex', '.mem', '.asm'))
+    assert with_tac.stderr == success_log(custom, ('.bin', '.hex', '.mem', '.asm', '.tac'))
     asm = custom.with_suffix('.asm')
     assembly = folder / 'ensamblado.bin'
     result = run('-x', '-i', asm, '-o', assembly)
-    assert result.stderr == 'ccom: aviso: -i se ignora con -x\n'
+    assert result.stderr == ('ccom: aviso: -i se ignora con -x\n' +
+                             success_log(assembly, ('.bin', '.hex', '.mem'), 'Ensamblado correcto.'))
     assert not assembly.with_suffix('.tac').exists()
 
 

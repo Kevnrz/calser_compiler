@@ -8,6 +8,7 @@
 #include "semantic.h"
 #include "semantic_scope.h"
 #include "diagnostics.h"
+#include "parser_service.h"
 #include <assert.h>
 #include <string.h>
 extern FILE *yyin;
@@ -112,9 +113,10 @@ int main(int argc, char **argv) {
     assert(yyin);
     diag_init(argv[1]);
     int parsed = yyparse();
+    parser_finish();
     assert(!fclose(yyin));
     int code = 3;
-    if (!parsed && !lexical_errors && semantic_analyze(root)) {
+    if (!parsed && !lexical_errors && !parser_syntax_errors() && semantic_analyze(root)) {
         char error[256];
         TacBuildResult *build = tac_build(root, scopes_global(), error, sizeof error);
         assert(build);

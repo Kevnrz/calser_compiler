@@ -5,9 +5,9 @@ ccom [opciones] <archivo> [-o <salida>]
 ```
 
 Las opciones pueden ir antes o después del archivo. Sin opciones, `ccom`
-compila en silencio: si no hay errores no imprime nada, escribe los archivos
-de salida y sale con código 0. Los errores siempre salen por stderr, con
-cualquier bandera.
+escribe sus archivos de salida y sale con código 0, confirmando el éxito y las
+rutas generadas en stderr. La salida clásica mantiene los errores en stderr;
+`--check-json` entrega los diagnósticos individuales en JSON por stdout.
 
 ## Banderas
 
@@ -20,6 +20,14 @@ cualquier bandera.
 | `--opt=lista` | Implica O1; une unroll,rename,dce,reorder,spill en orden fijo | archivos | Disponible |
 | `--unroll=N` | Factor 2..16, exige unroll; sin factor: heurística §11 | contexto | Disponible |
 | `--metrics archivo.json` | JSON solo tras compilación O1 exitosa | archivo JSON | Disponible |
+
+| `--clones-json <mínimo>` | Clones I/II de instantáneas CCL1; mínimo 5..100000 tokens | JSON v1 stdout | Disponible |
+| `--repair-json` | Reparaciones de cierres sobre copias verificadas con Flex/Bison; sin semántica ni artefactos | JSON v1 stdout; logs stderr | Disponible |
+| `--syntax-json` | Verificación independiente de léxico/sintaxis para la política del IDE; sin semántica | JSON v1 stdout; logs stderr | Disponible |
+| `--suggest-json <cursor>` | Continuaciones sintácticas Flex/Bison-LAC en el cursor UTF-8; sin semántica ni artefactos | JSON v1 en stdout; logs en stderr | Disponible |
+| `--tokens-json` | Solo lexer Flex: tokens clasificados, comentarios y errores; sin parser ni artefactos | JSON v1 en stdout; logs en stderr | Disponible |
+| `--check-json` | Mismo front-end que `--check`, con diagnósticos estructurados v1; sin artefactos | JSON en stdout; logs en stderr | Disponible |
+| `--check` | Solo análisis léxico, sintáctico y semántico, sin archivos de salida | diagnósticos en stderr | Disponible |
 | `--time` | Muestra la duración total en milisegundos, con estado completado o fallido | stderr | Disponible |
 | `--no-schedule` | Desactiva el organizador local y conserva la emisión de una operación más separación; útil para comparar | archivos | Disponible |
 | `--ast-json <archivo>` | Exporta el AST sintáctico a JSON para el visor gráfico | archivo JSON | Disponible |
@@ -34,10 +42,37 @@ cualquier bandera.
 
 Se pueden combinar: `ccom -t -m prog.cls` imprime el AST y después las tablas.
 
+Las siete consultas (`--check`, `--check-json`, `--tokens-json`, `--syntax-json`,
+`--suggest-json`, `--repair-json`, `--clones-json`) son excluyentes: solo admiten
+`-v` y `--time`. Rechazan con código 2 cualquier otra consulta, `-i`/`--tac`,
+`-O0/-O1/-O2`, `--opt`, `--unroll`, `--metrics`, salidas, ensamblado y listados,
+antes de abrir la entrada o modificar archivos. No se ignoran opciones.
+La ayuda `-h`/`--help` conserva su terminación inmediata.
+
+La compilación normal admite O1, pasadas, métricas y TAC. `--ast-json` solo
+termina tras sintaxis; `-s`, `-i`, `-m`, `-p` u O1 hacen continuar la compilación.
+Pruebas de incompatibilidades: `make check-ide-options` (incluida en `check`).
+
+
+## Solo análisis (`--check`)
+
+```bash
+./ccom --check programa.cls
+./ccom --check -v --time programa.cls
+```
+
+Ejecuta las mismas fases léxica, sintáctica y semántica que la compilación normal. No genera código, no ensambla, no exporta AST y no crea ni modifica `.bin`, `.hex`, `.mem`, `.asm` o `.json`. Es el modo usado por CALSIDE para revisar copias temporales de texto sin guardar.
+
+Códigos: **0** análisis correcto; **1** error de análisis o lectura; **2** uso incorrecto. Mantiene el formato de diagnósticos con archivo, línea, columna y señalador. Un análisis correcto confirma `ccom: Análisis correcto: sin errores.` en stderr; stdout permanece vacío.
+
+Solo se combina con `-v` y `--time`; las opciones de salida, ensamblado y listados (`-o`, `-s`, `-i`/`--tac`, `-x`, `-p`, `-t`, `-m`, `--ast-json`, `--no-schedule`, niveles, `--opt`, `--unroll`, `--metrics`) se rechazan con código 2 antes de abrir salidas. La medición se identifica como `tiempo de analisis`. Un éxito no certifica generación de código ni ejecución: para eso se usa la compilación normal.
+
+Prueba del contrato y conservación de archivos: `make check-analysis` (también forma parte de `make check`).
+
 ## Ejemplos
 
 ```bash
-./ccom prog.cls              # compila; solo muestra errores
+./ccom prog.cls              # compila y confirma el resultado
 ./ccom -t prog.cls           # árbol
 ./ccom -m prog.cls           # tabla de símbolos y de etiquetas
 ./ccom -v prog.cls           # avance por fase
@@ -93,14 +128,15 @@ compilado. El valor varía entre ejecuciones.
 
 La línea se escribe al final en stderr. Si falla la compilación se informa
 `(fallido)` y se conserva el código de salida original. Con `-x` se etiqueta
-como `ensamblado`; con `--ast-json` sin `-s`, `-i`, `-m` ni `-p`, como
-`exportacion AST`, pues ese modo termina después del análisis sintáctico.
+como `ensamblado`; con `--ast-json` sin `-s`, `-i`, `-m`, `-p` ni O1, como
+`exportacion AST`, pues ese modo termina después del análisis sintáctico. Con
+consultas se identifica como `analisis`, sin generación.
 Los errores de uso no inician trabajo ni muestran una duración. Si el reloj
 no está disponible se emite un aviso, sin cambiar el resultado del compilador.
 
 ## Archivos de salida
 
-Cuando no hay errores, `ccom` escribe siempre tres archivos con el nombre base
+En compilación normal, cuando no hay errores, `ccom` escribe tres archivos con el nombre base
 de `-o` (o el del fuente): `prog.cls` produce `prog.bin`, `prog.hex` y
 `prog.mem`. Con cualquier error no se escribe ninguno de los tres.
 
@@ -214,7 +250,7 @@ antes del análisis semántico. Con errores léxicos o sintácticos no hay AST.
 Línea de uso que se imprime en los errores de uso:
 
 ```
-uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-i|--tac] [-p] [-x] [--ast-json <json>] [--no-schedule] [--time] <archivo> [-o <salida>]
+uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-i|--tac] [-p] [-x] [--check|--check-json|--tokens-json|--suggest-json <cursor>|--repair-json|--syntax-json|--clones-json <min>] [--ast-json <json>] [--no-schedule] [--time] [-O0|-O1|-O2] [--opt=lista] [--unroll=N] [--metrics archivo.json] <archivo> [-o <salida>]
 ```
 
 ## Pruebas
@@ -295,3 +331,125 @@ opciones nuevas son errores de uso (2). Varias listas se unen sin duplicados.
 `-i` escribe HIGH inicial; `--ast-json` sigue escribiendo antes del semántico,
 pero O1 implica compilar. `-m` muestra todas las etiquetas emitidas con su
 índice final de bundle, mediante el IR de codegen. O0 conserva su tabla anterior.
+
+## Confirmación de éxito
+
+Las operaciones completadas confirman su éxito en `stderr`, incluso sin `-v`:
+
+- `--check`: «Análisis correcto: sin errores», sin archivos generados.
+- Compilación O0/O1: «Compilación correcta», con rutas `.bin`, `.hex`, `.mem`, `.asm` si se pidió `-s`, `.tac` si se pidió `-i`/`--tac` y métricas si se solicitaron.
+- `-x`: «Ensamblado correcto», con las tres imágenes de salida; no anuncia un `.asm` nuevo.
+- Exportación AST sola: confirma únicamente la exportación JSON, sin afirmar semántica ni generación de código.
+
+Un JSON combinado con compilación también figura entre los archivos generados. Los errores de análisis, uso o escritura no anuncian éxito; una escritura parcial tampoco se presenta como compilación correcta. La ayuda no añade una confirmación. Los códigos 0/1/2 y el contenido de `stdout` se conservan. Con `--time`, la medición sigue al final de `stderr`.
+
+
+## Análisis estructurado para CALSIDE (`--check-json`)
+
+```sh
+./ccom --check-json programa.cls
+```
+
+Usa las fases C existentes sin generar archivos. Su respuesta versionada distingue análisis correcto, errores del programa, fallo del servicio e informe limitado; incluye una lista de diagnósticos con códigos, categorías y rangos UTF-8. Admite `-v` y `--time`, y rechaza opciones de generación/listados igual que `--check`.
+
+Contrato completo y ejemplos: [Servicio de diagnósticos](ccom_servicios_ide.md#check). Verificación: `make check-analysis-json`, incluida en `make check`.
+
+## Tokens para el editor (`--tokens-json`)
+
+`./ccom --tokens-json programa.cls` recorre la entrada completa con Flex y devuelve clasificación y rangos UTF-8, incluidos comentarios. No comprueba sintaxis/semántica ni genera archivos. Compatible con `-v` y `--time`. Contrato y límites: [servicio léxico M2](ccom_servicios_ide.md#tokens).
+
+## Sugerencias sintácticas (`--suggest-json`)
+
+`./ccom --suggest-json 14 programa.cls` consulta continuaciones en la frontera UTF-8 solicitada. Ejemplo: `F main [] : vo` ofrece `void`. Solo admite `-v` y `--time` como auxiliares. [Protocolo, decisiones y límites M3](ccom_servicios_ide.md#suggest).
+
+## Reparaciones y verificación sintáctica M4
+
+`./ccom --repair-json programa.cls` propone cierres del primer error; `./ccom --syntax-json programa.cls` verifica sintaxis completa sin semántica. No generan artefactos y solo admiten -v/--time como auxiliares. [Contrato, garantías y límites](ccom_servicios_ide.md#repair).
+
+
+## Clones Tipo I/II (`--clones-json`)
+
+`./ccom --clones-json 20 consulta.ccl` compara los textos del paquete CCL1 mediante Flex y el motor C. Las rutas del paquete solo identifican documentos; no se abren. Solo admite `-v`/`--time`, no genera artefactos y devuelve JSON v1 con pares/rangos UTF-8 o un fallo explícito sin resultados parciales. El IDE crea el paquete con los buffers sin guardar y conserva su panel. [Contrato, ejemplo de paquete y límites M5](ccom_servicios_ide.md#clones). `make check-clones-json` forma parte de `make check`.
+
+
+## Recuperación de errores sintácticos (M7)
+
+`--check`, `--check-json` y la compilación habitual utilizan recuperación conservadora del parser C. Una consulta puede reportar varios errores independientes; cualquier error bloquea semántica, AST y generación. No hay una bandera para compilar programas recuperados. [Funcionamiento y límites](ccom_servicios_ide.md#recovery).
+
+
+## CALSIDE con entorno virtual
+
+Los servicios C forman parte de `ccom`; el IDE requiere PySide6. Desde la raíz:
+
+```sh
+make
+python3 -m venv .venv
+.venv/bin/python -m pip install -r ide/requirements.txt
+make PYTHON=.venv/bin/python ide
+QT_QPA_PLATFORM=offscreen make PYTHON=.venv/bin/python check-ide check-parser check-recorrido-ide
+```
+
+## Problemas conocidos
+
+### Cascadas de recuperación e71/e72/e74
+
+En e71, e72 y e74, después del primer error correcto, la recuperación puede
+agregar en las líneas 4 y 5 un `E` inesperado y un cierre sin bloque. Estas
+cascadas se aceptan para la integración C6; no cambian el rechazo (código 1)
+ni permiten exportar AST, ejecutar semántica o generar código del árbol parcial.
+
+### Pruebas del IDE desactualizadas
+
+La línea base de `feat/calside` y la integración registran 427 métodos: 29 métodos
+fallidos (34 eventos por los subtests) y un error. De ellos, **28 métodos fallidos
+y un error corresponden a defectos de las pruebas**, preexistentes en la rama de
+Saddy. Predominan las esperas que comprueban el resultado antes de iniciar F5:
+la preparación léxica de `ide/interfaz/ventana.py:925` deja `process is None`
+hasta que `recibir_analisis` reanuda la compilación en las líneas 539–543. Los
+helpers de `ide/pruebas/test_ejecucion.py:42–46`,
+`ide/pruebas/test_compilacion.py:61–65` y
+`ide/pruebas/test_prototipo.py:49–54` confunden ese estado con una operación
+terminada. Deben esperar la preparación y la finalización de la operación.
+El error JSON lee el contenido anterior antes de que termine la exportación.
+El grupo de 28 también incluye una aserción de geometría obsoleta:
+`ide/pruebas/test_prototipo.py:258` espera 68±2 píxeles y obtiene 55, con la
+cabecera/barra definidas en `ide/interfaz/ventana.py:133,147,156`.
+Estas pruebas no se corrigieron en la integración.
+
+### Análisis automático perdido después de F5/F6
+
+Defecto real del IDE, también presente en Saddy: F5 invalida la comprobación del
+documento y retira su resultado en `ide/interfaz/ventana.py:982–984`. Al terminar,
+`ventana.py:1070` solo reanuda el coordinador;
+`ide/interfaz/comprobacion.py:103–114` procesa lo pendiente pero no vuelve a
+programar el documento invalidado. La liberación de F6 en
+`ide/interfaz/ejecucion.py:166–173` tampoco lo programa. El documento puede
+quedar sin análisis automático actualizado hasta una nueva solicitud, aunque
+compilar y ejecutar hayan terminado correctamente. Falta reprogramar la revisión
+vigente al finalizar; no se modifica ese comportamiento en C6 fase 1.
+
+### Protecciones de F6 pendientes de verificar
+
+Los **12 métodos** de `ide/pruebas/test_ejecucion.py:58–186` relativos a ejecución,
+cancelación, tiempo límite, edición y vigencia de artefactos fallan en el helper
+`compilar` de las líneas 42–46, antes de alcanzar su escenario. Por tanto, esas
+protecciones no quedan verificadas por la suite actual. La ejecución real de un
+programa mediante F5/F6 no sustituye esa cobertura; hay que corregir la espera
+del helper y volver a ejecutar los doce casos.
+
+### Cancelar durante la preparación léxica de F5
+
+`ide/interfaz/ventana.py:1078–1082` solo cancela `run_process` o `process` activos.
+No retira `_compilacion_esperando_lexico`, creado en `ventana.py:925–933`, cuando
+todavía no existe el proceso compilador. Así, Cancelar no detiene una F5 que
+espera el análisis léxico y la compilación puede arrancar después. Defecto
+preexistente; queda pendiente cancelar también esa solicitud.
+
+### Recorrido gráfico no determinista
+
+`tools/probar_recorrido_ide.py` puede fallar en la línea 121, al comprobar
+`primero in ventana.compilados` antes de que arranque/termine F5, o en la línea
+126, esperando «Análisis actualizado tras F5/F6». El primer punto comparte la
+espera prematura de las pruebas; el segundo expone la pérdida de análisis
+automático descrita arriba. Ocurre también en la referencia de Saddy y no se
+considera una verificación gráfica aprobada de la integración.

@@ -1,4 +1,89 @@
 $ make -s check
+PASS intervalos: posiciones, lazo, ramas, vacío, inalcanzable, huecos y definiciones
+PASS asignación: capacidad, LRU, auxiliares, preservación, ligados, bajada y derrame
+archivo	función	vivos	solapamiento	MUL	DIV	MOD	POW	preservación	registros	resultado
+ejercicios/ejercicio1_factorial/ejercicio1.cls	factorial	2	3	1	0	0	0	0	12	OK
+ejercicios/ejercicio1_factorial/ejercicio1.cls	main	1	1	0	0	0	0	0	3	OK
+ejercicios/ejercicio2_matriz/ejercicio2.cls	buscar	3	4	6	0	0	0	0	12	OK
+ejercicios/ejercicio2_matriz/ejercicio2.cls	main	2	2	0	0	0	0	0	4	OK
+ejercicios/ejercicio3_cifrado/ejercicio3.cls	bloques_de	3	4	1	0	0	0	0	10	OK
+ejercicios/ejercicio3_cifrado/ejercicio3.cls	direccion	3	4	2	0	0	0	0	7	OK
+ejercicios/ejercicio3_cifrado/ejercicio3.cls	preparar_boveda	2	2	0	0	0	0	0	12	OK
+ejercicios/ejercicio3_cifrado/ejercicio3.cls	cifrar_archivo	4	4	0	1	1	0	2	12	OK
+ejercicios/ejercicio3_cifrado/ejercicio3.cls	descifrar_archivo	4	4	0	1	1	0	2	12	OK
+ejercicios/ejercicio3_cifrado/ejercicio3.cls	main	2	2	0	0	0	0	0	12	OK
+pruebas/arreglos/matriz3x4.cls	buscar	3	4	3	0	0	0	0	12	OK
+pruebas/arreglos/matriz3x4.cls	main	2	3	0	1	1	0	0	12	OK
+pruebas/etiquetas/globales_corto_circuito.cls	main	1	2	0	0	0	0	0	5	OK
+pruebas/matrices/cuadradas.cls	sumar	4	5	12	0	0	0	4	12	OK
+pruebas/matrices/cuadradas.cls	multiplicar	5	6	11	0	0	0	4	12	OK
+pruebas/matrices/cuadradas.cls	main	4	4	0	0	0	0	0	12	OK
+pruebas/matrices/rectangulares.cls	main	5	6	22	0	0	0	8	12	OK
+pruebas/p01_llamada_adelante.cls	main	1	1	0	0	0	0	0	2	OK
+pruebas/p01_llamada_adelante.cls	doble	2	2	0	0	0	0	0	3	OK
+pruebas/p02_factorial.cls	factorial	2	3	1	0	0	0	0	12	OK
+pruebas/p02_factorial.cls	main	1	1	0	0	0	0	0	3	OK
+pruebas/p03_suma.cls	suma	3	4	1	0	0	0	0	12	OK
+pruebas/p03_suma.cls	main	1	1	0	0	0	0	0	7	OK
+pruebas/p04_memoria.cls	maximo	3	4	4	0	0	0	0	12	OK
+pruebas/p04_memoria.cls	main	2	2	0	0	0	0	0	10	OK
+pruebas/p05_arreglos_llamadas.cls	suma_fila	4	5	2	0	0	0	1	12	OK
+pruebas/p05_arreglos_llamadas.cls	poner	3	3	1	0	0	0	0	6	OK
+pruebas/p05_arreglos_llamadas.cls	main	3	4	3	0	0	0	0	12	OK
+pruebas/p06_tipos.cls	es_par	2	3	0	0	1	0	0	4	OK
+pruebas/p06_tipos.cls	total	3	4	3	0	0	0	0	12	OK
+pruebas/p06_tipos.cls	main	5	5	0	0	0	0	0	12	OK
+pruebas/p07_retorno_recursion.cls	factorial	3	4	1	0	0	0	0	10	OK
+pruebas/p07_retorno_recursion.cls	doble	2	3	1	0	0	0	0	3	OK
+pruebas/p07_retorno_recursion.cls	main	3	4	0	1	1	1	1	12	OK
+pruebas/p08_comentarios.cls	main	2	2	0	0	0	0	0	5	OK
+pruebas/p09_crypto.cls	main	3	3	0	0	0	0	0	12	OK
+pruebas/p10_llamadas_anidadas.cls	identity	1	1	0	0	0	0	0	1	OK
+pruebas/p10_llamadas_anidadas.cls	add	2	2	0	0	0	0	0	3	OK
+pruebas/p10_llamadas_anidadas.cls	main	2	2	0	0	0	0	1	5	OK
+pruebas/p11_ejercicio3.cls	bloques_de	3	4	1	0	0	0	0	10	OK
+pruebas/p11_ejercicio3.cls	direccion	3	4	2	0	0	0	0	7	OK
+pruebas/p11_ejercicio3.cls	preparar_boveda	2	2	0	0	0	0	0	12	OK
+pruebas/p11_ejercicio3.cls	cifrar_archivo	4	4	0	1	1	0	2	12	OK
+pruebas/p11_ejercicio3.cls	descifrar_archivo	4	4	0	1	1	0	2	12	OK
+pruebas/p11_ejercicio3.cls	main	2	2	0	0	0	0	0	12	OK
+pruebas/p12_ejercicio2.cls	buscar	3	4	6	0	0	0	0	12	OK
+pruebas/p12_ejercicio2.cls	main	2	2	0	0	0	0	0	4	OK
+pruebas/programas/copia_arreglos.cls	doble	5	5	3	0	0	0	0	12	OK
+pruebas/programas/copia_arreglos.cls	fuera	2	2	0	0	0	0	0	3	OK
+pruebas/programas/copia_arreglos.cls	main	2	2	0	0	0	0	0	6	OK
+pruebas/programas/corto_circuito.cls	toca	1	1	0	0	0	0	0	3	OK
+pruebas/programas/corto_circuito.cls	main	2	3	0	0	0	0	0	12	OK
+pruebas/programas/e_en_s.cls	buscar	2	3	1	0	0	0	0	12	OK
+pruebas/programas/e_en_s.cls	main	2	2	0	0	0	0	0	12	OK
+pruebas/programas/factorial_r.cls	factorial	3	4	1	0	0	0	0	10	OK
+pruebas/programas/factorial_r.cls	main	1	1	0	0	0	0	0	3	OK
+pruebas/programas/lectura_1d.cls	f	1	1	0	0	0	0	0	2	OK
+pruebas/programas/lectura_1d.cls	main	3	4	4	0	0	0	0	12	OK
+pruebas/programas/r_arreglos.cls	suma	5	6	1	0	0	0	1	12	OK
+pruebas/programas/r_arreglos.cls	main	1	1	0	0	0	0	0	2	OK
+pruebas/programas/r_arreglos_2d.cls	suma	5	6	4	0	0	0	4	12	OK
+pruebas/programas/r_arreglos_2d.cls	main	1	1	0	0	0	0	0	2	OK
+pruebas/programas/r_arreglos_local.cls	suma	5	6	1	0	0	0	1	12	OK
+pruebas/programas/r_arreglos_local.cls	main	1	1	0	0	0	0	0	5	OK
+pruebas/programas/r_arreglos_parametro.cls	suma	5	6	1	0	0	0	1	12	OK
+pruebas/programas/r_arreglos_parametro.cls	main	1	1	0	0	0	0	0	5	OK
+pruebas/programas/retorno_cero.cls	nada	1	1	0	0	0	0	0	3	OK
+pruebas/programas/retorno_cero.cls	main	1	1	0	0	0	0	0	5	OK
+pruebas/programas/s_anidados.cls	main	3	4	1	0	0	0	0	12	OK
+pruebas/programas/s_negativo.cls	main	2	2	0	0	0	0	0	8	OK
+pruebas/programas/s_paso3.cls	main	2	2	0	0	0	0	0	8	OK
+pruebas/programas/s_paso_grande.cls	main	3	3	0	0	0	0	0	11	OK
+pruebas/programas/s_positivo.cls	main	2	2	0	0	0	0	0	8	OK
+pruebas/programas/sumar.cls	sumar	2	2	0	0	0	0	0	3	OK
+pruebas/programas/sumar.cls	main	1	1	0	0	0	0	0	3	OK
+pruebas/tac/ejemplo.cls	main	2	3	1	0	0	0	0	7	OK
+pruebas/tac_build/casos/condicionales.cls	main	2	2	0	0	0	0	0	12	OK
+pruebas/tac_build/casos/expresiones.cls	main	2	3	1	1	1	1	0	12	OK
+pruebas/tac_build/casos/inicializadores.cls	main	5	5	0	0	0	0	0	12	OK
+Corpus: 39 programas, 79 funciones, 79 rechazos frontend
+Fallos de asignación:
+ninguno
 PASS vivacidad: uniones, ciclos, raíces HIGH/ISA, globales, preserves y destruidos separados
 PASS live: 39 programas HIGH/ISA virtual, 3 temporales; 79 rechazos; representación e imagen intactas
 PASS lazos/edición: dominadores, unión, profundidad, sin retroceso, irreducible y rechazos atómicos
@@ -102,7 +187,7 @@ PASS constantes: inicializadores, Vi, profundidad, 32 bits, signos y rechazos si
 PASS constantes ISA: 12 casos, pasos, auxiliares y rechazos sin modificar salida
 ........
 ----------------------------------------------------------------------
-Ran 8 tests in 0.012s
+Ran 8 tests in 0.010s
 
 OK
 PASS ayuda: -h/--help, opciones, ejemplos, errores y archivos intactos

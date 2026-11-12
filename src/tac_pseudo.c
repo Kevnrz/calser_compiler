@@ -180,6 +180,11 @@ static int valid_arithmetic_registers(const TacInstruction *instruction, TacStag
         if (mask) {
             return tac_error(error, cap, "auxiliares físicos en PSEUDO virtual");
         }
+        if (operands[0].kind == TAC_TEMP &&
+            ((operands[1].kind == TAC_TEMP && operands[0].value.id == operands[1].value.id) ||
+             (operands[2].kind == TAC_TEMP && operands[0].value.id == operands[2].value.id))) {
+            return tac_error(error, cap, "destino aritmético PSEUDO coincide con fuente");
+        }
         return 1;
     }
     unsigned count = 0;

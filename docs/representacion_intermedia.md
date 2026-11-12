@@ -433,7 +433,7 @@ La clonación de bloques/instrucciones corresponde a C3.1, no a C1.
 | Tarea | Responsabilidad / estado |
 | --- | --- |
 | C2.3 C1, implementado | Vivacidad genérica y efectos separados; marcas; dominadores/lazos/profundidad; clasificación; edición y descarte |
-| C2.3 C2, pendiente | Intervalos reutilizables, linear scan LRU, restricciones/preservación y reserva de área de derrame |
+| C2.3 C2, implementado | Intervalos reutilizables, linear scan LRU, restricciones/preservación y reserva de área de derrame |
 | C3.1, pendiente | Clonación y unrolling con residuo |
 | C3.2, pendiente | Eliminación con raíces observables y prueba de seguridad de errores |
 | C3.3a/b, pendiente | Renombramiento local y DAG/list scheduling virtual |
@@ -442,13 +442,13 @@ La clonación de bloques/instrucciones corresponde a C3.1, no a C1.
 | C2.3 E, pendiente | Gestor con firma/contexto común, cinco pasadas registradas vacías, validación tras cada pasada, banderas, métricas y control final de ROM |
 | C4.2 / I2, pendiente | Ciclos del simulador a CSV/gráficas por prueba / ciclos RTL |
 
-El área de derrame será una extensión **no contigua** propia de cada función,
+El área de derrame es una extensión **no contigua** propia de cada función,
 separada de temp_base y agregada después de las áreas existentes, sin reubicar
-símbolos ni imagen global. Solo -O1/-O2; data_area recalculará la primera dirección
-de pila y repetirá el chequeo de 256 bytes libres después de reservar. R reutiliza
+símbolos ni imagen global. Solo -O1/-O2; el gestor deberá tomar la nueva dirección
+de pila y repetir el chequeo de 256 bytes libres después de reservar. R reutiliza
 el área; no hay recursión ordinaria. C1 no reserva ni modifica FrameLayout.
-Sin spilling, la asignación fallará con `sin registros temporales disponibles`,
-con archivo:L:C. La elección de auxiliares y candidatos se resolverá en C2;
+Sin spilling, la asignación falla con `sin registros temporales disponibles`,
+con archivo:L:C. C2 elige los auxiliares y prepara el plan de preservación;
 D hará los guardados/restauraciones requeridos, no elegirá tarde ocho auxiliares.
 
 Banderas futuras: -O0 P1; -O1 línea base; -O2 todas las pasadas; --opt=unroll,
@@ -709,8 +709,9 @@ CRYPTO y los cuatro R con arreglos. Compara doce listados y captura HIGH,
 sus metadatos, aristas e imagen antes/después sin normalización.
 
 Esta etapa se enlaza solo con los binarios de prueba, no con ccom. No cambia
-`-i`, el intérprete ni la CLI. C1 ya agrega vivacidad y lazos; quedan para los
-siguientes commits asignación, conservación de vivos/rl, expansión P1 y emisión.
+`-i`, el intérprete ni la CLI. C1 agrega vivacidad y lazos; C2 asigna registros
+en auxiliares de prueba. Quedan conservación emitida de vivos/rl, expansión P1
+y emisión para los siguientes commits.
 Por eso la salida virtual aún no es un programa físico ejecutable: el control
 `tac_validate_for_emission` la rechaza. Referencias: Aho §7.2, §8.1–8.2 y §8.6.
 
@@ -777,3 +778,70 @@ Esto permite detectar diferencias de traducción o de optimización sin generar
 ISA desde TAC. El intérprete solo se enlaza con el auxiliar de pruebas, no con
 ccom. Los controles adicionales verifican orden de evaluación, signos y desborde,
 errores aritméticos, rechazo de CRYPTO y detención por presupuesto.
+
+## C2: intervalos y asignación a registros físicos
+
+`tac_intervals.h` deriva intervalos de la vivacidad de C1 en ISA virtual. El
+algoritmo linear scan sigue a Poletto y Sarkar (1999), **fuera de Aho**:
+[Linear Scan Register Allocation](https://web.cs.ucla.edu/~palsberg/course/cs132/linearscan.pdf).
+La política LRU entre registros libres corresponde al contrato del proyecto
+(Aho §10.2.3); las restricciones de selección se describen en Aho §8.8.
+
+La numeración recorre la lista de bloques de cada función y sus instrucciones:
+lectura `2*i`, escritura `2*i+1`. Un bloque vacío consume también un índice y
+sus fronteras tienen posiciones propias. Los intervalos son cerrados; expiran
+si `fin < inicio_siguiente`. Cada TEMP tiene una sola envolvente que incluye
+usos, definiciones, `before/after`, `live_in/live_out` y retrocesos. Se conservan
+huecos, varias definiciones, definiciones muertas y bloques inalcanzables: no hay
+DCE, SSA ni partición de intervalos en C2.
+
+Las fuentes de MUL/DIV/MOD/POW ocupan también la posición de escritura. Así, el
+destino recibe un registro distinto incluso cuando las fuentes mueren allí. La
+bajada, si HIGH pide escribir el mismo TEMP que una fuente, crea un destino
+nuevo para la PSEUDO y después `add destino_original, nuevo, rz`. La validación
+ISA virtual rechaza destino TEMP igual a cualquiera de las fuentes TEMP.
+Una instrucción ISA ordinaria puede reutilizar una fuente muerta.
+
+`tac_allocate_registers(program, source_name, error, capacity)` asigna r4–r15;
+rz, rl, rx y rg quedan excluidos. Ordena intervalos por inicio/ID y activos por
+fin/ID. De los registros libres elige el que quedó libre primero; si empatan,
+el menor número físico. Los nunca usados son inicialmente los más antiguos.
+El punto interno estático `no_register_available` produce
+`archivo:L:C: error de generacion: sin registros temporales disponibles`.
+C3.4 reemplazará su cuerpo para integrar el derrame **dentro del recorrido**;
+no hay callback ni una pasada que derrame después del error.
+
+La asignación reescribe el mismo programa: TEMP pasa a PHYS en todos los
+operandos, incluidas lecturas ligadas de ifmov/feis; se escriben las máscaras
+`scratch_clobbers` y se cambia la etapa a ISA_PHYSICAL. Finalmente se ejecuta
+`tac_validate`. Si falla se abandona la compilación: el contrato permite que
+el programa quede inválido. El resultado posee planes y mapas, pero no el IR;
+se libera antes del programa y de sus símbolos. `source_name` es prestado.
+
+Cada sitio jas/CRYPTO/aritmética tiene un plan para D. Los ocho auxiliares
+aritméticos son distintos y no coinciden con destino ni fuentes; se prefieren
+registros sin un valor vivo que preservar. Se registra únicamente la
+intersección de los candidatos `preserve` de C1 con los registros destruidos.
+Cada entrada conserva ID TEMP original y registro físico, en orden físico.
+Los clobbers nunca se convierten en definiciones de virtuales.
+
+C2 no emite guardados ni movimientos: D debe guardar en `temp_base` antes de
+preparar argumentos o expandir una plantilla y restaurar después. Para CRYPTO,
+D prepara los registros fijos 6/7/9/10, resolviendo movimientos cruzados. La
+métrica pública por función contiene solo máscara y cantidad de registros
+asignados a valores; no incluye auxiliares ni todos los clobbers.
+
+`FrameLayout.spill_base` (-1 sin reserva) y `spill_size` (bytes) describen un
+tramo independiente, no necesariamente contiguo al frame original ni a
+`temp_base`. `data_area_reserve_spill` usa `data_area_alloc`, solo en O1/O2;
+cero bytes no reserva. Tras la última reserva el gestor debe repetir
+`data_area_stack_short` y solo entonces inicializar rx desde `data_area_end`.
+Una reserva fallida termina la compilación, sin restauración. Una compilación
+nueva reinicia el cursor mediante el `data_area_reset` existente del semántico.
+R reutiliza la misma área estática y la imagen inicial no se desplaza; C3.4
+escribirá cada casilla antes de leerla. C2 ofrece y prueba la reserva, pero
+como todavía no derrama no solicita casillas automáticamente.
+
+La CLI aún no llama al asignador ni a la reserva: O0 e `-i` conservan su camino.
+Quedan pendientes de C3.4 los derrames; de D la expansión/emisión y preparación
+física de CRYPTO; de E las banderas, integración, JSON y control final de ROM.

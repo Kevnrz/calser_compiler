@@ -15,6 +15,8 @@
 #ifndef DATA_AREA_H
 #define DATA_AREA_H
 
+#include "symbol_table.h"
+
 /* M-2: las variables de ccom ocupan 0x0000–0x0FFF; desde 0x1000 están los
  * archivos de load_file (la zona de CRYPTO). */
 #define DATA_LIMIT 0x1000          /* primera dirección que NO se puede usar */
@@ -90,5 +92,12 @@ int data_area_free(void);
  *   no se suma otro.
  */
 int data_area_stack_short(void);
+
+/* Reserva final solo O1/O2: bytes >= 0 y múltiplo de cuatro, una vez por función.
+ * Con cero deja base=-1. Devuelve 0 ante contrato inválido o desborde; no revierte
+ * una reserva fallida: se abandona la compilación. Tras la última reserva, repetir
+ * data_area_stack_short e inicializar la pila desde data_area_end; Aho §7.1.1.
+ */
+int data_area_reserve_spill(Symbol *function, int bytes);
 
 #endif

@@ -255,3 +255,25 @@ Para verificar otro auxiliar: `python3 pruebas/tac_analysis/probar.py live
 --binario /ruta/analizar_tac`, o `loops`. Los tres binarios nuevos se verifican
 con C11 estricto y ASan/UBSan. C1 no implementa intervalos, asignación, derrame,
 optimizaciones, banderas ni emisión: esos estados quedan documentados aparte.
+
+## C2: intervalos, linear scan y extensión de derrame
+
+`make check-tac-intervals` prueba posiciones de lectura/escritura, retrocesos,
+ramas, bloques vacíos e inalcanzables, huecos y definiciones repetidas o muertas.
+
+`make check-tac-allocate` prueba 12/13 vivos, diagnóstico archivo:L:C, LRU,
+reutilización de fuentes muertas, exclusión de fuentes en PSEUDO aritméticas,
+ocho auxiliares y preservación, CALL, las siete CRYPTO, ifmov/feis y la bajada
+cuando destino y fuente coinciden. También comprueba la reserva estática de
+derrame: cero bytes, varias funciones, límites y los 256 bytes de pila.
+
+El auxiliar `build/asignar_tac archivo.cls` mide y asigna en memoria. Devuelve
+0 al asignar todas las funciones, 4 si hay presión y 3 ante rechazo del frontend.
+`pruebas/tac_allocate/probar.py` recorre el corpus completo, continúa tras cada
+fallo e imprime por función vivos reales, solapamiento de intervalos, cantidades
+MUL/DIV/MOD/POW, sitios con preservación, registros asignados y resultado.
+Los máximos incluyen los bloques inalcanzables conservados. La lista final de
+fallos nunca se omite; reportar presión no equivale a una asignación aprobada.
+Ambos targets forman parte de `make check`; estos auxiliares no se enlazan con
+ccom ni modifican sus salidas. Referencias: Aho §9.2.5 y §10.2.3; Poletto y
+Sarkar 1999, fuera de Aho, para intervalos y linear scan.

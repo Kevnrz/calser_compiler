@@ -197,35 +197,44 @@ TacOperand tl_value(TacLower *lower, TacOperand operand, TacLowerSourcePolicy po
 }
 
 /*
- * destination — reserva resultado si HIGH escribe una VARIABLE.
+ * destination — separa casillas y destinos aritméticos ligados a sus fuentes.
  * Entrada:
  *   destino HIGH válido.
  * Salida:
  *   TEMP de resultado.
  * Efectos:
- *   reserva una identidad si corresponde.
+ *   reserva una identidad si corresponde; aritmética PSEUDO no pisa sus fuentes.
  * Restricciones:
  *   la escritura a memoria se realiza después de calcular el resultado.
  */
 static TacOperand destination(TacLower *lower) {
-    TacOperand dest = lower->source->dest;
-    return dest.kind == TAC_TEMP ? dest : tac_temp_new(lower->function);
+    const TacInstruction *source = lower->source;
+    TacOperand dest = source->dest;
+    int arithmetic = source->op >= TAC_MUL && source->op <= TAC_POW;
+    int aliases = dest.kind == TAC_TEMP &&
+        ((source->src1.kind == TAC_TEMP && dest.value.id == source->src1.value.id) ||
+         (source->src2.kind == TAC_TEMP && dest.value.id == source->src2.value.id));
+    return dest.kind == TAC_TEMP && !(arithmetic && aliases) ?
+           dest : tac_temp_new(lower->function);
 }
 
 /*
- * finish — transfiere a memoria un resultado cuyo destino es VARIABLE.
+ * finish — publica el resultado en la casilla o TEMP original de HIGH.
  * Entrada:
  *   lower con fuente y valor calculado.
  * Salida:
  *   ninguna.
  * Efectos:
- *   agrega SW solo cuando HIGH define una casilla.
+ *   agrega SW para casillas o copia desde un resultado auxiliar no ligado.
  * Restricciones:
  *   no elimina operaciones ni escrituras; Aho §8.6.
  */
 static void finish(TacLower *lower, TacOperand result) {
-    if (lower->source->dest.kind == TAC_VARIABLE) {
-        tl_store_symbol(lower, lower->source->dest.value.symbol, result);
+    TacOperand dest = lower->source->dest;
+    if (dest.kind == TAC_VARIABLE) {
+        tl_store_symbol(lower, dest.value.symbol, result);
+    } else if (dest.kind == TAC_TEMP && dest.value.id != result.value.id) {
+        tl_emit(lower, "add", dest, result, tac_physical(TAC_P1_RZ));
     }
 }
 

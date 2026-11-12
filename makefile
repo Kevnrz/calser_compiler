@@ -208,9 +208,30 @@ check-tac-loops: $(BUILD_DIR)/probar_tac_loops $(BUILD_DIR)/analizar_tac
 	$(BUILD_DIR)/probar_tac_loops
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/tac_analysis/probar.py loops
 
-check: check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+# C2 no se enlaza con ccom: intervalos, asignación y planes solo en auxiliares.
+TAC_ALLOCATE_SOURCES = src/tac_intervals.c src/tac_allocate.c src/tac_allocate_sites.c
+TAC_ALLOCATE_HEADERS = include/data_area.h include/tac_intervals.h include/tac_allocate.h src/tac_allocate_internal.h
+
+$(BUILD_DIR)/probar_tac_intervals: pruebas/tac_intervals/probar.c src/tac_intervals.c $(TAC_ANALYSIS_SOURCES) $(TAC_SOURCES) $(TAC_HEADERS) $(TAC_ANALYSIS_HEADERS) $(TAC_ALLOCATE_HEADERS) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
+
+$(BUILD_DIR)/probar_tac_allocate: pruebas/tac_allocate/probar.c $(TAC_ALLOCATE_SOURCES) $(TAC_LOWER_SOURCES) src/isa_constant.c src/ast.c src/data_area.c $(TAC_ANALYSIS_SOURCES) $(TAC_SOURCES) $(TAC_HEADERS) $(TAC_ANALYSIS_HEADERS) $(TAC_ALLOCATE_HEADERS) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
+
+$(BUILD_DIR)/asignar_tac: pruebas/tac_allocate/desde_fuente.c $(TAC_ALLOCATE_SOURCES) $(TAC_LOWER_SOURCES) $(TAC_ALLOCATE_HEADERS) $(TAC_LOWER_HEADERS) $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $(filter %.c %.o,$^) $(LDLIBS)
+
+check-tac-intervals: $(BUILD_DIR)/probar_tac_intervals
+	$<
+
+check-tac-allocate: $(BUILD_DIR)/probar_tac_allocate $(BUILD_DIR)/asignar_tac
+	$(BUILD_DIR)/probar_tac_allocate
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/tac_allocate/probar.py
+
+check: check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 clean:
+	rm -f $(BUILD_DIR)/probar_tac_intervals $(BUILD_DIR)/probar_tac_allocate $(BUILD_DIR)/asignar_tac
 	rm -f $(BUILD_DIR)/probar_tac_live $(BUILD_DIR)/probar_tac_loops $(BUILD_DIR)/analizar_tac
 	rm -f $(BUILD_DIR)/bajar_tac $(BUILD_DIR)/probar_tac_lower
 	rm -f $(BUILD_DIR)/interpretar_tac
@@ -227,7 +248,7 @@ clean:
 
 -include $(OBJECTS:.o=.d)
 
-.PHONY: check-tac-live check-tac-loops all clean ejercicios check check-tac-lower check-tac-values check-tac-build check-semantica-isa check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+.PHONY: check-tac-intervals check-tac-allocate check-tac-live check-tac-loops all clean ejercicios check check-tac-lower check-tac-values check-tac-build check-semantica-isa check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 # Prototipo gráfico CALSIDE (PySide6).
 PYTHON ?= python3

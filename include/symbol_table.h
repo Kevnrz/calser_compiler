@@ -50,6 +50,8 @@ typedef struct {
     int area_base;             // inicio del área estática; -1 = sin asignar
     int area_size;             // tamaño del área en bytes
     int temp_base;             // inicio de las 12 casillas de temporales; -1 = sin asignar
+    int spill_base;            // inicio independiente del derrame; -1 sin reserva
+    int spill_size;            // tamaño del derrame en bytes
 } FrameLayout;
 
 typedef struct Symbol {

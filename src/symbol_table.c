@@ -77,6 +77,8 @@ Symbol *symbol_create(const char *name,
     symbol->frame.area_base = -1;
     symbol->frame.area_size = 0;
     symbol->frame.temp_base = -1;
+    symbol->frame.spill_base = -1;
+    symbol->frame.spill_size = 0;
     symbol->limit_address = -1;
     symbol->param_list = NULL;
     symbol->param_capacity = 0;

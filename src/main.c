@@ -24,6 +24,9 @@
 #include "codegen.h"
 #include "generate.h"
 #include "tac_build.h"
+#include "tac_lower.h"
+#include "tac_emit.h"
+#include "tac_passes.h"
 #include "semantic_scope.h"
 #include "assembler.h"
 
@@ -65,11 +68,17 @@ typedef struct {
     int print_memory;          /* -m */
     int assemble_only;         /* -x */
     int print_bundles;         /* -p */
+    int level;                 /* Nivel efectivo: cero u O1. */
+    int explicit_level;        /* Bit por nivel explícito; detecta contradicciones. */
+    int opt_seen;              /* --opt explícito, incluso vacío. */
+    unsigned passes;           /* Unión de listas sin duplicados. */
+    unsigned unroll_factor;    /* Cero: heurística del §11. */
+    const char *metrics_path;  /* --metrics, solo con nivel efectivo O1. */
 } Options;
 
 #define EXIT_USAGE 2
 
-#define USAGE "uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-i|--tac] [-p] [-x] [--ast-json <json>] [--no-schedule] [--time] <archivo> [-o <salida>]"
+#define USAGE "uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-i|--tac] [-p] [-x] [--ast-json <json>] [--no-schedule] [--time] [-O0|-O1|-O2] [--opt=lista] [--unroll=N] [--metrics archivo.json] <archivo> [-o <salida>]"
 
 /*
  * print_help — describe las opciones sin requerir ni procesar una entrada.
@@ -92,8 +101,14 @@ static void print_help(void) {
          "  -p                   Muestra los bundles en ensamblador y binario.\n"
          "  -x                   Ensambla la entrada .asm; ignora -s, -i, -t y -m.\n"
          "  --ast-json <json>    Exporta el AST; sin -s, -i, -m ni -p termina\n"
-         "                       despues del analisis sintactico.\n"
+         "                       despues del analisis sintactico, salvo con -O1.\n"
          "  --no-schedule        Desactiva la organizacion de bundles.\n"
+         "  -O0                  Generador actual (predeterminado).\n"
+         "  -O1                  Camino ISA con asignacion de registros.\n"
+         "  -O2                  Reservado hasta C3.5; por ahora es error de uso.\n"
+         "  --opt=lista          Implica -O1; unroll,rename,dce,reorder,spill.\n"
+         "  --unroll=N           Factor 2..16; exige unroll activo.\n"
+         "  --metrics <json>     Metricas de una compilacion -O1 exitosa.\n"
          "  --time               Muestra la duracion total en ms en stderr.\n"
          "\nSalidas: .bin, .hex y .mem; con -s tambien .asm; con -i tambien .tac.\n"
          "Sin -o se usa el nombre de la entrada con extension .bin.\n"
@@ -128,7 +143,7 @@ static void report_elapsed(const Options *options, const struct timespec *start,
                         + (double) (end.tv_nsec - start->tv_nsec) / 1000000.0;
     const char *operation = options->assemble_only ? "ensamblado" : "compilacion";
     if (!options->assemble_only && options->ast_json && !options->emit_asm &&
-        !options->print_memory && !options->print_bundles && !options->emit_tac)
+        !options->print_memory && !options->print_bundles && !options->emit_tac && !options->level)
         operation = "exportacion AST";
 
     fprintf(stderr, "ccom: tiempo de %s (%s): %.3f ms\n", operation,
@@ -538,6 +553,10 @@ typedef struct {
     ASTNode *root;         /* AST entregado por el parser; NULL si no hubo   */
     LabelTable *labels;    /* tabla de etiquetas; NULL hasta construirla     */
     TacBuildResult *tac;   /* construcción opcional; posee imagen y auxiliares */
+    TacProgram *isa;       /* Programa bajado propio; comparte símbolos de tac. */
+    TacAllocationResult *allocation; /* Plan C2, liberar antes de ISA. */
+    char *initial_tac;      /* Listado HIGH previo a pasadas, solo -O1 con -i. */
+    TacMetrics metrics;    /* Acumulación de E, sin estado global. */
     int semantic_started;  /* hay tabla de símbolos que liberar              */
     int codegen_started;   /* hay código generado que liberar                */
     int exit_code;         /* código de salida cuando una fase corta el paso */
@@ -556,6 +575,9 @@ typedef struct {
  *   que va antes de ast_free; diag_free va al final y siempre se ejecuta.
  */
 static void compile_release(Compilation *compilation) {
+    tac_allocation_free(compilation->allocation);
+    tac_program_free(compilation->isa);
+    free(compilation->initial_tac);
     tac_build_free(compilation->tac);
 
     if (compilation->labels != NULL) {
@@ -591,8 +613,18 @@ static void compile_release(Compilation *compilation) {
  *   (§2.4) y ensamblarlo (§2.5). Sin código generado se imprime con "-".
  */
 static void print_labels(const Compilation *compilation) {
-    if (compilation->options->print_memory)
+    if (!compilation->options->print_memory)
+        return;
+    if (!compilation->options->level) {
         label_table_print(compilation->labels);
+        return;
+    }
+    puts("Etiquetas emitidas (direccion final):");
+    for (int k = 0; k < cg_ir_count(); k++) {
+        const CGIRRecord *record = cg_ir_record(k);
+        if (record->kind == CG_IR_LABEL)
+            printf("  %s = %d\n", record->data.label, cg_label_address(record->data.label));
+    }
 }
 
 /*
@@ -657,7 +689,7 @@ static int phase_parse(Compilation *compilation) {
  *   Efectos: imprime el AST o escribe el JSON.
  * Restricciones:
  *   --ast-json solo exporta y termina después del análisis sintáctico, salvo
- *   que se combine con -s, -i, -m o -p; permite inspeccionar construcciones que
+ *   que se combine con -s, -i, -m, -p u -O1; permite inspeccionar construcciones que
  *   el semántico o el generador rechazarían.
  */
 static int phase_export_ast(Compilation *compilation) {
@@ -685,7 +717,7 @@ static int phase_export_ast(Compilation *compilation) {
             if (failed) fprintf(stderr, "ccom: error al escribir AST JSON\n");
         }
         /* Exportación sola: inspeccionar incluso construcciones sin codegen. */
-        if (failed || (!options->emit_asm && !options->print_memory && !options->print_bundles && !options->emit_tac)) {
+        if (failed || (!options->emit_asm && !options->print_memory && !options->print_bundles && !options->emit_tac && !options->level)) {
             compilation->exit_code = failed ? 1 : 0;
 
             return 0;
@@ -776,23 +808,103 @@ static int phase_labels(Compilation *compilation) {
 }
 
 /*
- * phase_tac — construye solo por pedido, después del semántico (enunciado §4.1).
+ * phase_tac — construye con -i o -O1, después del semántico (enunciado §4.1).
  * Entrada: compilation con AST y símbolos válidos. Salida: 1 éxito, 0 ante error.
  * Efectos: reserva TAC opcional; no toca estado del generador ni direcciones.
  * Restricciones: compile_release libera TAC antes del ámbito prestado.
  */
 static int phase_tac(Compilation *compilation) {
-    if (!compilation->options->emit_tac)
+    if (!compilation->options->emit_tac && !compilation->options->level)
         return 1;
     char error[256];
     compilation->tac = tac_build(compilation->root, scopes_global(), error, sizeof error);
+    if (compilation->options->level)
+        report_phase(compilation->options, "O1: construccion HIGH", compilation->tac != NULL);
     if (!compilation->tac) {
         fprintf(stderr, "%s: error de representacion intermedia: %s\n",
                 compilation->options->input, error);
         compilation->exit_code = 1;
         return 0;
     }
+    if (compilation->options->level) {
+        compilation->metrics.high_initial =
+            tac_metrics_instruction_count(compilation->tac->program);
+        if (compilation->options->emit_tac) {
+            size_t size;
+            FILE *snapshot = open_memstream(&compilation->initial_tac, &size);
+            if (!snapshot) {
+                fprintf(stderr, "%s: no se pudo capturar HIGH inicial\n",
+                        compilation->options->input);
+                compilation->exit_code = 1;
+                return 0;
+            }
+            tac_build_print(snapshot, compilation->tac);
+            int failed = ferror(snapshot);
+            if (fclose(snapshot) != 0)
+                failed = 1;
+            if (failed) {
+                fprintf(stderr, "%s: error al capturar HIGH inicial\n",
+                        compilation->options->input);
+                compilation->exit_code = 1;
+                return 0;
+            }
+        }
+    }
     return 1;
+}
+
+/* Entrada: compilación y pasada. Salida: ninguna. Efectos: progreso común.
+ * Restricciones: adaptador de firma; conserva report_phase del camino P1.
+ */
+static void report_pass(void *user, const char *name, int ok) {
+    const Compilation *compilation = user;
+    report_phase(compilation->options, name, ok);
+}
+
+/* Entrada: compilación semánticamente válida. Salida: 1 o diagnóstico real.
+ * Efectos: HIGH -> ISA -> asignación -> emisor D; Aho §8.1 y §10.2.3.
+ * Restricciones: E no transforma ni derrama; D organiza y comprueba ROM una vez.
+ */
+static int phase_o1(Compilation *c) {
+    const Options *o = c->options;
+    char error[512] = "";
+    TacPassContext context = {.program = c->tac->program, .build = c->tac,
+        .scopes = scopes_first(), .source_name = o->input, .enabled = o->passes,
+        .unroll_factor = o->unroll_factor, .metrics = &c->metrics,
+        .report = report_pass, .report_user = c};
+    if (!tac_passes_run(&context, TAC_PASS_HIGH, error, sizeof error))
+        goto fail;
+    c->isa = tac_lower(c->tac->program, error, sizeof error);
+    report_phase(o, "O1: bajada a ISA virtual", c->isa != NULL);
+    if (!c->isa)
+        goto fail;
+    context.program = c->isa;
+    if (!tac_passes_run(&context, TAC_PASS_VIRTUAL, error, sizeof error) ||
+        !tac_passes_run(&context, TAC_PASS_ALLOCATION, error, sizeof error))
+        goto fail;
+    c->allocation = tac_allocate_registers(c->isa, o->input, error, sizeof error);
+    report_phase(o, "O1: asignacion de registros", c->allocation != NULL);
+    if (!c->allocation)
+        goto fail;
+    c->metrics.isa_before = tac_metrics_instruction_count(c->isa);
+    c->codegen_started = 1;
+    TacEmitInput input = {.program = c->isa, .allocation = c->allocation,
+        .initial_data = c->tac->initial_data, .initial_data_size = c->tac->initial_data_size,
+        .labels = c->labels, .source_name = o->input, .no_schedule = o->no_schedule};
+    int ok = tac_emit_program(&input, error, sizeof error);
+    report_phase(o, "O1: emision y bundles finales", ok);
+    if (!ok)
+        goto fail;
+    tac_metrics_collect(&c->metrics, c->isa, c->allocation);
+    label_table_resolve(c->labels, cg_label_address);
+    return 1;
+fail:
+    if (strstr(error, o->input) == error)
+        fprintf(stderr, "%s\n", error);
+    else
+        fprintf(stderr, "%s: %s\n", o->input, error);
+    c->exit_code = 1;
+    return 0;
 }
 
 /*
@@ -811,6 +923,8 @@ static int phase_tac(Compilation *compilation) {
 static int phase_codegen(Compilation *compilation) {
     const Options *options = compilation->options;
 
+    if (options->level)
+        return phase_o1(compilation);
     compilation->codegen_started = 1;
 
     int gen_failed = generate_code(compilation->root, compilation->labels, options->input);
@@ -895,7 +1009,8 @@ static int assemble_generated(const Options *options, const char *header) {
     for (int i = 1; i < line_count; i++)
         lines[i] = cg_line(i - 1);
 
-    int failed = assemble_and_write(options, lines, line_count, "<generado>",
+    int failed = assemble_and_write(options, lines, line_count,
+                                    options->level ? options->input : "<generado>",
                                     cg_data(), cg_data_size()) != 0;
 
     free(lines);
@@ -930,7 +1045,10 @@ static int write_tac(const Compilation *compilation) {
         free(path);
         return 1;
     }
-    tac_build_print(out, compilation->tac);
+    if (compilation->initial_tac)
+        fputs(compilation->initial_tac, out);
+    else
+        tac_build_print(out, compilation->tac);
     int failed = ferror(out);
     if (fclose(out) != 0)
         failed = 1;
@@ -1004,10 +1122,11 @@ static int phase_emit(const Compilation *compilation) {
  *   al final con compile_release.
  */
 static int compile(const Options *options) {
+    double started = options->metrics_path ? tac_metrics_clock() : 0;
     yyin = fopen(options->input, "r");
 
     if (!yyin) {
-        perror("fopen");
+        perror(options->level ? options->input : "fopen");
         return 1;
     }
 
@@ -1024,6 +1143,10 @@ static int compile(const Options *options) {
     else
         code = compilation.exit_code;
 
+    if (!code && options->metrics_path &&
+        !tac_metrics_write(options->metrics_path, options->input, &compilation.metrics,
+                           tac_metrics_clock() - started))
+        code = 1;
     compile_release(&compilation);
 
     return code;
@@ -1060,9 +1183,12 @@ static int parse_options(int argc, char **argv, Options *options) {
         {"no-schedule", no_argument, NULL, 1001},
         {"time", no_argument, NULL, 1002},
         {"tac", no_argument, NULL, 'i'},
+        {"opt", required_argument, NULL, 1003},
+        {"unroll", required_argument, NULL, 1004},
+        {"metrics", required_argument, NULL, 1005},
         {NULL, 0, NULL, 0}
     };
-    while ((option = getopt_long(argc, argv, "ho:vstmxpi", long_options, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "ho:vstmxpiO:", long_options, NULL)) != -1) {
 
         switch (option) {
 
@@ -1082,6 +1208,34 @@ static int parse_options(int argc, char **argv, Options *options) {
 
                 break;
 
+            case 'O':
+                if (strlen(optarg) != 1 || optarg[0] < '0' || optarg[0] > '2')
+                    goto usage_error;
+                options->explicit_level |= 1 << (optarg[0] - '0');
+                break;
+            case 1003: {
+                options->opt_seen = 1;
+                const char *part = optarg;
+                do {
+                    const char *comma = strchr(part, ',');
+                    size_t length = comma ? (size_t)(comma - part) : strlen(part);
+                    int id = tac_pass_find(part, length);
+                    if (id < 0)
+                        goto usage_error;
+                    options->passes |= 1u << id;
+                    part = comma ? comma + 1 : NULL;
+                } while (part);
+                break;
+            }
+            case 1004: {
+                char *end;
+                unsigned long factor = strtoul(optarg, &end, 10);
+                if (!*optarg || *end || factor < 2 || factor > 16)
+                    goto usage_error;
+                options->unroll_factor = (unsigned)factor;
+                break;
+            }
+            case 1005: options->metrics_path = optarg; break;
             case 1000: options->ast_json = optarg; break;
             case 1001: options->no_schedule = 1; break;
             case 1002: options->show_time = 1; break;
@@ -1099,6 +1253,16 @@ static int parse_options(int argc, char **argv, Options *options) {
                 return EXIT_USAGE;
         }
     }
+
+    if (options->explicit_level == 4 ||
+        (options->explicit_level && (options->explicit_level & (options->explicit_level - 1))) ||
+        (options->opt_seen && options->explicit_level == 1))
+        goto usage_error;
+    options->level = options->explicit_level == 2 || options->opt_seen;
+    if ((options->unroll_factor && !(options->passes & 1u)) ||
+        (options->metrics_path && !options->level) ||
+        (options->assemble_only && (options->level || options->unroll_factor || options->metrics_path)))
+        goto usage_error;
 
     // Exactamente un archivo de entrada.
     if (argc - optind != 1) {
@@ -1119,6 +1283,10 @@ static int parse_options(int argc, char **argv, Options *options) {
     }
 
     return -1;
+usage_error:
+    free(options->output);
+    fprintf(stderr, "%s\n", USAGE);
+    return EXIT_USAGE;
 }
 
 /*

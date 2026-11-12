@@ -59,7 +59,6 @@ typedef struct GenCtx {
  * DIAGNÓSTICOS, REGISTROS, MEMORIA Y PILA (generate_support.c)
  * ======================================================================= */
 
-
 /*
  * gen_report_error — reporta un error de generación.
  *
@@ -87,8 +86,6 @@ void gen_report_error(GenCtx *gen, ASTNode *node, const char *message);
  *   index no negativo; los hijos opcionales NULL no ocupan posición.
  */
 ASTNode *gen_child_at(ASTNode *node, int index);
-
-
 
 /*
  * gen_reset_registers — libera las reservas de temporales del generador.
@@ -202,10 +199,6 @@ int gen_load_symbol(GenCtx *gen, int rd, Symbol *symbol, ASTNode *node);
  */
 int gen_store_symbol(GenCtx *gen, Symbol *symbol, int rs, ASTNode *node);
 
-
-
-
-
 /*
  * gen_node_label — copia una etiqueta de control de la tabla.
  *
@@ -227,7 +220,6 @@ int gen_node_label(GenCtx *gen, char *buffer, size_t size, ASTNode *node,
 /* ==========================================================================
  * EXPRESIONES Y LLAMADAS (generate_expr.c)
  * ======================================================================= */
-
 
 /*
  * gen_expression — evalúa una expresión del AST anotado.
@@ -329,7 +321,6 @@ void gen_expr_setup(GenCtx *gen);
  * SENTENCIAS Y CONTROL DE FLUJO (generate_stmt.c)
  * ======================================================================= */
 
-
 /*
  * gen_block — genera las sentencias de un bloque en orden.
  *
@@ -371,7 +362,6 @@ void gen_end_of_main(GenCtx *gen);
 /* ==========================================================================
  * INICIALIZACIÓN DE VARIABLES (generate_init.c)
  * ======================================================================= */
-
 
 /*
  * gen_initialize_declaration — inicializa todas las casillas de una declaración.

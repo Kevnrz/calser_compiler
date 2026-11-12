@@ -286,15 +286,28 @@ ciclo de tres, fuente repetida y rz; casillas de preservación, rl en llamadas
 encadenadas, etiquetas únicas, nombre obligatorio y ROM 4096/4097 como función.
 El rechazo de source_name NULL del asignador se prueba en check-tac-allocate.
 
-`make check-o1-equivalence` usa `build/emitir_tac fuente base` para construir,
-bajar, asignar, emitir, calendarizar y ensamblar. Imprime dirección y ancho de
-globales/variables de main, sin identidades de ámbito. El comparador usa sim_asm
+`make check-o1-equivalence` usa `ccom -O1 -s` para construir, bajar, asignar,
+emitir, calendarizar y ensamblar. Lee dirección y ancho de globales/variables
+de main de la tabla de símbolos del listado, sin bandera nueva. El comparador usa sim_asm
 sin duplicar ISA: compara esos tramos, 0x1000–0xFFFF, auth/kv_lock/exc/anchor/vault
 y terminal lógico fin/error. Cada programa corre con los mismos datos externos
 en cero y con patrón de 1024 bytes, límite explícito de 2.000.000 bundles y cero
 avisos de separación. Imprime bundles O1/O0 y todos los fallos antes de devolver 1.
 
-E cambiará solo el adaptador `compile_new` de `pruebas/tac_emit/comparar.py`;
-la función `compare` y el target permanecen. Los dos targets forman parte de
-make check. D no agrega banderas ni entra en la CLI de ccom. Referencias: Aho
+E cambia solo el adaptador `compile_new` y el binario predeterminado de
+`pruebas/tac_emit/comparar.py`; la función `compare` y el target permanecen. Los dos targets forman parte de
+make check. E integra D en la CLI mediante `-O1`. Referencias: Aho
 §7.2 y §8.6; el tiempo/ciclos no son condición de equivalencia funcional.
+
+
+## E: opciones, gestor y métricas
+
+`make check-o1` ejecuta `build/probar_tac_passes` y
+`pruebas/tac_passes/probar_cli.py`. Comprueba orden fijo, error interno forzado
+con nombre de pasada, validación posterior y conteo no-NOP en bundles fijos.
+La CLI prueba uniones de listas y errores de uso (código 2), factores 2..16,
+claves/tipos/fórmulas JSON, demanda distinta de presión y máscara, escapes,
+HIGH inicial con `-i`, etiquetas finales con `-m`, AST antes del semántico,
+ausencia de métricas ante fallo y ROM en salida conservadora.
+`CCOM_TEST_BINARY` permite probar la misma CLI instrumentada con sanitizadores.
+El target forma parte de `make check`; no repite permutaciones ni ABI de D.

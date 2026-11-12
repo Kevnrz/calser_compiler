@@ -15,18 +15,6 @@ extern ASTNode *root;
 extern int yyparse(void);
 extern int lexical_errors;
 
-/* Entrada: vista C1. Salida: cantidad TEMP del conjunto. Efectos: ninguno.
- * Restricciones: registros fijos no son valores virtuales asignables.
- */
-static size_t set_count(const TacLiveAnalysis *live, const TacLiveSet *set) {
-    size_t count = 0;
-    for (size_t k = 0; k < tac_live_location_count(live); k++) {
-        TacOperand value = tac_live_location(live, k);
-        count += value.kind == TAC_TEMP && tac_live_contains(live, set, value);
-    }
-    return count;
-}
-
 /* Entrada: función virtual, nombre y buffer de métricas. Salida: ninguna.
  * Efectos: calcula máximos y conteos sin añadirlos a la API pública.
  * Restricciones: incluye inalcanzables conservados; cuenta vivos antes/después.
@@ -36,20 +24,9 @@ static void measure(TacFunction *f, size_t stats[6]) {
     TacLiveAnalysis *live = tac_live_analyze(f, NULL, 0, error, sizeof error);
     TacIntervalAnalysis *ranges = tac_intervals_analyze(f, live, error, sizeof error);
     assert(ranges);
+    stats[0] = tac_live_max_temporaries(live);
     for (TacBlock *b = f->first; b; b = b->next) {
-        const TacLiveBlock *block = tac_live_block(live, b);
-        size_t boundaries[] = {set_count(live, block->live_in), set_count(live, block->live_out)};
-        for (unsigned k = 0; k < 2; k++)
-            if (boundaries[k] > stats[0])
-                stats[0] = boundaries[k];
         for (TacInstruction *i = b->first; i; i = i->next) {
-            const TacLiveInstruction *view = tac_live_instruction(live, i);
-            size_t before = set_count(live, view->before);
-            size_t after = set_count(live, view->after);
-            if (before > stats[0])
-                stats[0] = before;
-            if (after > stats[0])
-                stats[0] = after;
             if (i->op == TAC_PSEUDO && i->pseudo.kind >= TAC_PSEUDO_MUL &&
                 i->pseudo.kind <= TAC_PSEUDO_POW)
                 stats[2 + i->pseudo.kind - TAC_PSEUDO_MUL]++;

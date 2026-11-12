@@ -72,6 +72,8 @@ static int allocate_function(TacFunctionAllocation *f, const TacIntervalAnalysis
         f->metrics.assigned_registers |= (uint16_t)(1u << chosen);
         state.busy |= (uint16_t)(1u << chosen);
         activate(state.active, &state.active_count, range);
+        if (state.active_count > f->metrics.pressure)
+            f->metrics.pressure = state.active_count;
     }
     for (unsigned r = TAC_P1_TEMP_FIRST; r <= TAC_P1_TEMP_LAST; r++)
         f->metrics.register_count += !!(f->metrics.assigned_registers & (1u << r));
@@ -117,6 +119,7 @@ TacAllocationResult *tac_allocate_registers(TacProgram *program, const char *sou
         assigned->function = f;
         assigned->registers = tac_analysis_array(f->next_temp, sizeof *assigned->registers);
         TacLiveAnalysis *live = tac_live_analyze(f, NULL, 0, error, capacity);
+        assigned->metrics.demand = tac_live_max_temporaries(live);
         TacIntervalAnalysis *ranges = live ?
             tac_intervals_analyze(f, live, error, capacity) : NULL;
         int ok = ranges && allocate_function(assigned, ranges, source, error, capacity);

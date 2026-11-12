@@ -9,7 +9,7 @@ BUILD_DIR = build
 GEN_DIR = $(BUILD_DIR)/generated
 OBJ_DIR = $(BUILD_DIR)/obj
 
-SOURCES = main tac tac_loop_marks tac_live tac_locations tac_loops tac_edit tac_cfg tac_validate tac_isa tac_pseudo tac_print tac_build tac_build_expr tac_build_stmt tac_build_flow tac_build_init ast ast_constant symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table isa_constant codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler
+SOURCES = main tac_passes tac_metrics tac_lower tac_lower_value tac_lower_control tac_intervals tac_allocate tac_allocate_sites tac_emit tac_emit_pseudo tac tac_loop_marks tac_live tac_locations tac_loops tac_edit tac_cfg tac_validate tac_isa tac_pseudo tac_print tac_build tac_build_expr tac_build_stmt tac_build_flow tac_build_init ast ast_constant symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table isa_constant codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler
 OBJECTS = $(addprefix $(OBJ_DIR)/,$(addsuffix .o,$(SOURCES))) \
           $(OBJ_DIR)/parser.tab.o $(OBJ_DIR)/lex.yy.o
 
@@ -173,11 +173,11 @@ $(BUILD_DIR)/interpretar_tac: pruebas/tac_build/ejecutar.c pruebas/tac_build/int
 check-tac-values: $(BUILD_DIR)/interpretar_tac
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/tac_build/probar_valores.py --binario $(BUILD_DIR)/interpretar_tac
 
-# B aún no se enlaza con ccom: selección y sus pruebas son independientes de la CLI.
+# E enlaza la selección B con ccom; estos auxiliares conservan pruebas directas.
 TAC_LOWER_SOURCES = src/tac_lower.c src/tac_lower_value.c src/tac_lower_control.c
 TAC_LOWER_HEADERS = include/tac_lower.h src/tac_lower_internal.h include/isa_constant.h include/ast.h
 
-$(BUILD_DIR)/bajar_tac: pruebas/tac_lower/desde_fuente.c $(TAC_LOWER_SOURCES) $(TAC_LOWER_HEADERS) $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
+$(BUILD_DIR)/bajar_tac: pruebas/tac_lower/desde_fuente.c $(TAC_LOWER_HEADERS) $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $(filter %.c %.o,$^) $(LDLIBS)
 
 $(BUILD_DIR)/probar_tac_lower: pruebas/tac_lower/probar.c $(TAC_LOWER_SOURCES) $(TAC_SOURCES) src/isa_constant.c src/ast.c $(TAC_LOWER_HEADERS) $(TAC_HEADERS) | $(BUILD_DIR)
@@ -197,7 +197,7 @@ $(BUILD_DIR)/probar_tac_live: pruebas/tac_live/probar.c $(TAC_ANALYSIS_SOURCES) 
 $(BUILD_DIR)/probar_tac_loops: pruebas/tac_loops/probar.c $(TAC_ANALYSIS_SOURCES) $(TAC_SOURCES) $(TAC_HEADERS) $(TAC_ANALYSIS_HEADERS) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
 
-$(BUILD_DIR)/analizar_tac: pruebas/tac_analysis/desde_fuente.c $(TAC_LOWER_SOURCES) $(TAC_LOWER_HEADERS) $(TAC_ANALYSIS_HEADERS) $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
+$(BUILD_DIR)/analizar_tac: pruebas/tac_analysis/desde_fuente.c $(TAC_LOWER_HEADERS) $(TAC_ANALYSIS_HEADERS) $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $(filter %.c %.o,$^) $(LDLIBS)
 
 check-tac-live: $(BUILD_DIR)/probar_tac_live $(BUILD_DIR)/analizar_tac
@@ -208,7 +208,7 @@ check-tac-loops: $(BUILD_DIR)/probar_tac_loops $(BUILD_DIR)/analizar_tac
 	$(BUILD_DIR)/probar_tac_loops
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/tac_analysis/probar.py loops
 
-# C2 no se enlaza con ccom: intervalos, asignación y planes solo en auxiliares.
+# C2: intervalos/asignación compartidos por ccom -O1 y las pruebas directas.
 TAC_ALLOCATE_SOURCES = src/tac_intervals.c src/tac_allocate.c src/tac_allocate_sites.c
 TAC_ALLOCATE_HEADERS = include/data_area.h include/tac_intervals.h include/tac_allocate.h src/tac_allocate_internal.h
 
@@ -218,7 +218,7 @@ $(BUILD_DIR)/probar_tac_intervals: pruebas/tac_intervals/probar.c src/tac_interv
 $(BUILD_DIR)/probar_tac_allocate: pruebas/tac_allocate/probar.c $(TAC_ALLOCATE_SOURCES) $(TAC_LOWER_SOURCES) src/isa_constant.c src/ast.c src/data_area.c $(TAC_ANALYSIS_SOURCES) $(TAC_SOURCES) $(TAC_HEADERS) $(TAC_ANALYSIS_HEADERS) $(TAC_ALLOCATE_HEADERS) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
 
-$(BUILD_DIR)/asignar_tac: pruebas/tac_allocate/desde_fuente.c $(TAC_ALLOCATE_SOURCES) $(TAC_LOWER_SOURCES) $(TAC_ALLOCATE_HEADERS) $(TAC_LOWER_HEADERS) $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
+$(BUILD_DIR)/asignar_tac: pruebas/tac_allocate/desde_fuente.c $(TAC_ALLOCATE_HEADERS) $(TAC_LOWER_HEADERS) $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $(filter %.c %.o,$^) $(LDLIBS)
 
 check-tac-intervals: $(BUILD_DIR)/probar_tac_intervals
@@ -228,26 +228,31 @@ check-tac-allocate: $(BUILD_DIR)/probar_tac_allocate $(BUILD_DIR)/asignar_tac
 	$(BUILD_DIR)/probar_tac_allocate
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/tac_allocate/probar.py
 
-# D: emisión y comparación independientes de la CLI actual.
+# D/E: emisión directa y comparación observable por la CLI -O1.
 TAC_EMIT_SOURCES = src/tac_emit.c src/tac_emit_pseudo.c
 TAC_EMIT_HEADERS = include/tac_emit.h src/tac_emit_internal.h include/generate_emit.h
 
-$(BUILD_DIR)/probar_tac_emit: pruebas/tac_emit/probar.c $(TAC_EMIT_SOURCES) $(TAC_ALLOCATE_SOURCES) $(TAC_EMIT_HEADERS) $(TAC_ALLOCATE_HEADERS) $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $(filter %.c %.o,$^) $(LDLIBS)
-
-$(BUILD_DIR)/emitir_tac: pruebas/tac_emit/desde_fuente.c $(TAC_EMIT_SOURCES) $(TAC_ALLOCATE_SOURCES) $(TAC_LOWER_SOURCES) $(TAC_EMIT_HEADERS) $(TAC_ALLOCATE_HEADERS) $(TAC_LOWER_HEADERS) $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
+$(BUILD_DIR)/probar_tac_emit: pruebas/tac_emit/probar.c $(TAC_EMIT_HEADERS) $(TAC_ALLOCATE_HEADERS) $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $(filter %.c %.o,$^) $(LDLIBS)
 
 check-tac-emit: $(BUILD_DIR)/probar_tac_emit
 	$<
 
-check-o1-equivalence: $(TARGET) $(BUILD_DIR)/emitir_tac
+check-o1-equivalence: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/tac_emit/comparar.py
 
-check: check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+$(BUILD_DIR)/probar_tac_passes: pruebas/tac_passes/probar.c $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+check-o1: $(TARGET) $(BUILD_DIR)/probar_tac_passes
+	$(BUILD_DIR)/probar_tac_passes
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/tac_passes/probar_cli.py
+
+check: check-o1 check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 clean:
-	rm -f $(BUILD_DIR)/probar_tac_emit $(BUILD_DIR)/emitir_tac
+	rm -f $(BUILD_DIR)/probar_tac_passes
+	rm -f $(BUILD_DIR)/probar_tac_emit
 	rm -f $(BUILD_DIR)/probar_tac_intervals $(BUILD_DIR)/probar_tac_allocate $(BUILD_DIR)/asignar_tac
 	rm -f $(BUILD_DIR)/probar_tac_live $(BUILD_DIR)/probar_tac_loops $(BUILD_DIR)/analizar_tac
 	rm -f $(BUILD_DIR)/bajar_tac $(BUILD_DIR)/probar_tac_lower
@@ -265,7 +270,7 @@ clean:
 
 -include $(OBJECTS:.o=.d)
 
-.PHONY: check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops all clean ejercicios check check-tac-lower check-tac-values check-tac-build check-semantica-isa check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
+.PHONY: check-o1 check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops all clean ejercicios check check-tac-lower check-tac-values check-tac-build check-semantica-isa check-tac check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles
 
 # Prototipo gráfico CALSIDE (PySide6).
 PYTHON ?= python3

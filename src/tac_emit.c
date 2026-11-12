@@ -22,7 +22,7 @@ const char *te_function_label(const TacEmitter *e, const Symbol *function) {
 }
 
 /* Entrada: cantidad final y nombre. Salida: 1 válida, 0 con diagnóstico.
- * Efectos: solo escribe error. Restricciones: no cuenta IR ni emisión conservadora.
+ * Efectos: solo escribe error. Restricciones: recibe bundles finales, organizados o conservadores.
  */
 int tac_emit_check_rom(size_t count, const char *source, char *error, size_t capacity) {
     if (!source)
@@ -218,7 +218,7 @@ int tac_emit_program(const TacEmitInput *in, char *error, size_t capacity) {
         cg_set_line(0);
         emit_terminal(e.end_label);
         emit_terminal(e.error_label);
-        if (cg_schedule())
+        if (!in->no_schedule && cg_schedule())
             ok = te_error(&e, NULL, "falló la calendarización");
         else
             ok = tac_emit_check_rom((size_t)cg_bundle_count(), in->source_name, error, capacity);

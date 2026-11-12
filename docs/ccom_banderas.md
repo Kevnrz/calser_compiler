@@ -14,6 +14,12 @@ cualquier bandera.
 | Bandera | Qué hace | Dónde sale | Estado |
 |---|---|---|---|
 | `-h`, `--help` | Muestra todas las banderas, ejemplos y códigos de salida, sin requerir entrada | stdout | Disponible |
+| `-O0` | Generador actual, también predeterminado sin nivel | archivos | Disponible |
+| `-O1` | Construcción HIGH, selección ISA, asignación y emisión; pasadas vacías | archivos | Disponible |
+| `-O2` | Reservado hasta C3.5; devuelve error de uso | stderr | Pendiente |
+| `--opt=lista` | Implica O1; une unroll,rename,dce,reorder,spill en orden fijo | archivos | Disponible |
+| `--unroll=N` | Factor 2..16, exige unroll; sin factor: heurística §11 | contexto | Disponible |
+| `--metrics archivo.json` | JSON solo tras compilación O1 exitosa | archivo JSON | Disponible |
 | `--time` | Muestra la duración total en milisegundos, con estado completado o fallido | stderr | Disponible |
 | `--no-schedule` | Desactiva el organizador local y conserva la emisión de una operación más separación; útil para comparar | archivos | Disponible |
 | `--ast-json <archivo>` | Exporta el AST sintáctico a JSON para el visor gráfico | archivo JSON | Disponible |
@@ -277,3 +283,15 @@ cierre se informa error, se elimina el parcial y se devuelve 1. No puede
 sobrescribir el fuente, tampoco mediante enlaces al mismo archivo. Los errores
 anteriores no borran un `.tac` preexistente. El listado no genera binarios ni
 incluye calendarización: ver [representacion_intermedia.md](representacion_intermedia.md).
+
+
+## Camino optimizante (`-O1`)
+
+El contrato de banderas y métricas está en §5/§6 de
+[representacion_intermedia.md](representacion_intermedia.md). Niveles distintos,
+listas vacías o desconocidas, `--opt` con O0, `--metrics` sin O1 y `-x` con
+opciones nuevas son errores de uso (2). Varias listas se unen sin duplicados.
+`--no-schedule` conserva la emisión conservadora y comprueba igualmente ROM.
+`-i` escribe HIGH inicial; `--ast-json` sigue escribiendo antes del semántico,
+pero O1 implica compilar. `-m` muestra todas las etiquetas emitidas con su
+índice final de bundle, mediante el IR de codegen. O0 conserva su tabla anterior.

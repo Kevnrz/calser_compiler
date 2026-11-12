@@ -18,6 +18,8 @@ typedef struct {
 } TacEmissionSite;
 typedef struct {
     uint16_t assigned_registers;       /* Solo registros asignados a valores. */
+    size_t demand;                    /* Máximo TEMP vivos antes de asignar. */
+    size_t pressure;                  /* Máximo de intervalos activos asignados. */
     unsigned register_count;           /* Cantidad de bits de la máscara. */
 } TacAllocationMetrics;
 

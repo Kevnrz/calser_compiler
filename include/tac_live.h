@@ -46,6 +46,9 @@ const TacLiveInstruction *tac_live_instruction(const TacLiveAnalysis *analysis,
 size_t tac_live_location_count(const TacLiveAnalysis *analysis);
 TacOperand tac_live_location(const TacLiveAnalysis *analysis, size_t index);
 int tac_live_contains(const TacLiveAnalysis *analysis, const TacLiveSet *set, TacOperand location);
+/* Máximo de TEMP vivos en entradas/salidas de bloques e instrucciones.
+ * No cuenta registros fijos ni VARIABLE; Aho §9.2.5. No modifica el análisis. */
+size_t tac_live_max_temporaries(const TacLiveAnalysis *analysis);
 void tac_live_free(TacLiveAnalysis *analysis);
 
 /* first_scope: lista prestada (normalmente scopes_first()). Compara identidad,

@@ -1,4 +1,6 @@
 $ make -s check
+PASS gestor E: orden fijo, errores con pasada, validacion y operaciones no-NOP
+PASS CLI E: opciones, union/orden, JSON, HIGH inicial, etiquetas y ROM conservadora
 PASS emisión D: permutaciones, preservación, rl, etiquetas, nombre y ROM
 programa	resultado	bundles O1	bundles O0
 ejercicios/ejercicio1_factorial/ejercicio1.cls	OK	71	80
@@ -231,7 +233,7 @@ PASS constantes: inicializadores, Vi, profundidad, 32 bits, signos y rechazos si
 PASS constantes ISA: 12 casos, pasos, auxiliares y rechazos sin modificar salida
 ........
 ----------------------------------------------------------------------
-Ran 8 tests in 0.015s
+Ran 8 tests in 0.017s
 
 OK
 PASS ayuda: -h/--help, opciones, ejemplos, errores y archivos intactos

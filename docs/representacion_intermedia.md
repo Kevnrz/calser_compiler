@@ -314,8 +314,8 @@ La liberación del programa no libera Scope, Symbol ni filas ISA prestadas.
 
 Regla: **sin cambiar el comportamiento de -O0 ni romper contratos existentes;
 se permiten las extensiones acordadas**. -O0 mantiene el generador y el
-organizador P1. Las banderas y pasadas futuras descritas aquí no están aún
-conectadas a ccom; C1 implementa solamente análisis, marcas y edición.
+organizador P1. E conecta las banderas y el gestor con ccom; las cinco pasadas siguen vacías
+hasta C3. C1 ofrece análisis, marcas y edición.
 
 **AST → construcción HIGH con marcas S/L → unrolling C3.1 → renombramiento local
 C3.3a → DCE C3.2 → bajada C2.3 → ISA virtual: reordenamiento C3.3b → asignación
@@ -438,8 +438,8 @@ La clonación de bloques/instrucciones corresponde a C3.1, no a C1.
 | C3.2, pendiente | Eliminación con raíces observables y prueba de seguridad de errores |
 | C3.3a/b, pendiente | Renombramiento local y DAG/list scheduling virtual |
 | C3.4, pendiente | Spilling sobre intervalos y profundidad natural |
-| C2.3 D, implementado (auxiliares, sin CLI) | Emisión, ABI, preservación y expansión P1 |
-| C2.3 E, pendiente | Gestor con firma/contexto común, cinco pasadas registradas vacías, validación tras cada pasada, banderas, métricas y control final de ROM |
+| C2.3 D, implementado (emisor compartido) | Emisión, ABI, preservación y expansión P1 |
+| C2.3 E, implementado | Gestor con firma/contexto común, cinco pasadas registradas vacías, validación tras cada pasada, banderas, métricas y control final de ROM |
 | C4.2 / I2, pendiente | Ciclos del simulador a CSV/gráficas por prueba / ciclos RTL |
 
 El área de derrame es una extensión **no contigua** propia de cada función,
@@ -451,23 +451,88 @@ Sin spilling, la asignación falla con `sin registros temporales disponibles`,
 con archivo:L:C. C2 elige los auxiliares y prepara el plan de preservación;
 D hará los guardados/restauraciones requeridos, no elegirá tarde ocho auxiliares.
 
-Banderas futuras: -O0 P1; -O1 línea base; -O2 todas las pasadas; --opt=unroll,
-rename,dce,reorder,spill para seleccionarlas sobre -O1; --unroll=N;
---metrics archivo.json. -i/--tac mantiene HIGH. -m en -O1/-O2 mostrará etiquetas
-realmente emitidas (.L_o1_* y expansiones), resueltas después del calendario;
--O0 no cambia. -p muestra bundles y --no-schedule omite el empaquetado final.
-Ninguna de estas banderas nuevas se implementa en C1.
+### §5. Banderas y errores: contrato de E
 
-D comprueba ROM máxima de **4096 bundles después del empaquetado**, cuando ya
-se conocen expansiones, preservación y NOPs; no equivale al límite de región de
-cg_schedule. El JSON común contará HIGH antes/después de pasadas, ISA antes de
-expandir, instrucciones emitidas, bundles/NOPs/bytes de instrucciones, tiempos
-por pasada/total y contadores de desenrolladas, renombradas, eliminadas,
-reordenadas y derramadas/cargas/guardados. 16 × bundles no es el tamaño completo
-del .bin con cabecera e imagen. C4.2/I2 agregarán ciclos y presentación gráfica.
+E implementa estas banderas y métricas; las cinco pasadas están registradas
+con cuerpos vacíos hasta C3. Sin bandera de nivel, sigue el camino actual `-O0`, con salida
+idéntica byte a byte. `-O1` activa construcción, pasadas HIGH, bajada, pasadas ISA
+virtual, asignación, emisión D, calendarización y salidas existentes.
+
+- `--opt=lista` selecciona `unroll,rename,dce,reorder,spill` e implica `-O1`
+  aunque no se escriba ese nivel. Con `-O0` explícito es error de uso,
+  independientemente del orden de los argumentos.
+- Repetir el mismo nivel es válido; especificar niveles distintos es error de
+  uso. Varias opciones `--opt` unen sus listas sin repetir pasadas. La lista
+  vacía y cualquier nombre desconocido son errores de uso.
+- El orden de ejecución es fijo: `unroll`, `rename`, `dce` en HIGH, `reorder`
+  en ISA virtual y `spill` como política dentro de la asignación; nunca depende
+  del orden de `--opt`. E registra las cinco pasadas vacías y valida después de
+  cada una. Un fallo de validación es error interno, código 1, con el nombre
+  de la pasada y el archivo real.
+- `-O2` significará todas las pasadas, pero se rechaza como error de uso hasta
+  C3.5. `--unroll=N` exige `unroll` activo y un entero entre 2 y 16 inclusive.
+  Sin factor explícito se aplica la heurística del §11; no se fija un factor
+  predeterminado nuevo en E.
+- `--no-schedule` se permite en `-O1`: omite el empaquetado final y conserva la
+  salida conservadora. **También se comprueba el máximo de 4096 bundles sobre
+  esa salida**, porque el límite de ROM se aplica a lo entregado al ensamblador,
+  aunque no se haya calendarizado. Con calendarización se comprueba después de
+  ella, incluyendo expansiones, preservación y NOPs. No es el límite de región
+  de `cg_schedule`, ni agrega un chequeo nuevo al camino `-O0`.
+- `-i`/`--tac` conserva su significado: muestra el HIGH inicial, antes de las
+  pasadas, aunque haya pasadas HIGH activas.
+- `--ast-json` junto con `-O1` implica compilar aun sin otras opciones de salida.
+  El AST se sigue escribiendo antes del análisis semántico; no se retrasa su
+  escritura. El comportamiento actual sin `-O1` se conserva.
+- `-v` informa construcción, pasadas, bajada, asignación y emisión mediante
+  `report_phase`. `-m` muestra las etiquetas realmente emitidas, incluidas
+  `.L_o1_*`, funciones, expansiones y terminales, con sus direcciones finales:
+  `cg_ir_count`/`cg_ir_record` y `cg_label_address` sobre la salida final.
+  `-p` muestra los bundles de esa salida. El camino `-O0` no cambia.
+- `-x` junto con `-O1`, `-O2`, `--opt`, `--unroll` o `--metrics` es error de uso.
+  Todos los errores de uso de este contrato devuelven código 2.
+
+Los errores del camino `-O1` llevan siempre el nombre real del archivo.
+
+### §6. Métricas y JSON: contrato de E
+
+`--metrics archivo.json` exige el nivel efectivo `-O1`, incluido el obtenido
+mediante `--opt`; sin él es error de uso, código 2. Una compilación fallida no
+escribe JSON de métricas. `tiempo_ms.total` cubre toda la compilación hasta
+terminar las salidas, excluyendo la escritura del propio JSON.
+
+Las claves del objeto son fijas:
+
+```text
+programa, nivel, pasadas,
+alto_nivel: {inicial, despues: {<pasada>: n}},
+isa_antes_expandir, emitidas, bundles, nops, bytes, demanda, presion,
+mascara_registros,
+tiempo_ms: {total, pasadas: {<pasada>: ms}},
+contadores: {desenrollados, renombradas, eliminadas, bloques_eliminados,
+             reordenadas, derramados, cargas_derrame, guardados_derrame},
+ciclos_sim
+```
+
+`nivel` vale `"O1"`. `pasadas` enumera solo las ejecutadas, en orden fijo; los
+mapas por pasada contienen solo las ejecutadas que correspondan a ese mapa
+(`alto_nivel.despues` solo las de HIGH). No se agregan entradas para pasadas
+inactivas. `demanda` es el máximo de vivos antes de asignar, obtenido mediante
+una consulta única de C1; `presion` es el máximo de intervalos activos con
+registro en el asignador, tomando el máximo entre funciones. La máscara
+`"0x...."` de registros usados es informativa y no sustituye la presión.
+
+`emitidas` cuenta las operaciones no-NOP que llegan a `cg_schedule`, incluidos
+los slots no-NOP de bundles fijos, expansiones y preservación; si se desactiva
+el calendario, cuenta el mismo IR de entrada. `nops = 4 × bundles − emitidas`
+y `bytes = 16 × bundles` describen la salida final elegida. Los bytes no son el
+tamaño completo del `.bin` con cabecera e imagen. Las pasadas vacías dejan
+`desenrollados` como `[]` y los demás contadores en 0; `ciclos_sim` vale `null`.
+C4.2/I2 agregarán ciclos y presentación gráfica.
+
 El intérprete comprueba pasadas HIGH; sim_asm contra -O0 comprueba las de ISA;
-tac_validate se ejecutará tras cada pasada. Todo esto es contrato futuro, no
-funcionalidad activada por C1.
+tac_validate se ejecutará tras cada pasada. El gestor E aplica este contrato; las transformaciones y el derrame efectivo
+siguen pendientes de C3.
 
 ## Guía y sexto ejemplo, paso a paso
 
@@ -520,7 +585,7 @@ solo esos binarios, diff y ccom; no Python. La suite forma parte de make check.
 `scopes_global()`. Usa los Symbol anotados, nunca vuelve a resolver nombres.
 `TacBuildResult` posee el TacProgram, la imagen inicial y los Symbol auxiliares;
 se libera antes de `semantic_free`. No modifica AST, ámbitos, direcciones,
-etiquetas ni estado del generador. La construcción solo ocurre con `-i` o `--tac`.
+etiquetas ni estado del generador. La construcción ocurre con `-i`/`--tac` y con `-O1`.
 
 La imagen inicial se imprime como `initial_data bytes=N`, seguida de palabras
 `@desplazamiento = valor` en hexadecimal. Conserva el mismo tamaño y palabras
@@ -708,10 +773,9 @@ si recibe otro valor, lo escribe antes de JEFR. Main siempre termina con EXIT.
 CRYPTO y los cuatro R con arreglos. Compara doce listados y captura HIGH,
 sus metadatos, aristas e imagen antes/después sin normalización.
 
-Esta etapa se enlaza solo con los binarios de prueba, no con ccom. No cambia
-`-i`, el intérprete ni la CLI. C1 agrega vivacidad y lazos; C2 asigna registros
-en auxiliares de prueba. Quedan conservación emitida de vivos/rl, expansión P1
-y emisión para los siguientes commits.
+E enlaza esta etapa con ccom para `-O1`. `-i` conserva HIGH y el intérprete
+no cambia. C1 agrega vivacidad y lazos; C2 asigna registros; D implementa
+conservación emitida de vivos/rl, expansión P1 y emisión.
 Por eso la salida virtual aún no es un programa físico ejecutable: el control
 `tac_validate_for_emission` la rechaza. Referencias: Aho §7.2, §8.1–8.2 y §8.6.
 
@@ -843,9 +907,10 @@ R reutiliza la misma área estática y la imagen inicial no se desplaza; C3.4
 escribirá cada casilla antes de leerla. C2 ofrece y prueba la reserva, pero
 como todavía no derrama no solicita casillas automáticamente.
 
-La CLI aún no llama al asignador ni a la reserva: O0 e `-i` conservan su camino.
-D implementa expansión/emisión y preparación física de CRYPTO. Quedan pendientes
-de C3.4 los derrames; de E las banderas, integración y JSON.
+La CLI `-O1` llama al asignador y a D, sin reservar derrame todavía;
+O0 e `-i` conservan su significado. D implementa expansión/emisión y preparación
+física de CRYPTO. Quedan pendientes
+de C3.4 los derrames; E integra banderas y JSON.
 
 
 ## D: emisión de ISA física hacia codegen
@@ -880,18 +945,43 @@ si no hubo movimientos. `cg_crypto_emit_template` conserva los bundles P1.
 
 Finalmente se emiten ambos terminales fijos, se llama `cg_schedule` y se verifica
 ROM mediante `tac_emit_check_rom`: 4096 bundles pasan, 4097 fallan con el archivo
-real. No se cuenta el flujo conservador ni se agrega validación de conocidos.
+real. Con `--no-schedule` se omite `cg_schedule` y se comprueba el mismo límite
+sobre el flujo conservador. No se agrega validación de conocidos.
 Tras éxito no se emite más. Se ensamblan `cg_line` y `cg_data` con el ensamblador
 existente, pasando también el nombre real para sus diagnósticos.
 
-E imprimirá -m sin tabla propia: recorrer `cg_ir_count`/`cg_ir_record`, seleccionar
+E imprime -m sin tabla propia: recorrer `cg_ir_count`/`cg_ir_record`, seleccionar
 CG_IR_LABEL y consultar `cg_label_address(record->data.label)` después de schedule.
 Esto incluye bloques y expansiones. Consultar antes de cg_free o cg_init.
 Liberar los planes antes del ISA, ISA antes de TacBuildResult, y conservar
-símbolos/AST/LabelTable mientras se emite. La CLI actual todavía no invoca D.
+símbolos/AST/LabelTable mientras se emite. La CLI invoca D con `-O1`.
+
+## E: integración, gestor y medición
+
+`src/tac_passes.c` contiene la tabla fija y una firma única con contexto prestado
+(IR, construcción, ámbitos, nombre real, selección y factor de unroll). El factor
+cero indica la heurística del §11; E no la ejecuta porque unroll está vacío.
+Las marcas se descartan después de unroll, o al entrar al punto HIGH si está
+inactivo. La política spill se registra antes de asignar, sin recorrido propio;
+no reemplaza el error de agotamiento del recorrido C2. C3.4 ampliará ese punto.
+
+`src/tac_metrics.c` es el único escritor JSON. Reutiliza `json_string` de AST
+(publicado sin cambiar su cuerpo). `tac_live_max_temporaries` es la consulta única
+de demanda, compartida por C2 y su auxiliar del corpus. El asignador registra el
+máximo de `active_count`; E solo agrega máximos entre funciones. La máscara puede
+incluir muchos registros usados sucesivamente aunque la presión sea baja.
+
+La CLI conserva una captura del HIGH inicial para `-i`, anterior a las pasadas.
+El JSON se escribe tras las salidas exitosas; un fallo no publica métricas.
+`check-o1` verifica opciones, gestor, JSON y salidas. `check-o1-equivalence` usa
+`ccom -O1 -s`; su adaptador lee dirección/ancho de GLOBAL y ámbitos de main en
+la tabla de símbolos del listado. `compare()` y la proyección observable de D
+siguen intactos. Se retiró el auxiliar de emisión desde fuente ya sin consumidor.
 
 ### Pendientes de limpieza después de integrar C2.3
 
+- Búsqueda lineal de `block_label` en `src/tac_emit.c:80`, mismo patrón que
+  `tac_live_instruction`, `tac_intervals_positions` y `tac_allocation_site`.
 - Guardado/restauración de `src/tac_emit_pseudo.c:17` frente a
   `src/codegen_crypto.c:78` (save_live) y `:98` (restore_live).
 - Terminal de `src/tac_emit.c:181` frente a `src/generate_stmt.c:752`

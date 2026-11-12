@@ -23,13 +23,21 @@ def compile_o0(source, base):
 
 
 def compile_new(binary, source, base):
-    """Adaptador D: devuelve base y tramos observables. E lo sustituirá por su CLI."""
-    result = subprocess.run([str(binary), str(source), str(base)],
+    """Adaptador E: compila por CLI y lee tramos de la tabla pública del listado."""
+    result = subprocess.run([str(binary), '-O1', '-s', str(source),
+                             '-o', str(base.with_suffix('.bin'))],
                             capture_output=True, text=True, timeout=30)
     if result.returncode:
-        raise ValueError(result.stderr.strip() or f'auxiliar: salida {result.returncode}')
-    regions = [tuple(map(int, line.split()[1:])) for line in result.stdout.splitlines()
-               if line.startswith('observable ')]
+        raise ValueError(result.stderr.strip() or f'ccom: salida {result.returncode}')
+    regions = []
+    selected = False
+    for line in base.with_suffix('.asm').read_text().splitlines():
+        scope = re.match(r'#\s+Scope \d+: (\w+)(?: (\w+))?$', line)
+        if scope:
+            selected = scope[1] == 'GLOBAL' or scope[2] == 'main'
+        variable = re.search(r' width=(\d+) addr=0x([0-9A-Fa-f]+)', line)
+        if selected and variable:
+            regions.append((int(variable[2], 16), int(variable[1])))
     return base, regions
 
 
@@ -80,7 +88,7 @@ def compare(source, directory, compiler):
 def main():
     """Entrada: auxiliar opcional. Salida: 1 si algún caso falla, tras listarlos todos."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--binario', type=Path, default=ROOT / 'build/emitir_tac')
+    parser.add_argument('--binario', type=Path, default=ROOT / 'ccom')
     args = parser.parse_args()
     binary = args.binario.resolve()
     failures = []

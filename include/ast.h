@@ -726,4 +726,7 @@ int ast_write_json(FILE *out, const ASTNode *node, const char *source);
  */
 void ast_free(ASTNode *node);
 
+/* Cadena JSON compartida; flujo y texto no NULL, no cierra el flujo. */
+void json_string(FILE *out, const char *text);
+
 #endif

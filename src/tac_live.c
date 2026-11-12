@@ -346,3 +346,32 @@ void tac_live_free(TacLiveAnalysis *a) {
     free(a->locations);
     free(a);
 }
+
+/* Entrada: análisis vivo y conjunto propio. Salida: cantidad TEMP.
+ * Efectos: ninguno. Restricciones: no cuenta ubicaciones físicas ni variables.
+ */
+static size_t temporary_count(const TacLiveAnalysis *a, const TacLiveSet *set) {
+    size_t count = 0;
+    for (size_t k = 0; k < a->count; k++)
+        count += a->locations[k].kind == TAC_TEMP && bit(set, k);
+    return count;
+}
+/* Entrada: análisis o NULL. Salida: pico de TEMP vivos, cero sin análisis.
+ * Efectos: ninguno. Restricciones: incluye inalcanzables conservados; Aho §9.2.5.
+ */
+size_t tac_live_max_temporaries(const TacLiveAnalysis *a) {
+    size_t maximum = 0;
+    if (!a)
+        return maximum;
+    for (size_t k = 0; k < a->block_count + a->instruction_count; k++) {
+        const TacLiveSet *before = k < a->block_count ? a->blocks[k].live_in :
+            a->instructions[k - a->block_count].before;
+        const TacLiveSet *after = k < a->block_count ? a->blocks[k].live_out :
+            a->instructions[k - a->block_count].after;
+        size_t counts[] = {temporary_count(a, before), temporary_count(a, after)};
+        for (unsigned n = 0; n < 2; n++)
+            if (counts[n] > maximum)
+                maximum = counts[n];
+    }
+    return maximum;
+}

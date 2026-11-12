@@ -116,7 +116,9 @@ static void lru(void) {
  * Restricciones: ocho auxiliares distintos de D/A/B; fuente muerta no se reutiliza.
  */
 static void arithmetic(void) {
-    for (unsigned extra = 0; extra <= 8; extra += 8) {
+    const unsigned extras[] = {0, 8, 10};
+    for (size_t case_id = 0; case_id < sizeof extras / sizeof extras[0]; case_id++) {
+        unsigned extra = extras[case_id];
         Fixture f;
         fixture_init(&f, TAC_STAGE_ISA_VIRTUAL);
         if (!extra) {
@@ -126,7 +128,7 @@ static void arithmetic(void) {
             f.b = (TacOperand){.kind = TAC_TEMP, .value.id = 6};
             f.d = (TacOperand){.kind = TAC_TEMP, .value.id = 7};
         }
-        TacOperand kept[8];
+        TacOperand kept[10];
         for (unsigned k = 0; k < extra; k++) {
             kept[k] = tac_temp_new(f.function);
             fixture_isa(f.entry, "mov", kept[k], tac_none(), tac_integer(k), tac_none());
@@ -138,6 +140,23 @@ static void arithmetic(void) {
         for (unsigned k = 0; k < extra; k++)
             fixture_isa(f.entry, "sw", tac_none(), tac_physical(0), kept[k], tac_none());
         fixture_exit(f.entry);
+        if (extra == 10) {
+            /* Diez vivos cruzan MUL y sus dos fuentes mueren allí: los doce
+             * registros siguen ocupados en escritura. Sin extender las fuentes
+             * hasta esa posición, el destino recibiría el registro de una fuente.
+             */
+            mul->source_line = 42;
+            mul->source_column = 9;
+            fixture_validate(&f);
+            char error[256];
+            TacAllocationResult *result = tac_allocate_registers(f.program,
+                "ruta/mul.cls", error, sizeof error);
+            assert(!result);
+            assert(!strcmp(error,
+                "ruta/mul.cls:42:9: error de generacion: sin registros temporales disponibles"));
+            tac_program_free(f.program);
+            continue;
+        }
         TacAllocationResult *a = assign(&f);
         assert(mul->dest.value.id != mul->src1.value.id);
         assert(mul->dest.value.id != mul->src2.value.id);

@@ -38,8 +38,8 @@ def main():
     print(f'Corpus: {valid} programas, {functions} funciones, {rejected} rechazos frontend')
     print('Fallos de asignación:')
     print('\n'.join(failures) if failures else 'ninguno')
-    # Los fallos se reportan como limitación, sin truncar la medición del corpus.
-    return 0
+    # Imprime todos los fallos antes de señalar el error a make check.
+    return 1 if failures else 0
 
 
 if __name__ == '__main__':

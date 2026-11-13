@@ -252,13 +252,13 @@ int clones_run(FILE *out,const char *snapshot,unsigned minimum) {
         c.failed ? "Paquete de instantaneas invalido, no disponible o memoria insuficiente." :
         c.lexical ? "Hay errores lexicos en una instantanea. Corrigelos antes de comparar clones." : "";
     int code=strcmp(status,"ok")!=0;
-    fputs("{\"schema_version\":1,\"operation\":\"clones\",\"offset_unit\":\"utf8\",\"source\":",out); diag_json_write_string(out,snapshot);
-    fprintf(out,",\"exit_code\":%d,\"status\":\"%s\",\"minimum\":%u,\"explanation\":",code,status,minimum); diag_json_write_string(out,message);
+    fputs("{\"schema_version\":1,\"operation\":\"clones\",\"offset_unit\":\"utf8\",\"source\":",out); json_write_string(out,snapshot);
+    fprintf(out,",\"exit_code\":%d,\"status\":\"%s\",\"minimum\":%u,\"explanation\":",code,status,minimum); json_write_string(out,message);
     fputs(",\"files\":[",out);
     /* Even malformed input returns valid JSON, without incomplete file names. */
     if (!c.failed) for (unsigned i=0;i<c.count;i++) {
         if (i) fputc(',',out);
-        fprintf(out,"{\"id\":%u,\"path\":",i); diag_json_write_string(out,c.files[i].path);
+        fprintf(out,"{\"id\":%u,\"path\":",i); json_write_string(out,c.files[i].path);
         fprintf(out,",\"bytes\":%zu}",c.files[i].length);
     }
     fputs("],\"pairs\":[",out);

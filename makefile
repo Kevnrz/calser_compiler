@@ -10,7 +10,7 @@ BUILD_DIR = build
 GEN_DIR = $(BUILD_DIR)/generated
 OBJ_DIR = $(BUILD_DIR)/obj
 
-SOURCES = main codegen_common tac_passes tac_metrics tac_lower tac_lower_value tac_lower_control tac_intervals tac_allocate tac_allocate_sites tac_emit tac_emit_pseudo tac tac_loop_marks tac_live tac_locations tac_loops tac_edit tac_cfg tac_validate tac_isa tac_pseudo tac_print tac_build tac_build_expr tac_build_stmt tac_build_flow tac_build_init ast ast_constant symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table isa_constant codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler clones repairs syntax_service suggestions diagnostics_json
+SOURCES = main json_text codegen_common tac_passes tac_metrics tac_lower tac_lower_value tac_lower_control tac_intervals tac_allocate tac_allocate_sites tac_emit tac_emit_pseudo tac tac_loop_marks tac_live tac_locations tac_loops tac_edit tac_cfg tac_validate tac_isa tac_pseudo tac_print tac_build tac_build_expr tac_build_stmt tac_build_flow tac_build_init ast ast_constant symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table isa_constant codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler clones repairs syntax_service suggestions diagnostics_json
 OBJECTS = $(addprefix $(OBJ_DIR)/,$(addsuffix .o,$(SOURCES))) \
           $(OBJ_DIR)/parser.tab.o $(OBJ_DIR)/lex.yy.o
 
@@ -83,7 +83,7 @@ check-diagnosticos-generacion: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/generador_o0/diagnosticos_generacion/probar.py
 
 # Evaluación constante sin dependencias del generador ni del emisor.
-$(BUILD_DIR)/probar_constantes: src/analisis/ast.c src/analisis/ast_constant.c pruebas/analisis/constantes/probar.c include/analisis/ast.h include/analisis/ast_constant.h include/analisis/symbol_table.h | $(BUILD_DIR)
+$(BUILD_DIR)/probar_constantes: src/analisis/ast.c src/comun/json_text.c include/comun/json_text.h src/analisis/ast_constant.c pruebas/analisis/constantes/probar.c include/analisis/ast.h include/analisis/ast_constant.h include/analisis/symbol_table.h | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
 
 check-constantes: $(BUILD_DIR)/probar_constantes
@@ -181,7 +181,7 @@ TAC_LOWER_HEADERS = include/generador_o1/tac_lower.h src/generador_o1/tac_lower_
 $(BUILD_DIR)/bajar_tac: pruebas/generador_o1/tac_lower/desde_fuente.c $(TAC_LOWER_HEADERS) $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $(filter %.c %.o,$^) $(LDLIBS)
 
-$(BUILD_DIR)/probar_tac_lower: pruebas/generador_o1/tac_lower/probar.c $(TAC_LOWER_SOURCES) $(TAC_SOURCES) src/isa/isa_constant.c src/analisis/ast.c $(TAC_LOWER_HEADERS) $(TAC_HEADERS) | $(BUILD_DIR)
+$(BUILD_DIR)/probar_tac_lower: pruebas/generador_o1/tac_lower/probar.c $(TAC_LOWER_SOURCES) $(TAC_SOURCES) src/isa/isa_constant.c src/analisis/ast.c src/comun/json_text.c include/comun/json_text.h $(TAC_LOWER_HEADERS) $(TAC_HEADERS) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
 
 check-tac-lower: $(BUILD_DIR)/bajar_tac $(BUILD_DIR)/probar_tac_lower
@@ -216,7 +216,7 @@ TAC_ALLOCATE_HEADERS = include/analisis/data_area.h include/representacion/tac_i
 $(BUILD_DIR)/probar_tac_intervals: pruebas/representacion/tac_intervals/probar.c src/representacion/tac_intervals.c $(TAC_ANALYSIS_SOURCES) $(TAC_SOURCES) $(TAC_HEADERS) $(TAC_ANALYSIS_HEADERS) $(TAC_ALLOCATE_HEADERS) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
 
-$(BUILD_DIR)/probar_tac_allocate: pruebas/generador_o1/tac_allocate/probar.c $(TAC_ALLOCATE_SOURCES) $(TAC_LOWER_SOURCES) src/isa/isa_constant.c src/analisis/ast.c src/analisis/data_area.c $(TAC_ANALYSIS_SOURCES) $(TAC_SOURCES) $(TAC_HEADERS) $(TAC_ANALYSIS_HEADERS) $(TAC_ALLOCATE_HEADERS) | $(BUILD_DIR)
+$(BUILD_DIR)/probar_tac_allocate: pruebas/generador_o1/tac_allocate/probar.c $(TAC_ALLOCATE_SOURCES) $(TAC_LOWER_SOURCES) src/isa/isa_constant.c src/analisis/ast.c src/comun/json_text.c include/comun/json_text.h src/analisis/data_area.c $(TAC_ANALYSIS_SOURCES) $(TAC_SOURCES) $(TAC_HEADERS) $(TAC_ANALYSIS_HEADERS) $(TAC_ALLOCATE_HEADERS) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
 
 $(BUILD_DIR)/asignar_tac: pruebas/generador_o1/tac_allocate/desde_fuente.c $(TAC_ALLOCATE_HEADERS) $(TAC_LOWER_HEADERS) $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)

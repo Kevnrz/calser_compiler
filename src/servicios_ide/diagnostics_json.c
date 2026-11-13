@@ -42,43 +42,6 @@ void diag_json_token(const char *kind, size_t start, size_t end) {
     tokens[token_count++] = (JsonToken) {kind, start, end};
 }
 
-/* Aceptar solo secuencias UTF-8 canónicas; los bytes inválidos se escapan al
- * serializar para no producir JSON ilegible. No es tokenización del lenguaje. */
-static size_t utf8_sequence(const unsigned char *p, size_t remaining) {
-    unsigned c = p[0];
-    size_t n = c >= 0xc2 && c <= 0xdf ? 2 :
-               c >= 0xe0 && c <= 0xef ? 3 : c >= 0xf0 && c <= 0xf4 ? 4 : 0;
-    if (!n || n > remaining) return 0;
-    for (size_t i = 1; i < n; i++)
-        if ((p[i] & 0xc0) != 0x80) return 0;
-    if ((c == 0xe0 && p[1] < 0xa0) || (c == 0xed && p[1] >= 0xa0) ||
-        (c == 0xf0 && p[1] < 0x90) || (c == 0xf4 && p[1] >= 0x90)) return 0;
-    return n;
-}
-
-void diag_json_write_bytes(FILE *out, const char *text, size_t length) {
-    const unsigned char *p = (const unsigned char *) text;
-    size_t remaining = length;
-    fputc('"', out);
-    while (remaining) {
-        unsigned c = *p;
-        if (c == '"' || c == '\\') { fputc('\\', out); fputc(c, out); }
-        else if (c < 0x20) fprintf(out, "\\u%04x", c);
-        else if (c < 0x80) fputc(c, out);
-        else {
-            size_t n = utf8_sequence(p, remaining);
-            if (n) { fwrite(p, 1, n, out); p += n; remaining -= n; continue; }
-            fprintf(out, "\\u%04x", c);
-        }
-        p++; remaining--;
-    }
-    fputc('"', out);
-}
-
-void diag_json_write_string(FILE *out, const char *text) {
-    diag_json_write_bytes(out, text, strlen(text));
-}
-
 static void capture(const char *category, DiagPosition position,
                     const char *format, va_list args, void *unused) {
     (void) unused;
@@ -137,16 +100,16 @@ int diag_json_finish(FILE *out, const char *source, int exit_code) {
     } else status = "ok";
 
     fprintf(out, "{\"schema_version\":1,\"operation\":\"%s\",\"offset_unit\":\"utf8\",\"source\":", lexical_mode ? "lex" : "check");
-    diag_json_write_string(out, source);
+    json_write_string(out, source);
     fprintf(out, ",\"status\":\"%s\",\"exit_code\":%d,\"error_count\":%d,\"truncated\":%s,\"message\":",
             status, exit_code, diag_count(), truncated ? "true" : "false");
-    diag_json_write_string(out, message);
+    json_write_string(out, message);
     fputs(",\"diagnostics\":[", out);
     for (int i = 0; i < entry_count; i++) {
         JsonDiagnostic *d = &entries[i];
         if (i) fputc(',', out);
         fprintf(out, "{\"code\":\"%s\",\"category\":\"%s\",\"severity\":\"error\",\"message\":", d->code, d->category);
-        diag_json_write_string(out, d->message);
+        json_write_string(out, d->message);
         fputs(",\"range\":", out);
         if (d->position.located)
             fprintf(out, "{\"start\":%zu,\"end\":%zu,\"line\":%d,\"column\":%d}",

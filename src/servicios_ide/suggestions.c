@@ -145,10 +145,10 @@ static int inline_preferred(const char *word, size_t count) {
 static int emit(FILE *out, const char *source, const char *status, const char *explanation) {
     int code = !strcmp(status, "error") || !strcmp(status, "limite") ? 1 : 0;
     fputs("{\"schema_version\":1,\"operation\":\"suggest\",\"offset_unit\":\"utf8\",\"source\":", out);
-    diag_json_write_string(out, source);
+    json_write_string(out, source);
     fprintf(out, ",\"cursor\":%zu,\"exit_code\":%d,\"status\":", cursor, code);
-    diag_json_write_string(out, status);
-    fputs(",\"explanation\":", out); diag_json_write_string(out, explanation);
+    json_write_string(out, status);
+    fputs(",\"explanation\":", out); json_write_string(out, explanation);
     fputs(",\"suggestions\":[", out);
     if (!strcmp(status, "ok")) {
         size_t prefix = cursor - fragment_start, count = option_count();
@@ -166,14 +166,14 @@ static int emit(FILE *out, const char *source, const char *status, const char *e
             int existing_colon = next < length && text[next] == ':';
             const char *insert = main_header && !existing_colon ? "[]: " : pair ? "[]" : word;
             if (emitted++) fputc(',', out);
-            fputs("{\"label\":", out); diag_json_write_string(out, insert);
-            fputs(",\"text\":", out); diag_json_write_string(out, insert);
+            fputs("{\"label\":", out); json_write_string(out, insert);
+            fputs(",\"text\":", out); json_write_string(out, insert);
             fprintf(out, ",\"start\":%zu,\"end\":%zu,\"category\":", fragment_start, fragment_end);
-            diag_json_write_string(out, priority(word) == 0 ? "palabra" : priority(word) == 1 ? "delimitador" : "operador");
+            json_write_string(out, priority(word) == 0 ? "palabra" : priority(word) == 1 ? "delimitador" : "operador");
             fprintf(out, ",\"inline_preferred\":%s", inline_preferred(word, count) ? "true" : "false");
             if (pair) fprintf(out, ",\"cursor_relative\":%d", main_header ? (existing_colon ? 2 : 4) : 1);
             fputs(",\"detail\":", out);
-            diag_json_write_string(out, main_header ? "Cabecera de main sin parametros; continuar con retorno void." : pair ? "Par de corchetes esperado; el cursor queda dentro para escribir parametros." : "Continuacion permitida por el parser de ccom (Bison/LAC).");
+            json_write_string(out, main_header ? "Cabecera de main sin parametros; continuar con retorno void." : pair ? "Par de corchetes esperado; el cursor queda dentro para escribir parametros." : "Continuacion permitida por el parser de ccom (Bison/LAC).");
             fputc('}', out);
         }
     }

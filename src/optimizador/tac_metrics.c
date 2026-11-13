@@ -1,7 +1,7 @@
 /* Escritor único de métricas E; escapes compartidos con AST, Aho §9.2.5. */
 #include "tac_metrics.h"
 #include "tac_passes.h"
-#include "ast.h"
+#include "json_text.h"
 #include "codegen.h"
 #include <string.h>
 #include <time.h>
@@ -69,7 +69,7 @@ static void pass_map(FILE *out, const TacMetrics *m, int times) {
             continue;
         if (comma++)
             fputc(',', out);
-        json_string(out, pass->name);
+        json_write_string(out, pass->name);
         if (times)
             fprintf(out, ":%.6f", m->pass_ms[k]);
         else
@@ -95,7 +95,7 @@ int tac_metrics_write(const char *path, const char *source, const TacMetrics *m,
         return 0;
     }
     fputs("{\"programa\":", out);
-    json_string(out, source);
+    json_write_string(out, source);
     fputs(",\"nivel\":\"O1\",\"pasadas\":[", out);
     int comma = 0;
     for (size_t k = 0; k < TAC_PASS_COUNT; k++) {
@@ -103,7 +103,7 @@ int tac_metrics_write(const char *path, const char *source, const TacMetrics *m,
             continue;
         if (comma++)
             fputc(',', out);
-        json_string(out, tac_pass_at(k)->name);
+        json_write_string(out, tac_pass_at(k)->name);
     }
     fprintf(out, "],\"alto_nivel\":{\"inicial\":%zu,\"despues\":", m->high_initial);
     pass_map(out, m, 0);

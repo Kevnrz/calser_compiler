@@ -16,8 +16,6 @@
 #include <string.h>
 extern FILE *yyin;
 extern ASTNode *root;
-extern int yyparse(void);
-extern int lexical_errors;
 
 /* Entrada: objeto vivo y tamaño. Salida: ninguna. Efectos: escribe captura.
  * Restricciones: comparación solo dentro del mismo proceso, no serialización.
@@ -152,11 +150,10 @@ int main(int argc, char **argv) {
     yyin = fopen(argv[2], "r");
     assert(yyin);
     diag_init(argv[2]);
-    int parsed = yyparse();
-    parser_finish();
+    int accepted = parser_accept(yyin, &root);
     assert(!fclose(yyin));
     int code = 3;
-    if (!parsed && !lexical_errors && !parser_syntax_errors() && semantic_analyze(root)) {
+    if (accepted && semantic_analyze(root)) {
         char error[256];
         TacBuildResult *build = tac_build(root, scopes_global(), error, sizeof error);
         assert(build);

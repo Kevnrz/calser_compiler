@@ -103,7 +103,7 @@ int syntax_json_run(FILE *out, const char *source) {
                          result.lexical ? "error_lexico" : result.accepted ? "aceptado" : "error_sintactico";
     int code = strcmp(status, "aceptado") != 0;
     fputs("{\"schema_version\":1,\"operation\":\"syntax\",\"offset_unit\":\"utf8\",\"source\":", out);
-    diag_json_write_string(out, source);
+    json_write_string(out, source);
     fprintf(out, ",\"exit_code\":%d,\"status\":\"%s\"}\n", code, status);
     free(text);
     return fflush(out) == 0 && !ferror(out) ? code : 1;

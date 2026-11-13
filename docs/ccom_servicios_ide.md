@@ -572,6 +572,16 @@ Es una recuperación **conservadora**, no una promesa de encontrar todos los err
 
 `yyparse()` puede devolver 0 tras recuperar errores; eso solo significa que llegó al símbolo inicial. **No significa que el programa sea válido.**
 
+`parser_accept(FILE *input, ASTNode **tree)`, declarada en
+`include/analisis/parser_service.h` e implementada al final de `grammar/parser.y`,
+reúne la aceptación completa y llama a `parser_finish()`. Entrega el AST, que
+puede ser parcial o NULL y que el llamador debe liberar siempre. No abre ni
+cierra el flujo ni inicia diagnósticos: esas responsabilidades quedan en el
+conductor y en cada auxiliar (Aho §4.8–4.9 y §5.3.1). `phase_parse` y los seis
+auxiliares de pruebas la usan; conservan sus mensajes y códigos de salida.
+Las consultas del IDE mantienen su modo independiente `lexer_parse_text`.
+
+
 `parser_syntax_errors()` conserva el contador de errores de la consulta. `src/main.c:phase_parse` exige tanto éxito de Bison como **cero errores sintácticos y léxicos** antes de continuar. Si falla cualquiera:
 
 - no se ejecuta el análisis semántico sobre el AST recuperado;
@@ -582,7 +592,7 @@ Es una recuperación **conservadora**, no una promesa de encontrar todos los err
 
 Esta regla se aplica a **todo consumidor de `yyparse()`**, incluidos los programas
 auxiliares de prueba: comprobar solo `yyparse() == 0` permite aceptar un AST
-recuperado. La condición de aceptación es `resultado == 0 &&
+recuperado. La condición que centraliza `parser_accept` es `resultado == 0 &&
 parser_syntax_errors() == 0 && lexical_errors == 0`; el contador sintáctico se
 consulta mediante la función declarada en `include/analisis/parser_service.h`.
 

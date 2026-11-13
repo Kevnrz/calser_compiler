@@ -37,10 +37,8 @@
 #include "semantic_scope.h"
 #include "assembler.h"
 
-extern int yyparse(void);
 extern FILE *yyin;
 
-extern ASTNode *root;
 
 // Cantidad de errores léxicos (lexer.l).
 extern int lexical_errors;
@@ -697,16 +695,13 @@ static int phase_parse(Compilation *compilation) {
     // §8.2: los errores muestran el archivo y la línea del programa.
     diag_init(options->input);
 
-    // Recuperar puede devolver 0 con errores: revisar también parser_syntax_errors().
-    // Contrato: docs/ccom_servicios_ide.md#contrato-yyparse.
-    int result = yyparse();
+    // Aceptación completa: docs/ccom_servicios_ide.md#contrato-yyparse.
+    int accepted = parser_accept(yyin, &compilation->root);
 
     fclose(yyin);
 
     // El árbol inicial, si llegó a construirse, pertenece a main. Un AST
     // recuperado se libera normalmente, pero jamás se exporta ni se analiza.
-    compilation->root = root;
-    parser_finish();
 
     if (lexical_errors > 0) {
         fprintf(stderr,
@@ -720,7 +715,7 @@ static int phase_parse(Compilation *compilation) {
         return 0;
     }
 
-    if (result != 0 || parser_syntax_errors() > 0) {
+    if (!accepted) {
         if (parser_recovery_limited())
             fprintf(stderr, "Analisis sintactico incompleto: limite de recuperacion alcanzado.\n");
         report_phase(options, "fase 1-2: analisis lexico y sintactico", 0);

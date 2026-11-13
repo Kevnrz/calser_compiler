@@ -7,17 +7,14 @@
 #include "label_table.h"
 extern FILE *yyin;
 extern ASTNode *root;
-extern int yyparse(void);
-extern int lexical_errors;
 int main(int argc, char **argv) {
     if (argc != 2) return 2;
     yyin = fopen(argv[1], "r");
     if (!yyin) return 1;
     diag_init(argv[1]);
-    int result = yyparse();
-    parser_finish();
+    int accepted = parser_accept(yyin, &root);
     fclose(yyin);
-    if (result || lexical_errors || parser_syntax_errors()) return 1;
+    if (!accepted) return 1;
     if (!semantic_analyze(root)) return 1;
     LabelTable labels;
     label_table_init(&labels);

@@ -3,6 +3,7 @@
  */
 #include "../../representacion/tac_analysis/fixture.h"
 #include "tac_emit.h"
+#include "assembler.h"
 #include "codegen.h"
 #include "data_area.h"
 
@@ -75,8 +76,8 @@ static void permutations(void) {
             char d[8], s[8];
             if (!fixed_seen && sscanf(text, "add %7[^,], %7[^,], rz", d, s) == 2)
                 regs[isa_parse_register(d)] = regs[isa_parse_register(s)];
-            saved += !strcmp(text, "sw t0, 64(rz)") || !strcmp(text, "sw t7, 92(rz)");
-            restored += !strcmp(text, "lw t0, 64(rz)") || !strcmp(text, "lw t7, 92(rz)");
+            saved += !strcmp(text, "sw r4, 64(rz)") || !strcmp(text, "sw r11, 92(rz)");
+            restored += !strcmp(text, "lw r4, 64(rz)") || !strcmp(text, "lw r11, 92(rz)");
         }
         assert(fixed_seen && saved == 2 && restored == 2);
         assert(cg_label_address(".L_func_main") >= 0 && cg_label_address("fin_main") >= 0);
@@ -160,9 +161,9 @@ static void calls(void) {
  */
 int main(void) {
     char error[512];
-    assert(tac_emit_check_rom(4096, "ruta/rom.cls", error, sizeof error));
+    assert(asm_check_rom(4096, "ruta/rom.cls", error, sizeof error));
     assert(!error[0]);
-    assert(!tac_emit_check_rom(4097, "ruta/rom.cls", error, sizeof error));
+    assert(!asm_check_rom(4097, "ruta/rom.cls", error, sizeof error));
     assert(!strcmp(error, "ruta/rom.cls:0:0: error de generacion: ROM excedida: 4097 bundles, máximo 4096"));
     permutations();
     calls();

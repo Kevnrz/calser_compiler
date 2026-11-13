@@ -18,6 +18,25 @@
 #include "assembler.h"
 #include "isa_table.h"
 
+/* asm_check_rom — véase el contrato en assembler.h. */
+int asm_check_rom(size_t count, const char *source, char *error, size_t capacity) {
+    if (!source) {
+        if (capacity)
+            snprintf(error, capacity, "emisión requiere source_name no NULL");
+        return 0;
+    }
+    if (count > ISA_ROM_BUNDLES) {
+        if (capacity)
+            snprintf(error, capacity,
+                "%s:0:0: error de generacion: ROM excedida: %zu bundles, máximo %d",
+                source, count, ISA_ROM_BUNDLES);
+        return 0;
+    }
+    if (capacity)
+        error[0] = '\0';
+    return 1;
+}
+
 /*
  * Ensamblado en dos pasadas sobre la sintaxis de isa.md §11.
  *
@@ -34,11 +53,6 @@
 
 /* Unidades, formas y funct de las instrucciones (isa.md §6, §11.3): tabla única
  * en isa_table.h, compartida con el organizador de bundles. */
-
-/* Rangos de isa.md §4.2. */
-#define IMM_BITS    18
-#define OFFSET_BITS 18
-#define TARGET_BITS 22
 
 #define MAX_OPERANDS 5
 
@@ -407,14 +421,14 @@ static int get_immediate(Assembler *as, int line, const char *text,
         return 0;
     }
 
-    if (!fits_signed(value, IMM_BITS)) {
+    if (!isa_immediate_fits(value)) {
         asm_error(as, line,
                   "inmediato fuera de rango: %ld (de -131072 a 131071)",
                   value);
         return 0;
     }
 
-    *field = (unsigned) value & ((1u << IMM_BITS) - 1);
+    *field = (unsigned) value & ((1u << ISA_IMMEDIATE_BITS) - 1);
 
     return 1;
 }
@@ -696,7 +710,7 @@ static int encode_branch(SlotOperands *ops, uint32_t *value) {
     if (!get_register(ops->as, ops->line, ops->operand[0], &a) ||
         !get_register(ops->as, ops->line, ops->operand[1], &b) ||
         !get_destination(ops->as, ops->line, ops->operand[2], ops->pc,
-                         OFFSET_BITS, &c))
+                         ISA_OFFSET_BITS, &c))
         return 0;
 
     *value |= FIELD_RD(b) | FIELD_RS1(a) | c;
@@ -723,7 +737,7 @@ static int encode_jef(SlotOperands *ops, uint32_t *value) {
     unsigned a;
 
     if (!get_destination(ops->as, ops->line, ops->operand[0], ops->pc,
-                         TARGET_BITS, &a))
+                         ISA_TARGET_BITS, &a))
         return 0;
 
     *value |= a;
@@ -737,7 +751,7 @@ static int encode_jas(SlotOperands *ops, uint32_t *value, int *written) {
 
     if (!get_register(ops->as, ops->line, ops->operand[0], &a) ||
         !get_destination(ops->as, ops->line, ops->operand[1], ops->pc,
-                         TARGET_BITS, &b))
+                         ISA_TARGET_BITS, &b))
         return 0;
 
     *value |= FIELD_RD(a) | b;

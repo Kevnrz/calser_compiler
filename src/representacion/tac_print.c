@@ -8,12 +8,7 @@
 
 /* Alias físicos del ISA; solo recibe registros válidos (0..15). */
 static void print_physical(FILE *out, size_t id) {
-    static const char *const aliases[] = {"rz", "rl", "rx", "rg"};
-    if (id < 4) {
-        fputs(aliases[id], out);
-    } else {
-        fprintf(out, "t%zu", id - 4);
-    }
+    fputs(isa_register_name((int)id), out);
 }
 
 /* HIGH usa tN; ISA usa vN para TEMP y alias del ISA para PHYS. */

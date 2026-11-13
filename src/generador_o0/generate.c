@@ -174,9 +174,7 @@ int generate_code(ASTNode *root, const LabelTable *labels, const char *source_na
         gen_initialize_declaration(gen, global, 1, 0);
     // Puntero de la pila de llamadas: primera dirección libre de la zona
     // de ccom (ver el comentario de la pila al inicio del archivo).
-    cg_op(SLOT_ALU0,
-          "mov rx, %d",
-          data_area_end());
+    cg_stack_init(data_area_end());
  
     ASTNode *functions = ast_find_child(root, AST_FUNCTIONS);
     ASTNode *main_function = NULL;
@@ -208,14 +206,8 @@ int generate_code(ASTNode *root, const LabelTable *labels, const char *source_na
     }
 
     cg_set_line(0);
-    gen_end_of_main(gen);
-
-    /* Manejador terminal: no hay consumidor ni camino de continuación.
-     * Emitir su salto a sí mismo sin la separación automática de cg_op. */
-    char terminal_jump[128];
-    snprintf(terminal_jump, sizeof terminal_jump, "jef %s", gen->arith_error_label);
-    cg_label(gen->arith_error_label);
-    cg_bundle(NULL, NULL, terminal_jump, NULL);
+    cg_program_end(gen->program_end_label);
+    cg_program_end(gen->arith_error_label);
 
     return gen->generation_errors == 0 ? 0 : 1;
 }

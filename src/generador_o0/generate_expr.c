@@ -24,65 +24,6 @@
 
 
 /*
- * gen_arith_emit_op — adapta operaciones aritméticas y de arreglos al emisor.
- *
- * Entrada:
- *   user  dato del callback, no utilizado.
- *   op  operación o NULL.
- * Salida:
- *   1 si emite; 0 si el formato o slot no es aceptado.
- *   Efectos: agrega etiquetas u operaciones a codegen.
- * Restricciones:
- *   slots -1, 0, 2 y 3; la etiqueta debe terminar en dos puntos y caber en
- *   128 bytes.
- */
-int gen_arith_emit_op(void *user, const CGArithOp *op) {
-    (void)user;
-
-    if (op == NULL)
-        return 0;
-
-    // Las etiquetas se representan con slot == -1.
-    if (op->slot == -1) {
-        size_t len = strlen(op->text);
-
-        if (len == 0 || op->text[len - 1] != ':')
-            return 0;
-
-        char label_name[128];
-
-        if (len >= sizeof(label_name))
-            return 0;
-
-        memcpy(label_name, op->text, len - 1);
-        label_name[len - 1] = '\0';
-
-        cg_label(label_name);
-        return 1;
-    }
-
-    // Slot 0 del emisor aritmético = ALU0.
-    if (op->slot == 0) {
-        cg_op(SLOT_ALU0, "%s", op->text);
-        return 1;
-    }
-
-    // Slot 2 del emisor aritmético = unidad de saltos BRU.
-    if (op->slot == 2) {
-        cg_op(SLOT_BRU, "%s", op->text);
-        return 1;
-    }
-
-    // Slot 3 del emisor de arreglos = LSU.
-    if (op->slot == 3) {
-        cg_op(SLOT_LSU, "%s", op->text);
-        return 1;
-    }
-
-    return 0;
-}
-
-/*
  * emit_software_arithmetic — expande multiplicación, división, módulo o potencia.
  *
  * Entrada:
@@ -207,7 +148,7 @@ static int emit_short_circuit(GenCtx *gen, ASTNode *node, ASTNode *left, ASTNode
     cg_op(SLOT_BRU,
           "%s %s, rz, %s",
           node->kind == AST_AND ? "beq" : "bne",
-          gen_reg_name(result),
+          isa_register_name(result),
           end_label);
 
     int other = gen_expression(gen, right);
@@ -219,8 +160,8 @@ static int emit_short_circuit(GenCtx *gen, ASTNode *node, ASTNode *left, ASTNode
 
     cg_op(SLOT_ALU0,
           "saddi %s, %s, 0",
-          gen_reg_name(result),
-          gen_reg_name(other));
+          isa_register_name(result),
+          isa_register_name(other));
 
     gen_free_reg(gen, other);
 
@@ -300,14 +241,14 @@ static int emit_binary_expression(GenCtx *gen, ASTNode *node) {
             // a >= b equivale a negar a < b.
             cg_op(SLOT_ALU0,
                   "slt %s, %s, %s",
-                  gen_reg_name(rd_left),
-                  gen_reg_name(rd_left),
-                  gen_reg_name(rd_right));
+                  isa_register_name(rd_left),
+                  isa_register_name(rd_left),
+                  isa_register_name(rd_right));
 
             cg_op(SLOT_ALU0,
                   "seq %s, %s, rz",
-                  gen_reg_name(rd_left),
-                  gen_reg_name(rd_left));
+                  isa_register_name(rd_left),
+                  isa_register_name(rd_left));
 
             gen_free_reg(gen, rd_right);
             return rd_left;
@@ -323,9 +264,9 @@ static int emit_binary_expression(GenCtx *gen, ASTNode *node) {
     cg_op(SLOT_ALU0,
           "%s %s, %s, %s",
           op,
-          gen_reg_name(rd_left),
-          gen_reg_name(rd_left),
-          gen_reg_name(rd_right));
+          isa_register_name(rd_left),
+          isa_register_name(rd_left),
+          isa_register_name(rd_right));
 
     gen_free_reg(gen, rd_right);
 
@@ -406,13 +347,13 @@ static int emit_unary(GenCtx *gen, ASTNode *node) {
     if (node->kind == AST_NEG) {
         cg_op(SLOT_ALU0,
               "sub %s, rz, %s",
-              gen_reg_name(rd),
-              gen_reg_name(rd));
+              isa_register_name(rd),
+              isa_register_name(rd));
     } else {
         cg_op(SLOT_ALU0,
               "seq %s, %s, rz",
-              gen_reg_name(rd),
-              gen_reg_name(rd));
+              isa_register_name(rd),
+              isa_register_name(rd));
     }
 
     return rd;
@@ -801,7 +742,7 @@ static int check_call(GenCtx *gen, ASTNode *node, int result_needed,
         }
 
         if (call->return_symbol->address < 0 ||
-            call->return_symbol->address > 131071) {
+            !isa_immediate_fits(call->return_symbol->address)) {
             gen_report_error(gen, node,
                              "direccion de retorno invalida");
             return -1;
@@ -828,7 +769,7 @@ static int check_call(GenCtx *gen, ASTNode *node, int result_needed,
 
         if (param == NULL ||
             param->address < 0 ||
-            param->address > 131071) {
+            !isa_immediate_fits(param->address)) {
             gen_report_error(gen, node,
                              "direccion de parametro invalida");
             return -1;
@@ -859,7 +800,7 @@ static void save_live_temporaries(GenCtx *gen, SavedRegs *saved) {
             int reg = TEMP_FIRST + i;
 
             saved->regs[saved->count++] = reg;
-            gen_stack_push(reg);
+            cg_stack_push(reg);
         }
     }
 }
@@ -910,7 +851,7 @@ static int push_arguments(GenCtx *gen, const CallInfo *call,
             return -1;
         }
 
-        gen_stack_push(reg);
+        cg_stack_push(reg);
         gen_free_reg(gen, reg);
     }
 
@@ -973,7 +914,7 @@ static int store_arguments(GenCtx *gen, ASTNode *node, const CallInfo *call,
                                  "no se pudo pasar el arreglo como argumento");
         }
         else {
-            gen_stack_pop(reg);
+            cg_stack_pop(reg);
 
             store_result = gen_store_symbol(gen, param, reg, node);
         }
@@ -1019,7 +960,7 @@ static int jump_to_callee(GenCtx *gen, const CallInfo *call,
     // Los valores de argumentos ya salieron de la pila.
     // Solo quedan los temporales vivos guardados del llamador.
     // Guarda el enlace de retorno anterior antes de que jas escriba rl.
-    gen_stack_push(1);  // rl
+    cg_stack_push(1);  // rl
 
     // Invoca la función.
     // jas escribe la dirección de retorno en rl.
@@ -1027,11 +968,11 @@ static int jump_to_callee(GenCtx *gen, const CallInfo *call,
 
     // El E de la función llamada vuelve mediante el nuevo rl.
     // Restaura el rl anterior del llamador al volver.
-    gen_stack_pop(1);
+    cg_stack_pop(1);
 
     // Restaura los temporales vivos del llamador en orden inverso.
     for (int i = saved->count - 1; i >= 0; i--) {
-        gen_stack_pop(saved->regs[i]);
+        cg_stack_pop(saved->regs[i]);
     }
 
     return 0;
@@ -1121,15 +1062,15 @@ static int emit_crypto_argument(void *user, ASTNode *expr, int dst,
     }
     cg_gap();
     for (int i = 0; i < count; i++)
-        cg_op(SLOT_LSU, "sw %s, %d(rz)", gen_reg_name(saved[i]), slots[i]);
+        cg_op(SLOT_LSU, "sw %s, %d(rz)", isa_register_name(saved[i]), slots[i]);
     gen_reset_registers(gen);
     int result = gen_expression(gen, expr);
     if (result < 0)
         return 1;
     if (result != dst)
-        cg_op(SLOT_ALU0, "saddi %s, %s, 0", gen_reg_name(dst), gen_reg_name(result));
+        cg_op(SLOT_ALU0, "saddi %s, %s, 0", isa_register_name(dst), isa_register_name(result));
     for (int i = 0; i < count; i++)
-        cg_op(SLOT_LSU, "lw %s, %d(rz)", gen_reg_name(saved[i]), slots[i]);
+        cg_op(SLOT_LSU, "lw %s, %d(rz)", isa_register_name(saved[i]), slots[i]);
     gen_reset_registers(gen);
     gen->temp_used[dst - TEMP_FIRST] = 1;
     for (int reg = 4; reg < 16; reg++)
@@ -1158,8 +1099,8 @@ void gen_expr_setup(GenCtx *gen) {
     gen->crypto = (CGCryptoContext) {.eval = emit_crypto_argument, .next_label = 1};
     gen->crypto.user = gen;
 
-    // La aritmética y los arreglos emiten por gen_arith_emit_op.
-    gen->arithmetic.emit = gen_arith_emit_op;
+    // La aritmética y los arreglos emiten por cg_emit_arith_op.
+    gen->arithmetic.emit = cg_emit_arith_op;
     gen->arithmetic.user = NULL;
     gen->arithmetic.next_label = 0;
 }

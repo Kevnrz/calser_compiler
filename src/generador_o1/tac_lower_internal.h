@@ -29,7 +29,6 @@ void tl_fail(TacLower *lower, const char *message);
 TacInstruction *tl_emit(TacLower *lower, const char *name,
                         TacOperand dest, TacOperand src1, TacOperand src2);
 void tl_location(const TacLower *lower, TacInstruction *instruction);
-int tl_immediate(int64_t value);
 void tl_constant(TacLower *lower, TacOperand dest, int64_t value);
 TacOperand tl_value(TacLower *lower, TacOperand operand, TacLowerSourcePolicy policy);
 void tl_load_symbol(TacLower *lower, TacOperand dest, const Symbol *symbol);

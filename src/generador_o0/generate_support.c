@@ -26,7 +26,7 @@
  * siguen con asignación estática (libro §7.1.1); solo esto usa una pila.
  *
  * rx es un temporal libre según isa.md §8; aquí se usa por convención como
- * puntero de pila. La pila crece hacia arriba (gen_stack_push).
+ * puntero de pila. La pila crece hacia arriba (cg_stack_push).
  *
  * Vive en la zona de ccom (0x0000–0x0FFF): empieza en la primera dirección
  * libre después de la última área que asignó el semántico
@@ -87,21 +87,6 @@ ASTNode *gen_child_at(ASTNode *node, int index) {
     return child;
 }
 
-/* gen_reg_name — véase el contrato en generate_emit.h. */
-const char *gen_reg_name(int reg) {
-    static const char *names[16] = {
-        "rz", "rl", "rx", "rg",
-        "t0", "t1", "t2", "t3",
-        "t4", "t5", "t6", "t7",
-        "t8", "t9", "t10", "t11"
-    };
-
-    if (reg < 0 || reg >= 16)
-        return "rz";
-
-    return names[reg];
-}
-
 /* gen_reset_registers — véase el contrato en generate_internal.h. */
 void gen_reset_registers(GenCtx *gen) {
     memset(gen->temp_used, 0, sizeof(gen->temp_used));
@@ -136,7 +121,7 @@ int gen_mov(GenCtx *gen, int rd, long immediate, ASTNode *node) {
         return -1;
     }
     if (plan.count == 1) {
-        cg_op(SLOT_ALU0, "mov %s, %ld", gen_reg_name(rd), (long) plan.steps[0].immediate);
+        cg_op(SLOT_ALU0, "mov %s, %ld", isa_register_name(rd), (long) plan.steps[0].immediate);
         return 0;
     }
     int scratch = gen_alloc_reg(gen);
@@ -146,14 +131,14 @@ int gen_mov(GenCtx *gen, int rd, long immediate, ASTNode *node) {
     }
     /* DEST se vincula a rd y SCRATCH al auxiliar; el empaquetado sigue siendo P1. */
     char first[64], second[64];
-    snprintf(first, sizeof(first), "mov %s, %ld", gen_reg_name(rd),
+    snprintf(first, sizeof(first), "mov %s, %ld", isa_register_name(rd),
              (long) plan.steps[0].immediate);
-    snprintf(second, sizeof(second), "mov %s, %ld", gen_reg_name(scratch),
+    snprintf(second, sizeof(second), "mov %s, %ld", isa_register_name(scratch),
              (long) plan.steps[1].immediate);
     cg_bundle(first, second, NULL, NULL);
     cg_gap();
-    cg_op(SLOT_ALU0, "sll %s, %s, %s", gen_reg_name(rd), gen_reg_name(rd), gen_reg_name(scratch));
-    cg_op(SLOT_ALU0, "saddi %s, %s, %ld", gen_reg_name(rd), gen_reg_name(rd),
+    cg_op(SLOT_ALU0, "sll %s, %s, %s", isa_register_name(rd), isa_register_name(rd), isa_register_name(scratch));
+    cg_op(SLOT_ALU0, "saddi %s, %s, %ld", isa_register_name(rd), isa_register_name(rd),
           (long) plan.steps[3].immediate);
     gen_free_reg(gen, scratch);
     return 0;
@@ -206,7 +191,7 @@ int gen_load_symbol(GenCtx *gen, int rd, Symbol *symbol, ASTNode *node) {
         return -1;
     }
 
-    if (symbol->address > 131071) {
+    if (!isa_immediate_fits(symbol->address)) {
         gen_report_error(gen, node,
                      "direccion fuera del rango de lw");
         return -1;
@@ -214,7 +199,7 @@ int gen_load_symbol(GenCtx *gen, int rd, Symbol *symbol, ASTNode *node) {
 
     cg_op(SLOT_LSU,
           "lw %s, %d(rz)",
-          gen_reg_name(rd),
+          isa_register_name(rd),
           symbol->address);
 
     return 0;
@@ -229,7 +214,7 @@ int gen_store_symbol(GenCtx *gen, Symbol *symbol, int rs, ASTNode *node) {
     }
 
     if (symbol->address < 0 ||
-        symbol->address > 131071) {
+        !isa_immediate_fits(symbol->address)) {
 
         gen_report_error(gen, node,
                      "direccion de almacenamiento invalida");
@@ -238,30 +223,10 @@ int gen_store_symbol(GenCtx *gen, Symbol *symbol, int rs, ASTNode *node) {
 
     cg_op(SLOT_LSU,
           "sw %s, %d(rz)",
-          gen_reg_name(rs),
+          isa_register_name(rs),
           symbol->address);
 
     return 0;
-}
-
-/* gen_stack_push — véase el contrato en generate_emit.h. */
-void gen_stack_push(int reg) {
-    cg_op(SLOT_LSU,
-          "sw %s, 0(rx)",
-          gen_reg_name(reg));
-
-    cg_op(SLOT_ALU0,
-          "saddi rx, rx, 4");
-}
-
-/* gen_stack_pop — véase el contrato en generate_emit.h. */
-void gen_stack_pop(int reg) {
-    cg_op(SLOT_ALU0,
-          "saddi rx, rx, -4");
-
-    cg_op(SLOT_LSU,
-          "lw %s, 0(rx)",
-          gen_reg_name(reg));
 }
 
 /* gen_node_label — véase el contrato en generate_internal.h. */

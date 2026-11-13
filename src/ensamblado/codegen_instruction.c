@@ -36,7 +36,7 @@
  */
 static int immediate(const char *p) {
     long n;
-    return isa_parse_integer(p, &n) && n >= -131072 && n <= 131071;
+    return isa_parse_integer(p, &n) && isa_immediate_fits(n);
 }
 /*
  * selector — comprueba un selector de dos bits.

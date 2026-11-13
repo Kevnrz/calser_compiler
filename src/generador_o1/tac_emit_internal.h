@@ -3,7 +3,7 @@
 #define TAC_EMIT_INTERNAL_H
 #include "tac_emit.h"
 #include "tac_analysis_internal.h"
-#include "generate_emit.h"
+#include "codegen_common.h"
 #include "codegen.h"
 typedef struct {
     const TacBlock *block;

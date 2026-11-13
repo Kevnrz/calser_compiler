@@ -57,7 +57,7 @@ static void initialize_cells(GenCtx *gen, ASTNode *init, Symbol *symbol, int *of
         int reg = init ? gen_expression(gen, init) : gen_alloc_reg(gen);
         if (reg < 0) { gen_report_error(gen, init, "fallo al inicializar variable"); return; }
         if (!init && gen_mov(gen, reg, 0, NULL) != 0) { gen_free_reg(gen, reg); return; }
-        cg_op(SLOT_LSU, "sw %s, %d(rz)", gen_reg_name(reg), address);
+        cg_op(SLOT_LSU, "sw %s, %d(rz)", isa_register_name(reg), address);
         gen_free_reg(gen, reg);
     }
 }

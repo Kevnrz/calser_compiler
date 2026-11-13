@@ -238,6 +238,29 @@ def test_round_trip(directory):
           'datos de p09 en el .bin' % len(programs))
 
 
+def test_rom_limit(directory):
+    """La imagen de ROM admite 4096 bundles, según enunciado §3.2.1."""
+    bundle = '{ nopi | nopi | nopi | nopi }\n'
+    for count in (4096, 4097):
+        source = directory / ('rom_%d.asm' % count)
+        base = directory / ('imagen_%d' % count)
+        source.write_text(bundle * count)
+        result = run('-x', '-p', source, '-o', base.with_suffix('.bin'))
+        if count == 4096:
+            assert result.returncode == 0, result.stderr
+            assert read_bin(base)[0][0] == count
+            assert len(hex_lines(base)) == count
+        else:
+            expected = ('%s:0:0: error de generacion: ROM excedida: '
+                        '4097 bundles, máximo 4096\n') % source
+            assert result.returncode == 1 and result.stderr == expected, result
+            assert result.stdout == '', result.stdout
+            assert '<generado>' not in result.stderr
+            assert not any(base.with_suffix(suffix).exists()
+                           for suffix in ('.bin', '.hex', '.mem'))
+    print('PASS ROM: -x acepta 4096, rechaza 4097 con ruta exacta y sin imagen ni bundles impresos')
+
+
 def main():
     with tempfile.TemporaryDirectory() as folder:
         directory = Path(folder)
@@ -246,6 +269,7 @@ def main():
         test_errors(directory)
         test_syntax(directory)
         test_round_trip(directory)
+        test_rom_limit(directory)
 
 
 if __name__ == '__main__':

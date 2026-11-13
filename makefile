@@ -10,7 +10,7 @@ BUILD_DIR = build
 GEN_DIR = $(BUILD_DIR)/generated
 OBJ_DIR = $(BUILD_DIR)/obj
 
-SOURCES = main tac_passes tac_metrics tac_lower tac_lower_value tac_lower_control tac_intervals tac_allocate tac_allocate_sites tac_emit tac_emit_pseudo tac tac_loop_marks tac_live tac_locations tac_loops tac_edit tac_cfg tac_validate tac_isa tac_pseudo tac_print tac_build tac_build_expr tac_build_stmt tac_build_flow tac_build_init ast ast_constant symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table isa_constant codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler clones repairs syntax_service suggestions diagnostics_json
+SOURCES = main codegen_common tac_passes tac_metrics tac_lower tac_lower_value tac_lower_control tac_intervals tac_allocate tac_allocate_sites tac_emit tac_emit_pseudo tac tac_loop_marks tac_live tac_locations tac_loops tac_edit tac_cfg tac_validate tac_isa tac_pseudo tac_print tac_build tac_build_expr tac_build_stmt tac_build_flow tac_build_init ast ast_constant symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table isa_constant codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler clones repairs syntax_service suggestions diagnostics_json
 OBJECTS = $(addprefix $(OBJ_DIR)/,$(addsuffix .o,$(SOURCES))) \
           $(OBJ_DIR)/parser.tab.o $(OBJ_DIR)/lex.yy.o
 
@@ -51,7 +51,7 @@ $(BUILD_DIR)/emitir_arreglos: src/rutinas/codegen_array.c pruebas/rutinas/arregl
 check-arrays: $(BUILD_DIR)/emitir_arreglos
 	python3 pruebas/rutinas/arreglos/probar.py $<
 
-$(BUILD_DIR)/emitir_crypto: src/ensamblado/codegen.c src/ensamblado/codegen_instruction.c src/isa/isa_table.c src/ensamblado/codegen_schedule.c src/ensamblado/codegen_verify.c src/rutinas/codegen_crypto.c pruebas/rutinas/crypto/emitir.c include/ensamblado/codegen.h include/isa/isa_table.h include/ensamblado/codegen_schedule.h include/rutinas/codegen_crypto.h include/analisis/ast.h include/analisis/symbol_table.h | $(BUILD_DIR)
+$(BUILD_DIR)/emitir_crypto: src/ensamblado/codegen.c src/ensamblado/codegen_instruction.c src/isa/isa_table.c src/ensamblado/codegen_schedule.c src/ensamblado/codegen_verify.c src/rutinas/codegen_crypto.c src/rutinas/codegen_common.c pruebas/rutinas/crypto/emitir.c include/ensamblado/codegen.h include/isa/isa_table.h include/ensamblado/codegen_schedule.h include/rutinas/codegen_crypto.h include/rutinas/codegen_common.h include/analisis/ast.h include/analisis/symbol_table.h | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(filter %.c,$^) -o $@
 
 check-crypto: $(BUILD_DIR)/emitir_crypto $(TARGET)
@@ -231,7 +231,7 @@ check-tac-allocate: $(BUILD_DIR)/probar_tac_allocate $(BUILD_DIR)/asignar_tac
 
 # D/E: emisión directa y comparación observable por la CLI -O1.
 TAC_EMIT_SOURCES = src/generador_o1/tac_emit.c src/generador_o1/tac_emit_pseudo.c
-TAC_EMIT_HEADERS = include/generador_o1/tac_emit.h src/generador_o1/tac_emit_internal.h include/generador_o0/generate_emit.h
+TAC_EMIT_HEADERS = include/generador_o1/tac_emit.h src/generador_o1/tac_emit_internal.h include/rutinas/codegen_common.h
 
 $(BUILD_DIR)/probar_tac_emit: pruebas/generador_o1/tac_emit/probar.c $(TAC_EMIT_HEADERS) $(TAC_ALLOCATE_HEADERS) $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $(filter %.c %.o,$^) $(LDLIBS)

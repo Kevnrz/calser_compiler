@@ -13,6 +13,7 @@
 #define ASSEMBLER_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 /* Ensamblador de ccom: traduce líneas en la sintaxis de isa.md §11 a los
  * bundles de 128 bits de isa.md §3 (cuatro palabras de 32 bits).
@@ -31,6 +32,23 @@ typedef struct {
 /* ==========================================================================
  * ENSAMBLADO Y LIBERACIÓN
  * ======================================================================= */
+
+/*
+ * asm_check_rom — comprueba la capacidad de la ROM (enunciado §3.1.2 y §3.2.1).
+ *
+ * Entrada:
+ *   bundle_count  cantidad final de bundles ensamblados.
+ *   source_name  nombre real del archivo de entrada, obligatorio.
+ *   error  buffer escribible; puede ser NULL solo si capacity es cero.
+ * Salida:
+ *   1 si cabe; 0 con el mismo diagnóstico de ROM del generador anterior.
+ * Efectos:
+ *   escribe error, vacío al aceptar; no emite ni escribe la imagen de ROM.
+ * Restricciones:
+ *   llamar antes de imprimir bundles o escribir binarios, en O0, O1 y -x.
+ */
+int asm_check_rom(size_t bundle_count, const char *source_name,
+                   char *error, size_t capacity);
 
 /*
  * asm_assemble — ensambla un programa en dos pasadas.

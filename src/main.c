@@ -481,6 +481,16 @@ static int assemble_and_write(const Options *options,
         return 1;
     }
 
+    /* Límite de la imagen final, común a O0/O1/-x (enunciado §3.2.1).
+     * El nombre real evita filtrar el origen interno "<generado>" de O0. */
+    char error[512];
+    if (!asm_check_rom((size_t)program.count, options->input, error, sizeof error)) {
+        fprintf(stderr, "%s\n", error);
+        report_phase(options, "ensamblado", 0);
+        asm_free(&program);
+        return 1;
+    }
+
     report_phase(options, "ensamblado", 1);
 
     // -p: índice del bundle, el bundle en ensamblador y como en el .hex.

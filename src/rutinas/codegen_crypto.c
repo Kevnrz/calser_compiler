@@ -17,6 +17,7 @@
 
 #include "codegen.h"
 #include "codegen_crypto.h"
+#include "codegen_common.h"
 
 #define TEMP_MASK 0xFFF0u
 
@@ -62,43 +63,6 @@ static int valid_area(const CGCryptoContext *ctx) {
         return 0;
     int64_t end = (int64_t) f->frame.area_base + f->frame.area_size;
     return (int64_t) f->frame.temp_base + 48 <= end && end <= CG_DATA_BYTES;
-}
-
-/*
- * save_live — guarda temporales vivos antes de evaluar argumentos.
- *
- * Entrada:
- *   ctx  contexto validado.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: emite separación y sw en casillas de temp_base.
- * Restricciones:
- *   live_mask solo bits ISA 4–15; área comprobada.
- */
-static void save_live(const CGCryptoContext *ctx) {
-    if (ctx->live_mask == 0)
-        return;
-    cg_gap();  /* La última expresión del llamador puede haber escrito un vivo. */
-    for (int r = 4; r < 16; r++)
-        if (ctx->live_mask & (1u << r))
-            cg_op(SLOT_LSU, "sw r%d, %d(rz)", r, ctx->function->frame.temp_base + 4 * (r - 4));
-}
-
-/*
- * restore_live — restaura temporales vivos después de la expansión.
- *
- * Entrada:
- *   ctx  contexto validado.
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: emite lw desde casillas de temp_base.
- * Restricciones:
- *   las casillas guardadas no fueron sobrescritas por el evaluador.
- */
-static void restore_live(const CGCryptoContext *ctx) {
-    for (int r = 4; r < 16; r++)
-        if (ctx->live_mask & (1u << r))
-            cg_op(SLOT_LSU, "lw r%d, %d(rz)", r, ctx->function->frame.temp_base + 4 * (r - 4));
 }
 
 /*
@@ -217,11 +181,11 @@ static int valid_template(const CGCryptoTemplate *operation, const unsigned *nex
         return 0;
     const CryptoOperationInfo *info = &operations[operation->operation];
     int loop = info->arguments == 4;
-    int expected[] = {info->arguments ? 10 : -1, -1, -1};
+    int expected[] = {info->arguments ? CG_CRYPTO_REG_ARGUMENT : -1, -1, -1};
     if (loop) {
-        expected[0] = 6;
-        expected[1] = 7;
-        expected[2] = 9;
+        expected[0] = CG_CRYPTO_REG_SOURCE;
+        expected[1] = CG_CRYPTO_REG_DEST;
+        expected[2] = CG_CRYPTO_REG_COUNT;
     }
     for (unsigned i = 0; i < 3; i++) {
         if (operation->registers[i] != expected[i])
@@ -271,7 +235,7 @@ int cg_crypto_emit_template(const CGCryptoTemplate *operation, unsigned *next_la
  * Efectos:
  *   escribe args y operation; no emite ni cambia el contexto.
  * Restricciones:
- *   valida aridad, selectores y contador antes de save_live, como en P1.
+ *   valida aridad, selectores y contador antes de preservar vivos, como en P1.
  */
 static int prepare_arguments(const CGCryptoContext *ctx, ASTNode *node,
                              ASTNode *args[4], CGCryptoTemplate *operation) {
@@ -299,13 +263,13 @@ static int prepare_arguments(const CGCryptoContext *ctx, ASTNode *node,
     if (count != info->arguments || (count != 0 && ctx->eval == NULL))
         return 1;
     *operation = (CGCryptoTemplate){.operation = (CGCryptoOperation)kind,
-                                  .registers = {count ? 10 : -1, -1, -1}, .k = -1, .w = -1};
+                                  .registers = {count ? CG_CRYPTO_REG_ARGUMENT : -1, -1, -1}, .k = -1, .w = -1};
     if (info->arguments == 4) {
         if (!selector(args[3]))
             return 1;
-        operation->registers[0] = 6;
-        operation->registers[1] = 7;
-        operation->registers[2] = 9;
+        operation->registers[0] = CG_CRYPTO_REG_SOURCE;
+        operation->registers[1] = CG_CRYPTO_REG_DEST;
+        operation->registers[2] = CG_CRYPTO_REG_COUNT;
         operation->k = (int)args[3]->number;
     } else if (kind == CG_CRYPTO_KV_WRITE) {
         if (!selector(args[0]) || !selector(args[1]))
@@ -325,19 +289,19 @@ static int prepare_arguments(const CGCryptoContext *ctx, ASTNode *node,
  * Efectos:
  *   emite evaluaciones y separaciones, conservando orden y máscaras del P1.
  * Restricciones:
- *   save_live ya ejecutado; no restaura ni consume etiquetas ante un fallo.
+ *   vivos ya guardados; no restaura ni consume etiquetas ante un fallo.
  */
 static int evaluate_arguments(CGCryptoContext *ctx, ASTNode *args[4],
                               const CGCryptoTemplate *operation) {
     int count = operations[operation->operation].arguments;
     if (count == 4) {
-        return evaluate(ctx, args[0], 6, 0) ||
-               evaluate(ctx, args[1], 7, 1u << 6) ||
-               evaluate(ctx, args[2], 9, (1u << 6) | (1u << 7));
+        return evaluate(ctx, args[0], CG_CRYPTO_REG_SOURCE, 0) ||
+               evaluate(ctx, args[1], CG_CRYPTO_REG_DEST, 1u << CG_CRYPTO_REG_SOURCE) ||
+               evaluate(ctx, args[2], CG_CRYPTO_REG_COUNT, (1u << CG_CRYPTO_REG_SOURCE) | (1u << CG_CRYPTO_REG_DEST));
     }
     if (count == 0)
         return 0;
-    return evaluate(ctx, operation->operation == CG_CRYPTO_KV_WRITE ? args[2] : args[0], 10, 0);
+    return evaluate(ctx, operation->operation == CG_CRYPTO_KV_WRITE ? args[2] : args[0], CG_CRYPTO_REG_ARGUMENT, 0);
 }
 
 /* cg_crypto — véase el contrato en codegen_crypto.h. */
@@ -346,11 +310,12 @@ int cg_crypto(CGCryptoContext *ctx, ASTNode *node) {
     CGCryptoTemplate operation;
     if (prepare_arguments(ctx, node, args, &operation))
         return 1;
-    save_live(ctx);
+    const FrameLayout *frame = ctx->function ? &ctx->function->frame : NULL;
+    if (!cg_preserve(frame, (uint16_t)ctx->live_mask, 0))
+        return 1;
     if (evaluate_arguments(ctx, args, &operation))
         return 1;
     if (cg_crypto_emit_template(&operation, &ctx->next_label))
         return 1;
-    restore_live(ctx);
-    return 0;
+    return cg_preserve(frame, (uint16_t)ctx->live_mask, 1) ? 0 : 1;
 }

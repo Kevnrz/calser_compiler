@@ -7,6 +7,7 @@
  * instrucción es agregar una fila. También ofrece la lectura de registros y
  * enteros que ambos comparten, para que acepten exactamente el mismo texto.
  *
+ * También fija rangos, capacidad de ROM y convención de registros de ccom.
  * Usa: biblioteca C.
  * Lo usa: isa_table.c; codegen.h, codegen_instruction.c y assembler.c.
  * Referencias: isa.md §3, §4.2, §6.
@@ -16,6 +17,30 @@
 #define ISA_TABLE_H
 
 #include <stdint.h>
+
+/* Límites del procesador (isa.md §4.2 y §6; enunciado §3.1.2 y §3.2.1). */
+#define ISA_IMMEDIATE_BITS 18
+#define ISA_OFFSET_BITS    18
+#define ISA_TARGET_BITS    22
+#define ISA_ROM_BUNDLES    4096
+
+/* Convención de ccom; el ISA solo fija rz. rx conserva la pila del Proyecto I;
+ * rg es auxiliar del derrame y no permanece vivo (Aho §7.2 y §8.8). */
+enum { REG_ZERO = 0, REG_LINK = 1, REG_STACK = 2, REG_SPILL = 3,
+       REG_TEMP_FIRST = 4, REG_TEMP_LAST = 15, REG_TEMP_COUNT = 12 };
+#define REG_CALL_CLOBBERS UINT16_C(0xfff0)
+
+/* Entrada: entero sin normalizar. Salida: 1 si cabe con signo; sin efectos.
+ * Restricciones: inline para consumidores que se enlazan solos, como isa_constant. */
+static inline int isa_immediate_fits(int64_t value) {
+    return value >= -(INT64_C(1) << (ISA_IMMEDIATE_BITS - 1)) &&
+           value <   (INT64_C(1) << (ISA_IMMEDIATE_BITS - 1));
+}
+
+/* Entrada: registro ISA. Salida: alias prestado rz/rl/rx/rg/t0..t11.
+ * Efectos: ninguno. Restricciones: fuera de 0..15 devuelve rz. */
+const char *isa_register_name(int reg);
+
 
 /* ==========================================================================
  * TABLA DE INSTRUCCIONES

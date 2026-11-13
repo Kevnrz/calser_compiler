@@ -562,13 +562,22 @@ char *isa_trim(char *text) {
     return text;
 }
 
+static const char *const REGISTER_NAMES[] = {
+    "rz", "rl", "rx", "rg", "t0", "t1", "t2", "t3",
+    "t4", "t5", "t6", "t7", "t8", "t9", "t10", "t11"
+};
+
+/* isa_register_name — véase el contrato en isa_table.h. */
+const char *isa_register_name(int reg) {
+    return REGISTER_NAMES[reg < REG_ZERO || reg > REG_TEMP_LAST ? REG_ZERO : reg];
+}
+
 /* isa_parse_register — véase el contrato en isa_table.h. */
 int isa_parse_register(const char *text) {
-    static const char *const ALIASES[] = { "rz", "rl", "rx", "rg" };
 
     for (int i = 0; i < 4; i++) {
 
-        if (strcmp(text, ALIASES[i]) == 0)
+        if (strcmp(text, REGISTER_NAMES[i]) == 0)
             return i;
     }
 

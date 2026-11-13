@@ -15,6 +15,10 @@
 #include "ast.h"
 #include "symbol_table.h"
 
+/* Registros fijos de las plantillas (isa.md §6.4 y §9.3). */
+enum { CG_CRYPTO_REG_SOURCE = 6, CG_CRYPTO_REG_DEST = 7,
+       CG_CRYPTO_REG_COUNT = 9, CG_CRYPTO_REG_ARGUMENT = 10 };
+
 /* Adaptador del evaluador de Kevin. Registros expresados como números ISA.
  * Evalúa expr en dst (4..15), preservando los registros de preserve_mask.
  * Devuelve 0 si tuvo éxito. Puede usar los demás temporales como scratch.

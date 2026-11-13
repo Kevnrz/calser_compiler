@@ -102,12 +102,11 @@ int tac_isa_validate(const TacInstruction *instruction, char *error, size_t cap)
     }
     int memory = isa->form == ISA_FORM_LOAD || isa->form == ISA_FORM_STORE;
     int64_t offset = instruction->isa.displacement;
-    if ((memory && (offset < -131072 || offset > 131071)) || (!memory && offset)) {
+    if ((memory && !isa_immediate_fits(offset)) || (!memory && offset)) {
         return tac_error(error, cap, "desplazamiento ISA inválido");
     }
     if ((isa->form == ISA_FORM_MOV || isa->form == ISA_FORM_IMM) &&
-        (instruction->src2.value.integer < -131072 ||
-         instruction->src2.value.integer > 131071)) {
+        !isa_immediate_fits(instruction->src2.value.integer)) {
         return tac_error(error, cap, "inmediato ISA fuera de 18 bits con signo");
     }
     return 1;

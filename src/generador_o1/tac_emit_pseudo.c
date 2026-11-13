@@ -11,8 +11,8 @@ typedef struct {
 
 /* Entrada: plan, frame y modo. Salida: 1 emitido, 0 con diagnóstico.
  * Efectos: guarda/restaura solo preservados en sus casillas ABI.
- * Restricciones: un único ayudante D; duplicación conocida con save_live y
- * restore_live de CRYPTO P1, pendiente de limpieza después de integrar C2.3.
+ * Restricciones: el plan decide los vivos; cg_preserve comparte las casillas
+ * y el orden ascendente con CRYPTO (Aho §7.2 y §8.8).
  */
 static int preserve(TacEmitter *e, const TacFunction *f, const TacInstruction *i,
                      const TacEmissionSite *site, int restore) {
@@ -20,18 +20,11 @@ static int preserve(TacEmitter *e, const TacFunction *f, const TacInstruction *i
         return te_error(e, i, "sitio sin plan de preservación");
     if (!site->preserved_count)
         return 1;
-    const FrameLayout *frame = &f->symbol->frame;
-    int64_t end = (int64_t)frame->area_base + frame->area_size;
-    if (frame->area_base < 0 || frame->temp_base < frame->area_base ||
-        frame->temp_base % 4 || (int64_t)frame->temp_base + 48 > end || end > CG_DATA_BYTES)
+    uint16_t mask = 0;
+    for (size_t k = 0; k < site->preserved_count; k++)
+        mask |= (uint16_t)(1u << site->preserved[k].physical_register);
+    if (!cg_preserve(&f->symbol->frame, mask, restore))
         return te_error(e, i, "área de preservación inválida");
-    if (!restore)
-        cg_gap();
-    for (size_t k = 0; k < site->preserved_count; k++) {
-        unsigned r = site->preserved[k].physical_register;
-        cg_op(SLOT_LSU, "%s %s, %d(rz)", restore ? "lw" : "sw", gen_reg_name((int)r),
-            frame->temp_base + 4 * ((int)r - TAC_P1_TEMP_FIRST));
-    }
     return 1;
 }
 
@@ -57,12 +50,12 @@ static void parallel_copies(RegisterCopy copies[3], size_t count) {
                 ready = k;
         }
         if (ready != count) {
-            cg_op(SLOT_ALU0, "add %s, %s, rz", gen_reg_name(copies[ready].dest),
-                  gen_reg_name(copies[ready].source));
+            cg_op(SLOT_ALU0, "add %s, %s, rz", isa_register_name(copies[ready].dest),
+                  isa_register_name(copies[ready].source));
             copies[ready] = copies[--count];
         } else {
             int old = copies[0].dest;
-            cg_op(SLOT_ALU0, "add t0, %s, rz", gen_reg_name(old));
+            cg_op(SLOT_ALU0, "add t0, %s, rz", isa_register_name(old));
             for (size_t k = 0; k < count; k++)
                 if (copies[k].source == old)
                     copies[k].source = TAC_P1_TEMP_FIRST;
@@ -88,14 +81,14 @@ static int crypto(TacEmitter *e, const TacInstruction *i) {
     size_t count = 0;
     if (loop) {
         TacOperand sources[] = {i->dest, i->src1, i->src2};
-        const int fixed[] = {6, 7, 9};
+        const int fixed[] = {CG_CRYPTO_REG_SOURCE, CG_CRYPTO_REG_DEST, CG_CRYPTO_REG_COUNT};
         for (size_t k = 0; k < 3; k++) {
             operation.registers[k] = fixed[k];
             copies[count++] = (RegisterCopy){fixed[k], (int)sources[k].value.id};
         }
     } else if (argument) {
-        operation.registers[0] = 10;
-        copies[count++] = (RegisterCopy){10, (int)i->src1.value.id};
+        operation.registers[0] = CG_CRYPTO_REG_ARGUMENT;
+        copies[count++] = (RegisterCopy){CG_CRYPTO_REG_ARGUMENT, (int)i->src1.value.id};
     }
     parallel_copies(copies, count);
     cg_gap(); /* La primera lectura de un bundle fijo no puede ver una escritura pendiente. */
@@ -138,9 +131,9 @@ int te_emit_special(TacEmitter *e, const TacFunction *f, const TacInstruction *i
         const char *callee = te_function_label(e, i->isa.target.value.symbol);
         if (!callee)
             return te_error(e, i, "llamada sin etiqueta de función");
-        gen_stack_push(TAC_P1_RL);
+        cg_stack_push(TAC_P1_RL);
         cg_op(SLOT_BRU, "jas rl, %s", callee);
-        gen_stack_pop(TAC_P1_RL);
+        cg_stack_pop(TAC_P1_RL);
     } else if (i->pseudo.kind >= TAC_PSEUDO_MUL && i->pseudo.kind <= TAC_PSEUDO_POW) {
         if (!arithmetic(e, i, site))
             return 0;

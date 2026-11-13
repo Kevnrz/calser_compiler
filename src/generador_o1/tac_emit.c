@@ -21,20 +21,6 @@ const char *te_function_label(const TacEmitter *e, const Symbol *function) {
     return label_table_get(e->input->labels, function->decl_node, LABEL_FUNCTION);
 }
 
-/* Entrada: cantidad final y nombre. Salida: 1 válida, 0 con diagnóstico.
- * Efectos: solo escribe error. Restricciones: recibe bundles finales, organizados o conservadores.
- */
-int tac_emit_check_rom(size_t count, const char *source, char *error, size_t capacity) {
-    if (!source)
-        return tac_error(error, capacity, "emisión requiere source_name no NULL");
-    if (count > 4096)
-        return tac_error(error, capacity,
-            "%s:0:0: error de generacion: ROM excedida: %zu bundles, máximo 4096", source, count);
-    if (capacity)
-        error[0] = '\0';
-    return 1;
-}
-
 /* Entrada: programa y plan. Salida: 1 válidos, 0 con diagnóstico.
  * Efectos: prepara etiquetas globales. Restricciones: no recalcula C2 ni sus máscaras.
  */
@@ -89,7 +75,7 @@ static const char *block_label(const TacEmitter *e, const TacBlock *block) {
  */
 static const char *operand_text(TacOperand operand, char buffer[32]) {
     if (operand.kind == TAC_PHYS)
-        return gen_reg_name((int)operand.value.id);
+        return isa_register_name((int)operand.value.id);
     if (operand.kind == TAC_INTEGER) {
         snprintf(buffer, 32, "%" PRId64, operand.value.integer);
         return buffer;
@@ -174,17 +160,6 @@ static int emit_function(TacEmitter *e, const TacFunction *f) {
     return 1;
 }
 
-/* Entrada: etiqueta global del P1. Salida: ninguna. Efectos: terminal fijo.
- * Restricciones: no usar cg_op, que añadiría separación automática; duplicación
- * conocida con gen_end_of_main/generate.c, pendiente de limpieza posterior.
- */
-static void emit_terminal(const char *label) {
-    char jump[128];
-    snprintf(jump, sizeof jump, "jef %s", label);
-    cg_label(label);
-    cg_bundle(NULL, NULL, jump, NULL);
-}
-
 /* Entrada: datos prestados. Salida: 1 éxito, 0 con diagnóstico.
  * Efectos: carga imagen, comprueba pila, emite y organiza. Restricciones: contrato
  * público; no llama tac_validate_for_emission sobre PSEUDO aún sin expandir.
@@ -193,7 +168,7 @@ int tac_emit_program(const TacEmitInput *in, char *error, size_t capacity) {
     if (!in || !in->source_name)
         return tac_error(error, capacity, "emisión requiere source_name no NULL");
     TacEmitter e = {.input = in, .error = error, .capacity = capacity,
-                    .arithmetic = {.emit = gen_arith_emit_op}};
+                    .arithmetic = {.emit = cg_emit_arith_op}};
     if (!prepare(&e))
         return 0;
     cg_init();
@@ -202,11 +177,15 @@ int tac_emit_program(const TacEmitInput *in, char *error, size_t capacity) {
         if (cg_data_set((int)address, in->initial_data[address / 4]))
             ok = te_error(&e, NULL, "imagen inicial fuera del área de datos");
     }
-    if (data_area_stack_short())
-        ok = te_error(&e, NULL, "no queda espacio para la pila de llamadas: se necesitan 256 bytes");
+    if (data_area_stack_short()) {
+        char message[128];
+        snprintf(message, sizeof message,
+                 "no queda espacio para la pila de llamadas: se necesitan %d bytes", STACK_MIN_BYTES);
+        ok = te_error(&e, NULL, message);
+    }
     if (ok) {
         cg_set_line(0);
-        cg_op(SLOT_ALU0, "mov rx, %d", data_area_end());
+        cg_stack_init(data_area_end());
         for (unsigned main_pass = 0; main_pass < 2 && ok; main_pass++) {
             for (const TacFunction *f = in->program->first; f && ok; f = f->next) {
                 if ((!strcmp(f->symbol->name, "main")) == (main_pass == 0))
@@ -216,12 +195,10 @@ int tac_emit_program(const TacEmitInput *in, char *error, size_t capacity) {
     }
     if (ok) {
         cg_set_line(0);
-        emit_terminal(e.end_label);
-        emit_terminal(e.error_label);
+        cg_program_end(e.end_label);
+        cg_program_end(e.error_label);
         if (!in->no_schedule && cg_schedule())
             ok = te_error(&e, NULL, "falló la calendarización");
-        else
-            ok = tac_emit_check_rom((size_t)cg_bundle_count(), in->source_name, error, capacity);
     }
     free(e.blocks);
     return ok;

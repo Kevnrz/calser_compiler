@@ -19,14 +19,15 @@
 #include <stddef.h>
 
 #include "ast.h"
+#include "isa_table.h"
 #include "codegen_arith.h"
-#include "generate_emit.h"
+#include "codegen_common.h"
 #include "codegen_crypto.h"
 #include "label_table.h"
 #include "symbol_table.h"
 
-#define TEMP_FIRST 4
-#define TEMP_COUNT 12
+#define TEMP_FIRST REG_TEMP_FIRST
+#define TEMP_COUNT REG_TEMP_COUNT
 
 /*
  * GenCtx — estado de una generación de código.
@@ -346,18 +347,6 @@ void gen_block(GenCtx *gen, ASTNode *block);
  *   contexto de función configurado y análisis semántico exitoso.
  */
 void gen_statement(GenCtx *gen, ASTNode *node);
-
-/*
- * gen_end_of_main — define el destino terminal del programa.
- *
- * Entrada: ninguna
- * Salida:
- *   ninguna (solo efectos).
- *   Efectos: emite program_end_label y un bundle con salto a sí mismo.
- * Restricciones:
- *   etiqueta global consultada al iniciar; llamar una vez por programa.
- */
-void gen_end_of_main(GenCtx *gen);
 
 /* ==========================================================================
  * INICIALIZACIÓN DE VARIABLES (generate_init.c)

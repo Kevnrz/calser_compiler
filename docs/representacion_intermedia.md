@@ -187,10 +187,13 @@ El llamador debe conservar los virtuales vivos que terminen en esos registros.
 C2.3 implementará la secuencia de llamada; esta tarea solo expresa el contrato.
 Parámetros y retorno pasan por las casillas del área estática de la función.
 
-rz/r0 es cero; rl/r1, enlace; rx/r2, pila; rg/r3 no se usa por la ABI P1.
+rz/r0 es cero; rl/r1, enlace; rx/r2, pila. rg/r3 es el auxiliar del derrame
+en O1/O2: se carga, se usa y se suelta; nunca queda vivo entre instrucciones.
 `docs/isa.md` §8 describe rx como temporal libre y rg como puntero global.
-ccom P1 reserva rx como pila (`generate_support.c:26,243-259`) y no usa rg:
-es una convención del compilador, no una restricción del hardware.
+ccom conserva rx como pila del Proyecto I; la convención `REG_*`, los alias,
+los anchos de inmediato/destino y `ISA_ROM_BUNDLES` se definen en
+`include/isa/isa_table.h`. Es una convención del compilador, no una restricción
+del hardware (Aho §7.2 y §8.8; enunciado §3.1.2 y §3.2.1).
 CALL de alto nivel resume conservadoramente lecturas/escrituras de rx y rl;
 jas define rl explícitamente, necesita rx y destruye t0–t11. En C2.3 los push,
 pop y accesos de parámetros tendrán dependencias explícitas sobre rx. RETURN

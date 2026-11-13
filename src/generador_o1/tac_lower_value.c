@@ -7,21 +7,6 @@
 #include "isa_constant.h"
 
 /*
- * tl_immediate — reconoce el rango exacto de un inmediato con signo de 18 bits.
- * Entrada:
- *   valor entero.
- * Salida:
- *   1 si cabe; 0 si no.
- * Efectos:
- *   ninguno.
- * Restricciones:
- *   no trunca ni normaliza el valor.
- */
-int tl_immediate(int64_t value) {
-    return value >= -131072 && value <= 131071;
-}
-
-/*
  * tl_constant — materializa el plan compartido en registros virtuales.
  * Entrada:
  *   lower, destino TEMP y entero aceptable por isa_constant_plan.
@@ -93,16 +78,16 @@ static TacOperand address(TacLower *lower, TacOperand base, TacOperand offset,
                            int64_t *displacement) {
     if (base.kind == TAC_VARIABLE) {
         int location = symbol_address(lower, base.value.symbol);
-        if (offset.kind == TAC_INTEGER && tl_immediate(offset.value.integer)) {
+        if (offset.kind == TAC_INTEGER && isa_immediate_fits(offset.value.integer)) {
             int64_t combined = (int64_t)location + offset.value.integer;
-            if (tl_immediate(combined)) {
+            if (isa_immediate_fits(combined)) {
                 *displacement = combined;
                 return tac_physical(TAC_P1_RZ);
             }
         }
         base = tl_value(lower, tac_integer(location), TL_SOURCE_FIXED_ALLOWED);
     }
-    if (offset.kind == TAC_INTEGER && tl_immediate(offset.value.integer)) {
+    if (offset.kind == TAC_INTEGER && isa_immediate_fits(offset.value.integer)) {
         *displacement = offset.value.integer;
         return base;
     }
@@ -294,7 +279,7 @@ static int binary(TacLower *lower) {
         TacOperand left = tl_value(lower, lower->source->src1, TL_SOURCE_FIXED_ALLOWED);
         TacOperand result = destination(lower);
         if (selection[k].op == TAC_ADD && lower->source->src2.kind == TAC_INTEGER &&
-            tl_immediate(lower->source->src2.value.integer)) {
+            isa_immediate_fits(lower->source->src2.value.integer)) {
             tl_emit(lower, "saddi", result, left, lower->source->src2);
         } else {
             TacOperand right = tl_value(lower, lower->source->src2, TL_SOURCE_FIXED_ALLOWED);

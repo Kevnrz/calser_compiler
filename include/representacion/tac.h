@@ -214,10 +214,10 @@ struct TacProgram {
     TacFunction *last;                /* Última función poseída, o NULL; inserción y validación. */
 };
 enum {
-    TAC_P1_RZ = 0, TAC_P1_RL = 1, TAC_P1_RX = 2, TAC_P1_RG = 3,
-    TAC_P1_TEMP_FIRST = 4, TAC_P1_TEMP_LAST = 15
+    TAC_P1_RZ = REG_ZERO, TAC_P1_RL = REG_LINK, TAC_P1_RX = REG_STACK, TAC_P1_RG = REG_SPILL,
+    TAC_P1_TEMP_FIRST = REG_TEMP_FIRST, TAC_P1_TEMP_LAST = REG_TEMP_LAST
 };
-#define TAC_P1_CALL_CLOBBERS UINT16_C(0xfff0)
+#define TAC_P1_CALL_CLOBBERS REG_CALL_CLOBBERS
 
 /* Contratos completos por función en las implementaciones.
  * Las precondiciones y rechazos están en el contrato de cada constructor.

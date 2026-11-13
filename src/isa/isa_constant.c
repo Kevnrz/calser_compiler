@@ -5,6 +5,7 @@
  * Referencias: Aho §8.1–8.2; isa.md §4.2–4.3.
  */
 #include "isa_constant.h"
+#include "isa_table.h"
 
 /*
  * isa_constant_plan — elige MOV o MOV/MOV/SLL/SADDI con roles simbólicos.
@@ -31,7 +32,7 @@ int isa_constant_plan(int64_t value, IsaConstantPlan *out) {
         .steps = {{.op = ISA_CONST_MOV, .target = ISA_CONST_DEST,
                    .immediate = (int32_t)value}},
     };
-    if (value < -131072 || value > 131071) {
+    if (!isa_immediate_fits(value)) {
         int64_t high = value / 32768;
         int64_t low = value % 32768;
         if (low < 0) {

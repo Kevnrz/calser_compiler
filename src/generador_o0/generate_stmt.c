@@ -352,7 +352,7 @@ static void emit_alternatives(GenCtx *gen, ASTNode *alternatives,
 
         cg_op(SLOT_BRU,
               "beq %s, rz, %s",
-              gen_reg_name(rc),
+              isa_register_name(rc),
               following);
 
         gen_free_reg(gen, rc);
@@ -408,7 +408,7 @@ static void emit_conditional(GenCtx *gen, ASTNode *node) {
 
     cg_op(SLOT_BRU,
           "beq %s, rz, %s",
-          gen_reg_name(rc),
+          isa_register_name(rc),
           next_label);
 
     gen_free_reg(gen, rc);
@@ -477,7 +477,7 @@ static void emit_loop_l(GenCtx *gen, ASTNode *node) {
 
     cg_op(SLOT_BRU,
           "beq %s, rz, %s",
-          gen_reg_name(rc),
+          isa_register_name(rc),
           end_label);
 
     gen_free_reg(gen, rc);
@@ -588,7 +588,7 @@ static int loop_s_enter(GenCtx *gen, LoopS *loop) {
     }
 
     gen_store_symbol(gen, loop->var, start, loop->id_node);
-    cg_op(SLOT_LSU, "sw %s, %d(rz)", gen_reg_name(end), loop->limit);
+    cg_op(SLOT_LSU, "sw %s, %d(rz)", isa_register_name(end), loop->limit);
 
     gen_free_reg(gen, start);
     gen_free_reg(gen, end);
@@ -641,14 +641,14 @@ static int loop_s_test(GenCtx *gen, LoopS *loop) {
         return -1;
     }
 
-    cg_op(SLOT_LSU, "lw %s, %d(rz)", gen_reg_name(bound), loop->limit);
+    cg_op(SLOT_LSU, "lw %s, %d(rz)", isa_register_name(bound), loop->limit);
 
     if (loop->step > 0)
         cg_op(SLOT_BRU, "bge %s, %s, %s",
-              gen_reg_name(current), gen_reg_name(bound), loop->end_label);
+              isa_register_name(current), isa_register_name(bound), loop->end_label);
     else
         cg_op(SLOT_BRU, "bge %s, %s, %s",
-              gen_reg_name(bound), gen_reg_name(current), loop->end_label);
+              isa_register_name(bound), isa_register_name(current), loop->end_label);
 
     gen_free_reg(gen, current);
     gen_free_reg(gen, bound);
@@ -687,9 +687,9 @@ static void loop_s_update(GenCtx *gen, LoopS *loop) {
         return;
     }
 
-    if (loop->step >= -131072 && loop->step <= 131071) {
+    if (isa_immediate_fits(loop->step)) {
         cg_op(SLOT_ALU0, "saddi %s, %s, %ld",
-              gen_reg_name(current), gen_reg_name(current), loop->step);
+              isa_register_name(current), isa_register_name(current), loop->step);
     }
     else {
         int amount = gen_alloc_reg(gen);
@@ -705,7 +705,7 @@ static void loop_s_update(GenCtx *gen, LoopS *loop) {
         }
 
         cg_op(SLOT_ALU0, "add %s, %s, %s",
-              gen_reg_name(current), gen_reg_name(current), gen_reg_name(amount));
+              isa_register_name(current), isa_register_name(current), isa_register_name(amount));
 
         gen_free_reg(gen, amount);
     }
@@ -746,16 +746,6 @@ static void emit_loop_s(GenCtx *gen, ASTNode *node) {
     gen_block(gen, loop.body);
 
     loop_s_update(gen, &loop);
-}
-
-/* gen_end_of_main — véase el contrato en generate_internal.h. */
-void gen_end_of_main(GenCtx *gen) {
-    char jump[96];
-
-    snprintf(jump, sizeof(jump), "jef %s", gen->program_end_label);
-
-    cg_label(gen->program_end_label);
-    cg_bundle(NULL, NULL, jump, NULL);
 }
 
 /*
@@ -867,7 +857,7 @@ static int check_rewind(GenCtx *gen, ASTNode *node, RewindInfo *info) {
             return -1;
         }
 
-        if (param->address < 0 || param->address > 131071) {
+        if (param->address < 0 || !isa_immediate_fits(param->address)) {
             gen_report_error(gen, node,
                              "direccion de parametro invalida en R");
             return -1;

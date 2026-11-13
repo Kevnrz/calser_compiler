@@ -114,7 +114,7 @@ Las futuras ediciones de reparación requerirán fronteras válidas: este permis
 4. Se ejecutan y liberan las mismas fases de análisis de la compilación normal.
 5. `diag_json_finish` escribe la respuesta, libera los mensajes capturados y desconecta el observador. Un fallo de escritura cambia el retorno a 1 y puede dejar una respuesta incompleta que el cliente debe rechazar.
 
-Archivos C: `include/diagnostics.h`, `src/diagnostics.c`, `include/diagnostics_json.h`, `src/diagnostics_json.c` y la integración de CLI en `src/main.c`.
+Archivos C: `include/comun/diagnostics.h`, `src/comun/diagnostics.c`, `include/servicios_ide/diagnostics_json.h`, `src/servicios_ide/diagnostics_json.c` y la integración de CLI en `src/main.c`.
 
 El servicio es un proceso por solicitud. Su estado global no se comparte entre documentos ni se presenta como una biblioteca C reentrante.
 
@@ -285,8 +285,8 @@ Las llamadas de Calser usan `nombre[argumentos]`. Si aparece `(` después de un 
 
 ### Cómo calcula las propuestas
 
-1. `suggestions_run`, en `src/suggestions.c`, lee la fuente acotada e instala un observador de diagnósticos silencioso.
-2. Flex recorre la fuente completa y publica sus rangos mediante `LexerObserver` (`include/lexer_service.h`). Se detectan comentarios, fragmento alrededor del cursor y errores anteriores. Los errores del sufijo posterior no bloquean el prefijo consultado.
+1. `suggestions_run`, en `src/servicios_ide/suggestions.c`, lee la fuente acotada e instala un observador de diagnósticos silencioso.
+2. Flex recorre la fuente completa y publica sus rangos mediante `LexerObserver` (`include/analisis/lexer_service.h`). Se detectan comentarios, fragmento alrededor del cursor y errores anteriores. Los errores del sufijo posterior no bloquean el prefijo consultado.
 3. Para palabras/números, el fragmento se toma cuando `inicio < cursor <= fin`; para operadores extensibles `= ! < >`, cuando `inicio <= cursor < fin`. Los delimitadores y operadores ya completos se consideran parte del prefijo. Un carácter ASCII de reservada incompleta, como `V`, puede observarse como fragmento inválido y completarse a `Vi`/`Vm`; no se modifica la regla de Flex ni se tolera ese error al compilar.
 4. Se analiza únicamente el prefijo anterior al fragmento con el parser existente. En modo consulta, `syntax_lex` sustituye el EOF temporal por un **TOKEN_CURSOR privado**, que no pertenece a ninguna producción. `yyreport_syntax_error` consulta `yypcontext_expected_tokens` con **LAC**, distingue ese marcador de un error real anterior y recoge los terminales concretos.
 5. Así un programa completo también puede ofrecer continuaciones, sin confundir EOF con un error del usuario. No se derivan reglas a partir de mensajes humanos ni se copia una gramática a Python.
@@ -414,7 +414,7 @@ No ejecuta parser, semántica, generación ni simulador. No guarda documentos ni
 1. `ide/interfaz/clones.py` reúne archivos `.cls` permitidos del proyecto y reemplaza su contenido por los buffers abiertos con nombre. Conserva las exclusiones, la comparación visual, el mínimo, la cancelación y la navegación vigilada. Los documentos nuevos con ruta pueden participar sin existir en disco; los documentos sin nombre quedan excluidos.
 2. `ide/clones.py` mantiene los modelos `Fragmento`/`ParClon`, empaqueta instantáneas y valida el protocolo. Ya no tiene regex, reservadas, comparación, firmas ni normalización del lenguaje. El helper de inspección `tokenizar` consulta `--tokens-json`; el detector productivo no lo llama.
 3. `ide/servicio_ccom.py` crea un directorio privado, escribe el paquete y lanza el ejecutable configurado, con el mismo transporte cancelable de los otros servicios. No utiliza shell. Siempre recoge el hijo y elimina el paquete, incluso al cancelar o fallar.
-4. `src/clones.c` lee el paquete acotado, observa los reconocimientos de `grammar/lexer.l` mediante `lexer_scan_text` y compara en C. Las rutas de los documentos solo identifican fuentes: **nunca se abren desde C**. Cada texto analizado coincide con la copia enviada; no hay que guardar antes de analizar.
+4. `src/servicios_ide/clones.c` lee el paquete acotado, observa los reconocimientos de `grammar/lexer.l` mediante `lexer_scan_text` y compara en C. Las rutas de los documentos solo identifican fuentes: **nunca se abren desde C**. Cada texto analizado coincide con la copia enviada; no hay que guardar antes de analizar.
 5. El adaptador convierte extremos UTF-8 a caracteres Python para el panel y el editor. No reconstruye tokens. La ventana descarta resultados si cambian buffers, carpeta, mínimo o ejecutable.
 
 ### Equivalencia
@@ -584,7 +584,7 @@ Esta regla se aplica a **todo consumidor de `yyparse()`**, incluidos los program
 auxiliares de prueba: comprobar solo `yyparse() == 0` permite aceptar un AST
 recuperado. La condición de aceptación es `resultado == 0 &&
 parser_syntax_errors() == 0 && lexical_errors == 0`; el contador sintáctico se
-consulta mediante la función declarada en `include/parser_service.h`.
+consulta mediante la función declarada en `include/analisis/parser_service.h`.
 
 Por ejemplo, este programa tiene una expresión ausente antes del `;`:
 
@@ -600,10 +600,10 @@ termina con **`yyparse() == 0`, `parser_syntax_errors() == 1` y
 `lexical_errors == 0`**. El consumidor debe rechazarlo aunque Bison haya
 terminado normalmente: `ccom` devuelve 1 y no continúa con las fases posteriores.
 En la integración C6 se corrigieron los seis auxiliares que aún comprobaban solo
-el retorno: `pruebas/tac_analysis/desde_fuente.c`,
-`pruebas/tac_allocate/desde_fuente.c`, `pruebas/tac_lower/desde_fuente.c`,
-`pruebas/tac_build/probar.c`, `pruebas/tac_build/ejecutar.c` y
-`pruebas/bundles/revisar_ir.c`.
+el retorno: `pruebas/representacion/tac_analysis/desde_fuente.c`,
+`pruebas/generador_o1/tac_allocate/desde_fuente.c`, `pruebas/generador_o1/tac_lower/desde_fuente.c`,
+`pruebas/representacion/tac_build/probar.c`, `pruebas/representacion/tac_build/ejecutar.c` y
+`pruebas/ensamblado/bundles/revisar_ir.c`.
 
 El árbol parcial no se expone como resultado válido. Si se construyó un nodo de programa, main recibe su propiedad y lo libera durante la limpieza; los símbolos descartados antes fueron liberados por Bison. `parser_finish()` libera el observador de bloques, sin borrar el contador ni liberar el árbol de main. El estado se reinicia en la siguiente consulta.
 
@@ -629,11 +629,11 @@ Una consulta con dos errores y recuperación normal tiene `status: "errors"`, do
 | Archivo | Responsabilidad |
 | --- | --- |
 | `grammar/parser.y` | Producciones de recuperación, sincronización, progreso, contador y destructores. |
-| `include/parser_service.h` | Contador, límite y limpieza del observador, sin transferir el AST a otros consumidores. |
+| `include/analisis/parser_service.h` | Contador, límite y limpieza del observador, sin transferir el AST a otros consumidores. |
 | `src/main.c` | Bloqueo de fases posteriores y limpieza del AST parcial. |
-| `src/diagnostics_json.c` | Señalar recuperación agotada como límite/truncado. |
+| `src/servicios_ide/diagnostics_json.c` | Señalar recuperación agotada como límite/truncado. |
 | `grammar/lexer.l` | Finalizar/liberar el contexto del parser en consultas de memoria. |
-| `pruebas/recuperacion/probar.py` | Globales, funciones, cuerpos/ramas/cierres, Unicode, EOF, comentarios, límites, artefactos y 120 mutaciones deterministas. |
+| `pruebas/analisis/recuperacion/probar.py` | Globales, funciones, cuerpos/ramas/cierres, Unicode, EOF, comentarios, límites, artefactos y 120 mutaciones deterministas. |
 | `ide/pruebas/test_recuperacion_sintactica.py` | Dos problemas reales navegables y corrección progresiva sin guardar; validación/reparación no aceptan entrada recuperada. |
 
 ```sh

@@ -56,4 +56,11 @@ void tac_live_free(TacLiveAnalysis *analysis);
  */
 int tac_variable_is_rename_candidate(const TacFunction *function, const Symbol *symbol,
                                       const Scope *first_scope);
+/* Raíces escalares globales/main; vector propio, liberar con free (§9.11). */
+TacOperand *tac_observable_roots(const Scope *first_scope, size_t *count);
+/* Visita ubicaciones leídas/definidas y compara identidades; Aho §9.2.5 (§9.12). */
+typedef void (*TacLocationVisit)(void *user, TacOperand location, int definition);
+void tac_locations_visit(const TacFunction *function, const TacInstruction *instruction,
+                         TacLocationVisit visit, void *user);
+int tac_location_equal(TacOperand left, TacOperand right);
 #endif

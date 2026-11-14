@@ -551,8 +551,55 @@ static void presentation_numbers(void) {
     tac_program_free(fixture.program);
 }
 
+/* §9.12: edición transaccional y clonación con destinos internos/externos. */
+static void order_and_clone(void) {
+    Symbol symbol = {.name = "aux", .kind = SYMBOL_FUNCTION, .type = TYPE_INT};
+    Scope scope = {.kind = SCOPE_GLOBAL, .symbols = &symbol};
+    TacProgram *p = tac_program_new(&scope);
+    TacFunction *f = tac_function_new(p, &symbol);
+    TacBlock *a = tac_block_new(f), *b = tac_block_new(f), *end = tac_block_new(f);
+    TacOperand local = tac_temp_new(f), shared = tac_temp_new(f), none = tac_none();
+    TacInstruction *first = tac_append(a, TAC_COPY, local, tac_integer(1), none);
+    first->source_line = 12; first->source_column = 7;
+    TacInstruction *second = tac_append(a, TAC_COPY, shared, tac_integer(7), none);
+    TacInstruction *jump = tac_append(a, TAC_GOTO, tac_label(b), none, none);
+    tac_append(b, TAC_ADD, shared, local, tac_integer(1));
+    tac_append(b, TAC_GOTO, tac_label(end), none, none);
+    TacInstruction *ret = tac_append(end, TAC_RETURN, none, shared, none);
+    rebuild(f); valid(p);
+    char error[256];
+    TacInstruction *order[] = {second, first, jump};
+    assert(tac_block_set_order(a, order, 3, error, sizeof error));
+    assert(a->first == second && second->next == first && a->last == jump);
+    TacInstruction *bad[][3] = {{first, first, jump}, {first, ret, jump}, {jump, second, first}};
+    for (size_t k = 0; k < 3; k++) {
+        assert(!tac_block_set_order(a, bad[k], 3, error, sizeof error));
+        assert(error[0] && a->first == second && second->next == first && first->next == jump);
+    }
+    const TacBlock *blocks[] = {b, a};
+    TacBlockCopy copies[2];
+    const TacBlock *duplicate[] = {a, a};
+    size_t old_temp = f->next_temp, old_label = f->next_label;
+    assert(!tac_blocks_clone(f, duplicate, 2, end, copies, error, sizeof error));
+    assert(f->next_temp == old_temp && f->next_label == old_label && !end->next);
+    assert(tac_blocks_clone(f, blocks, 2, end, copies, error, sizeof error));
+    TacBlock *ca = copies[1].copy, *cb = copies[0].copy;
+    assert(end->next == ca && ca->next == cb && f->last == cb);
+    assert(!ca->successor_count && !cb->predecessor_count);
+    assert(ca->last->dest.value.block == cb && cb->last->dest.value.block == end);
+    TacInstruction *copied_first = ca->first->next;
+    assert(copied_first->source_line == 12 && copied_first->source_column == 7);
+    assert(copied_first->dest.value.id != local.value.id);
+    assert(cb->first->src1.value.id == copied_first->dest.value.id);
+    assert(cb->first->dest.value.id == shared.value.id);
+    assert(!f->loop_marks);
+    rebuild(f); valid(p);
+    tac_program_free(p);
+}
+
 /* Las pruebas de contratos no alteran las seis impresiones de referencia. */
 int main(void) {
+    order_and_clone();
     presentation_numbers();
     globals_and_properties();
     crypto_errors();

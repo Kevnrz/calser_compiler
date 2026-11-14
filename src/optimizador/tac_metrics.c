@@ -4,6 +4,7 @@
 #include "json_text.h"
 #include "codegen.h"
 #include <string.h>
+#include <stdlib.h>
 #include <time.h>
 #include <sys/stat.h>
 
@@ -38,6 +39,7 @@ static int non_nop(const CGInstruction *instruction) {
  */
 void tac_metrics_collect(TacMetrics *m, const TacProgram *program,
                          const TacAllocationResult *allocation) {
+    m->counters.spilled = m->counters.spill_loads = m->counters.spill_stores = 0;
     for (const TacFunction *f = program->first; f; f = f->next) {
         const TacAllocationMetrics *a = tac_allocation_metrics(allocation, f);
         if (a->demand > m->demand)
@@ -45,6 +47,9 @@ void tac_metrics_collect(TacMetrics *m, const TacProgram *program,
         if (a->pressure > m->pressure)
             m->pressure = a->pressure;
         m->registers |= a->assigned_registers;
+        m->counters.spilled += a->spilled;
+        m->counters.spill_loads += a->spill_loads;
+        m->counters.spill_stores += a->spill_stores;
     }
     m->emitted = 0;
     for (int k = 0; k < cg_ir_count(); k++) {
@@ -96,7 +101,7 @@ int tac_metrics_write(const char *path, const char *source, const TacMetrics *m,
     }
     fputs("{\"programa\":", out);
     json_write_string(out, source);
-    fputs(",\"nivel\":\"O1\",\"pasadas\":[", out);
+    fprintf(out, ",\"nivel\":\"O%u\",\"pasadas\":[", m->level);
     int comma = 0;
     for (size_t k = 0; k < TAC_PASS_COUNT; k++) {
         if (!(m->executed & (1u << k)))
@@ -113,9 +118,16 @@ int tac_metrics_write(const char *path, const char *source, const TacMetrics *m,
         m->isa_before, m->emitted, m->bundles, 4 * m->bundles - m->emitted,
         16 * m->bundles, m->demand, m->pressure, (unsigned)m->registers, total_ms);
     pass_map(out, m, 1);
-    fputs("},\"contadores\":{\"desenrollados\":[],\"renombradas\":0,\"eliminadas\":0,"
-        "\"bloques_eliminados\":0,\"reordenadas\":0,\"derramados\":0,"
-        "\"cargas_derrame\":0,\"guardados_derrame\":0},\"ciclos_sim\":null}\n", out);
+    fputs("},\"contadores\":{\"desenrollados\":[", out);
+    const TacPassCounters *c = &m->counters;
+    for (size_t k = 0; k < c->unrolled_count; k++)
+        fprintf(out, "%s{\"linea\":%d,\"factor\":%u}", k ? "," : "",
+                c->unrolled[k].line, c->unrolled[k].factor);
+    fprintf(out, "],\"renombradas\":%zu,\"eliminadas\":%zu,"
+        "\"bloques_eliminados\":%zu,\"reordenadas\":%zu,\"derramados\":%zu,"
+        "\"cargas_derrame\":%zu,\"guardados_derrame\":%zu},\"ciclos_sim\":null}\n",
+        c->renamed, c->removed, c->removed_blocks, c->reordered, c->spilled,
+        c->spill_loads, c->spill_stores);
     int failed = ferror(out);
     if (fclose(out) != 0)
         failed = 1;
@@ -124,4 +136,13 @@ int tac_metrics_write(const char *path, const char *source, const TacMetrics *m,
         fprintf(stderr, "%s: error al escribir métricas en %s\n", source, path);
     }
     return !failed;
+}
+
+/* Entrada: métricas propias. Salida: ninguna. Efectos: libera lista de lazos.
+ * Restricciones: llamadas repetidas válidas; contrato §7.1 y §9.10.
+ */
+void tac_metrics_free(TacMetrics *metrics) {
+    free(metrics->counters.unrolled);
+    metrics->counters.unrolled = NULL;
+    metrics->counters.unrolled_count = 0;
 }

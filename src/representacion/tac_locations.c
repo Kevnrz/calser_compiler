@@ -4,6 +4,8 @@
  * Referencias: Aho §9.2.5 y §10.2.3; ABI de Calser en tac.h.
  */
 #include "tac_live_internal.h"
+#include "tac_analysis_internal.h"
+#include <string.h>
 
 /* Entrada: operandos por valor. Salida: igualdad de ubicación. Efectos: ninguno.
  * Restricciones: solo compara identidades de VARIABLE/TEMP/PHYS, nunca direcciones.
@@ -106,3 +108,27 @@ int tac_variable_is_rename_candidate(const TacFunction *function, const Symbol *
     }
     return 0;
 }
+
+/* Entrada: lista de ámbitos. Salida: raíces propias y su cantidad.
+ * Efectos: reúne globales escalares y variables escalares de main, incluso Vi/S.
+ * Restricciones: arreglos son memoria, no registros ni raíces escalares.
+ */
+TacOperand *tac_observable_roots(const Scope *first_scope, size_t *count) {
+    size_t capacity = 0;
+    for (const Scope *s = first_scope; s; s = s->next) {
+        for (const Symbol *v = s->symbols; v; v = v->next)
+            capacity++;
+    }
+    TacOperand *roots = tac_analysis_array(capacity + 1, sizeof *roots);
+    *count = 0;
+    for (const Scope *s = first_scope; s; s = s->next) {
+        if (s->kind != SCOPE_GLOBAL && (!s->owner || strcmp(s->owner->name, "main")))
+            continue;
+        for (const Symbol *v = s->symbols; v; v = v->next) {
+            if (v->kind == SYMBOL_VARIABLE && !v->dimensions)
+                roots[(*count)++] = tac_variable(v);
+        }
+    }
+    return roots;
+}
+

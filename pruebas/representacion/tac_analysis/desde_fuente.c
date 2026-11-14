@@ -74,30 +74,6 @@ static void unchanged(FILE *first, FILE *second) {
     assert(!fclose(second));
 }
 
-/* Entrada: lista de ámbitos. Salida: raíces propias y su cantidad.
- * Efectos: reúne globales escalares y variables escalares de main, incluso Vi/S.
- * Restricciones: arreglos son memoria, no registros ni raíces escalares.
- */
-static TacOperand *observable_roots(size_t *count) {
-    size_t capacity = 0;
-    for (const Scope *s = scopes_first(); s; s = s->next) {
-        for (const Symbol *v = s->symbols; v; v = v->next)
-            capacity++;
-    }
-    TacOperand *roots = calloc(capacity + 1, sizeof *roots);
-    assert(roots);
-    *count = 0;
-    for (const Scope *s = scopes_first(); s; s = s->next) {
-        if (s->kind != SCOPE_GLOBAL && (!s->owner || strcmp(s->owner->name, "main")))
-            continue;
-        for (const Symbol *v = s->symbols; v; v = v->next) {
-            if (v->kind == SYMBOL_VARIABLE && !v->dimensions)
-                roots[(*count)++] = tac_variable(v);
-        }
-    }
-    return roots;
-}
-
 /* Entrada: función válida, modo, raíces. Salida: ninguna.
  * Efectos: ejecuta análisis y publica resumen de lazos para los casos dirigidos.
  * Restricciones: libera análisis antes de liberar/editar la representación.
@@ -160,7 +136,7 @@ int main(int argc, char **argv) {
         TacProgram *isa = tac_lower(build->program, error, sizeof error);
         assert(isa);
         size_t count;
-        TacOperand *roots = observable_roots(&count);
+        TacOperand *roots = tac_observable_roots(scopes_first(), &count);
         const TacProgram *programs[] = {build->program, isa};
         for (unsigned stage = 0; stage < 2; stage++) {
             FILE *before = snapshot(programs[stage], build);

@@ -18,9 +18,5 @@ struct TacLiveAnalysis {
     size_t instruction_count;
     size_t *offsets;
 };
-typedef void (*TacLocationVisit)(void *user, TacOperand location, int definition);
-void tac_locations_visit(const TacFunction *function, const TacInstruction *instruction,
-                         TacLocationVisit visit, void *user);
-int tac_location_equal(TacOperand left, TacOperand right);
 void tac_locations_physical(const TacInstruction *instruction, TacLiveInstruction *out);
 #endif

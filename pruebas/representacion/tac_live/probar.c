@@ -1,5 +1,6 @@
 /* Pruebas directas de vivacidad y clasificación C1. Aho §9.2.5, §10.2.3. */
 #include "../tac_analysis/fixture.h"
+#include <stdlib.h>
 
 /* Entrada: fixture y raíces. Salida: análisis propio válido. Efectos: analiza.
  * Restricciones: valida antes y no modifica el programa.
@@ -226,6 +227,29 @@ static void classification(void) {
     tac_program_free(f.program);
 }
 
+/* §11.1: x=1 queda observable si la división falla antes de x=2. */
+static void observable_failure(void) {
+    Fixture f;
+    fixture_init(&f, TAC_STAGE_HIGH);
+    Scope local = {.kind = SCOPE_FUNCTION, .owner = &f.symbol, .symbols = &f.local};
+    f.scope.next = &local;
+    TacOperand x = tac_variable(&f.local), g = tac_variable(&f.global);
+    TacInstruction *first = tac_append(f.entry, TAC_COPY, x, tac_integer(1), tac_none());
+    TacInstruction *division = tac_append(f.entry, TAC_DIV, f.d, tac_integer(1), g);
+    tac_append(f.entry, TAC_COPY, x, tac_integer(2), tac_none());
+    fixture_return(f.entry);
+    size_t count;
+    TacOperand *roots = tac_observable_roots(&f.scope, &count);
+    assert(count == 2);
+    TacLiveAnalysis *a = analyze(&f, roots, count);
+    assert(tac_live_contains(a, tac_live_instruction(a, first)->after, x));
+    assert(tac_live_contains(a, tac_live_instruction(a, division)->uses, x));
+    assert(tac_live_contains(a, tac_live_instruction(a, division)->uses, g));
+    tac_live_free(a);
+    free(roots);
+    tac_program_free(f.program);
+}
+
 /* Entrada: ninguna. Salida: cero si pasan contratos. Efectos: ejecuta casos manuales.
  * Restricciones: no se enlaza con el generador ni el frontend.
  */
@@ -237,6 +261,7 @@ int main(void) {
     preserved_destinations();
     pseudo_effects();
     classification();
+    observable_failure();
     char error[128];
     assert(!tac_live_analyze(NULL, NULL, 0, error, sizeof error));
     assert(!tac_live_analyze(NULL, NULL, 0, NULL, 0));

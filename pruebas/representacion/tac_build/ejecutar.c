@@ -4,6 +4,7 @@
  * Referencias: Aho §6.4, §6.6 y §7.2. No lee el .tac ni genera ensamblador.
  */
 #include "interpretar.h"
+#include "tac_passes.h"
 #include "semantic.h"
 #include "semantic_scope.h"
 #include "diagnostics.h"
@@ -102,25 +103,53 @@ static void print_result(const TacRunResult *result) {
  * Restricciones: los errores de ejecución se informan en status, no como retorno normal.
  */
 int main(int argc, char **argv) {
-    if (argc < 2 || argc > 3) {
-        return 2;
-    }
+    const char *source = NULL;
+    unsigned passes = 0, factor = 0;
     uint64_t limit = UINT64_C(1000000);
-    if (argc == 3) {
-        char *end;
-        errno = 0;
-        unsigned long long parsed = strtoull(argv[2], &end, 10);
-        if (argv[2][0] == '-' || end == argv[2] || *end || errno || parsed > UINT64_MAX) {
+    int have_limit = 0;
+    for (int k = 1; k < argc; k++) {
+        if (!strncmp(argv[k], "--opt=", 6)) {
+            const char *name = argv[k] + 6;
+            do {
+                const char *end = strchr(name, ',');
+                size_t length = end ? (size_t)(end - name) : strlen(name);
+                int index = tac_pass_find(name, length);
+                if (index < 0 || tac_pass_at((size_t)index)->point != TAC_PASS_HIGH)
+                    return 2;
+                passes |= 1u << index;
+                name = end ? end + 1 : NULL;
+            } while (name);
+        } else if (!strncmp(argv[k], "--unroll=", 9)) {
+            char *end;
+            errno = 0;
+            unsigned long value = strtoul(argv[k] + 9, &end, 10);
+            if (errno || *end || value < 2 || value > 16)
+                return 2;
+            factor = (unsigned)value;
+        } else if (!source) {
+            if (argv[k][0] == '-')
+                return 2;
+            source = argv[k];
+        } else if (!have_limit) {
+            char *end;
+            errno = 0;
+            unsigned long long value = strtoull(argv[k], &end, 10);
+            if (argv[k][0] == '-' || end == argv[k] || *end || errno || value > UINT64_MAX)
+                return 2;
+            limit = (uint64_t)value;
+            have_limit = 1;
+        } else {
             return 2;
         }
-        limit = (uint64_t)parsed;
     }
-    yyin = fopen(argv[1], "r");
+    if (!source || (factor && !(passes & 1u)))
+        return 2;
+    yyin = fopen(source, "r");
     if (!yyin) {
-        perror(argv[1]);
+        perror(source);
         return 1;
     }
-    diag_init(argv[1]);
+    diag_init(source);
     int accepted = parser_accept(yyin, &root);
     fclose(yyin);
     if (!accepted) {
@@ -138,6 +167,21 @@ int main(int argc, char **argv) {
     TacBuildResult *build = tac_build(root, scopes_global(), error, sizeof error);
     if (!build) {
         fprintf(stderr, "%s\n", error);
+        semantic_free();
+        ast_free(root);
+        diag_free();
+        return 1;
+    }
+    /* Mismo gestor que ccom; la salida sigue siendo el resultado interpretado (§9.11). */
+    TacMetrics metrics = {0};
+    TacPassContext context = {.program = build->program, .build = build,
+        .scopes = scopes_first(), .source_name = source, .enabled = passes,
+        .unroll_factor = factor, .metrics = &metrics};
+    int ok = tac_passes_run(&context, TAC_PASS_HIGH, error, sizeof error);
+    tac_metrics_free(&metrics);
+    if (!ok) {
+        fprintf(stderr, "%s\n", error);
+        tac_build_free(build);
         semantic_free();
         ast_free(root);
         diag_free();

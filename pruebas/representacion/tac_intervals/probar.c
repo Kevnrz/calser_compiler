@@ -67,9 +67,11 @@ static void flow(void) {
     assert(read == 6); /* MOV, bloque vacío, BEQ, incremento. */
     const TacInterval *range = tac_intervals_find(a, f.a.value.id);
     assert(range->start == 1 && range->end > write);
+    assert(range->loop_depth == 1); /* TEMP que atraviesa el lazo, §9.13. */
     assert(tac_intervals_positions(a, dead, &read, &write));
     assert(tac_intervals_find(a, f.b.value.id)->start == write);
     assert(tac_intervals_find(a, f.b.value.id)->end == write);
+    assert(tac_intervals_find(a, f.b.value.id)->loop_depth == 0); /* Fuera del lazo. */
     tac_intervals_free(a);
     tac_live_free(live);
     tac_program_free(f.program);

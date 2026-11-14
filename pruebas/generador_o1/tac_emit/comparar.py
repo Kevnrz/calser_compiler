@@ -22,10 +22,10 @@ def compile_o0(source, base):
     return base
 
 
-def compile_new(binary, source, base):
+def compile_new(binary, source, base, opt=None):
     """Adaptador E: compila por CLI y lee tramos de la tabla pública del listado."""
     result = subprocess.run([str(binary), '-O1', '-s', str(source),
-                             '-o', str(base.with_suffix('.bin'))],
+                             '-o', str(base.with_suffix('.bin'))] + ([f'--opt={opt}'] if opt else []),
                             capture_output=True, text=True, timeout=30)
     if result.returncode:
         raise ValueError(result.stderr.strip() or f'ccom: salida {result.returncode}')
@@ -89,6 +89,7 @@ def main():
     """Entrada: auxiliar opcional. Salida: 1 si algún caso falla, tras listarlos todos."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binario', type=Path, default=ROOT / 'ccom')
+    parser.add_argument('--opt', help='Pasadas que se agregan a la compilación O1')
     args = parser.parse_args()
     binary = args.binario.resolve()
     failures = []
@@ -104,7 +105,7 @@ def main():
             count += 1
             try:
                 o1, o0 = compare(source, Path(temporary),
-                    lambda src, base: compile_new(binary, src, base))
+                    lambda src, base: compile_new(binary, src, base, args.opt))
                 print(f'{name}\tOK\t{o1}\t{o0}')
             except (ValueError, OSError, subprocess.SubprocessError) as error:
                 failures.append(f'{name}: {error}')

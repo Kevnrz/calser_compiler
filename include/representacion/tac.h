@@ -236,6 +236,10 @@ TacOperand tac_physical(unsigned register_number);
 TacOperand tac_temp_new(TacFunction *function);
 int tac_is_global(const TacProgram *program, TacOperand operand);
 const TacOpInfo *tac_op_info(TacOpcode op);
+/* Parejas de operaciones complejas; §9.8 y Aho §8.2. */
+TacPseudoKind tac_pseudo_for(TacOpcode high);
+TacOpcode tac_pseudo_high(TacPseudoKind kind);
+int tac_pseudo_is_arithmetic(TacPseudoKind kind);
 int tac_instruction_info(const TacInstruction *instruction, TacOpInfo *out);
 /* Capacidad 3; sin duplicados; 0 si instrucción/op inválida. Solo explícitos.
  * Orden dest/src1/src2. PHYS rz nunca es definición. No omitir los resúmenes
@@ -245,6 +249,15 @@ size_t tac_definitions(const TacInstruction *instruction, TacOperand out[3]);
 size_t tac_uses(const TacInstruction *instruction, TacOperand out[3]);
 TacProgram *tac_program_new(const Scope *global_scope);
 TacFunction *tac_function_new(TacProgram *program, const Symbol *symbol);
+/* Permutación exacta, terminador al final; fallo sin mutar (§9.12). */
+int tac_block_set_order(TacBlock *block, TacInstruction *const *order, size_t count,
+                        char *error, size_t capacity);
+typedef struct { const TacBlock *original; TacBlock *copy; } TacBlockCopy;
+/* Clona HIGH en orden relativo tras insert_after (NULL: inicio); no crea aristas
+ * ni copia marcas. Ante error de contrato no modifica la función (§9.12). */
+int tac_blocks_clone(TacFunction *function, const TacBlock *const *blocks, size_t count,
+                     TacBlock *insert_after, TacBlockCopy *copies,
+                     char *error, size_t capacity);
 TacBlock *tac_block_new(TacFunction *function);
 /* previous NULL = inicio y actualiza entry; previo ajeno = NULL, sin cambios. */
 TacBlock *tac_block_insert_after(TacFunction *function, TacBlock *previous);

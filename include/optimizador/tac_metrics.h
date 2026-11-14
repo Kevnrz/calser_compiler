@@ -4,7 +4,17 @@
 #include "tac_allocate.h"
 #define TAC_PASS_COUNT 5
 
+typedef struct { int line; unsigned factor; } TacUnrolledLoop;
 typedef struct {
+    TacUnrolledLoop *unrolled;         /* Lista propia, contrato común §7.1. */
+    size_t unrolled_count;
+    size_t renamed, removed, removed_blocks, reordered;
+    size_t spilled, spill_loads, spill_stores;
+} TacPassCounters;
+
+typedef struct {
+    TacPassCounters counters;          /* Efectos informados por las pasadas. */
+    unsigned level;                    /* Nivel efectivo 1 u 2 (§8.3). */
     unsigned executed;                 /* Máscara de pasadas ejecutadas, orden fijo. */
     size_t high_initial;               /* Instrucciones HIGH antes de las pasadas. */
     size_t high_after[TAC_PASS_COUNT];  /* Conteos solo para pasadas HIGH ejecutadas. */
@@ -36,4 +46,6 @@ int tac_metrics_write(const char *path, const char *source, const TacMetrics *me
  * Restricciones: tiempos de una misma ejecución, no comparables entre procesos.
  */
 double tac_metrics_clock(void);
+/* Libera la lista propia de lazos; no libera la estructura prestada (§9.10). */
+void tac_metrics_free(TacMetrics *metrics);
 #endif

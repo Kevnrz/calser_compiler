@@ -264,3 +264,134 @@ int tac_replace_reads(TacBlock *block, TacInstruction *instruction,
         *replaced = count;
     return 1;
 }
+
+/* Permutación transaccional de un bloque; Aho §8.4.1 y contrato §9.12.
+ * Primero comprueba pertenencia, unicidad y terminadores; luego cambia enlaces.
+ */
+int tac_block_set_order(TacBlock *block, TacInstruction *const *order, size_t count,
+                        char *error, size_t capacity) {
+    if (capacity)
+        error[0] = '\0';
+    if (!block || (count && !order))
+        return tac_error(error, capacity, "orden requiere bloque y vector válidos");
+    size_t actual = 0;
+    for (const TacInstruction *i = block->first; i; i = i->next)
+        actual++;
+    if (actual != count)
+        return tac_error(error, capacity, "orden no es una permutación exacta");
+    for (size_t k = 0; k < count; k++) {
+        if (!tac_has_instruction(block, order[k]))
+            return tac_error(error, capacity, "instrucción ajena en orden");
+        for (size_t n = 0; n < k; n++)
+            if (order[k] == order[n])
+                return tac_error(error, capacity, "instrucción repetida en orden");
+        TacOpInfo info;
+        if (!tac_instruction_info(order[k], &info) ||
+            (info.flow != TAC_FLOW_NEXT && k + 1 != count))
+            return tac_error(error, capacity, "terminador fuera del final del orden");
+    }
+    for (size_t k = 0; k < count; k++)
+        order[k]->next = k + 1 < count ? order[k + 1] : NULL;
+    block->first = count ? order[0] : NULL;
+    block->last = count ? order[count - 1] : NULL;
+    return 1;
+}
+
+/* Identidad dentro del conjunto prestado; nunca usa números de presentación. */
+static size_t clone_index(const TacBlock *const *blocks, size_t count, const TacBlock *block) {
+    for (size_t k = 0; k < count; k++)
+        if (blocks[k] == block)
+            return k;
+    return SIZE_MAX;
+}
+
+/* Clonación HIGH transaccional, Aho §8.4.1 y §10.2.3; contrato §9.12.
+ * Valida antes de reservar identificadores o enlazar. El constructor TAC termina
+ * ante falta de memoria. El llamador reconstruye las aristas después del éxito.
+ */
+int tac_blocks_clone(TacFunction *function, const TacBlock *const *blocks, size_t count,
+                     TacBlock *insert_after, TacBlockCopy *copies,
+                     char *error, size_t capacity) {
+    if (capacity)
+        error[0] = '\0';
+    if (!function || !function->program || function->program->stage != TAC_STAGE_HIGH ||
+        !tac_has_function(function->program, function) ||
+        (insert_after && !tac_has_block(function, insert_after)) ||
+        (count && (!blocks || !copies)))
+        return tac_error(error, capacity, "clonación requiere función HIGH y bloques propios");
+    for (size_t k = 0; k < count; k++) {
+        if (!tac_has_block(function, blocks[k]))
+            return tac_error(error, capacity, "bloque ajeno en clonación");
+        for (size_t n = 0; n < k; n++)
+            if (blocks[k] == blocks[n])
+                return tac_error(error, capacity, "bloque repetido en clonación");
+    }
+    if (count > SIZE_MAX - function->next_label ||
+        function->next_temp > SIZE_MAX / sizeof(size_t))
+        return tac_error(error, capacity, "identificadores de clonación fuera de rango");
+    if (!count)
+        return 1;
+    /* Un TEMP local tiene definición interna y ninguna lectura externa. */
+    size_t temps = function->next_temp;
+    unsigned char *defined = tac_allocate(temps);
+    unsigned char *external = tac_allocate(temps);
+    size_t *map = tac_allocate(temps * sizeof *map);
+    for (const TacBlock *b = function->first; b; b = b->next) {
+        int inside = clone_index(blocks, count, b) != SIZE_MAX;
+        for (const TacInstruction *i = b->first; i; i = i->next) {
+            TacOperand values[3];
+            size_t n = inside ? tac_definitions(i, values) : tac_uses(i, values);
+            for (size_t k = 0; k < n; k++) {
+                if (values[k].kind != TAC_TEMP)
+                    continue;
+                if (values[k].value.id >= temps) {
+                    free(defined); free(external); free(map);
+                    return tac_error(error, capacity, "temporal inválido en clonación");
+                }
+                (inside ? defined : external)[values[k].value.id] = 1;
+            }
+        }
+    }
+    size_t local_count = 0;
+    for (size_t k = 0; k < temps; k++)
+        local_count += defined[k] && !external[k];
+    if (local_count > SIZE_MAX - function->next_temp) {
+        free(defined); free(external); free(map);
+        return tac_error(error, capacity, "temporales de clonación fuera de rango");
+    }
+    for (size_t k = 0; k < temps; k++)
+        map[k] = defined[k] && !external[k] ? tac_temp_new(function).value.id : k;
+    /* Orden relativo original aunque el vector del llamador esté permutado. */
+    TacBlock **ordered = tac_allocate(count * sizeof *ordered);
+    size_t total = 0;
+    for (TacBlock *b = function->first; b; b = b->next)
+        if (clone_index(blocks, count, b) != SIZE_MAX)
+            ordered[total++] = b;
+    TacBlock *previous = insert_after;
+    for (size_t k = 0; k < count; k++) {
+        size_t index = clone_index(blocks, count, ordered[k]);
+        TacBlock *copy = tac_block_insert_after(function, previous);
+        copies[index] = (TacBlockCopy){ordered[k], copy};
+        previous = copy;
+    }
+    for (size_t k = 0; k < count; k++) {
+        for (const TacInstruction *i = blocks[k]->first; i; i = i->next) {
+            TacInstruction *copy = tac_append(copies[k].copy, i->op, i->dest, i->src1, i->src2);
+            *copy = *i;
+            copy->next = NULL;
+            TacOperand *values[] = {&copy->dest, &copy->src1, &copy->src2};
+            for (size_t n = 0; n < 3; n++) {
+                TacOperand *value = values[n];
+                if (value->kind == TAC_TEMP)
+                    value->value.id = map[value->value.id];
+                else if (value->kind == TAC_LABEL) {
+                    size_t index = clone_index(blocks, count, value->value.block);
+                    if (index != SIZE_MAX)
+                        value->value.block = copies[index].copy;
+                }
+            }
+        }
+    }
+    free(ordered); free(defined); free(external); free(map);
+    return 1;
+}

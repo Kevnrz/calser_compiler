@@ -94,15 +94,33 @@ static void transfer(const TacLiveSet *dst, const TacLiveSet *use,
         dst->words[i] = use->words[i] | (after->words[i] & ~def->words[i]);
 }
 
+/* Lecturas del estado observable ante fallos, solo HIGH (§11.1, Aho §9.2.5).
+ * Visita globales y, en main, raíces del llamador; no agrega definiciones.
+ */
+static void observable_uses(const TacFunction *f, const TacInstruction *i,
+    const TacOperand *roots, size_t count, TacLocationVisit visit, void *user) {
+    TacOpInfo info;
+    tac_instruction_info(i, &info);
+    if (f->program->stage != TAC_STAGE_HIGH || !(info.may_trap || info.uses_globals))
+        return;
+    for (const Symbol *s = f->program->global_scope->symbols; s; s = s->next)
+        if (s->kind == SYMBOL_VARIABLE && !s->dimensions)
+            visit(user, tac_variable(s), 0);
+    if (!strcmp(f->symbol->name, "main"))
+        for (size_t k = 0; k < count; k++)
+            visit(user, roots[k], 0);
+}
+
 /* Entrada: función validada. Salida: ninguna. Efectos: indexa listas y consulta efectos.
  * Restricciones: no usa etiquetas como índices; Aho §9.2.5.
  */
-static void prepare(TacLiveAnalysis *a) {
+static void prepare(TacLiveAnalysis *a, const TacOperand *roots, size_t count) {
     for (const TacBlock *b = a->function->first; b; b = b->next) {
         a->block_count++;
         for (const TacInstruction *i = b->first; i; i = i->next) {
             a->instruction_count++;
             tac_locations_visit(a->function, i, collect_location, a);
+            observable_uses(a->function, i, roots, count, collect_location, a);
         }
     }
     a->blocks = tac_analysis_array(a->block_count, sizeof *a->blocks);
@@ -128,7 +146,7 @@ static void fill_location(void *user, TacOperand location, int definition) {
  * Efectos: crea conjuntos por bloque/instrucción y resume USE/DEF.
  * Restricciones: DEF físico explícito no incluye call_clobbers virtuales.
  */
-static void summarize(TacLiveAnalysis *a) {
+static void summarize(TacLiveAnalysis *a, const TacOperand *roots, size_t count) {
     size_t n = 0;
     size_t k = 0;
     for (const TacBlock *b = a->function->first; b; b = b->next, k++) {
@@ -145,6 +163,7 @@ static void summarize(TacLiveAnalysis *a) {
             view->preserve = new_set(a);
             FillContext fill = {a, view};
             tac_locations_visit(a->function, i, fill_location, &fill);
+            observable_uses(a->function, i, roots, count, fill_location, &fill);
             tac_locations_physical(i, view);
             for (size_t w = 0; w < view->uses->width; w++) {
                 block->use->words[w] |= view->uses->words[w] & ~block->def->words[w];
@@ -250,12 +269,12 @@ TacLiveAnalysis *tac_live_analyze(const TacFunction *function, const TacOperand 
     }
     TacLiveAnalysis *a = tac_allocate(sizeof *a);
     a->function = function;
-    prepare(a);
+    prepare(a, exit_roots, root_count);
     if (function->program->stage == TAC_STAGE_HIGH && !strcmp(function->symbol->name, "main")) {
         for (size_t i = 0; i < root_count; i++)
             collect_location(a, exit_roots[i], 0);
     }
-    summarize(a);
+    summarize(a, exit_roots, root_count);
     solve(a, exit_roots, root_count);
     instruction_liveness(a);
     return a;

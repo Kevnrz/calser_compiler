@@ -6,122 +6,50 @@
 #include "tac_internal.h"
 #include <string.h>
 
-/* Propiedades del contrato de expansión; las filas no describen ISA hardware. */
-static const TacOpInfo operations[TAC_PSEUDO_COUNT] = {
-    [TAC_PSEUDO_MUL] = {
-        .text = "mul",
-        .reads = TAC_SRC1 | TAC_SRC2,
-        .writes = TAC_DEST,
-        .scratch_count = 8,
-        .may_create_blocks = 1,
-        .format = TAC_FMT_PSEUDO,
-    },
-    [TAC_PSEUDO_DIV] = {
-        .text = "div",
-        .reads = TAC_SRC1 | TAC_SRC2,
-        .writes = TAC_DEST,
-        .scratch_count = 8,
-        .may_create_blocks = 1,
-        .may_trap = 1,
-        .format = TAC_FMT_PSEUDO,
-    },
-    [TAC_PSEUDO_MOD] = {
-        .text = "mod",
-        .reads = TAC_SRC1 | TAC_SRC2,
-        .writes = TAC_DEST,
-        .scratch_count = 8,
-        .may_create_blocks = 1,
-        .may_trap = 1,
-        .format = TAC_FMT_PSEUDO,
-    },
-    [TAC_PSEUDO_POW] = {
-        .text = "pow",
-        .reads = TAC_SRC1 | TAC_SRC2,
-        .writes = TAC_DEST,
-        .scratch_count = 8,
-        .may_create_blocks = 1,
-        .may_trap = 1,
-        .format = TAC_FMT_PSEUDO,
-    },
-    [TAC_PSEUDO_AUTH] = {
-        .text = "auth",
-        .reads = TAC_SRC1,
-        .barrier = 1,
-        .nonremovable = 1,
-        .crypto_state = 1,
-        .call_clobbers = TAC_P1_CALL_CLOBBERS,
-        .format = TAC_FMT_PSEUDO,
-    },
-    [TAC_PSEUDO_LOGOUT] = {
-        .text = "logout",
-        .barrier = 1,
-        .nonremovable = 1,
-        .crypto_state = 1,
-        .call_clobbers = TAC_P1_CALL_CLOBBERS,
-        .format = TAC_FMT_PSEUDO,
-    },
-    [TAC_PSEUDO_KV_WRITE] = {
-        .text = "kv_write",
-        .reads = TAC_SRC1,
-        .selectors = TAC_SELECT_K | TAC_SELECT_W,
-        .barrier = 1,
-        .nonremovable = 1,
-        .crypto_state = 1,
-        .call_clobbers = TAC_P1_CALL_CLOBBERS,
-        .format = TAC_FMT_PSEUDO,
-    },
-    [TAC_PSEUDO_KV_LOCK] = {
-        .text = "kv_lock",
-        .barrier = 1,
-        .nonremovable = 1,
-        .crypto_state = 1,
-        .call_clobbers = TAC_P1_CALL_CLOBBERS,
-        .format = TAC_FMT_PSEUDO,
-    },
-    [TAC_PSEUDO_SANC] = {
-        .text = "sanc",
-        .reads = TAC_SRC1,
-        .barrier = 1,
-        .nonremovable = 1,
-        .crypto_state = 1,
-        .call_clobbers = TAC_P1_CALL_CLOBBERS,
-        .format = TAC_FMT_PSEUDO,
-    },
-    [TAC_PSEUDO_CIFRAR] = {
-        .text = "cifrar",
-        .reads = TAC_DEST | TAC_SRC1 | TAC_SRC2,
-        .selectors = TAC_SELECT_K,
-        .barrier = 1,
-        .nonremovable = 1,
-        .crypto_state = 1,
-        .memory_read = 1,
-        .memory_write = 1,
-        .may_create_blocks = 1,
-        .call_clobbers = TAC_P1_CALL_CLOBBERS,
-        .format = TAC_FMT_PSEUDO,
-    },
-    [TAC_PSEUDO_DESCIFRAR] = {
-        .text = "descifrar",
-        .reads = TAC_DEST | TAC_SRC1 | TAC_SRC2,
-        .selectors = TAC_SELECT_K,
-        .barrier = 1,
-        .nonremovable = 1,
-        .crypto_state = 1,
-        .memory_read = 1,
-        .memory_write = 1,
-        .may_create_blocks = 1,
-        .call_clobbers = TAC_P1_CALL_CLOBBERS,
-        .format = TAC_FMT_PSEUDO,
-    },
-    [TAC_PSEUDO_EXIT] = {
-        .text = "exit",
-        .barrier = 1,
-        .nonremovable = 1,
-        .uses_globals = 1,
-        .flow = TAC_FLOW_RETURN,
-        .format = TAC_FMT_PSEUDO,
-    },
+/* Tabla única HIGH/PSEUDO; propiedades compartidas según §9.8 y Aho §8.2. */
+static const struct {
+    TacOpcode high;
+    TacPseudoKind kind;
+    const char *text;
+    unsigned scratch_count;
+    uint16_t clobbers;
+} operations[] = {
+    {TAC_MUL, TAC_PSEUDO_MUL, "mul", 8, 0},
+    {TAC_DIV, TAC_PSEUDO_DIV, "div", 8, 0},
+    {TAC_MOD, TAC_PSEUDO_MOD, "mod", 8, 0},
+    {TAC_POW, TAC_PSEUDO_POW, "pow", 8, 0},
+    {TAC_AUTH, TAC_PSEUDO_AUTH, "auth", 0, TAC_P1_CALL_CLOBBERS},
+    {TAC_LOGOUT, TAC_PSEUDO_LOGOUT, "logout", 0, TAC_P1_CALL_CLOBBERS},
+    {TAC_KV_WRITE, TAC_PSEUDO_KV_WRITE, "kv_write", 0, TAC_P1_CALL_CLOBBERS},
+    {TAC_KV_LOCK, TAC_PSEUDO_KV_LOCK, "kv_lock", 0, TAC_P1_CALL_CLOBBERS},
+    {TAC_SANC, TAC_PSEUDO_SANC, "sanc", 0, TAC_P1_CALL_CLOBBERS},
+    {TAC_CIFRAR, TAC_PSEUDO_CIFRAR, "cifrar", 0, TAC_P1_CALL_CLOBBERS},
+    {TAC_DESCIFRAR, TAC_PSEUDO_DESCIFRAR, "descifrar", 0, TAC_P1_CALL_CLOBBERS},
 };
+static const TacOpInfo exit_operation = {
+    .text = "exit", .barrier = 1, .nonremovable = 1, .uses_globals = 1,
+    .flow = TAC_FLOW_RETURN, .format = TAC_FMT_PSEUDO,
+};
+
+/* Consultas sin efectos; NONE/COUNT indican ausencia de pareja (§9.8). */
+TacPseudoKind tac_pseudo_for(TacOpcode high) {
+    for (size_t k = 0; k < sizeof operations / sizeof operations[0]; k++)
+        if (operations[k].high == high)
+            return operations[k].kind;
+    return TAC_PSEUDO_NONE;
+}
+TacOpcode tac_pseudo_high(TacPseudoKind kind) {
+    for (size_t k = 0; k < sizeof operations / sizeof operations[0]; k++)
+        if (operations[k].kind == kind)
+            return operations[k].high;
+    return TAC_OP_COUNT;
+}
+int tac_pseudo_is_arithmetic(TacPseudoKind kind) {
+    for (size_t k = 0; k < sizeof operations / sizeof operations[0]; k++)
+        if (operations[k].kind == kind)
+            return operations[k].scratch_count == 8;
+    return 0;
+}
 
 /*
  * tac_pseudo_info — consulta efectos y operandos por el contrato de expansión.
@@ -139,7 +67,20 @@ int tac_pseudo_info(const TacInstruction *instruction, TacOpInfo *out) {
     if (kind <= TAC_PSEUDO_NONE || (unsigned)kind >= TAC_PSEUDO_COUNT) {
         return 0;
     }
-    *out = operations[kind];
+    if (kind == TAC_PSEUDO_EXIT) {
+        *out = exit_operation;
+    } else {
+        for (size_t k = 0; k < sizeof operations / sizeof operations[0]; k++) {
+            if (operations[k].kind != kind)
+                continue;
+            *out = *tac_op_info(operations[k].high);
+            out->text = operations[k].text;
+            out->format = TAC_FMT_PSEUDO;
+            out->scratch_count = operations[k].scratch_count;
+            out->call_clobbers = operations[k].clobbers;
+            break;
+        }
+    }
     unsigned positions = out->reads | out->writes;
     for (unsigned k = 0; k < 3; k++) {
         out->allowed[k] = positions & (1u << k) ?
@@ -214,7 +155,7 @@ static int valid_arithmetic_registers(const TacInstruction *instruction, TacStag
  */
 int tac_pseudo_validate(const TacFunction *function, const TacInstruction *instruction,
                         char *error, size_t cap) {
-    if (operations[instruction->pseudo.kind].scratch_count) {
+    if (tac_pseudo_is_arithmetic(instruction->pseudo.kind)) {
         return valid_arithmetic_registers(instruction, function->program->stage, error, cap);
     }
     if (instruction->pseudo.scratch_clobbers) {

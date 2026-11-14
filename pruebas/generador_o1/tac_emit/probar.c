@@ -3,6 +3,7 @@
  */
 #include "../../representacion/tac_analysis/fixture.h"
 #include "tac_emit.h"
+#include "tac_allocate_internal.h"
 #include "assembler.h"
 #include "codegen.h"
 #include "data_area.h"
@@ -12,7 +13,7 @@
  */
 static TacAllocationResult *emit(Fixture *f, const LabelTable *labels, char error[512]) {
     fixture_validate(f);
-    TacAllocationResult *a = tac_allocate_registers(f->program, "ruta/prueba.cls", error, 512);
+    TacAllocationResult *a = tac_allocate_registers(f->program, "ruta/prueba.cls", NULL, error, 512);
     assert(a);
     TacEmitInput input = {.program = f->program, .allocation = a,
         .labels = labels, .source_name = "ruta/prueba.cls"};
@@ -156,6 +157,47 @@ static void calls(void) {
     cg_free();
 }
 
+/* Plan manual de §9.13: preservar, cargar rg, ISA, guardar y restaurar. */
+static void spill_plan(void) {
+    Fixture f;
+    fixture_init(&f, TAC_STAGE_ISA_PHYSICAL);
+    f.symbol.frame = (FrameLayout){.area_base = 16, .area_size = 96, .temp_base = 64};
+    TacInstruction *instruction = fixture_isa(f.entry, "add", tac_physical(REG_SPILL),
+        tac_physical(REG_SPILL), tac_physical(REG_TEMP_FIRST), tac_none());
+    fixture_exit(f.entry);
+    fixture_validate(&f);
+    TacRegisterBinding binding = {0, REG_TEMP_FIRST};
+    TacEmissionSite site = {.instruction = instruction, .preserved = &binding,
+        .preserved_count = 1, .loads = {{REG_SPILL, 128}}, .load_count = 1,
+        .stores = {{REG_SPILL, 132}}, .store_count = 1};
+    TacFunctionAllocation function = {.function = f.function};
+    TacAllocationResult allocation = {.functions = &function, .function_count = 1,
+        .sites = &site, .site_count = 1};
+    LabelEntry error_label = {.role = LABEL_ARITH_ERROR, .name = ".L_arith_error"};
+    LabelEntry end = {.role = LABEL_PROGRAM_END, .name = "fin_main", .next = &error_label};
+    LabelEntry main_label = {.role = LABEL_FUNCTION, .name = ".L_func_main", .next = &end};
+    LabelTable labels = {.entries = &main_label};
+    TacEmitInput input = {.program = f.program, .allocation = &allocation,
+        .labels = &labels, .source_name = "ruta/prueba.cls"};
+    data_area_reset();
+    int address;
+    data_area_alloc(256, &address);
+    char error[512];
+    assert(tac_emit_program(&input, error, sizeof error));
+    const char *expected[] = {"sw r4, 64(rz)", "lw rg, 128(rz)", "add rg, rg, t0",
+                              "sw rg, 132(rz)", "lw r4, 64(rz)"};
+    size_t at = 0;
+    for (int k = 0; k < cg_ir_count(); k++) {
+        const CGIRRecord *record = cg_ir_record(k);
+        if (record->kind == CG_IR_OPERATION && at < 5 &&
+            !strcmp(record->data.instruction.text, expected[at]))
+            at++;
+    }
+    assert(at == 5);
+    cg_free();
+    tac_program_free(f.program);
+}
+
 /* Entrada: ninguna. Salida: cero. Efectos: ejecuta contratos D y frontera ROM.
  * Restricciones: no genera 4097 bundles para probar una comparación de cantidades.
  */
@@ -165,6 +207,7 @@ int main(void) {
     assert(!error[0]);
     assert(!asm_check_rom(4097, "ruta/rom.cls", error, sizeof error));
     assert(!strcmp(error, "ruta/rom.cls:0:0: error de generacion: ROM excedida: 4097 bundles, máximo 4096"));
+    spill_plan();
     permutations();
     calls();
     puts("PASS emisión D: permutaciones, preservación, rl, etiquetas, nombre y ROM");

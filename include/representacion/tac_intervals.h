@@ -9,6 +9,7 @@ typedef struct TacIntervalAnalysis TacIntervalAnalysis;
 typedef struct {
     size_t temp_id;                  /* Identidad local a la función. */
     size_t start;                    /* Primera posición inclusiva. */
+    size_t loop_depth;               /* Mayor profundidad donde aparece; §9.13. */
     size_t end;                      /* Última posición inclusiva. */
     const TacInstruction *origin;    /* Origen prestado para diagnóstico. */
 } TacInterval;

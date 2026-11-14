@@ -87,7 +87,7 @@ static const char *operand_text(TacOperand operand, char buffer[32]) {
  * Efectos: llama cg_op. Restricciones: cg_describe_instruction/isa_table validan
  * texto y dependencias; aquí solo se adapta la forma a la sintaxis (Aho §8.6).
  */
-static int emit_isa(TacEmitter *e, const TacInstruction *i) {
+int te_emit_isa(TacEmitter *e, const TacInstruction *i) {
     const IsaInstruction *isa = i->isa.instruction;
     char buffers[3][32];
     const char *d = operand_text(i->dest, buffers[0]);
@@ -152,8 +152,7 @@ static int emit_function(TacEmitter *e, const TacFunction *f) {
         cg_label(block_label(e, b));
         for (const TacInstruction *i = b->first; i; i = i->next) {
             cg_set_line(i->source_line);
-            int special = i->op == TAC_PSEUDO || i->isa.instruction->form == ISA_FORM_JAS;
-            if (!(special ? te_emit_special(e, f, i) : emit_isa(e, i)))
+            if (!te_emit_special(e, f, i))
                 return 0;
         }
     }

@@ -2,6 +2,7 @@
  * Poletto y Sarkar 1999 (fuera de Aho): un intervalo por TEMP, sin partición.
  */
 #include "tac_intervals.h"
+#include "tac_loops.h"
 #include "tac_analysis_internal.h"
 
 typedef struct {
@@ -15,6 +16,7 @@ struct TacIntervalAnalysis {
     size_t temp_count;
     Position *positions;
     size_t position_count;
+    size_t current_depth;
 };
 
 /* Entrada: intervalos presentes. Salida: orden por inicio e ID.
@@ -36,6 +38,8 @@ static void touch(TacIntervalAnalysis *a, TacOperand operand, size_t position,
     if (operand.kind != TAC_TEMP)
         return;
     TacInterval *range = &a->by_id[operand.value.id];
+    if (a->current_depth > range->loop_depth)
+        range->loop_depth = a->current_depth;
     if (range->start == SIZE_MAX || position < range->start)
         range->start = position;
     if (position > range->end)
@@ -103,6 +107,9 @@ TacIntervalAnalysis *tac_intervals_analyze(const TacFunction *f,
         tac_error(error, capacity, "numeración de intervalos demasiado grande");
         return NULL;
     }
+    TacLoopAnalysis *loops = tac_loops_analyze(f, error, capacity);
+    if (!loops)
+        return NULL;
     TacIntervalAnalysis *a = tac_analysis_array(1, sizeof *a);
     a->temp_count = f->next_temp;
     a->by_id = tac_analysis_array(a->temp_count, sizeof *a->by_id);
@@ -114,6 +121,7 @@ TacIntervalAnalysis *tac_intervals_analyze(const TacFunction *f,
     }
     size_t cursor = 0;
     for (const TacBlock *b = f->first; b; b = b->next) {
+        a->current_depth = tac_loops_depth(loops, b);
         const TacLiveBlock *view = tac_live_block(live, b);
         touch_set(a, live, view->live_in, cursor);
         for (const TacInstruction *i = b->first; i; i = i->next) {
@@ -129,6 +137,7 @@ TacIntervalAnalysis *tac_intervals_analyze(const TacFunction *f,
         if (a->by_id[k].start != SIZE_MAX)
             a->ordered[a->count++] = &a->by_id[k];
     }
+    tac_loops_free(loops);
     qsort(a->ordered, a->count, sizeof *a->ordered, compare_start);
     if (capacity)
         error[0] = '\0';

@@ -195,7 +195,7 @@ TacOperand tl_value(TacLower *lower, TacOperand operand, TacLowerSourcePolicy po
 static TacOperand destination(TacLower *lower) {
     const TacInstruction *source = lower->source;
     TacOperand dest = source->dest;
-    int arithmetic = source->op >= TAC_MUL && source->op <= TAC_POW;
+    int arithmetic = tac_pseudo_is_arithmetic(tac_pseudo_for(source->op));
     int aliases = dest.kind == TAC_TEMP &&
         ((source->src1.kind == TAC_TEMP && dest.value.id == source->src1.value.id) ||
          (source->src2.kind == TAC_TEMP && dest.value.id == source->src2.value.id));
@@ -304,29 +304,16 @@ static int binary(TacLower *lower) {
  *   sin auxiliares físicos, expansión ni conservación de vivos; Aho §8.2.
  */
 static int pseudo(TacLower *lower) {
-    static const struct {
-        TacOpcode high;
-        TacPseudoKind kind;
-    } selection[] = {
-        {TAC_MUL, TAC_PSEUDO_MUL}, {TAC_DIV, TAC_PSEUDO_DIV},
-        {TAC_MOD, TAC_PSEUDO_MOD}, {TAC_POW, TAC_PSEUDO_POW},
-        {TAC_AUTH, TAC_PSEUDO_AUTH}, {TAC_LOGOUT, TAC_PSEUDO_LOGOUT},
-        {TAC_KV_WRITE, TAC_PSEUDO_KV_WRITE}, {TAC_KV_LOCK, TAC_PSEUDO_KV_LOCK},
-        {TAC_SANC, TAC_PSEUDO_SANC}, {TAC_CIFRAR, TAC_PSEUDO_CIFRAR},
-        {TAC_DESCIFRAR, TAC_PSEUDO_DESCIFRAR},
-    };
-    for (size_t k = 0; k < sizeof selection / sizeof selection[0]; k++) {
-        if (lower->source->op != selection[k].high) {
-            continue;
-        }
+    TacPseudoKind kind = tac_pseudo_for(lower->source->op);
+    if (kind != TAC_PSEUDO_NONE) {
         const TacOpInfo *info = tac_op_info(lower->source->op);
-        TacInstruction target = {.op = TAC_PSEUDO, .pseudo = {.kind = selection[k].kind}};
+        TacInstruction target = {.op = TAC_PSEUDO, .pseudo = {.kind = kind}};
         TacOpInfo target_info;
         if (!tac_instruction_info(&target, &target_info)) {
             tl_fail(lower, "propiedades PSEUDO no disponibles");
             return 1;
         }
-        TacLowerSourcePolicy policy = target_info.scratch_count ?
+        TacLowerSourcePolicy policy = tac_pseudo_is_arithmetic(kind) ?
             TL_SOURCE_ASSIGNABLE : TL_SOURCE_FIXED_ALLOWED;
         TacOperand high[] = {lower->source->dest, lower->source->src1, lower->source->src2};
         TacOperand operands[3] = {tac_none(), tac_none(), tac_none()};
@@ -339,7 +326,7 @@ static int pseudo(TacLower *lower) {
             operands[0] = destination(lower);
         }
         if (!lower->failed) {
-            TacInstruction *instruction = tac_append_pseudo(lower->block, selection[k].kind,
+            TacInstruction *instruction = tac_append_pseudo(lower->block, kind,
                 operands[0], operands[1], operands[2], lower->source->selectors, 0);
             tl_location(lower, instruction);
         }

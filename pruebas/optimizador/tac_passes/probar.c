@@ -39,7 +39,7 @@ int main(void) {
     context.program = f.program;
     assert(tac_passes_run(&context, TAC_PASS_VIRTUAL, error, sizeof error));
     assert(tac_passes_run(&context, TAC_PASS_ALLOCATION, error, sizeof error));
-    assert(next == 5 && metrics.executed == 31);
+    assert(next == 4 && metrics.executed == 15);
     context.report = NULL;
     TacPass failure = {.name = "dce", .point = TAC_PASS_HIGH, .run = fail_pass};
     assert(!tac_pass_execute(&context, &failure, 2, error, sizeof error));

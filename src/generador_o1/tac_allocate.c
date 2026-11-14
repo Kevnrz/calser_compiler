@@ -20,7 +20,8 @@ typedef struct {
  * este cuerpo por derrame integrado, no por una pasada después del error.
  */
 static unsigned no_register_available(RegisterState *state, const TacInterval *range,
-    const char *source, char *error, size_t capacity) {
+    const char *source, const TacAllocationOptions *options, char *error, size_t capacity) {
+    (void)options; /* Interruptor reservado, sin derrame en P12 (§9.13). */
     (void)state; /* C3.4 retirará una víctima y devolverá su registro aquí. */
     const TacInstruction *i = range->origin;
     tac_error(error, capacity,
@@ -47,7 +48,7 @@ static void activate(const TacInterval **active, size_t *count, const TacInterva
  * Efectos: completa mapa/métrica; no toca IR. Restricciones: r4-r15, sin derrame.
  */
 static int allocate_function(TacFunctionAllocation *f, const TacIntervalAnalysis *ranges,
-                              const char *source, char *error, size_t capacity) {
+                              const char *source, const TacAllocationOptions *options, char *error, size_t capacity) {
     RegisterState state = {.function = f};
     for (size_t k = 0; k < tac_intervals_count(ranges); k++) {
         const TacInterval *range = tac_intervals_at(ranges, k);
@@ -65,7 +66,7 @@ static int allocate_function(TacFunctionAllocation *f, const TacIntervalAnalysis
                 chosen = r;
         }
         if (!chosen)
-            chosen = no_register_available(&state, range, source, error, capacity);
+            chosen = no_register_available(&state, range, source, options, error, capacity);
         if (!chosen)
             return 0;
         f->registers[range->temp_id] = chosen;
@@ -93,6 +94,7 @@ static void physical_operand(TacOperand *operand, const unsigned *registers) {
  * Restricciones: contrato público; liveness debe ver todavía el programa virtual.
  */
 TacAllocationResult *tac_allocate_registers(TacProgram *program, const char *source,
+                                 const TacAllocationOptions *options,
                                  char *error, size_t capacity) {
     if (!source) {
         tac_error(error, capacity, "asignación requiere source_name no NULL");
@@ -122,7 +124,7 @@ TacAllocationResult *tac_allocate_registers(TacProgram *program, const char *sou
         assigned->metrics.demand = tac_live_max_temporaries(live);
         TacIntervalAnalysis *ranges = live ?
             tac_intervals_analyze(f, live, error, capacity) : NULL;
-        int ok = ranges && allocate_function(assigned, ranges, source, error, capacity);
+        int ok = ranges && allocate_function(assigned, ranges, source, options, error, capacity);
         if (ok)
             tac_allocate_sites(result, assigned, live);
         tac_intervals_free(ranges);

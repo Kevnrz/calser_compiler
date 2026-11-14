@@ -11,7 +11,7 @@
 static TacAllocationResult *assign(Fixture *f) {
     fixture_validate(f);
     char error[256];
-    TacAllocationResult *a = tac_allocate_registers(f->program, "caso.cls", error, sizeof error);
+    TacAllocationResult *a = tac_allocate_registers(f->program, "caso.cls", NULL, error, sizeof error);
     if (!a)
         fprintf(stderr, "%s\n", error);
     assert(a && !error[0] && f->program->stage == TAC_STAGE_ISA_PHYSICAL);
@@ -45,15 +45,15 @@ static void capacity(void) {
         fixture_exit(f.entry);
         fixture_validate(&f);
         char error[256];
-        TacAllocationResult *a = tac_allocate_registers(f.program, "ruta/caso.cls", error, sizeof error);
+        TacAllocationResult *a = tac_allocate_registers(f.program, "ruta/caso.cls", NULL, error, sizeof error);
         if (count == 13) {
             assert(!a);
             assert(!strcmp(error, "ruta/caso.cls:42:9: error de generacion: sin registros temporales disponibles"));
             for (TacInstruction *i = f.entry->first; i; i = i->next)
                 i->source_line = i->source_column = 0;
-            a = tac_allocate_registers(f.program, "ruta/caso.cls", error, sizeof error);
+            a = tac_allocate_registers(f.program, "ruta/caso.cls", NULL, error, sizeof error);
             assert(!a && !strcmp(error, "ruta/caso.cls:0:0: error de generacion: sin registros temporales disponibles"));
-            a = tac_allocate_registers(f.program, NULL, error, sizeof error);
+            a = tac_allocate_registers(f.program, NULL, NULL, error, sizeof error);
             assert(!a && !strcmp(error, "asignación requiere source_name no NULL"));
             assert(f.program->stage == TAC_STAGE_ISA_VIRTUAL);
             assert(f.entry->first->dest.kind == TAC_TEMP);
@@ -154,7 +154,7 @@ static void arithmetic(void) {
             fixture_validate(&f);
             char error[256];
             TacAllocationResult *result = tac_allocate_registers(f.program,
-                "ruta/mul.cls", error, sizeof error);
+                "ruta/mul.cls", NULL, error, sizeof error);
             assert(!result);
             assert(!strcmp(error,
                 "ruta/mul.cls:42:9: error de generacion: sin registros temporales disponibles"));
@@ -274,7 +274,7 @@ static void linked_and_lower(void) {
         assert(mul->next->op == TAC_ISA && !strcmp(mul->next->isa.instruction->name, "add"));
         assert(mul->next->dest.value.id == f.a.value.id);
         assert(mul->next->src1.value.id == mul->dest.value.id);
-        TacAllocationResult *result = tac_allocate_registers(isa, "alias.cls", error, sizeof error);
+        TacAllocationResult *result = tac_allocate_registers(isa, "alias.cls", NULL, error, sizeof error);
         assert(result);
         tac_allocation_free(result);
         tac_program_free(isa);

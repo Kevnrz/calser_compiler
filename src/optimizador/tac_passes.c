@@ -3,21 +3,12 @@
 #include "tac_loops.h"
 #include <string.h>
 
-/* Entrada: contexto y buffer. Salida: éxito. Efectos: ninguno todavía.
- * Restricciones: las transformaciones y la política de derrame pertenecen a C3.
- */
-static int empty_pass(TacPassContext *context, char *error, size_t capacity) {
-    (void)context;
-    (void)error;
-    (void)capacity;
-    return 1;
-}
 static const TacPass passes[TAC_PASS_COUNT] = {
-    {.name = "unroll", .point = TAC_PASS_HIGH, .run = empty_pass},
-    {.name = "rename", .point = TAC_PASS_HIGH, .run = empty_pass},
-    {.name = "dce", .point = TAC_PASS_HIGH, .run = empty_pass},
-    {.name = "reorder", .point = TAC_PASS_VIRTUAL, .run = empty_pass},
-    {.name = "spill", .point = TAC_PASS_ALLOCATION, .run = empty_pass}
+    {.name = "unroll", .point = TAC_PASS_HIGH, .run = tac_pass_unroll},
+    {.name = "rename", .point = TAC_PASS_HIGH, .run = tac_pass_rename},
+    {.name = "dce", .point = TAC_PASS_HIGH, .run = tac_pass_dce},
+    {.name = "reorder", .point = TAC_PASS_VIRTUAL, .run = tac_pass_reorder},
+    {.name = "spill", .point = TAC_PASS_ALLOCATION, .run = NULL}
 };
 
 /* Entrada: índice. Salida: descriptor prestado o NULL. Efectos: ninguno.
@@ -74,7 +65,7 @@ int tac_passes_run(TacPassContext *context, TacPassPoint point, char *error, siz
     if (point == TAC_PASS_HIGH && !(context->enabled & 1u))
         discard_marks(context);
     for (size_t k = 0; k < TAC_PASS_COUNT; k++) {
-        if (passes[k].point != point || !(context->enabled & (1u << k)))
+        if (!passes[k].run || passes[k].point != point || !(context->enabled & (1u << k)))
             continue;
         if (!tac_pass_execute(context, &passes[k], k, error, capacity))
             return 0;

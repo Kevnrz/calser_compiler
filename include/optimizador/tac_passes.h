@@ -22,6 +22,10 @@ typedef struct {
     TacPassPoint point;                /* Momento fijo de ejecución. */
     TacPassRun run;                    /* 1 éxito; 0 con detalle en el buffer. */
 } TacPass;
+int tac_pass_unroll(TacPassContext *context, char *detail, size_t capacity);
+int tac_pass_rename(TacPassContext *context, char *detail, size_t capacity);
+int tac_pass_dce(TacPassContext *context, char *detail, size_t capacity);
+int tac_pass_reorder(TacPassContext *context, char *detail, size_t capacity);
 const TacPass *tac_pass_at(size_t index);
 /* Entrada: nombre de longitud explícita. Salida: índice o -1. Efectos: ninguno.
  * Restricciones: comparación exacta, sin aliases ni reordenamiento del registro.

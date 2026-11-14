@@ -60,7 +60,7 @@ static size_t allocate_all(TacProgram *program, const char *source) {
         size_t stats[6] = {0};
         measure(f, stats);
         char error[512];
-        TacAllocationResult *a = tac_allocate_registers(&single, source, error, sizeof error);
+        TacAllocationResult *a = tac_allocate_registers(&single, source, NULL, error, sizeof error);
         size_t sites = 0;
         unsigned registers = 0;
         if (a) {

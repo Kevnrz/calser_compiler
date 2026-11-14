@@ -13,8 +13,6 @@
 #include <string.h>
 extern FILE *yyin;
 extern ASTNode *root;
-extern int yyparse(void);
-extern int lexical_errors;
 
 /* Entrada: función virtual, nombre y buffer de métricas. Salida: ninguna.
  * Efectos: calcula máximos y conteos sin añadirlos a la API pública.
@@ -106,11 +104,10 @@ int main(int argc, char **argv) {
     yyin = fopen(argv[1], "r");
     assert(yyin);
     diag_init(argv[1]);
-    int parsed = yyparse();
-    parser_finish();
+    int accepted = parser_accept(yyin, &root);
     assert(!fclose(yyin));
     int status = 3;
-    if (!parsed && !lexical_errors && !parser_syntax_errors() && semantic_analyze(root)) {
+    if (accepted && semantic_analyze(root)) {
         char error[256];
         TacBuildResult *build = tac_build(root, scopes_global(), error, sizeof error);
         assert(build);

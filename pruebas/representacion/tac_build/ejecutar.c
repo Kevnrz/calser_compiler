@@ -14,8 +14,6 @@
 #include <string.h>
 extern FILE *yyin;
 extern ASTNode *root;
-extern int yyparse(void);
-extern int lexical_errors;
 
 /*
  * result_json_string — escapa cadenas sin depender del texto del listado TAC.
@@ -123,10 +121,9 @@ int main(int argc, char **argv) {
         return 1;
     }
     diag_init(argv[1]);
-    int parsed = yyparse();
-    parser_finish();
+    int accepted = parser_accept(yyin, &root);
     fclose(yyin);
-    if (parsed || lexical_errors || parser_syntax_errors()) {
+    if (!accepted) {
         ast_free(root);
         diag_free();
         return 1;

@@ -16,8 +16,6 @@
 #include <string.h>
 extern FILE *yyin;
 extern ASTNode *root;
-extern int yyparse(void);
-extern int lexical_errors;
 
 /* Guarda AST y símbolos para detectar modificaciones de los datos prestados. */
 static FILE *snapshot(const char *source) {
@@ -57,10 +55,9 @@ int main(int argc, char **argv) {
     yyin = fopen(argv[1], "r");
     assert(yyin);
     diag_init(argv[1]);
-    int parsed = yyparse();
-    parser_finish();
+    int accepted = parser_accept(yyin, &root);
     assert(!fclose(yyin));
-    assert(!parsed && !lexical_errors && !parser_syntax_errors());
+    assert(accepted);
     assert(semantic_analyze(root));
     LabelTable labels;
     label_table_init(&labels);

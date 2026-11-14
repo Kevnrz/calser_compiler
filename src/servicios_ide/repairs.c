@@ -28,26 +28,26 @@ static int emit(FILE *out, const char *source, const char *text, SyntaxAnalysis 
                 Repair *repairs, int count, const char *status, const char *explanation) {
     int code = !strcmp(status, "limite") || !strcmp(status, "error");
     fputs("{\"schema_version\":1,\"operation\":\"repair\",\"offset_unit\":\"utf8\",\"source\":", out);
-    diag_json_write_string(out, source);
-    fprintf(out, ",\"exit_code\":%d,\"status\":", code); diag_json_write_string(out, status);
-    fputs(",\"explanation\":", out); diag_json_write_string(out, explanation);
+    json_write_string(out, source);
+    fprintf(out, ",\"exit_code\":%d,\"status\":", code); json_write_string(out, status);
+    fputs(",\"explanation\":", out); json_write_string(out, explanation);
     fputs(",\"repairs\":[", out);
     for (int i = 0; i < count; i++) {
         Repair r = repairs[i];
         if (i) fputc(',', out);
-        fputs("{\"code\":", out); diag_json_write_string(out, codes[r.kind]);
-        fputs(",\"description\":", out); diag_json_write_string(out, descriptions[r.kind]);
+        fputs("{\"code\":", out); json_write_string(out, codes[r.kind]);
+        fputs(",\"description\":", out); json_write_string(out, descriptions[r.kind]);
         fprintf(out, ",\"automatic_safe\":%s,\"edits\":[{\"start\":%zu,\"end\":%zu,\"text\":\"%c\"}],",
                 r.automatic ? "true" : "false", r.position, r.position, delimiters[r.kind]);
         fprintf(out, "\"preconditions\":[{\"start\":%zu,\"end\":%zu,\"expected\":", base.previous_start, base.previous_end);
-        diag_json_write_bytes(out, text + base.previous_start, base.previous_end - base.previous_start);
+        json_write_bytes(out, text + base.previous_start, base.previous_end - base.previous_start);
         fputs("}],\"reasons\":[", out);
-        diag_json_write_string(out, r.accepted ? "La copia completa es aceptada por el parser C." : "La copia supera el token del primer error; quedan errores posteriores.");
+        json_write_string(out, r.accepted ? "La copia completa es aceptada por el parser C." : "La copia supera el token del primer error; quedan errores posteriores.");
         fputc(',', out);
-        diag_json_write_string(out, r.automatic ? "Unico punto y coma con aceptacion sintactica completa, sin errores lexicos." : "Requiere revision manual; no garantiza intencion ni semantica.");
+        json_write_string(out, r.automatic ? "Unico punto y coma con aceptacion sintactica completa, sin errores lexicos." : "Requiere revision manual; no garantiza intencion ni semantica.");
         fprintf(out, "],\"validation\":{\"accepted\":%s,\"resolved\":true,\"reached\":%zu,\"target\":%zu,\"description\":",
                 r.accepted ? "true" : "false", r.reached, base.offset);
-        diag_json_write_string(out, r.accepted ? "Bison/Flex: aceptacion sintactica completa de la copia; semantica no comprobada." : "Bison/Flex: primer error superado; aceptacion sintactica parcial, solo manual.");
+        json_write_string(out, r.accepted ? "Bison/Flex: aceptacion sintactica completa de la copia; semantica no comprobada." : "Bison/Flex: primer error superado; aceptacion sintactica parcial, solo manual.");
         fputs("}}", out);
     }
     fputs("]}\n", out);

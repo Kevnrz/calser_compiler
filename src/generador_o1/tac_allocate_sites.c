@@ -22,7 +22,7 @@ static uint16_t live_mask(const TacFunctionAllocation *f, const TacLiveAnalysis 
     uint16_t mask = 0;
     for (size_t k = 0; k < tac_live_location_count(live); k++) {
         TacOperand value = tac_live_location(live, k);
-        if (value.kind == TAC_TEMP && tac_live_contains(live, set, value))
+        if (value.kind == TAC_TEMP && tac_live_contains_at(live, set, k))
             mask |= (uint16_t)(1u << f->registers[value.value.id]);
     }
     return mask;
@@ -72,7 +72,7 @@ void tac_allocate_sites(TacAllocationResult *a, TacFunctionAllocation *f,
                 for (size_t k = 0; k < tac_live_location_count(live); k++) {
                     TacOperand value = tac_live_location(live, k);
                     if (value.kind == TAC_TEMP && f->registers[value.value.id] == r &&
-                        tac_live_contains(live, view->preserve, value)) {
+                        tac_live_contains_at(live, view->preserve, k)) {
                         saved[site->preserved_count++] = (TacRegisterBinding){value.value.id, r};
                         break;
                     }

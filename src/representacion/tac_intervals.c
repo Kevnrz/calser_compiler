@@ -55,7 +55,7 @@ static void touch_set(TacIntervalAnalysis *a, const TacLiveAnalysis *live,
                       const TacLiveSet *set, size_t position) {
     for (size_t k = 0; k < tac_live_location_count(live); k++) {
         TacOperand value = tac_live_location(live, k);
-        if (tac_live_contains(live, set, value))
+        if (tac_live_contains_at(live, set, k))
             touch(a, value, position, NULL);
     }
 }

@@ -369,6 +369,7 @@ y luego vivos antes/después de cada instrucción. Las claves son Symbol por
 identidad, TEMP por ID local y PHYS por número; nunca se comparan direcciones de
 casillas para identificar valores. Las vistas y conjuntos pertenecen al resultado.
 Conservar función/instrucciones/símbolos; liberar análisis antes de editar.
+La pertenencia se consulta por posición del universo mediante `tac_live_contains_at`.
 
 El adaptador común `tac_locations` agrega globales HIGH y registros implícitos
 ISA a las consultas de tac.h. Cada instrucción separa (a) usos/definiciones y

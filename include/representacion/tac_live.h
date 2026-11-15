@@ -46,6 +46,9 @@ const TacLiveInstruction *tac_live_instruction(const TacLiveAnalysis *analysis,
 size_t tac_live_location_count(const TacLiveAnalysis *analysis);
 TacOperand tac_live_location(const TacLiveAnalysis *analysis, size_t index);
 int tac_live_contains(const TacLiveAnalysis *analysis, const TacLiveSet *set, TacOperand location);
+/* Pertenencia por posición del universo; cero para NULL o índice fuera de rango.
+ * El conjunto pertenece al análisis, como en tac_live_contains; Aho §9.2.5. */
+int tac_live_contains_at(const TacLiveAnalysis *a, const TacLiveSet *set, size_t index);
 /* Máximo de TEMP vivos en entradas/salidas de bloques e instrucciones.
  * No cuenta registros fijos ni VARIABLE; Aho §9.2.5. No modifica el análisis. */
 size_t tac_live_max_temporaries(const TacLiveAnalysis *analysis);

@@ -250,6 +250,92 @@ static void observable_failure(void) {
     tac_program_free(f.program);
 }
 
+/* Entrada: análisis y conjunto propios. Salida: ninguna. Efectos: compara consultas.
+ * Restricciones: enumera todo el universo, incluidos bits cero; Aho §9.2.5.
+ */
+static void same_membership(const TacLiveAnalysis *a, const TacLiveSet *set) {
+    size_t count = tac_live_location_count(a);
+    for (size_t k = 0; k < count; k++)
+        assert(tac_live_contains_at(a, set, k) ==
+               tac_live_contains(a, set, tac_live_location(a, k)));
+    assert(!tac_live_contains_at(NULL, set, 0));
+    assert(!tac_live_contains_at(a, NULL, 0));
+    assert(!tac_live_contains_at(a, set, count));
+    assert(!tac_live_contains_at(a, set, SIZE_MAX));
+    TacOperand missing = {.kind = TAC_TEMP, .value.id = SIZE_MAX};
+    assert(!tac_live_contains(a, set, missing));
+    missing.kind = TAC_PHYS;
+    assert(!tac_live_contains(a, set, missing));
+    missing.value.id = 16;
+    assert(!tac_live_contains(a, set, missing));
+}
+
+/* P14: todas las ubicaciones/conjuntos en HIGH, ISA virtual y física.
+ * Incluye huecos de ID, raíces VARIABLE, registros implícitos, preservados
+ * y el límite entre palabras de 64 bits; Aho §9.2.5.
+ */
+static void indexed_membership(void) {
+    const TacStage stages[] = {TAC_STAGE_HIGH, TAC_STAGE_ISA_VIRTUAL, TAC_STAGE_ISA_PHYSICAL};
+    for (size_t stage = 0; stage < 3; stage++) {
+        Fixture f;
+        fixture_init(&f, stages[stage]);
+        Symbol callee = {.kind = SYMBOL_FUNCTION, .name = "aux", .type = TYPE_VOID};
+        TacOperand values[70];
+        if (stages[stage] != TAC_STAGE_ISA_PHYSICAL) {
+            for (size_t k = 0; k < 70; k++) {
+                values[k] = tac_temp_new(f.function);
+                if (stages[stage] == TAC_STAGE_HIGH)
+                    tac_append(f.entry, TAC_COPY, values[k], tac_integer((int64_t)k), tac_none());
+                else
+                    fixture_isa(f.entry, "mov", values[k], tac_none(), tac_integer((int64_t)k), tac_none());
+            }
+        }
+        if (stages[stage] == TAC_STAGE_HIGH) {
+            tac_append(f.entry, TAC_CALL, tac_none(), tac_function_operand(&callee), tac_integer(0));
+            for (size_t k = 1; k < 70; k++)
+                tac_append(f.entry, TAC_ADD, values[0], values[0], values[k]);
+            tac_append(f.entry, TAC_COPY, tac_variable(&f.local), values[0], tac_none());
+        } else {
+            fixture_isa(f.entry, "jas", tac_physical(TAC_P1_RL), tac_none(), tac_none(),
+                        tac_function_operand(&callee));
+            if (stages[stage] == TAC_STAGE_ISA_VIRTUAL) {
+                for (size_t k = 1; k < 70; k++)
+                    fixture_isa(f.entry, "add", values[0], values[0], values[k], tac_none());
+                fixture_isa(f.entry, "sw", tac_none(), tac_physical(TAC_P1_RZ), values[0], tac_none());
+            } else {
+                fixture_isa(f.entry, "add", tac_physical(4), tac_physical(5), tac_physical(15), tac_none());
+                fixture_isa(f.entry, "sw", tac_none(), tac_physical(TAC_P1_RZ), tac_physical(4), tac_none());
+            }
+        }
+        TacBlock *end = tac_block_new(f.function);
+        if (stages[stage] == TAC_STAGE_HIGH)
+            fixture_return(end);
+        else
+            fixture_exit(end);
+        TacOperand roots[] = {tac_variable(&f.local), tac_variable(&f.global)};
+        TacLiveAnalysis *a = analyze(&f, roots, 2);
+        assert(stages[stage] == TAC_STAGE_ISA_PHYSICAL || tac_live_location_count(a) > 64);
+        for (const TacBlock *b = f.function->first; b; b = b->next) {
+            const TacLiveBlock *v = tac_live_block(a, b);
+            const TacLiveSet *sets[] = {v->use, v->def, v->live_in, v->live_out};
+            for (size_t k = 0; k < 4; k++)
+                same_membership(a, sets[k]);
+            for (const TacInstruction *i = b->first; i; i = i->next) {
+                const TacLiveInstruction *view = tac_live_instruction(a, i);
+                const TacLiveSet *all[] = {view->uses, view->definitions, view->before,
+                                           view->after, view->preserve};
+                for (size_t k = 0; k < 5; k++) {
+                    same_membership(a, all[k]);
+                    assert(!tac_live_contains(a, all[k], f.a)); /* ID reservado sin ubicación. */
+                    assert(!tac_live_contains(a, all[k], tac_physical(TAC_P1_RZ)));
+                }
+            }
+        }
+        tac_live_free(a);
+        tac_program_free(f.program);
+    }
+}
+
 /* Entrada: ninguna. Salida: cero si pasan contratos. Efectos: ejecuta casos manuales.
  * Restricciones: no se enlaza con el generador ni el frontend.
  */
@@ -262,6 +348,7 @@ int main(void) {
     pseudo_effects();
     classification();
     observable_failure();
+    indexed_membership();
     char error[128];
     assert(!tac_live_analyze(NULL, NULL, 0, error, sizeof error));
     assert(!tac_live_analyze(NULL, NULL, 0, NULL, 0));

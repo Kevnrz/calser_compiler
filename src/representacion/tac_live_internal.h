@@ -12,6 +12,8 @@ struct TacLiveAnalysis {
     TacOperand *locations;
     size_t count;
     size_t capacity;
+    size_t *temp_positions;           /* next_temp entradas; SIZE_MAX si no aparece. */
+    size_t *physical_positions;       /* 16 entradas; conserva el orden del universo. */
     TacLiveBlock *blocks;
     size_t block_count;
     TacLiveInstruction *instructions;

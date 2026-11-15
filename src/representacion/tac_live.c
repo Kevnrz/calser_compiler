@@ -12,6 +12,11 @@
  * Restricciones: identidad local a una función, no igualdad de direcciones.
  */
 static size_t location_index(const TacLiveAnalysis *a, TacOperand location) {
+    if (location.kind == TAC_TEMP)
+        return location.value.id < a->function->next_temp ?
+               a->temp_positions[location.value.id] : SIZE_MAX;
+    if (location.kind == TAC_PHYS)
+        return location.value.id < 16 ? a->physical_positions[location.value.id] : SIZE_MAX;
     for (size_t i = 0; i < a->count; i++) {
         if (tac_location_equal(a->locations[i], location))
             return i;
@@ -38,6 +43,10 @@ static void collect_location(void *user, TacOperand location, int definition) {
         a->locations = locations;
         a->capacity = capacity;
     }
+    if (location.kind == TAC_TEMP)
+        a->temp_positions[location.value.id] = a->count;
+    else if (location.kind == TAC_PHYS)
+        a->physical_positions[location.value.id] = a->count;
     a->locations[a->count++] = location;
 }
 
@@ -269,6 +278,12 @@ TacLiveAnalysis *tac_live_analyze(const TacFunction *function, const TacOperand 
     }
     TacLiveAnalysis *a = tac_allocate(sizeof *a);
     a->function = function;
+    a->temp_positions = tac_analysis_array(function->next_temp, sizeof *a->temp_positions);
+    a->physical_positions = tac_analysis_array(16, sizeof *a->physical_positions);
+    for (size_t k = 0; k < function->next_temp; k++)
+        a->temp_positions[k] = SIZE_MAX;
+    for (size_t k = 0; k < 16; k++)
+        a->physical_positions[k] = SIZE_MAX;
     prepare(a, exit_roots, root_count);
     if (function->program->stage == TAC_STAGE_HIGH && !strcmp(function->symbol->name, "main")) {
         for (size_t i = 0; i < root_count; i++)
@@ -330,6 +345,13 @@ int tac_live_contains(const TacLiveAnalysis *a, const TacLiveSet *set, TacOperan
     return index != SIZE_MAX && bit(set, index);
 }
 
+/* Entrada: análisis, conjunto propio e índice del universo. Salida: bit o cero.
+ * Efectos: ninguno. Restricciones: conjunto de ese análisis; Aho §9.2.5.
+ */
+int tac_live_contains_at(const TacLiveAnalysis *a, const TacLiveSet *set, size_t index) {
+    return a && set && index < a->count ? bit(set, index) : 0;
+}
+
 /* Entrada: conjunto propio o NULL. Salida: ninguna. Efectos: libera.
  * Restricciones: solo usada por la liberación del propietario.
  */
@@ -363,6 +385,8 @@ void tac_live_free(TacLiveAnalysis *a) {
     free(a->instructions);
     free(a->blocks);
     free(a->locations);
+    free(a->temp_positions);
+    free(a->physical_positions);
     free(a);
 }
 

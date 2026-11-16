@@ -958,7 +958,7 @@ Preparar una lista JSON ahora **no completa** esa recuperación. Es una decisió
 ### M1 — Servicio C y diagnósticos estructurados
 
 - [x] Fijar esquema, estados, rangos, límites y compatibilidad de CLI.
-- [x] Exponer diagnósticos desde `src/diagnostics.c` sin inferirlos con regex en Python.
+- [x] Exponer diagnósticos desde `src/comun/diagnostics.c` sin inferirlos con regex en Python.
 - [x] Reutilizar las fases existentes de parseo/semántica sin generación de código.
 - [x] Adaptar `ide/ccom.py` y `interfaz/comprobacion.py` al servicio y sus fallos explícitos.
 - [x] Probar fuente sin guardar, rutas con espacios, Unicode, falta de main, varios errores semánticos, cancelación y cero artefactos.
@@ -1134,7 +1134,7 @@ Los nombres de módulos C nuevos son propuestas, no archivos creados. Se elegir�
 | `interfaz/ventana.py`, `interfaz/editor.py` | Actualizar conexiones y recepción de diagnósticos/tokens sin replicar reglas. | Documento, pestañas, resaltado visual y acciones. |
 | `interfaz/explorador.py`, `acciones_archivos.py`, `seleccion_archivos.py`, `orden_explorador.py`, `operaciones_carpetas.py`, `iconos.py` | Mantener comportamiento del gestor de proyecto. | Árbol, archivos, lotes, arrastre y recursos. |
 | `interfaz/ejecucion.py`, `terminal.py`, `terminal_pty.py` | Mantener integración de herramientas; el simulador Python está autorizado y se conserva. | Control de procesos y presentación. |
-| `src/diagnostics.c`, `include/diagnostics.h` | Añadir salida/colección estructurada reutilizable con lista de diagnósticos. | Nada de diagnóstico del lenguaje inferido por regex. |
+| `src/comun/diagnostics.c`, `include/comun/diagnostics.h` | Añadir salida/colección estructurada reutilizable con lista de diagnósticos. | Nada de diagnóstico del lenguaje inferido por regex. |
 | `grammar/lexer.l`, `grammar/parser.y` | Exponer rangos, tokens, contexto y reinicio; posteriormente recuperación. | No se copian sus reglas a Python. |
 | `src/main.c`, `makefile` | Integrar servicio, opciones compatibles, construcción y pruebas. | No cambia la responsabilidad de F5 como invocación de ccom. |
 | Módulos `src/semantic*` e interfaces existentes | Reutilizar y revisar ciclo de vida; no reconstruir semántica para el IDE. | Solo se presentan sus resultados. |
@@ -1258,7 +1258,7 @@ Ver [protocolo M2](../../docs/ccom_servicios_ide.md#tokens). Pruebas: `make chec
 
 ## 15. Resultado de M3 (2026-11-11)
 
-Adaptado el comportamiento y los casos de la entrega a `src/suggestions.c`, sin importar/fusionar sus dataclasses. `--suggest-json <cursor UTF-8>` usa los rangos Flex y el contexto real de Bison/LAC. Un marcador privado en el EOF temporal permite preguntar por continuaciones de programas completos/incompletos y distinguir errores anteriores. No se ejecuta semántica ni se inventan identificadores/literales. Filtrado y orden se realizan en C.
+Adaptado el comportamiento y los casos de la entrega a `src/servicios_ide/suggestions.c`, sin importar/fusionar sus dataclasses. `--suggest-json <cursor UTF-8>` usa los rangos Flex y el contexto real de Bison/LAC. Un marcador privado en el EOF temporal permite preguntar por continuaciones de programas completos/incompletos y distinguir errores anteriores. No se ejecuta semántica ni se inventan identificadores/literales. Filtrado y orden se realizan en C.
 
 `ide/sugerencias_ccom.py` valida JSON y convierte rangos al contrato compartido. `ide/servicio_ccom.py` comparte transporte cancelable con el léxico de M2. El proveedor predeterminado ya es C; Ctrl+Espacio, pausa opcional, aceptación, Deshacer y vigencia mantienen su UI. La pausa conserva su valor predeterminado desactivado. Cambiar ccom cancela consultas/listas antiguas. Reparaciones sigue pendiente para M4.
 
@@ -1279,7 +1279,7 @@ La política ya no llama al parser LL(1) Python: valida original y candidato en 
 
 ## 17. Resultado de M5 (2026-11-11)
 
-Clones Tipo I/II compara en `src/clones.c` los reconocimientos reales de Flex. `ide/clones.py` queda como modelos, empaquetado CCL1, transporte y adaptación de rangos, sin regex ni comparación Python. La ventana pasa la ruta de ccom configurada al trabajador; el panel, instantáneas sin guardar, comparación y navegación se conservan.
+Clones Tipo I/II compara en `src/servicios_ide/clones.c` los reconocimientos reales de Flex. `ide/clones.py` queda como modelos, empaquetado CCL1, transporte y adaptación de rangos, sin regex ni comparación Python. La ventana pasa la ruta de ccom configurada al trabajador; el panel, instantáneas sin guardar, comparación y navegación se conservan.
 
 Se mantienen equivalencia biyectiva de nombres, variación de literales por clase, límites de archivos/bytes/tokens/candidatos/pares, cancelación y ausencia de resultados parciales; se añade un presupuesto de trabajo y plazo de 15 s. Las entradas con errores léxicos se bloquean explícitamente. [Protocolo, arquitectura, límites y pruebas M5](../../docs/ccom_servicios_ide.md#clones).
 
@@ -1324,7 +1324,7 @@ Este documento registra el mapa vigente y el alcance de la revisión. La explica
 | `ide/nucleo/asistencia.py` | Productivo: modelos y validación estructural, sin importar analizadores ni Qt. Mantener su ubicación evita romper contratos del aplicador y las entregas. |
 | `ide/nucleo/lexico.py`, `gramatica.py`, `tabla.py`, `parser.py` | Conservar API de consulta, estudio y pruebas del LL(1), autorizada por Saddy. Cabeceras/README explican que no es backend gráfico ni respaldo de ccom. |
 | Sugerencias/reparaciones Python de la entrega | No se cargan en producción; los proveedores efectivos son `ide.sugerencias_ccom` y `ide.reparaciones_ccom`. No se fusiona ni se borra la rama del compañero desde esta revisión. |
-| Regex/firma/comparación de clones Python | Sustituidos en M5 por Flex/`src/clones.c`. El helper `tokenizar` restante consulta Flex y solo se conserva para inspección/pruebas, no para el detector. |
+| Regex/firma/comparación de clones Python | Sustituidos en M5 por Flex/`src/servicios_ide/clones.c`. El helper `tokenizar` restante consulta Flex y solo se conserva para inspección/pruebas, no para el detector. |
 | `ide/adaptador_nucleo.py` | Conservar nombre por compatibilidad: hoy adapta Flex/JSON a Qt. No importa el lexer del núcleo. |
 | Regex de `ide/ccom.py:diagnosticos` | Conservar para leer la salida textual de F5. No reconoce código Calser ni determina reglas del lenguaje. |
 | `ide/servicio_ccom.py` y `interfaz/comprobacion.py` | Conservar ambos: transporte Popen bloqueante en trabajadores M2–M5 y QProcess dirigido por señales para M1. Sus ciclos de vida son distintos; no hay dos analizadores. |
@@ -1388,12 +1388,12 @@ Verificación final M6: **382 pruebas IDE correctas**, suite completa del compil
 
 1. `ide/main.py`, `ide/__init__.py`, `ide/interfaz/ventana.py`: arranque y conexiones.
 2. `ide/ccom.py`, `ide/servicio_ccom.py`, `ide/interfaz/comprobacion.py`: ejecutable, cabecera común y procesos.
-3. `src/main.c`, `include/diagnostics.h`, `src/diagnostics.c`, `src/diagnostics_json.c`: despacho y datos reales.
-4. `grammar/lexer.l`, `include/lexer_service.h`, `ide/adaptador_nucleo.py`, `ide/interfaz/analisis.py`: tokens y colores.
-5. `grammar/parser.y`, `src/suggestions.c`, `src/syntax_service.c`, `src/repairs.c`: LAC, candidatos y propiedad de AST.
+3. `src/main.c`, `include/comun/diagnostics.h`, `src/comun/diagnostics.c`, `src/servicios_ide/diagnostics_json.c`: despacho y datos reales.
+4. `grammar/lexer.l`, `include/analisis/lexer_service.h`, `ide/adaptador_nucleo.py`, `ide/interfaz/analisis.py`: tokens y colores.
+5. `grammar/parser.y`, `src/servicios_ide/suggestions.c`, `src/servicios_ide/syntax_service.c`, `src/servicios_ide/repairs.c`: LAC, candidatos y propiedad de AST.
 6. `ide/nucleo/asistencia.py`, `ide/sugerencias_ccom.py`, `ide/reparaciones_ccom.py`, `ide/interfaz/asistencia.py`: contratos y coordinación.
 7. `ide/politica_asistencia.py`, `ide/ediciones.py`, `ide/interfaz/ediciones.py`: permisos, vigencia y edición.
-8. `src/clones.c`, `ide/clones.py`, `ide/interfaz/clones.py`: paquete, equivalencia y comparación visual.
+8. `src/servicios_ide/clones.c`, `ide/clones.py`, `ide/interfaz/clones.py`: paquete, equivalencia y comparación visual.
 9. `ide/nucleo/README.md`: LL(1) de consulta/pruebas, separado del recorrido anterior.
 
 Los comentarios de M6 cubren los servicios/adaptadores de la migración y sus puntos de integración. No implican una reescritura ni auditoría total del generador, semántico, simulador o todos los widgets.
@@ -1475,7 +1475,7 @@ Actualizado en M6, 2026-11-11. La entrega original Python se usó como referenci
 
 ## Dónde trabajar
 
-- Backend: `src/suggestions.c, include/suggestions.h, grammar/parser.y y grammar/lexer.l`.
+- Backend: `src/servicios_ide/suggestions.c, include/servicios_ide/suggestions.h, grammar/parser.y y grammar/lexer.l`.
 - Entrada nativa: `ccom --suggest-json <cursorBytes>`; stdout JSON v1 y stderr para auxiliares.
 - Adaptador: `ide/sugerencias_ccom.py`. Valida datos y convierte coordenadas; no interpreta Calser.
 - Modelos compartidos: `ide/nucleo/asistencia.py`, sin importar los analizadores Python.
@@ -1517,7 +1517,7 @@ Actualizado en M6, 2026-11-11. La entrega original Python se usó como referenci
 
 ## Dónde trabajar
 
-- Backend: `src/repairs.c, src/syntax_service.c y sus cabeceras`.
+- Backend: `src/servicios_ide/repairs.c, src/servicios_ide/syntax_service.c y sus cabeceras`.
 - Entrada nativa: `ccom --repair-json y --syntax-json`; stdout JSON v1 y stderr para auxiliares.
 - Adaptador: `ide/reparaciones_ccom.py`. Valida datos y convierte coordenadas; no interpreta Calser.
 - Modelos compartidos: `ide/nucleo/asistencia.py`, sin importar los analizadores Python.
@@ -2165,7 +2165,7 @@ Las futuras ediciones de reparación requerirán fronteras válidas: este permis
 4. Se ejecutan y liberan las mismas fases de análisis de la compilación normal.
 5. `diag_json_finish` escribe la respuesta, libera los mensajes capturados y desconecta el observador. Un fallo de escritura cambia el retorno a 1 y puede dejar una respuesta incompleta que el cliente debe rechazar.
 
-Archivos C: `include/diagnostics.h`, `src/diagnostics.c`, `include/diagnostics_json.h`, `src/diagnostics_json.c` y la integración de CLI en `src/main.c`.
+Archivos C: `include/comun/diagnostics.h`, `src/comun/diagnostics.c`, `include/servicios_ide/diagnostics_json.h`, `src/servicios_ide/diagnostics_json.c` y la integración de CLI en `src/main.c`.
 
 El servicio es un proceso por solicitud. Su estado global no se comparte entre documentos ni se presenta como una biblioteca C reentrante.
 
@@ -2335,8 +2335,8 @@ Solo `ok` contiene propuestas. Todos los demás estados incluyen explicación y 
 
 ### Cómo calcula las propuestas
 
-1. `suggestions_run`, en `src/suggestions.c`, lee la fuente acotada e instala un observador de diagnósticos silencioso.
-2. Flex recorre la fuente completa y publica sus rangos mediante `LexerObserver` (`include/lexer_service.h`). Se detectan comentarios, fragmento alrededor del cursor y errores anteriores. Los errores del sufijo posterior no bloquean el prefijo consultado.
+1. `suggestions_run`, en `src/servicios_ide/suggestions.c`, lee la fuente acotada e instala un observador de diagnósticos silencioso.
+2. Flex recorre la fuente completa y publica sus rangos mediante `LexerObserver` (`include/analisis/lexer_service.h`). Se detectan comentarios, fragmento alrededor del cursor y errores anteriores. Los errores del sufijo posterior no bloquean el prefijo consultado.
 3. Para palabras/números, el fragmento se toma cuando `inicio < cursor <= fin`; para operadores extensibles `= ! < >`, cuando `inicio <= cursor < fin`. Los delimitadores y operadores ya completos se consideran parte del prefijo. Un carácter ASCII de reservada incompleta, como `V`, puede observarse como fragmento inválido y completarse a `Vi`/`Vm`; no se modifica la regla de Flex ni se tolera ese error al compilar.
 4. Se analiza únicamente el prefijo anterior al fragmento con el parser existente. En modo consulta, `syntax_lex` sustituye el EOF temporal por un **TOKEN_CURSOR privado**, que no pertenece a ninguna producción. `yyreport_syntax_error` consulta `yypcontext_expected_tokens` con **LAC**, distingue ese marcador de un error real anterior y recoge los terminales concretos.
 5. Así un programa completo también puede ofrecer continuaciones, sin confundir EOF con un error del usuario. No se derivan reglas a partir de mensajes humanos ni se copia una gramática a Python.
@@ -2465,7 +2465,7 @@ No ejecuta parser, semántica, generación ni simulador. No guarda documentos ni
 1. `ide/interfaz/clones.py` reúne archivos `.cls` permitidos del proyecto y reemplaza su contenido por los buffers abiertos con nombre. Conserva las exclusiones, la comparación visual, el mínimo, la cancelación y la navegación vigilada. Los documentos nuevos con ruta pueden participar sin existir en disco; los documentos sin nombre quedan excluidos.
 2. `ide/clones.py` mantiene los modelos `Fragmento`/`ParClon`, empaqueta instantáneas y valida el protocolo. Ya no tiene regex, reservadas, comparación, firmas ni normalización del lenguaje. El helper de inspección `tokenizar` consulta `--tokens-json`; el detector productivo no lo llama.
 3. `ide/servicio_ccom.py` crea un directorio privado, escribe el paquete y lanza el ejecutable configurado, con el mismo transporte cancelable de los otros servicios. No utiliza shell. Siempre recoge el hijo y elimina el paquete, incluso al cancelar o fallar.
-4. `src/clones.c` lee el paquete acotado, observa los reconocimientos de `grammar/lexer.l` mediante `lexer_scan_text` y compara en C. Las rutas de los documentos solo identifican fuentes: **nunca se abren desde C**. Cada texto analizado coincide con la copia enviada; no hay que guardar antes de analizar.
+4. `src/servicios_ide/clones.c` lee el paquete acotado, observa los reconocimientos de `grammar/lexer.l` mediante `lexer_scan_text` y compara en C. Las rutas de los documentos solo identifican fuentes: **nunca se abren desde C**. Cada texto analizado coincide con la copia enviada; no hay que guardar antes de analizar.
 5. El adaptador convierte extremos UTF-8 a caracteres Python para el panel y el editor. No reconstruye tokens. La ventana descarta resultados si cambian buffers, carpeta, mínimo o ejecutable.
 
 ### Equivalencia
@@ -2654,11 +2654,11 @@ Una consulta con dos errores y recuperación normal tiene `status: "errors"`, do
 | Archivo | Responsabilidad |
 | --- | --- |
 | `grammar/parser.y` | Producciones de recuperación, sincronización, progreso, contador y destructores. |
-| `include/parser_service.h` | Contador, límite y limpieza del observador, sin transferir el AST a otros consumidores. |
+| `include/analisis/parser_service.h` | Contador, límite y limpieza del observador, sin transferir el AST a otros consumidores. |
 | `src/main.c` | Bloqueo de fases posteriores y limpieza del AST parcial. |
-| `src/diagnostics_json.c` | Señalar recuperación agotada como límite/truncado. |
+| `src/servicios_ide/diagnostics_json.c` | Señalar recuperación agotada como límite/truncado. |
 | `grammar/lexer.l` | Finalizar/liberar el contexto del parser en consultas de memoria. |
-| `pruebas/recuperacion/probar.py` | Globales, funciones, cuerpos/ramas/cierres, Unicode, EOF, comentarios, límites, artefactos y 120 mutaciones deterministas. |
+| `pruebas/analisis/recuperacion/probar.py` | Globales, funciones, cuerpos/ramas/cierres, Unicode, EOF, comentarios, límites, artefactos y 120 mutaciones deterministas. |
 | `ide/pruebas/test_recuperacion_sintactica.py` | Dos problemas reales navegables y corrección progresiva sin guardar; validación/reparación no aceptan entrada recuperada. |
 
 ```sh
@@ -2676,4 +2676,4 @@ Verificación: **384 pruebas IDE**, suite completa del compilador y casos M7 baj
 
 Se agregaron 12 programas independientes en `ide/ejemplos/revision_manual/recorridos`, con comentarios y una guía de resultados: operadores, llamadas adelantadas/anidadas, ramas, ciclos L/S, recursión con R, recorrido/copia/búsqueda de arreglos, suma/resta de matrices, transposición rectangular, producto matricial y corto circuito. La guía propone mutaciones individuales para asistencia y errores sin convertir el corpus válido en un conjunto de fuentes dañadas.
 
-Verificación específica del corpus: 12/12 pasan `ccom --check`, generación de artefactos y simulación; los valores finales coinciden con los esperados, con terminación normal y sin avisos de separación. Se usaron los auxiliares existentes de `pruebas/programas/probar.py`, con salidas temporales. No se ejecutó la suite completa. La revisión humana sigue pendiente; los estados manuales anteriores se conservan.
+Verificación específica del corpus: 12/12 pasan `ccom --check`, generación de artefactos y simulación; los valores finales coinciden con los esperados, con terminación normal y sin avisos de separación. Se usaron los auxiliares existentes de `pruebas/generador_o0/programas/probar.py`, con salidas temporales. No se ejecutó la suite completa. La revisión humana sigue pendiente; los estados manuales anteriores se conservan.

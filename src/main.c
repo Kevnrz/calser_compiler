@@ -37,10 +37,8 @@
 #include "semantic_scope.h"
 #include "assembler.h"
 
-extern int yyparse(void);
 extern FILE *yyin;
 
-extern ASTNode *root;
 
 // Cantidad de errores léxicos (lexer.l).
 extern int lexical_errors;
@@ -481,6 +479,16 @@ static int assemble_and_write(const Options *options,
         return 1;
     }
 
+    /* Límite de la imagen final, común a O0/O1/-x (enunciado §3.2.1).
+     * El nombre real evita filtrar el origen interno "<generado>" de O0. */
+    char error[512];
+    if (!asm_check_rom((size_t)program.count, options->input, error, sizeof error)) {
+        fprintf(stderr, "%s\n", error);
+        report_phase(options, "ensamblado", 0);
+        asm_free(&program);
+        return 1;
+    }
+
     report_phase(options, "ensamblado", 1);
 
     // -p: índice del bundle, el bundle en ensamblador y como en el .hex.
@@ -616,6 +624,7 @@ typedef struct {
  *   que va antes de ast_free; diag_free va al final y siempre se ejecuta.
  */
 static void compile_release(Compilation *compilation) {
+    tac_metrics_free(&compilation->metrics);
     tac_allocation_free(compilation->allocation);
     tac_program_free(compilation->isa);
     free(compilation->initial_tac);
@@ -687,16 +696,13 @@ static int phase_parse(Compilation *compilation) {
     // §8.2: los errores muestran el archivo y la línea del programa.
     diag_init(options->input);
 
-    // Recuperar puede devolver 0 con errores: revisar también parser_syntax_errors().
-    // Contrato: docs/ccom_servicios_ide.md#contrato-yyparse.
-    int result = yyparse();
+    // Aceptación completa: docs/ccom_servicios_ide.md#contrato-yyparse.
+    int accepted = parser_accept(yyin, &compilation->root);
 
     fclose(yyin);
 
     // El árbol inicial, si llegó a construirse, pertenece a main. Un AST
     // recuperado se libera normalmente, pero jamás se exporta ni se analiza.
-    compilation->root = root;
-    parser_finish();
 
     if (lexical_errors > 0) {
         fprintf(stderr,
@@ -710,7 +716,7 @@ static int phase_parse(Compilation *compilation) {
         return 0;
     }
 
-    if (result != 0 || parser_syntax_errors() > 0) {
+    if (!accepted) {
         if (parser_recovery_limited())
             fprintf(stderr, "Analisis sintactico incompleto: limite de recuperacion alcanzado.\n");
         report_phase(options, "fase 1-2: analisis lexico y sintactico", 0);
@@ -914,6 +920,7 @@ static void report_pass(void *user, const char *name, int ok) {
 static int phase_o1(Compilation *c) {
     const Options *o = c->options;
     char error[512] = "";
+    c->metrics.level = (unsigned)o->level;
     TacPassContext context = {.program = c->tac->program, .build = c->tac,
         .scopes = scopes_first(), .source_name = o->input, .enabled = o->passes,
         .unroll_factor = o->unroll_factor, .metrics = &c->metrics,
@@ -925,13 +932,22 @@ static int phase_o1(Compilation *c) {
     if (!c->isa)
         goto fail;
     context.program = c->isa;
-    if (!tac_passes_run(&context, TAC_PASS_VIRTUAL, error, sizeof error) ||
-        !tac_passes_run(&context, TAC_PASS_ALLOCATION, error, sizeof error))
+    if (!tac_passes_run(&context, TAC_PASS_VIRTUAL, error, sizeof error))
         goto fail;
-    c->allocation = tac_allocate_registers(c->isa, o->input, error, sizeof error);
+    TacAllocationOptions allocation_options = {
+        .spill = !!(o->passes & (1u << tac_pass_find("spill", 5)))};
+    c->allocation = tac_allocate_registers(c->isa, o->input, &allocation_options, error, sizeof error);
     report_phase(o, "O1: asignacion de registros", c->allocation != NULL);
     if (!c->allocation)
         goto fail;
+    /* Spill es política de asignación, no pasada del gestor (§9.9). */
+    int spill = tac_pass_find("spill", 5);
+    if (o->passes & (1u << spill)) {
+        c->metrics.executed |= 1u << spill;
+        for (const TacFunction *f = c->isa->first; f; f = f->next)
+            c->metrics.pass_ms[spill] += tac_allocation_metrics(c->allocation, f)->spill_ms;
+        report_pass(c, "spill", 1);
+    }
     c->metrics.isa_before = tac_metrics_instruction_count(c->isa);
     c->codegen_started = 1;
     TacEmitInput input = {.program = c->isa, .allocation = c->allocation,

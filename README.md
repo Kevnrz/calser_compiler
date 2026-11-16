@@ -166,15 +166,21 @@ que ejercitan errores del compilador.
 
 ```text
 calser_compiler/
-├── src/                 # Implementación en C
-├── include/             # Cabeceras de los módulos
+├── src/                 # main.c y componentes en subcarpetas
+├── include/             # Cabeceras agrupadas por los mismos componentes
 ├── grammar/             # lexer.l (Flex) y parser.y (Bison)
-├── pruebas/             # Programas Calser y una carpeta por suite de pruebas
-│   ├── aritmetica/ arreglos/ crypto/        # rutinas de generación, por separado
-│   ├── ast/ ayuda/ tiempo/ ejecutor/        # AST, banderas, --time y el ejecutor
-│   ├── ensamblador/ simulador/ etiquetas/   # ensamblado, simulador y etiquetas
-│   ├── bundles/ matrices/ programas/        # organizador, matrices y programas
-│   └── p*.cls  e*.cls                       # programas válidos y casos de error
+├── pruebas/             # Suites agrupadas por componente
+│   ├── conductor/       # ayuda, exito, tiempo y ejecutor
+│   ├── isa/             # constantes del ISA
+│   ├── analisis/        # check, ast, constantes y recuperacion
+│   ├── representacion/  # TAC, construcción y análisis de flujo
+│   ├── optimizador/     # gestor de pasadas
+│   ├── generador_o0/    # programas, matrices, etiquetas y diagnósticos
+│   ├── generador_o1/    # bajada, asignación y emisión
+│   ├── rutinas/         # aritmetica, arreglos y crypto
+│   ├── ensamblado/      # bundles, ensamblador y simulador
+│   ├── servicios_ide/   # consultas JSON e integración del IDE
+│   └── p*.cls  e*.cls  resultados.txt  correr_pruebas.sh
 ├── tools/               # Simulador, ejecutor de pruebas, generador de ejercicios y visor del AST
 ├── ejercicios/          # Entregables de los tres ejercicios
 ├── docs/                # Documentación del compilador
@@ -186,7 +192,7 @@ calser_compiler/
 └── README.md
 ```
 
-Los módulos con interfaz propia tienen su `include/<módulo>.h`. `main` no
+Los módulos con interfaz propia tienen su `include/<componente>/<módulo>.h`. `main` no
 tiene cabecera; `semantic_expr`, `semantic_crypto` y los `generate_*` comparten
 `semantic_internal.h` y `generate_internal.h`; `codegen_instruction` y
 `codegen_verify` se declaran en `codegen.h` y `codegen_schedule.h`.
@@ -218,7 +224,9 @@ tiene cabecera; `semantic_expr`, `semantic_crypto` y los `generate_*` comparten
 | | `isa_table` | Tabla única del ISA: formatos, unidad, lecturas, escrituras, preservación y efectos; lectura de registros y enteros |
 | | `assembler` | Ensamblador de dos pasadas: etiquetas y codificación de bundles |
 
-Las cabeceras están en `include/` y las implementaciones en `src/`. Flex y
+Las cabeceras y las implementaciones se agrupan en las mismas subcarpetas de
+`include/` y `src/`: `comun`, `isa`, `analisis`, `representacion`, `optimizador`,
+`generador_o0`, `generador_o1`, `rutinas`, `ensamblado` y `servicios_ide`. Flex y
 Bison generan sus archivos en `build/generated/`; los objetos y dependencias
 se guardan en `build/obj/`. El ejecutable se mantiene en `./ccom`.
 
@@ -302,7 +310,7 @@ El reporte está en `build/validacion_bundles/`, junto a los archivos de ambos
 modos. Comprueba resultado 120, paralelismo realmente ejecutado, cero avisos
 y reducción de ciclos, además de seis entradas auxiliares.
 
-Las [pruebas matriciales](pruebas/matrices/README.md) verifican suma, resta y
+Las [pruebas matriciales](pruebas/generador_o0/matrices/README.md) verifican suma, resta y
 productos con ciclos e índices, incluyendo AB distinto de BA, matrices
 rectangulares, identidad y ceros, con y sin organización de bundles.
 

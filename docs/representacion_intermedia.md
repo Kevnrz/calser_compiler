@@ -37,7 +37,7 @@ ID interno porque no hay una posición válida.
 Las constantes de alto nivel no se truncan: C2.3 deberá aplicar la semántica de
 32 bits y materializar las que no caben en un inmediato de 18 bits con signo.
 La selección de pasos de materialización vive en `isa_constant_plan`
-(`include/isa_constant.h`, `src/isa_constant.c`), compartida entre `gen_mov` y la
+(`include/isa/isa_constant.h`, `src/isa/isa_constant.c`), compartida entre `gen_mov` y la
 bajada a ISA virtual. Devuelve uno o cuatro pasos con roles DEST/SCRATCH,
 sin elegir registros, bundles ni huecos. El generador conserva su empaquetado P1;
 la bajada vincula esos roles a TEMP y propaga línea/columna.
@@ -187,10 +187,13 @@ El llamador debe conservar los virtuales vivos que terminen en esos registros.
 C2.3 implementará la secuencia de llamada; esta tarea solo expresa el contrato.
 Parámetros y retorno pasan por las casillas del área estática de la función.
 
-rz/r0 es cero; rl/r1, enlace; rx/r2, pila; rg/r3 no se usa por la ABI P1.
+rz/r0 es cero; rl/r1, enlace; rx/r2, pila. rg/r3 es el auxiliar del derrame
+en O1/O2: se carga, se usa y se suelta; nunca queda vivo entre instrucciones.
 `docs/isa.md` §8 describe rx como temporal libre y rg como puntero global.
-ccom P1 reserva rx como pila (`generate_support.c:26,243-259`) y no usa rg:
-es una convención del compilador, no una restricción del hardware.
+ccom conserva rx como pila del Proyecto I; la convención `REG_*`, los alias,
+los anchos de inmediato/destino y `ISA_ROM_BUNDLES` se definen en
+`include/isa/isa_table.h`. Es una convención del compilador, no una restricción
+del hardware (Aho §7.2 y §8.8; enunciado §3.1.2 y §3.2.1).
 CALL de alto nivel resume conservadoramente lecturas/escrituras de rx y rl;
 jas define rl explícitamente, necesita rx y destruye t0–t11. En C2.3 los push,
 pop y accesos de parámetros tendrán dependencias explícitas sobre rx. RETURN
@@ -366,6 +369,7 @@ y luego vivos antes/después de cada instrucción. Las claves son Symbol por
 identidad, TEMP por ID local y PHYS por número; nunca se comparan direcciones de
 casillas para identificar valores. Las vistas y conjuntos pertenecen al resultado.
 Conservar función/instrucciones/símbolos; liberar análisis antes de editar.
+La pertenencia se consulta por posición del universo mediante `tac_live_contains_at`.
 
 El adaptador común `tac_locations` agrega globales HIGH y registros implícitos
 ISA a las consultas de tac.h. Cada instrucción separa (a) usos/definiciones y
@@ -386,9 +390,14 @@ límite auxiliar no son candidatos.
 
 Cada TacFunction HIGH posee `loop_marks`, creada al traducir S/L. Una marca
 presta cabecera, cuerpo y latch opcional, y conserva profundidad sintáctica.
-En S presta control/límite y guarda operandos de inicio/fin **ya capturados** y
-paso: no contiene expresiones para reevaluar. No cambia IDs, CFG ni el .tac de -i.
-Las marcas no se copian a ISA.
+En S presta control/límite y paso. `initial` es INTEGER/TEMP existente, o NONE
+si el inicio era VARIABLE. `bound` es INTEGER/TEMP existente, o VARIABLE cuyo
+Symbol es exactamente `limit`, la captura real del fin en `$limite_Sk`. No
+contiene expresiones para reevaluar. El límite tiene una sola definición
+explícita por identidad de Symbol; su bloque está fuera del lazo natural y
+domina la cabecera. Cada condición tiene un diagnóstico propio. La unicidad
+explícita no garantiza ausencia de alias por memoria (diseño §9.18).
+No cambia IDs, CFG ni el .tac de -i. Las marcas no se copian a ISA.
 
 `tac_loops_analyze` recalcula alcanzabilidad y dominadores desde entry (Aho
 §9.6.1). Retroceso significa destino que domina al origen (§9.6.4); algoritmo
@@ -544,7 +553,7 @@ constructores y cuádruplas con `tac_append`. Para ISA, fijar stage y usar
 de reconstruir/validar. Imprimir antes/después de la pasada y liberar el
 programa antes de destruir los símbolos. No comparar identidades por texto.
 
-`pruebas/tac/ejemplo.cls`, compilado por check-tac, contiene:
+`pruebas/representacion/tac/ejemplo.cls`, compilado por check-tac, contiene:
 
 ```text
 F main [] : void ;
@@ -581,7 +590,7 @@ solo esos binarios, diff y ccom; no Python. La suite forma parte de make check.
 
 ## Construcción desde el AST validado (C2.1, enunciado §4.1)
 
-`include/tac_build.h` recibe un AST que ya pasó el semántico y el ámbito real
+`include/representacion/tac_build.h` recibe un AST que ya pasó el semántico y el ámbito real
 `scopes_global()`. Usa los Symbol anotados, nunca vuelve a resolver nombres.
 `TacBuildResult` posee el TacProgram, la imagen inicial y los Symbol auxiliares;
 se libera antes de `semantic_free`. No modifica AST, ámbitos, direcciones,
@@ -601,19 +610,38 @@ orden de lista. Cada función termina con RETURN implícito si queda un camino
 abierto; `tac_rebuild_edges` y `tac_validate` comprueban el resultado. Puede haber
 bloques sin predecesores: esta etapa no elimina código muerto.
 
-Cada lectura escalar se captura en un temporal antes de evaluar el operando
-siguiente (Aho §6.4). En asignaciones, el valor derecho se evalúa antes que los
-índices del destino. Los índices se capturan de izquierda a derecha; una matriz
-usa `(fila * columnas + columna) * 4` bytes (Aho §6.4.3). Las llamadas capturan
-sus argumentos antes de formar el grupo PARAM; los CALL anidados se resuelven
-primero. Arreglos declarados pasan por ADDRESS; parámetros arreglo leen la
-dirección recibida mediante COPY.
+P15 usa `TAC_VARIABLE` directamente para una lectura escalar: Aho §6.4,
+`E -> id: E.place = id.place` (diseño §9.18). Al combinar subexpresiones de
+izquierda a derecha, captura mediante COPY un operando VARIABLE si una
+subexpresión posterior contiene una llamada a función, incluso anidada. El
+otro caso de captura es R, por la asignación simultánea de parámetros. Los
+literales y los temporales no requieren otra captura. Esto protege binarios,
+argumentos, fila antes de columna, inicio antes de fin de S, valor derecho
+antes de índices del destino y los argumentos de cifrar/descifrar. Una matriz
+usa `(fila * columnas + columna) * 4` bytes (Aho §6.4.3). Las llamadas forman
+el grupo PARAM después de evaluar los argumentos; los CALL anidados se
+resuelven primero. Arreglos declarados pasan por ADDRESS; parámetros arreglo
+leen la dirección recibida mediante COPY.
+
+El contrato de marcas de S usa la captura privada del fin; no agrega una copia
+a TEMP solo para metadatos. P15 está integrado en este árbol: make check completo
+(incluidos 22 esperados HIGH y 12 ISA), make ejercicios y equivalencia O1/O0
+independiente 39/39 aprobaron. Las 84 imágenes O0 y las 154 consultas del IDE
+conservan la referencia; las diferencias de texto son únicamente las rutas
+conocidas. En los esperados ISA se aceptan renumeración biyectiva, copias de
+VARIABLE eliminadas y sus cargas desplazadas hacia el uso en el mismo bloque,
+con igual base/dirección; ninguna otra diferencia. PARAM conserva su bajada.
+Los totales HIGH pasan 2029→1673, bundles 5872→5898 y ciclos del simulador
+85143→85487; las ocho subidas se explican por carga al uso. El antes se
+reconstruyó fuera del repo y coincidió con las capturas pre-P15. El detalle,
+las dos imágenes externas y los límites de medición están en diseño §9.18 y
+`build/p15/final/reporte.txt`.
 
 `&` y `|` crean saltos y una unión con el temporal del resultado: el lado
 derecho solo se ejecuta cuando corresponde (Aho §6.6). No se traducen a
 TAC_AND/TAC_OR de evaluación plena. C/A/residual prueba las ramas en orden;
-L reevalúa la condición. S captura inicio y fin antes de escribir el control,
-compara con extremo exclusivo según el signo del paso y conserva el fin en un
+L reevalúa la condición. S evalúa inicio y fin antes de escribir su control nuevo,
+compara con extremo exclusivo según el signo del paso y captura el fin en un
 Symbol auxiliar `$limite_SN`, en la dirección `limit_address` que ya reservó el
 semántico. Ese Symbol pertenece al resultado, no a los ámbitos prestados.
 
@@ -626,7 +654,7 @@ operación por sentencia y los selectores literales, sin expansión al ISA.
 
 ### Factorial desde el AST hasta los bloques
 
-`pruebas/programas/factorial_r.cls` contiene el factorial con dos acumuladores.
+`pruebas/generador_o0/programas/factorial_r.cls` contiene el factorial con dos acumuladores.
 Su AST tiene FUNCTION factorial, PARAMS n/acc, RETURN_TYPE r y un BLOCK con
 CONDITIONAL: condición LESS_EQUAL(n,1), rama ASSIGNMENT(r,acc) y EMIT,
 y RESIDUAL con REWIND factorial(n-1,acc*n).
@@ -637,7 +665,7 @@ y RESIDUAL con REWIND factorial(n-1,acc*n).
 4. B4 conserva el RETURN implícito del final, aunque aquí no tiene predecesores.
 5. main inicializa f, pasa 3/1 y conserva el resultado inmediato del CALL.
 
-El esperado completo está en `pruebas/tac_build/esperados/factorial_r.tac`.
+El esperado completo está en `pruebas/representacion/tac_build/esperados/factorial_r.tac`.
 Su función factorial se imprime así:
 
 ```text
@@ -677,7 +705,7 @@ un archivo para entregar entero a `cg_op`.
 
 ## Bajada a ISA virtual (C2.3 B)
 
-`include/tac_lower.h` expone `tac_lower(high, error, capacity)`. Recibe el
+`include/generador_o1/tac_lower.h` expone `tac_lower(high, error, capacity)`. Recibe el
 programa HIGH de `TacBuildResult` y devuelve otro `TacProgram` propio, en etapa
 ISA_VIRTUAL y validado. Ante forma o anotaciones insuficientes devuelve NULL;
 los diagnósticos de selección incluyen `linea L:C`. No modifica HIGH, AST,
@@ -808,12 +836,12 @@ commits: esta separación no conecta -O1 con el ensamblador.
 
 ## Intérprete de pruebas de alto nivel (C2)
 
-`make check-tac-values` ejecuta `pruebas/tac_build/probar_valores.py` y el auxiliar
-`build/interpretar_tac`. Importa la tabla CASES de `pruebas/programas/probar.py`,
+`make check-tac-values` ejecuta `pruebas/representacion/tac_build/probar_valores.py` y el auxiliar
+`build/interpretar_tac`. Importa la tabla CASES de `pruebas/generador_o0/programas/probar.py`,
 sin duplicar sus valores, y compara las variables finales de los 22 programas
 sin CRYPTO. P09 y P11 se listan como omitidos, sin sumarlos a aprobados.
 
-`pruebas/tac_build/interpretar.h` recibe un TacBuildResult en memoria, nunca el
+`pruebas/representacion/tac_build/interpretar.h` recibe un TacBuildResult en memoria, nunca el
 texto `.tac`. Carga su imagen en una memoria estática compartida de 64 KiB y
 accede a variables mediante Symbol.address. No crea locales nuevas al llamar;
 solo temporales y capturas PARAM pertenecen a cada invocación. La pila explícita
@@ -915,7 +943,7 @@ de C3.4 los derrames; E integra banderas y JSON.
 
 ## D: emisión de ISA física hacia codegen
 
-`include/tac_emit.h` recibe ISA_PHYSICAL y su plan de C2 sin editar, imagen
+`include/generador_o1/tac_emit.h` recibe ISA_PHYSICAL y su plan de C2 sin editar, imagen
 inicial, LabelTable y nombre real obligatorio. `tac_emit_program` devuelve 1
 en éxito y 0 con diagnóstico: no modifica IR ni símbolos. Reinicia codegen,
 carga palabras con `cg_data_set`, repite `data_area_stack_short` y emite
@@ -929,7 +957,7 @@ al cuerpo. `tac_validate_for_emission` sigue rechazando PSEUDO en IR expandido;
 D usa `tac_validate` y expande directamente hacia codegen, sin cambiar ese IR.
 
 Las formas ISA se adaptan a `cg_set_line`/`cg_op`; parser y semántica siguen en
-codegen_instruction/isa_table. `include/generate_emit.h` presta `gen_reg_name`,
+codegen_instruction/isa_table. `include/generador_o0/generate_emit.h` presta `gen_reg_name`,
 `gen_stack_push`, `gen_stack_pop` y `gen_arith_emit_op`, con la lógica P1 intacta.
 
 El único ayudante D de preservación usa `temp_base + 4*(r-4)` para cada vivo
@@ -958,14 +986,14 @@ símbolos/AST/LabelTable mientras se emite. La CLI invoca D con `-O1`.
 
 ## E: integración, gestor y medición
 
-`src/tac_passes.c` contiene la tabla fija y una firma única con contexto prestado
+`src/optimizador/tac_passes.c` contiene la tabla fija y una firma única con contexto prestado
 (IR, construcción, ámbitos, nombre real, selección y factor de unroll). El factor
 cero indica la heurística del §11; E no la ejecuta porque unroll está vacío.
 Las marcas se descartan después de unroll, o al entrar al punto HIGH si está
 inactivo. La política spill se registra antes de asignar, sin recorrido propio;
 no reemplaza el error de agotamiento del recorrido C2. C3.4 ampliará ese punto.
 
-`src/tac_metrics.c` es el único escritor JSON. Reutiliza `json_string` de AST
+`src/optimizador/tac_metrics.c` es el único escritor JSON. Reutiliza `json_string` de AST
 (publicado sin cambiar su cuerpo). `tac_live_max_temporaries` es la consulta única
 de demanda, compartida por C2 y su auxiliar del corpus. El asignador registra el
 máximo de `active_count`; E solo agrega máximos entre funciones. La máscara puede
@@ -980,12 +1008,12 @@ siguen intactos. Se retiró el auxiliar de emisión desde fuente ya sin consumid
 
 ### Pendientes de limpieza después de integrar C2.3
 
-- Búsqueda lineal de `block_label` en `src/tac_emit.c:80`, mismo patrón que
+- Búsqueda lineal de `block_label` en `src/generador_o1/tac_emit.c:80`, mismo patrón que
   `tac_live_instruction`, `tac_intervals_positions` y `tac_allocation_site`.
-- Guardado/restauración de `src/tac_emit_pseudo.c:17` frente a
-  `src/codegen_crypto.c:78` (save_live) y `:98` (restore_live).
-- Terminal de `src/tac_emit.c:181` frente a `src/generate_stmt.c:752`
-  (gen_end_of_main) y `src/generate.c:216`. Se concentra una sola vez en D;
+- Guardado/restauración de `src/generador_o1/tac_emit_pseudo.c:17` frente a
+  `src/rutinas/codegen_crypto.c:78` (save_live) y `:98` (restore_live).
+- Terminal de `src/generador_o1/tac_emit.c:181` frente a `src/generador_o0/generate_stmt.c:752`
+  (gen_end_of_main) y `src/generador_o0/generate.c:216`. Se concentra una sola vez en D;
   no se reorganizan estas duplicaciones conocidas durante esta entrega.
 
 Referencias: Aho §7.2, §8.6, §8.8 y §10.2.3.

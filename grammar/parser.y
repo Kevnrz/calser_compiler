@@ -24,6 +24,8 @@
 
 extern int yylex(void);
 extern int yylineno;
+extern FILE *yyin;
+extern int lexical_errors;
 
 /* 1 si un error léxico cortó la entrada (lexer.l). */
 extern int lexical_fatal;
@@ -1917,4 +1919,16 @@ void yyerror(const char *message) {
             location = (YYLTYPE) {diag_last_line(), 1, diag_last_line(), 1};
         syntax_report(location, message);
     }
+}
+
+/* parser_accept — véase el contrato en parser_service.h.
+ * La recuperación de Bison puede aceptar el símbolo inicial tras un error;
+ * el AST solo sirve a las fases posteriores sin errores (Aho §4.8–4.9). */
+int parser_accept(FILE *input, ASTNode **tree) {
+    yyin = input;
+    int result = yyparse();
+    *tree = root;
+    int accepted = result == 0 && parser_syntax_errors() == 0 && lexical_errors == 0;
+    parser_finish();
+    return accepted;
 }

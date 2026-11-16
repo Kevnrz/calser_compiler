@@ -436,7 +436,7 @@ Activar una coincidencia abre/revela el destino o selecciona el rango. Si cambi�
 
 ### Clones Tipo I y II
 
-`ide/clones.py` es el adaptador del motor C: empaqueta todas las instantáneas en CCL1, consulta el ccom configurado, valida JSON y convierte extremos UTF-8 a posiciones Python. No tokeniza ni compara Calser. `src/clones.c` reutiliza Flex y realiza firmas, biyección de nombres, extensión y filtro de inclusiones. Requiere ccom compatible; errores léxicos bloquean la consulta. [Protocolo M5](../../docs/ccom_servicios_ide.md#clones).
+`ide/clones.py` es el adaptador del motor C: empaqueta todas las instantáneas en CCL1, consulta el ccom configurado, valida JSON y convierte extremos UTF-8 a posiciones Python. No tokeniza ni compara Calser. `src/servicios_ide/clones.c` reutiliza Flex y realiza firmas, biyección de nombres, extensión y filtro de inclusiones. Requiere ccom compatible; errores léxicos bloquean la consulta. [Protocolo M5](../../docs/ccom_servicios_ide.md#clones).
 
 Tipo I exige tokens iguales ignorando espacios/comentarios. Tipo II permite renombrar identificadores de forma consistente y cambiar literales del mismo tipo; conserva operadores y reservadas. Un índice de ventanas encuentra candidatos, que se verifican y amplían; se eliminan inclusiones redundantes del mismo tipo.
 
@@ -513,7 +513,7 @@ Los nombres son rutas relativas a la raíz del repositorio. Los módulos de prod
 | `ide/ediciones.py` | `validar_ediciones`, `aplicar_ediciones`, conversiones. | Rangos del original, superposición, precondiciones, Unicode y traslado de posiciones. |
 | `ide/busqueda.py` | `Coincidencia`, `buscar_proyecto`. | Recorrido, exclusiones, prioridad del buffer sobre disco y límites. |
 | `ide/clones.py` | `detectar`, `empaquetar`, `interpretar`. | Modelos, copias CCL1, transporte cancelable, validación de JSON y rangos. |
-| `src/clones.c`, `include/clones.h` | `clones_run`. | Flex, firmas, biyección, extensión, inclusión y presupuestos nativos. |
+| `src/servicios_ide/clones.c`, `include/servicios_ide/clones.h` | `clones_run`. | Flex, firmas, biyección, extensión, inclusión y presupuestos nativos. |
 | `ide/preferencias.py` | `validar`, `cargar`, `guardar`. | Campos permitidos y presupuesto del JSON; ramas/orden no deben impedir guardar el estado básico. |
 | `ide/reparaciones_ccom.py` | `proponer_reparaciones`, `comprobar_sintaxis`, `interpretar`. | Puente de reparaciones y validación C; precondiciones reales y rangos UTF-8, sin analizar lenguaje en Python. |
 | `ide/politica_asistencia.py` | `ReglaAutomatica`, `evaluar_automatizacion`. | Separar propuesta, permiso, disparador y prueba sintáctica; explicar regla revisada, permisos y verificación nativa. |

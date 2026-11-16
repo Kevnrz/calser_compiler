@@ -5,26 +5,21 @@ B0: successors [B1]
   r = 0
   goto B1
 B1: successors [B3, B2]
-  t0 = i
-  t1 = t0 >= 3
-  if t1 == 0 goto B3
+  t0 = i >= 3
+  if t0 == 0 goto B3
 B2: successors []
-  t2 = acc
-  r = t2
+  r = acc
   return r
 B3: successors [B1]
-  t3 = v
-  t4 = i
-  t5 = t4 + 1
-  t6 = acc
-  t7 = i
-  t8 = t7 * 4
-  t9 = v
-  t10 = t9[t8]
-  t11 = t6 + t10
-  v = t3
-  i = t5
-  acc = t11
+  t1 = v
+  t2 = i + 1
+  t3 = i * 4
+  t4 = v
+  t5 = t4[t3]
+  t6 = acc + t5
+  v = t1
+  i = t2
+  acc = t6
   goto B1
 B4: successors []
   return r

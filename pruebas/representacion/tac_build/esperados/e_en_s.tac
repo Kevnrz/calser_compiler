@@ -13,16 +13,13 @@ B1: successors [B2]
 B2: successors [B7, B3]
   if i >= $limite_S0 goto B7
 B3: successors [B5, B4]
-  t1 = i
-  t2 = t1 * 4
-  t3 = v
-  t4 = t3[t2]
-  t5 = x
-  t6 = t4 == t5
-  if t6 == 0 goto B5
+  t1 = i * 4
+  t2 = v
+  t3 = t2[t1]
+  t4 = t3 == x
+  if t4 == 0 goto B5
 B4: successors []
-  t7 = i
-  pos = t7
+  pos = i
   return pos
 B5: successors [B6]
   goto B6
@@ -60,10 +57,8 @@ B1: successors [B2]
 B2: successors [B4, B3]
   if k >= $limite_S1 goto B4
 B3: successors [B2]
-  t4 = c
-  t5 = a
-  t6 = t4 + t5
-  c = t6
+  t4 = c + a
+  c = t4
   k = k + 1
   goto B2
 B4: successors []

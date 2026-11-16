@@ -62,7 +62,7 @@ static void shared_header(void) {
     mark->bound = tac_integer(3);
     mark->step = 1;
     assert(!tac_loop_marks_validate(a, error, sizeof error));
-    assert(strstr(error, "capturados"));
+    assert(strstr(error, "inicio inválido"));
     TacFunction alien = {.program = f.program, .symbol = &f.symbol};
     assert(!tac_loops_analyze(&alien, error, sizeof error));
     tac_loops_free(a);
@@ -71,6 +71,78 @@ static void shared_header(void) {
     tac_loop_marks_discard(f.function);
     assert(tac_block_remove(f.function, f.entry, error, sizeof error) == 0);
     tac_program_free(f.program);
+}
+
+/* Entrada: ninguna. Salida: ninguna. Efectos: valida capturas reales de S (§9.18).
+ * Restricciones: cuenta definiciones por identidad y comprueba ubicación/dominio.
+ */
+static void s_captures(void) {
+    for (int variant = 0; variant < 6; variant++) {
+        Fixture f;
+        fixture_init(&f, TAC_STAGE_HIGH);
+        TacOperand limit = tac_variable(&f.global);
+        TacBlock *before = tac_block_new(f.function);
+        TacBlock *h = tac_block_new(f.function);
+        TacBlock *body = tac_block_new(f.function);
+        TacBlock *end = tac_block_new(f.function);
+        if (variant == 3)
+            tac_append(f.entry, TAC_IF_EQ, tac_label(h), f.a, tac_integer(0));
+        else
+            jump(f.entry, before);
+        tac_append(before, TAC_COPY, f.a, tac_integer(3), tac_none());
+        if (variant != 2 && variant != 4)
+            tac_append(before, TAC_COPY, limit, f.a, tac_none());
+        if (variant == 1)
+            tac_append(before, TAC_COPY, limit, tac_integer(4), tac_none());
+        jump(before, h);
+        tac_append(h, TAC_IF_GE, tac_label(end), tac_variable(&f.local), limit);
+        if (variant == 2)
+            tac_append(body, TAC_COPY, limit, tac_integer(3), tac_none());
+        if (variant == 5)
+            fixture_return(body);
+        else
+            jump(body, h);
+        fixture_return(end);
+        TacLoopMark description = {.kind = TAC_LOOP_S, .header = h, .body = body,
+            .latch = variant == 5 ? NULL : body, .structural_depth = 1,
+            .control = &f.local, .limit = &f.global, .step = 1,
+            .initial = tac_none(), .bound = limit};
+        TacLoopMark *mark = tac_loop_mark_add(f.function, &description);
+        assert(mark);
+        TacLoopAnalysis *a = analyze(&f);
+        char error[256];
+        if (variant > 0 && variant < 5) {
+            const char *expected[] = {"", "más de una", "dentro del lazo", "no domina", "sin definición"};
+            assert(!tac_loop_marks_validate(a, error, sizeof error));
+            assert(strstr(error, expected[variant]));
+        } else {
+            TacOperand starts[] = {tac_none(), tac_integer(0), f.a};
+            TacOperand bounds[] = {limit, tac_integer(3), f.a};
+            for (size_t i = 0; i < 3; i++) {
+                for (size_t j = 0; j < 3; j++) {
+                    mark->initial = starts[i];
+                    mark->bound = bounds[j];
+                    assert(tac_loop_marks_validate(a, error, sizeof error));
+                }
+            }
+            mark->initial = tac_none();
+            /* La otra VARIABLE tiene incluso la misma dirección; importa Symbol. */
+            Symbol other = f.global;
+            mark->bound = tac_variable(&other);
+            assert(!tac_loop_marks_validate(a, error, sizeof error));
+            assert(strstr(error, "fin inválido"));
+            mark->bound = limit;
+            mark->initial = tac_variable(&f.local);
+            assert(!tac_loop_marks_validate(a, error, sizeof error));
+            assert(strstr(error, "inicio inválido"));
+            mark->initial = tac_none();
+            mark->bound = (TacOperand){.kind = TAC_TEMP, .value.id = f.function->next_temp};
+            assert(!tac_loop_marks_validate(a, error, sizeof error));
+            assert(strstr(error, "fin inválido"));
+        }
+        tac_loops_free(a);
+        tac_program_free(f.program);
+    }
 }
 
 /* Entrada: ninguna. Salida: ninguna. Efectos: prueba anidamiento y lazo sin marca.
@@ -281,6 +353,7 @@ static void insertion(void) {
  */
 int main(void) {
     shared_header();
+    s_captures();
     nested_and_unreachable();
     no_backedge();
     irreducible();

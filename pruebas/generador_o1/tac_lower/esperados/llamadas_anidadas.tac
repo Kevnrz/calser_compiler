@@ -12,10 +12,10 @@ B0: successors [B1]
   sw rz, 64(rz)
   jef B1
 B1: successors []
-  lw v0, 68(rz)
-  lw v1, 72(rz)
-  add v2, v0, v1
-  sw v2, 64(rz)
+  lw v1, 68(rz)
+  lw v2, 72(rz)
+  add v0, v1, v2
+  sw v0, 64(rz)
   jefR rz, rl
 
 function main (entry B0)

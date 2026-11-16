@@ -5,9 +5,8 @@ B0: successors [B1]
   r = 0
   goto B1
 B1: successors [B3, B2]
-  t0 = a
-  t1 = t0 > 0
-  if t1 == 0 goto B3
+  t0 = a > 0
+  if t0 == 0 goto B3
 B2: successors [B4]
   r = 9
   goto B4

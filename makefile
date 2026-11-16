@@ -173,6 +173,7 @@ $(BUILD_DIR)/interpretar_tac: pruebas/representacion/tac_build/ejecutar.c prueba
 
 check-tac-values: $(BUILD_DIR)/interpretar_tac
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/representacion/tac_build/probar_valores.py --binario $(BUILD_DIR)/interpretar_tac
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/representacion/tac_build/probar_lecturas.py
 
 # E enlaza la selección B con ccom; estos auxiliares conservan pruebas directas.
 TAC_LOWER_SOURCES = src/generador_o1/tac_lower.c src/generador_o1/tac_lower_value.c src/generador_o1/tac_lower_control.c

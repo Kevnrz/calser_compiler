@@ -85,10 +85,14 @@ static Symbol *loop_limit(TacBuilder *builder, const Symbol *control) {
     return limit;
 }
 
-/* Fin exclusivo capturado antes de escribir el control; incremento con signo. */
+/* Fin exclusivo en casilla privada antes del cuerpo; incremento con signo (§9.18). */
 static void loop_s(TacBuilder *builder, ASTNode *node) {
     const Symbol *control = tb_symbol(tb_child(node, 0));
     TacOperand start = tb_expression(builder, tb_child(node, 1));
+    /* Aho §6.4 y diseño §9.18: el fin se evalúa antes de usar el inicio. */
+    if (tb_contains_call(tb_child(node, 2))) {
+        start = tb_capture(builder, tb_child(node, 1), start);
+    }
     TacOperand finish = tb_expression(builder, tb_child(node, 2));
     Symbol *limit = loop_limit(builder, control);
     int64_t step = tb_child(node, 3)->number;
@@ -113,7 +117,8 @@ static void loop_s(TacBuilder *builder, ASTNode *node) {
     }
     TacLoopMark mark = {.kind = TAC_LOOP_S, .header = test, .body = body,
         .latch = latch, .structural_depth = depth, .control = control, .limit = limit,
-        .initial = start, .bound = finish, .step = step};
+        .initial = start.kind == TAC_VARIABLE ? tac_none() : start,
+        .bound = finish.kind == TAC_VARIABLE ? tac_variable(limit) : finish, .step = step};
     tac_loop_mark_add(builder->function, &mark);
     builder->block = end;
 }
@@ -127,6 +132,8 @@ static void rewind_function(TacBuilder *builder, ASTNode *node) {
     for (size_t i = 0; i < count; i++, argument = argument->next) {
         values[i] = function->param_list[i]->dimensions ?
                     tb_array_base(builder, argument) : tb_expression(builder, argument);
+        /* R redefine parámetros: conserva su asignación simultánea (Aho §6.4, §9.18). */
+        values[i] = tb_capture(builder, argument, values[i]);
     }
     for (size_t i = 0; i < count; i++) {
         tb_emit(builder, node, TAC_COPY, tac_variable(function->param_list[i]),

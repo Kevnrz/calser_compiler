@@ -16,16 +16,10 @@ B1: successors []
   cargar_llave [0, 2, 324508639]
   cargar_llave [0, 3, 610839776]
   sellar []
-  t2 = origen
-  t3 = cifrado
-  cifrar [t2, t3, 128, 0]
-  t4 = cifrado
-  t5 = vuelta
-  descifrar [t4, t5, 128, 0]
+  cifrar [origen, cifrado, 128, 0]
+  descifrar [cifrado, vuelta, 128, 0]
   cerrar_sesion []
-  t6 = origen
-  t7 = negado
-  cifrar [t6, t7, 1, 0]
+  cifrar [origen, negado, 1, 0]
   autenticar [999]
   cambiar_ancla [5]
   cifrar_total = 0

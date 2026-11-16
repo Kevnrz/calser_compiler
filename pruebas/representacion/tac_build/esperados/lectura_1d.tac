@@ -5,9 +5,8 @@ B0: successors [B1]
   r = 0
   goto B1
 B1: successors []
-  t0 = a
-  t1 = t0 + 1
-  r = t1
+  t0 = a + 1
+  r = t0
   return r
 
 function main (entry B0)
@@ -34,28 +33,24 @@ B1: successors [B2]
   y = t2
   goto B2
 B2: successors [B4, B3]
-  t3 = i
-  t4 = t3 < 4
-  if t4 == 0 goto B4
+  t3 = i < 4
+  if t3 == 0 goto B4
 B3: successors [B2]
-  t5 = s
-  t6 = i
-  t7 = t6 * 4
-  t8 = v[t7]
-  t9 = t5 + t8
-  s = t9
-  t10 = i
-  t11 = t10 + 1
-  i = t11
+  t4 = i * 4
+  t5 = v[t4]
+  t6 = s + t5
+  s = t6
+  t7 = i + 1
+  i = t7
   goto B2
 B4: successors []
-  t12 = 2 * 4
-  t13 = v[t12]
-  param t13, 0
-  t14 = call f, 1
-  z = t14
+  t8 = 2 * 4
+  t9 = v[t8]
+  param t9, 0
+  t10 = call f, 1
+  z = t10
   param 5, 0
-  t15 = call f, 1
-  q = t15
+  t11 = call f, 1
+  q = t11
   return
 

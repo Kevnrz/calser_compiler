@@ -275,12 +275,44 @@ TacLoopMarkState tac_loop_mark_state(const TacLoopAnalysis *a, const TacLoopMark
     return TAC_LOOP_MARK_WITH_BACKEDGE;
 }
 
-/* Entrada: operando capturado y función. Salida: si es literal o TEMP existente.
- * Efectos: ninguno. Restricciones: nunca acepta AST, LABEL ni lecturas diferidas de VARIABLE.
+/* Entrada: operando y función. Salida: si conserva un INTEGER o TEMP existente.
+ * Efectos: ninguno. Restricciones: NONE de inicio y VARIABLE(limit) de fin se
+ * validan por separado; no acepta una lectura diferida de otra VARIABLE (§9.18).
  */
 static int captured_value(const TacFunction *function, TacOperand value) {
     return value.kind == TAC_INTEGER ||
            (value.kind == TAC_TEMP && value.value.id < function->next_temp);
+}
+
+/* Entrada: marca S estructuralmente válida y análisis. Salida: captura válida.
+ * Efectos: solo diagnóstico. Restricciones: una definición explícita por Symbol,
+ * fuera del lazo natural y dominante; no prueba ausencia de alias (§9.18, Aho §9.6).
+ */
+static int limit_capture(const TacLoopAnalysis *a, const TacLoopMark *m,
+                           char *error, size_t capacity) {
+    size_t count = 0, definition = SIZE_MAX;
+    for (size_t b = 0; b < a->count; b++) {
+        for (const TacInstruction *i = a->blocks[b]->first; i; i = i->next) {
+            TacOperand values[3];
+            size_t definitions = tac_definitions(i, values);
+            for (size_t k = 0; k < definitions; k++) {
+                if (values[k].kind == TAC_VARIABLE && values[k].value.symbol == m->limit) {
+                    count++;
+                    definition = b;
+                }
+            }
+        }
+    }
+    if (!count)
+        return tac_error(error, capacity, "marca S sin definición explícita del límite");
+    if (count != 1)
+        return tac_error(error, capacity, "marca S con más de una definición explícita del límite");
+    size_t h = index_of(a, m->header);
+    if (a->members[h * a->count + definition])
+        return tac_error(error, capacity, "marca S con definición del límite dentro del lazo natural");
+    if (!a->dominators[h * a->count + definition])
+        return tac_error(error, capacity, "marca S con definición del límite que no domina la cabecera");
+    return 1;
 }
 
 /* Entrada: análisis de CFG y marcas prestadas. Salida: 1 válidas, 0 con diagnóstico.
@@ -297,9 +329,21 @@ int tac_loop_marks_validate(const TacLoopAnalysis *a, char *error, size_t capaci
             index_of(a, m->header) == SIZE_MAX || index_of(a, m->body) == SIZE_MAX ||
             (m->latch && index_of(a, m->latch) == SIZE_MAX))
             return tac_error(error, capacity, "marca de lazo con referencias inválidas");
-        if (m->kind == TAC_LOOP_S && (!m->control || !m->limit || !m->step ||
-            !captured_value(a->function, m->initial) || !captured_value(a->function, m->bound)))
-            return tac_error(error, capacity, "marca S sin valores capturados");
+        if (m->kind == TAC_LOOP_S) {
+            if (!m->control)
+                return tac_error(error, capacity, "marca S sin símbolo de control");
+            if (!m->limit)
+                return tac_error(error, capacity, "marca S sin símbolo de límite");
+            if (!m->step)
+                return tac_error(error, capacity, "marca S con paso cero");
+            if (m->initial.kind != TAC_NONE && !captured_value(a->function, m->initial))
+                return tac_error(error, capacity, "marca S con inicio inválido: requiere INTEGER, TEMP existente o NONE");
+            if (!captured_value(a->function, m->bound) &&
+                !(m->bound.kind == TAC_VARIABLE && m->bound.value.symbol == m->limit))
+                return tac_error(error, capacity, "marca S con fin inválido: requiere INTEGER, TEMP existente o su límite");
+            if (!limit_capture(a, m, error, capacity))
+                return 0;
+        }
         if (tac_loop_mark_state(a, m) != TAC_LOOP_MARK_WITH_BACKEDGE)
             continue;
         size_t h = index_of(a, m->header);

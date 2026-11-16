@@ -1,0 +1,32 @@
+{
+  "r1_waw": {
+    "renombradas": 2,
+    "valores": {
+      "salida": [
+        18
+      ]
+    }
+  },
+  "r2_war": {
+    "renombradas": 2,
+    "valores": {
+      "g": [
+        20
+      ]
+    }
+  },
+  "r3_limites": {
+    "renombradas": 0,
+    "valores": {
+      "g": [
+        2
+      ],
+      "x": [
+        2
+      ],
+      "y": [
+        8
+      ]
+    }
+  }
+}

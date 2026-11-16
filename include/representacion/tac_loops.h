@@ -15,8 +15,8 @@ struct TacLoopMark {
     size_t structural_depth;           /* Profundidad sintáctica, desde uno. */
     const Symbol *control;             /* Control existente del S; NULL en L. */
     const Symbol *limit;               /* Auxiliar existente del S; NULL en L. */
-    TacOperand initial;               /* Inicio ya evaluado, no AST para reevaluar. */
-    TacOperand bound;                 /* Fin ya evaluado, exclusivo, solo S. */
+    TacOperand initial;               /* INTEGER/TEMP evaluado o NONE si VARIABLE: no conserva el inicio. */
+    TacOperand bound;                 /* INTEGER/TEMP evaluado o VARIABLE exactamente limit; fin exclusivo. */
     int64_t step;                     /* Paso con signo, distinto de cero en S. */
     TacLoopMark *next;                /* Colección propia de TacFunction. */
 };
@@ -48,6 +48,8 @@ size_t tac_loops_count(const TacLoopAnalysis *analysis);
 const TacBlock *tac_loops_header(const TacLoopAnalysis *analysis, size_t loop);
 int tac_loops_contains(const TacLoopAnalysis *analysis, size_t loop, const TacBlock *block);
 /* Un solo sentido: solo marcas con retroceso alcanzable requieren lazo natural.
+ * S: limit tiene una definición explícita, fuera de su lazo natural, que domina header.
+ * La unicidad es por Symbol, no una garantía contra alias de memoria (§9.18).
  * Una marca ajena/inválida se rechaza antes de consultar su estado.
  */
 int tac_loop_marks_validate(const TacLoopAnalysis *analysis, char *error, size_t capacity);

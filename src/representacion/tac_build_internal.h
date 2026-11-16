@@ -28,6 +28,8 @@ TacOperand tb_value(TacBuilder *builder, ASTNode *node, TacOpcode op,
                      TacOperand src1, TacOperand src2);
 TacBlock *tb_reserve_block(TacBuilder *builder);
 void tb_jump(TacBuilder *builder, ASTNode *node, TacBlock *target);
+int tb_contains_call(ASTNode *node);
+TacOperand tb_capture(TacBuilder *builder, ASTNode *node, TacOperand value);
 TacOperand tb_expression(TacBuilder *builder, ASTNode *node);
 TacOperand tb_call(TacBuilder *builder, ASTNode *node, int result_needed);
 TacOperand tb_array_base(TacBuilder *builder, ASTNode *node);

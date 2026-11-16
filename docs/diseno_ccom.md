@@ -16,7 +16,7 @@ sale de otra fuente se indica.
 | 6 | Efecto de la integración del IDE sobre el léxico y el parser | Escrita |
 | 7 | Contrato de integración de las optimizaciones | Escrita |
 | 8 | Conexión con el IDE y las métricas | Escrita |
-| 9 | Plan de implementación del refactor (pasos P0 a P13) | Escrita |
+| 9 | Plan de implementación del refactor (pasos P0 a P15) y su cierre | P0–P12, P14 y P15 integrados; P13 pospuesto |
 | 10 | Lo que se queda como está | Escrita |
 | 11 | Diseño técnico de las optimizaciones (estructuras, pseudocódigo, casos de prueba) | Escrita |
 | 12 | Enlazado de archivos (`P`) | Escrita |
@@ -25,10 +25,17 @@ sale de otra fuente se indica.
 | 15 | Avisos para el cerebro | Escrita |
 | A | Anexo: decisiones vigentes del camino optimizante (absorbe `diseno_camino_optimizante.md`) | Escrito |
 
-**Siguiente:** revisión de Luis; después, por cada paso de la parte 9, comandos de rama y
-mensaje para el agente, empezando por P0 y P1.
+**Estado del refactor (15/11).** P0 a P12 y P14 están integrados en la rama `refactor-c6`
+(PR #18 a #23, commit `29f0665`) y pasaron la validación final (9.17). Después de revisar las
+optimizaciones contra las presentaciones del curso se tomaron dos decisiones (4.4): P15 (lectura
+de variables en el TAC al estilo del curso, antes del PR a `develop`) y Chaitin como ruta
+alterna del spilling (se implementa con C3.4). P15 está integrado y validado en el árbol de
+`feature/c6-tac-curso` (9.18); no se atribuye un PR ni un commit nuevos. Siguiente: un solo PR
+de `refactor-c6` hacia `develop`; después, las optimizaciones (parte 7 y parte 11). P13
+(cascadas) queda pospuesto para después de las optimizaciones, junto con la revisión del IDE
+y de los errores (9.14).
 
-Para retomar en otro chat: leer este apartado, la parte 4 y la parte 9.
+Para retomar en otro chat: leer este apartado, la parte 4, 9.0 y 9.17.
 
 **Base del análisis.** Código de `Kevnrz/calser_compiler`, rama `develop`, commit `6ad9fb4`,
 leído directamente; comparado con `2268981` (antes de integrar el IDE). Bison 3.8.2 se ejecutó
@@ -287,6 +294,43 @@ prueba ──► ccom -O1 --opt=pasada ──► JSON (A6) + .asm ──► C1 �
 
 Ver la parte 10.
 
+### 4.4 Alineación con el curso (15/11)
+
+Revisión de las optimizaciones contra las presentaciones del curso (*Optimización de Código*,
+*Spilling de Registros*, *Optimización para el Paralelismo y la Localidad*).
+
+| Tema | Curso | Diseño | Resultado |
+|---|---|---|---|
+| Validez | La salida observable (valores, errores, no terminación) no cambia | Regla 11.1 | Alineado |
+| DCE | Local y global con variables vivas, repitiendo hasta punto fijo | 7.2, 11.2 | Alineado |
+| Renombramiento | Nombre nuevo por temporal para liberar el bloque | 7.3, 11.3: los temporales ya nacen únicos; se renombran las variables locales | Alineado |
+| Reordenamiento | Intercambio de instrucciones independientes; RAW, WAR, WAW | 7.5, 11.5 | Alineado |
+| Unrolling | No está en las presentaciones; Aho §10.5.1 y notas de arqui §5.2.2 | 7.4, 11.4 | Alineado con el libro |
+| TAC | `E → id { E.place = id.place }`: la variable se usa directo | Se copiaba toda lectura a un temporal | **Decisión 1: P15** (9.18) |
+| Spilling | Coloreo de Chaitin; víctima por costo/grado con 10^profundidad | *Linear scan*; víctima por profundidad y fin | **Decisión 2: Chaitin como ruta alterna** (7.6) |
+
+**Decisión 1.** El TAC usa la variable directo, como el curso. Solo se copia a un temporal
+si queda una llamada a función por evaluar en la misma construcción, o en `R`, para conservar
+la asignación simultánea de parámetros antes de sobrescribirlos. El fin de `S` se captura en
+su casilla privada, sin agregar una copia a TEMP solo para la marca. Se implementa en P15
+(9.18), antes del PR a `develop`.
+
+**Decisión 2.** El *linear scan* sigue como ruta principal. Se agrega el coloreo de Chaitin en
+su propio archivo, elegido con `--alloc=color`. Las dos estrategias entregan lo mismo (mapa
+temporal→registro y lista de derramados) y comparten la víctima del curso. Después se comparan
+bundles, ciclos y derramados para decidir cuál queda como principal. Se implementa con el
+spilling (C3.4).
+
+**Fuera del alcance** (lo enseña el curso, no lo pide el enunciado): subexpresiones comunes,
+plegado y propagación de constantes, expresiones disponibles, definiciones alcanzables, código
+invariante, reducción de fuerza, intercambio de ciclos, *tiling* y la prueba del GCD.
+
+**Para la defensa.** Los bloques básicos se forman al construir el TAC, no con el algoritmo de
+líderes de la presentación; el resultado cumple la misma definición (entrada solo por la
+primera instrucción, salida solo por la última). El LL(1) (PRIMERO, SIGUIENTE, tabla M y
+analizador predictivo) ya existe en `ide/nucleo/` y `ide/docs/ll1/`; su revisión queda para la
+etapa del IDE.
+
 ## 5. Diseño contra el código actual
 
 Estado: **E** existe, **P** existe parcialmente, **F** falta. La última columna remite al paso
@@ -297,13 +341,13 @@ del refactor (parte 9) o a la tarea del plan.
 | A1 Conductor | `src/main.c` (1529 líneas) | E | La secuencia de `-O1` vive dentro de `main.c` (`phase_o1`) y nadie más puede usarla → P9. Límite de ROM → P5 |
 | A2.1 Enlazado | — | F | Tarea C2.2. Diseño en la parte 12 |
 | A2.2 Léxico | `grammar/lexer.l` | E | Se queda |
-| A2.3 Sintáctico | `grammar/parser.y`, `src/ast.c` | E | La aceptación del AST se repite en 7 lugares → P6. Cascadas → P13 |
+| A2.3 Sintáctico | `grammar/parser.y`, `src/ast.c` | E | La aceptación del AST se repite en 7 lugares → P6. Cascadas → P13 (pospuesto, 9.14) |
 | A2.4 Semántico | `semantic.c`, `semantic_expr.c`, `semantic_scope.c`, `semantic_calls.c`, `semantic_crypto.c`, `symbol_table.c`, `ast_constant.c` | E | Se queda |
 | A2.5 Memoria de datos | `data_area.c` | E | Se queda. La extensión de derrame ya existe y está probada |
 | A2.6 Diagnósticos | `diagnostics.c` | E | Se queda. Con el enlazado necesitará el archivo de cada error |
 | A3.1 Forma | `tac.c`, `tac_isa.c`, `tac_pseudo.c`, `tac_cfg.c`, `tac_edit.c`, `tac_validate.c`, `tac_print.c`, `tac_loop_marks.c` | P | Tabla de operaciones complejas repetida → P7. No se puede clonar un bloque ni fijar un orden nuevo dentro de un bloque → P11 |
 | A3.2 Construcción | `tac_build.c`, `tac_build_expr.c`, `tac_build_flow.c`, `tac_build_init.c`, `tac_build_stmt.c` | E | Se queda |
-| A3.3 Análisis | `tac_live.c`, `tac_locations.c`, `tac_loops.c`, `tac_intervals.c` | P | Las raíces observables solo se calculan en una prueba (`pruebas/tac_analysis/desde_fuente.c`) → P10 |
+| A3.3 Análisis | `tac_live.c`, `tac_locations.c`, `tac_loops.c`, `tac_intervals.c` | P | Las raíces observables solo se calculan en una prueba (`pruebas/tac_analysis/desde_fuente.c`) → P10. La pertenencia a un conjunto de vivos busca la posición del valor recorriendo todas las ubicaciones (costo cúbico en la asignación) → P14 |
 | A4.1 Gestor | `tac_passes.c` | P | Las cinco pasadas son una misma función vacía en este archivo; `spill` se ejecuta como pasada antes de asignar → P8 |
 | A4.2 a A4.5 Pasadas | — | F | Tareas C3.1 a C3.3. Sus archivos y su registro los deja P8. Contrato en la parte 7, diseño técnico en la parte 11 |
 | A5.1 Generador `-O0` | `generate.c`, `generate_expr.c`, `generate_stmt.c`, `generate_init.c`, `generate_support.c`, `label_table.c` | E | Solo cambian llamadas (P2, P3) |
@@ -483,17 +527,17 @@ Diseño interno: 11.2. Regla ante un fallo: 11.1.
 **Ejemplo**
 
 ```
-F f [ a : int ] : int r ;        alto nivel de f:
-    Vm x : int = a * 2 ;           t1 = a          t2 = t1 * 2      x = t2
-    Vm y : int = a + 1 ;           t3 = a          t4 = t3 + 1      y = t4
-    r = y ;                        t5 = y          r = t5
+F f [ a : int ] : int r ;        alto nivel de f (con P15):
+    Vm x : int = a * 2 ;           t1 = a * 2      x = t1
+    Vm y : int = a + 1 ;           t2 = a + 1      y = t2
+    r = y ;                        r = y
     E ;                            return
 .
 ```
 
-`x` no se lee nunca y `f` no es `main`, así que `x` no está viva después de `x = t2`.
-Primera vuelta: se elimina `x = t2`. Segunda: `t2` ya no está viva, se elimina `t2 = t1 * 2`
-(la multiplicación no puede fallar). Tercera: se elimina `t1 = a`. Resultado: `removed = 3`.
+`x` no se lee nunca y `f` no es `main`, así que `x` no está viva después de `x = t1`.
+Primera vuelta: se elimina `x = t1`. Segunda: `t1` ya no está viva, se elimina `t1 = a * 2`
+(la multiplicación no puede fallar). Resultado: `removed = 2`.
 Si la misma función fuera `main`, `x` sería raíz observable y no se eliminaría nada.
 
 ### 7.3 Renombramiento local (A4.3, tarea C3.3a)
@@ -523,8 +567,7 @@ sería SSA, fuera del alcance).
 ```
 antes                         después
 x = t1 + t2      (def 1)      t9 = t1 + t2
-t3 = x                        t3 = t9
-c = t3 * 2                    c = t3 * 2
+c = x * 2                     c = t9 * 2
 x = t4 + 1       (def 2)      x = t4 + 1
 ```
 
@@ -641,6 +684,18 @@ ejecuta la otra carga.
 
 ### 7.6 Spilling (dentro de A5.3, tarea C3.4)
 
+**Decisión del 15/11 (4.4).** Además del *linear scan*, que sigue como ruta principal, se
+implementa el coloreo de Chaitin, como en el curso, en `src/generador_o1/tac_allocate_color.c`,
+elegido con `--alloc=color` (`TacAllocationOptions` gana el campo de la estrategia). Chaitin
+construye el grafo de interferencia con los intervalos (dos temporales interfieren si sus
+intervalos se solapan), simplifica con k = 12, elige víctima cuando se atasca y selecciona
+colores. Las dos estrategias entregan el mismo mapa temporal→registro y la lista de
+derramados; todo lo demás (plan por instrucción, código de derrame con `rg`, preservación,
+operaciones complejas, emisión) es común. A diferencia del curso, no hace falta repetir el
+algoritmo después de un spill: el código de derrame usa `rg`, registro reservado que no entra
+al grafo y cumple el papel de los "temporales frescos". Después se comparan bundles, ciclos y
+derramados para decidir cuál queda como principal.
+
 **Dónde.** En el recorrido del *linear scan*, en el punto que hoy es `no_register_available`
 (`tac_allocate.c`). No es una pasada del gestor.
 
@@ -665,7 +720,9 @@ el plan por instrucción que ya arma la asignación (`TacEmissionSite`, `tac_all
 **Algoritmo** (Poletto y Sarkar 1999, fuera de Aho)
 
 1. Al llegar a un intervalo sin registro libre, los candidatos son los 12 activos y el nuevo.
-2. Víctima: el de menor profundidad de lazo; en empate, el que termina más lejos.
+2. Víctima (la del curso, común a las dos estrategias): el de menor costo/grado, con
+   costo = Σ 10^profundidad sobre cada definición y uso del temporal, y grado = cantidad de
+   intervalos que se solapan con el suyo. En empate, el que termina más lejos.
 3. La víctima queda derramada para toda su vida (no hay partición de intervalos). Si era un
    activo, su registro pasa al intervalo nuevo.
 4. Al terminar la función: reservar `4 × derramados` bytes con `data_area_reserve_spill`. La
@@ -765,8 +822,10 @@ pendiente está en el IDE (B6, B8) y en la herramienta de medición (C2), tarea 
 
 ## 9. Plan de implementación del refactor
 
-Catorce pasos, P0 a P13. Cada uno es una rama y un PR hacia `develop`, y lo ejecuta el agente
-(que solo programa, prueba y documenta). En todos corren las cuatro protecciones de 4.1.
+Dieciséis pasos, P0 a P15. Cada uno es una rama y un PR hacia la rama de integración
+`refactor-c6`, y lo ejecuta el agente (que solo programa, prueba y documenta). En todos corren
+las cuatro protecciones de 4.1. `develop` conserva el código funcional hasta que el refactor
+completo pasa la validación final (9.17); entonces entra con un solo PR de `refactor-c6`.
 
 ### 9.0 Orden y dependencias
 
@@ -781,11 +840,13 @@ Catorce pasos, P0 a P13. Cada uno es una rama y un PR hacia `develop`, y lo ejec
 | P6 | Aceptación única del parser | P1 | P10, enlazado `P` |
 | P7 | Tabla de operaciones complejas | P1 | DCE, reordenamiento |
 | P8 | Archivos de las pasadas y gestor | P1 | Las cuatro pasadas |
-| P9 | Métricas con contadores y nivel | P4, P8 | Las cinco optimizaciones |
+| P9 | Métricas con contadores y nivel | P4, P8 y los campos de derrame de `TacAllocationMetrics` (P12) | Las cinco optimizaciones |
 | P10 | Raíces observables y verificación con pasadas | P6, P8 | Las cinco optimizaciones |
 | P11 | Clonar bloques y fijar orden | P1 | Unrolling, reordenamiento |
 | P12 | Asignación preparada para el derrame | P2, P3, P9 | Spilling |
-| P13 | Cascadas | P6 | — |
+| P13 | Cascadas (pospuesto) | P6 | — |
+| P14 | Búsqueda directa en la liveness | P10, P12 | Todas: tiempo de compilación de `-O1` |
+| P15 | Lectura de variables al estilo del curso (integrado; validación en 9.18) | P14 | DCE y renombramiento (TAC más limpio); métricas de alto nivel |
 
 Qué necesita cada optimización para empezar:
 
@@ -798,7 +859,12 @@ Qué necesita cada optimización para empezar:
 | Spilling | P2, P3, P9, P10, P12 |
 
 P2, P4, P6, P7, P8 y P11 no se pisan entre sí: tocan archivos distintos. P13 es el de mayor
-riesgo y el único que no desbloquea nada; va al final.
+riesgo y el único que no desbloquea nada: se pospuso para después de las optimizaciones.
+
+**Dependencia corregida entre P9 y P12.** `tac_metrics_collect` (P9) copia los contadores de
+derrame del resultado de la asignación, y esos campos de `TacAllocationMetrics` los define
+P12. Como P9 a P12 se hicieron en un mismo PR (#22), las declaraciones de esos campos se
+adelantaron al implementar P9; el resto de P12 se hizo en su orden.
 
 **Cuidado común a todos los pasos.** Varios objetivos de prueba del `makefile` enlazan a mano
 un subconjunto de fuentes (por ejemplo `probar_constantes_isa` solo `isa_constant.c`, o
@@ -1262,6 +1328,20 @@ representación guarda `const Symbol *`: hay que resolver esa diferencia al impl
 
 ### 9.14 P13. Cascadas de e71, e72 y e74
 
+**Estado: pospuesto** (decisión del 14/11) para después de las optimizaciones, en una
+revisión aparte del IDE y de los errores. Solo cambia los diagnósticos: ninguna optimización
+depende de él. Al retomarlo:
+
+- Las cascadas no existen en `main` (entrega del Proyecto I): ese parser no tiene reglas de
+  recuperación y se detiene en el primer error sintáctico; el semántico sí reporta varios
+  errores. La recuperación sintáctica, y con ella las cascadas, llegó con la integración del
+  IDE (PR #17).
+- El IDE tiene su propio parser LL(1) en Python, y `ComparacionBison`
+  (`ide/pruebas/test_parser.py`) lo compara con el de Bison sobre un corpus: hay que revisar
+  si P13 afecta esa prueba.
+- Las 154 consultas de referencia (`refactor_ref/consultas/`) darán menos diagnósticos en los
+  ejemplos con error en la cabecera de un bloque: diferencia esperada, una por una.
+
 **Objetivo.** Un error en la cabecera de un bloque no debe hacer que se pierda el bloque.
 
 **Cambio en `grammar/parser.y`:** reglas de error en la cabecera de cada bloque, que
@@ -1299,6 +1379,167 @@ recuperación" de `docs/ccom_banderas.md`.
 **Riesgo.** Es el paso más delicado y no desbloquea ninguna optimización. Si el tiempo aprieta,
 es el que se puede dejar para después de las optimizaciones sin costo.
 
+### 9.15 P14. Búsqueda directa en la liveness
+
+**Problema.** `location_index` (`tac_live.c`) recorría todo el universo de ubicaciones en cada
+consulta, y `touch_set` (`tac_intervals.c`) y los dos recorridos de vivos de
+`tac_allocate_sites.c` preguntaban por cada ubicación. El costo de la asignación crecía con el
+cubo del tamaño de la función: con -O1, 800 asignaciones tardaban 33 s y 1600, 200 s. Era un
+error de este diseño: la parte 10 la había incluido entre las búsquedas que se quedan.
+
+**Cambio** (PR #23)
+
+| Archivo | Cambio |
+|---|---|
+| `tac_live_internal.h` | `TacLiveAnalysis` guarda una tabla de posiciones por número de temporal (tamaño `next_temp`) y otra de 16 para los registros físicos; `SIZE_MAX` donde no hay ubicación |
+| `tac_live.c` | `location_index` resuelve `TAC_TEMP` y `TAC_PHYS` con esas tablas; `TAC_VARIABLE` conserva la búsqueda lineal (solo en alto nivel, pocas). `collect_location` anota la posición. El orden de las posiciones no cambia |
+| `tac_live.h`, `tac_live.c` | `int tac_live_contains_at(const TacLiveAnalysis *a, const TacLiveSet *set, size_t index)` responde por posición (Aho §9.2.5) |
+| `tac_intervals.c`, `tac_allocate_sites.c` | Consultan por la posición que ya recorren |
+| `pruebas/representacion/tac_live/probar.c` | Caso nuevo: `contains_at` y `contains` coinciden en las tres etapas |
+
+**Resultado.** Conjuntos de vivos idénticos bit a bit; 39/39 `.asm` de -O1 idénticos. Con -O1,
+800 asignaciones pasan de 32,7 s a 0,52 s, y 1600 de 200 s a 1,5 s (este último sigue rechazado
+por exceder la ROM, como debe).
+
+### 9.16 Cierre del refactor: PRs integrados
+
+| PR | Pasos | Commit |
+|---|---|---|
+| #18 | Diseño (`docs/diseno_ccom.md`) | `ec4b24c` |
+| #19 | P1 | `3e51a56` |
+| #20 | P2, P3, P5 | `955b59f` |
+| #21 | P4, P6 | `38113d4` |
+| #22 | P7 a P12 | `de8f1a9` |
+| #23 | P14 | `11d5556` (merge `29f0665`) |
+
+P0 no tiene PR: es la línea base, guardada fuera del repo en `refactor_ref/` (`ccom_ref`, `o0/`,
+`consultas/`, `manifest.json`).
+
+P15 está integrado en el árbol de `feature/c6-tac-curso`, con las comprobaciones completas de
+9.18. Este cierre local no registra un PR ni un commit adicionales.
+
+### 9.17 Validación final de `refactor-c6` (`29f0665`)
+
+| Comprobación | Resultado |
+|---|---|
+| `make` | Sin warnings |
+| `make check` | Completo |
+| `make ejercicios` | Código 0 |
+| -O0 contra la referencia | 84/84 imágenes idénticas; solo diferencias de ruta (16 `.asm`, 28 stderr) |
+| Consultas del IDE | 154 invocaciones, 462/462 idénticas |
+| Equivalencia de -O1 | 39/39 |
+| AddressSanitizer y UBSan | 92/92 limpios (39 con -O1, 28 con -O0, 22 `--check-json`, e71/e72/e74) |
+| Tiempo de -O1, 800 asignaciones | 0,59 s y 0,61 s (una muestra) |
+| `make check-ide` | 427 métodos con el mismo resultado por método que `feat/calside` (`6ebeffb`): 31 fallos y 1 error, todos preexistentes. Los 29 de la fase 1 más 2 de la terminal integrada que dependen del entorno. Requiere `XDG_DATA_HOME` aislado: sin él, las pruebas de papelera real se cuelgan en los dos árboles |
+
+### 9.18 P15. Lectura de variables al estilo del curso
+
+**Construcción de valores.** Un `AST_IDENTIFIER` escalar devuelve `tac_variable(símbolo)`
+sin instrucción: `E → id { E.place = id.place }`, Aho §6.4. Para `x = g + h ;` se
+construye `t1 = g + h; x = t1`, sin las copias de lectura de g/h.
+
+Un operando VARIABLE solo se copia a TEMP en dos casos:
+
+1. Queda una llamada a función por evaluar en la misma construcción. Se detectan
+   `AST_CALL`/`AST_INDEX` cuyo símbolo es función, a cualquier profundidad. La copia
+   ocurre antes de esa evaluación posterior, para conservar el valor leído.
+2. `R` reasigna parámetros simultáneamente: captura sus argumentos antes de escribirlos,
+   incluso sin llamadas. Por ejemplo, `R f[b,a,...]` debe intercambiar los valores anteriores.
+
+Los literales y TEMP no requieren otra captura. La regla protege binarios, argumentos,
+fila antes de columna, inicio antes de un fin de S con llamadas, valor derecho antes de
+índices del destino y los argumentos de cifrar/descifrar. C/A/L consumen sus condiciones
+antes del cuerpo; el corto circuito conserva su temporal de unión; cada inicializador se
+consume antes del siguiente. RETURN consume directamente el símbolo de retorno.
+
+**Captura y marcas de S.** Inicio y fin se resuelven en el ámbito exterior; el control es
+un símbolo nuevo Vi. El constructor evalúa ambos, escribe el control y guarda el fin en
+`$limite_Sk` antes del cuerpo. El cuerpo puede cambiar la variable exterior del fin, pero la
+prueba sigue leyendo la casilla privada. No hace falta una copia a TEMP solo para la marca.
+
+- `initial` conserva INTEGER o TEMP existente; si inicio es VARIABLE, queda NONE
+  (inicio dinámico no conservado en metadatos; no significa cero).
+- `bound` conserva INTEGER o TEMP existente; si fin es VARIABLE, referencia exactamente
+  `tac_variable(limit)`, nunca la variable exterior.
+- `limit` tiene exactamente una definición explícita en la función, contada con
+  `tac_definitions` por identidad de Symbol. Su bloque está fuera del lazo natural de la
+  marca y domina su cabecera. Hay diagnósticos distintos para operandos inválidos, ausencia
+  o multiplicidad de definiciones, definición interior y falta de dominancia.
+
+La unicidad es estructural, no una garantía de ausencia de alias de memoria. Este contrato
+no agrega comprobación de índices dinámicos ni cambia la semántica de acceso a arreglos.
+La bajada, la validación HIGH, el intérprete, la vivacidad y las métricas admiten VARIABLE.
+El intérprete conserva su rechazo contractual de CRYPTO; esos controles usan el comparador O0.
+
+#### Efecto en bundles
+
+Menos instrucciones HIGH no garantiza menos bundles. Al eliminar la copia de lectura, cada
+PARAM VARIABLE carga al materializarse, justo antes de guardar su casilla de parámetro. El
+organizador conserva el orden entre accesos de memoria; no adelanta la siguiente carga sobre
+el store anterior. Con consumidor desde B+2 aparecen huecos carga→store. Es el mismo patrón
+de transferencia carga/store que usa O0 al desapilar cada argumento; no se afirma identidad
+de instrucciones ni de evaluación interna entre los dos generadores.
+
+La línea base acepta ese aumento: la bajada de PARAM no se cambia en P15. Recuperarlo queda
+a cargo del reordenamiento de §11.5 cuando se implemente; la pasada actual es un stub. El
+análisis de `build/p15_analisis/` reprodujo ejercicio3 667→705 y p04_memoria 143→148 bundles.
+En p04 también se carga la columna de matriz después del producto de la fila, retrasando la
+suma y la siguiente multiplicación. Ambos programas conservaron el estado observable contra O0.
+
+**Criterio de aceptación de esperados ISA.** La revisión de los doce listados permite
+renumeración biyectiva de temporales/registros virtuales por función; eliminación de copias
+de VARIABLE; y mover su `lw` hacia el consumidor dentro del mismo bloque, conservando
+dirección y base. Después de quitar las copias y apartar esas cargas, el resto debe mantener
+operaciones, orden, etiquetas, bloques y saltos. No se permite ningún otro cambio.
+
+Once esperados cambian: cinco solo renumeran, cinco mueven una carga cada uno además de
+renumerar, y corto_circuito elimina 22 copias además de renumerar. Las cargas de esas copias
+escriben directamente el temporal de unión; la biyección se verifica entre las identidades
+que sobreviven. constantes_grandes permanece idéntico. No se modificaron el auxiliar, la
+suite ni el comparador para aceptar resultados. Auditoría: `build/p15/final/auditoria_isa.json`.
+
+**Resultados finales (15/11; P15 integrado en este árbol).**
+
+| Comprobación | Resultado de esta corrida |
+|---|---|
+| `make clean`, `make`, `make check` | Códigos 0; compilación sin warnings; check completo, incluidos los doce esperados ISA |
+| `make ejercicios` | Código 0; cuatro textos regenerados conservados bajo build/ y originales restituidos con SHA-256 |
+| -O0 contra manifest de P0 | 84/84 imágenes BIN/HEX/MEM idénticas; solo 16 ASM y 28 stderr por rutas, enumerados en el reporte |
+| Consultas nativas del IDE | 154/154; 462 stdout/stderr/códigos idénticos |
+| `make check-o1-equivalence` independiente | 39/39, con imágenes externas cero y patrón |
+| Versión previa reconstruida fuera del repo | 113 fuentes/headers/gramática/makefile coinciden con hashes pre-P15; sus 39 ASM y 117 imágenes coinciden con build/p15/antes/ |
+| Simulación antes/después | 78 pares (39 fuentes × 2 imágenes); sin avisos, terminación y estado observable iguales |
+| HIGH total, 39 fuentes | 2029 → 1673 (−356) |
+| Bundles totales, 39 fuentes | 5872 → 5898 (+26) |
+| Ciclos totales del simulador | 85143 → 85487 (+344); mismo resultado con cero y patrón; suma del corpus, no de una aplicación única |
+| Tiempo -O1, recto de 800 asignaciones | 506,575 → 614,063 ms; pared 0.510 → 0.619 s, una muestra por versión |
+| Tiempo -O1, S con 800 asignaciones | 512,867 → 493,062 ms; pared 0.517 → 0.497 s, una muestra por versión |
+
+Los tiempos son mediciones nuevas de ambos ejecutables reconstruidos en este entorno con
+los mismos fuentes de P14; no constituyen un perfil ni una garantía de aceleración.
+
+Tabla resumida de todas las subidas (HIGH/bundles/ciclos antes → después):
+
+| Fuente | HIGH | Bundles | Ciclos | Causa |
+|---|---:|---:|---:|---|
+| `ejercicios/ejercicio2_matriz/ejercicio2.cls` | 56 → 51 | 171 → 172 | 724 → 735 | Columna 2D al uso: +2 en comparación, −1 al guardar posición |
+| `ejercicios/ejercicio3_cifrado/ejercicio3.cls` | 191 → 133 | 667 → 705 | 16087 → 16285 | PARAM, captura S y operandos al volver de productos |
+| `pruebas/generador_o0/programas/s_anidados.cls` | 21 → 18 | 57 → 58 | 485 → 497 | Carga de x después de i*j |
+| `pruebas/p04_memoria.cls` | 56 → 46 | 143 → 148 | 591 → 604 | PARAM de bandera e índices 2D |
+| `pruebas/p06_tipos.cls` | 74 → 66 | 203 → 202 | 1685 → 1686 | Captura de tope en S: +1 ciclo; dos bundles eliminados en rama no ejecutada |
+| `pruebas/p11_ejercicio3.cls` | 191 → 133 | 667 → 705 | 16087 → 16285 | Mismo ASM ejecutable que ejercicio3 |
+| `pruebas/p12_ejercicio2.cls` | 56 → 51 | 171 → 172 | 724 → 735 | Mismo ASM ejecutable que ejercicio2 |
+| `pruebas/rutinas/arreglos/matriz3x4.cls` | 68 → 57 | 208 → 210 | 1444 → 1456 | Columna 2D al uso, +2 por comparación |
+
+Las ocho subidas tienen causa identificada en carga al uso de VARIABLE/PARAM. El reporte
+incluye fragmentos de ASM y las contribuciones dinámicas por bloque; no hay subidas sin
+explicar. El caso p06 muestra por qué menos bundles estáticos no implica menos ciclos:
+la copia lógica eliminada está en una rama no ejecutada y la captura S sí se ejecuta.
+
+Reporte A–G, tabla completa de 39 programas, diferencias de referencia y registros:
+`build/p15/final/reporte.txt`. Datos de medición: `tabla.json`, `tiempos.json`,
+`comprobaciones.json`; ASM completos antes/después y bloques de las subidas bajo esa carpeta.
+
 ## 10. Lo que se queda como está
 
 | Qué | Dónde | Por qué se queda |
@@ -1308,7 +1549,7 @@ es el que se puede dejar para después de las optimizaciones sin costo.
 | El material LL(1) en Python | `ide/nucleo/` | Estudio y documentación; no participa en el análisis |
 | Tabla de símbolos con lista por ámbito | `symbol_table.c` | Ámbitos pequeños, una búsqueda por identificador, resultado anotado en el AST. Una tabla de dispersión sería sobreingeniería. Reversible: cabe en ese archivo. Preguntar al profesor qué espera por "eficiente" |
 | Tabla de etiquetas, etiquetas del ensamblador y búsqueda de direcciones en el listado | `label_table.c`, `assembler.c`, `codegen.c` | Mismo criterio |
-| Búsquedas internas de cada análisis de `-O1` | `tac_live.c`, `tac_intervals.c`, `tac_allocate.c`, `tac_emit.c` | Son de análisis distintos, cada una sobre sus propios datos; solo comparten la forma |
+| Búsquedas "instrucción → dato" de cada análisis de `-O1` | `tac_live.c`, `tac_intervals.c`, `tac_allocate.c`, `tac_emit.c` | Son de análisis distintos, cada una sobre sus propios datos; solo comparten la forma. **No incluye** la búsqueda de la posición de un valor en los conjuntos de vivos: esa fila la incluía por error y se corrigió en P14 (9.15) |
 | Cabecera del protocolo del IDE escrita en 5 servicios | `diagnostics_json.c`, `syntax_service.c`, `suggestions.c`, `repairs.c`, `clones.c` | Una línea fija por archivo; el IDE y las suites la validan en cada respuesta |
 | Acoplamiento del parser y el léxico con los servicios del IDE | `parser.y`, `lexer.l` | Funciona; desacoplarlo es rediseñar los motores del IDE |
 | Lectura del fuente con límite, repetida | `suggestions.c`, `syntax_service.c` | Es del IDE, fuera de esta tarea |
@@ -1432,7 +1673,7 @@ seguro: puede dar por vivo algo que ya no lo está. La vuelta siguiente lo recal
 
 | Caso | Entrada | Esperado |
 |---|---|---|
-| Local muerta | Función con `Vm x : int = a * 2 ;` y `x` nunca leída | Se eliminan sus 3 instrucciones (`t = a`, `t = t * 2`, `x = t`); `removed = 3` |
+| Local muerta | Función con `Vm x : int = a * 2 ;` y `x` nunca leída | Se eliminan sus 2 instrucciones (`t = a * 2`, `x = t`); `removed = 2` |
 | Llamada entre medias | Lo anterior con una llamada que modifica una global | La llamada se conserva; el resultado no cambia |
 | División constante | Local muerta con `a / 4` | Se elimina |
 | División variable | Local muerta con `a / b` | Se conserva |
@@ -1587,6 +1828,7 @@ collect_plans(f):
     tac_loops_free(lazos)
 
 trip_count(p):
+    // Solo INTEGER: NONE, TEMP y VARIABLE($limite_Sk) son no constantes.
     si p.mark.initial o p.mark.bound no son enteros: devolver −1
     a ← initial;  b ← bound;  s ← step
     si s > 0: devolver máx(0, techo((b − a) / s))
@@ -1782,9 +2024,11 @@ spill_under_pressure(estado, nuevo):
     quitar víctima de estado.active
     devolver registro
 
-choose_victim(estado, nuevo):
+choose_victim(estado, nuevo):           // víctima del curso, común a scan y Chaitin
     entre estado.active ∪ {nuevo}:
-        menor loop_depth;  empate: mayor end;  empate: mayor temp_id
+        costo(v) ← Σ sobre cada definición y uso de v de 10^profundidad del bloque
+        grado(v) ← cantidad de intervalos que se solapan con el de v
+        menor costo/grado;  empate: mayor end;  empate: mayor temp_id
 
 // al terminar el recorrido de la función
 si f.spill_count > 0: data_area_reserve_spill(símbolo de f, 4 × f.spill_count)
@@ -2029,7 +2273,6 @@ B0: successors [B1]
 B2: successors [B4, B3]
   if j >= $limite_S0 goto B4
 B3: successors [B2]
-  t0 = s
   t3 = t1 * 3
   t7 = t6[t5]
 ```
@@ -2262,8 +2505,8 @@ F main [] : void ;
 .
 ```
 
-Esperado: `g = 3`, `v = 4`. Se eliminan las 3 instrucciones de `x`; la llamada a `tocar` se
-conserva. `eliminadas = 3`.
+Esperado: `g = 3`, `v = 4`. Se eliminan las 2 instrucciones de `x` (con P15); la llamada a
+`tocar` se conserva. `eliminadas = 2`.
 
 `d2_inalcanzable.cls`: sentencias después de `E` y una rama `C [ falso ]`. Esperado:
 `bloques_eliminados ≥ 1`.
@@ -2297,9 +2540,9 @@ Esperado: los derramados son los que no se usan dentro del lazo.
 `s3_compleja.cls`: una multiplicación y una llamada con la presión al máximo. Esperado:
 resultado correcto con operandos derramados de una operación compleja.
 
-Para el renombramiento conviene mostrar también la comparación contra `-O0`: en `-O1`, 9
-programas del corpus tienen más bundles que en `-O0`, porque la línea base usa un temporal por
-lectura de variable.
+Para el renombramiento conviene mostrar también la comparación contra `-O0`: antes de P15, en
+`-O1`, 9 programas del corpus tenían más bundles que en `-O0`. Se vuelve a medir después de
+P15.
 
 ## 15. Avisos para el cerebro
 
@@ -2308,8 +2551,19 @@ lectura de variable.
   `diseno_camino_optimizante.md` como contrato vigente: sus decisiones están en el anexo A.
 - A `diseno_camino_optimizante.md` le faltaba su §11 (se perdió en una reescritura del 12/11);
   está recuperada en A.5.
-- Las "fugas del parser con errores de sintaxis" (plan §1.3) parecen resueltas por los
-  destructores que agregó la integración del IDE. Se confirma en P0.
+- Las "fugas del parser con errores de sintaxis" (plan §1.3) están resueltas por los
+  destructores que agregó la integración del IDE: confirmado en P0 y con AddressSanitizer en la
+  validación final (9.17).
+- `make check-ide` da 31 fallos y 1 error, no 29 y 1: los 2 nuevos son de la terminal integrada
+  (`test_prototipo`, esperan el prompt `calser:`), fallan igual en `feat/calside` y dependen del
+  entorno. La suite necesita `XDG_DATA_HOME` aislado; sin él, las pruebas de papelera real se
+  cuelgan. Para la revisión del IDE.
+- El mensaje de ROM excedida sale como `archivo:0:0: error de generacion` también con `-x`,
+  donde no hay generación. Para la revisión de los errores.
+- P13 (cascadas) se pospuso para después de las optimizaciones (9.14).
+- Alineación con el curso (4.4): P15 cambia el TAC (variables directo, como el curso) y el
+  spilling tendrá Chaitin como ruta alterna (`--alloc=color`). C3.4 cambia de contenido.
+- P14 corrigió un error de diseño: la liveness hacía cúbica la asignación de -O1 (9.15).
 - Pregunta nueva para el profesor: qué se espera por tablas "eficientes" (§4.1).
 - `docs/compiler-integration.md` de arqui dice que `ccom` no usa `rg`; pasa a ser el registro
   auxiliar del derrame.
@@ -2341,7 +2595,7 @@ Sarkar (1999, *linear scan*), Goodman y Hsu (1988), Fisher, Faraboschi y Young.
 | Tema | Decisión | Fundamento |
 |---|---|---|
 | Registros virtuales | Temporales virtuales ilimitados; los registros físicos se deciden una sola vez | "Registros simbólicos" (Aho §8.8.4), pseudorregistros (Aho §10.2.3) |
-| Un temporal por lectura de variable | Se mantiene; la inflación de la línea base afecta igual al antes y al después de cada pasada. En alto nivel una variable es una variable, no un acceso a memoria | Fidelidad al orden de evaluación |
+| Lectura de variables (cambia con P15) | La variable se usa directo (`E.place = id.place`); solo se copia a un temporal si una llamada posterior en la misma expresión podría modificarla (9.18). En alto nivel una variable es una variable, no un acceso a memoria | Aho §6.4; presentación *Optimización de Código*, diapositiva 7. La copia restante conserva el orden de evaluación |
 | Destino distinto de las fuentes en `*`, `/`, `%`, `^` | La rutina exige destino, operandos y 8 auxiliares físicos todos distintos. En ISA virtual, si el destino coincide con una fuente, la bajada usa un temporal nuevo y agrega una copia. En la asignación, las fuentes de esas instrucciones se consideran vivas también en la posición de escritura | Restricción de la rutina del Proyecto I |
 | Asignación de registros | *Linear scan* sobre intervalos de vida (liveness, Aho §9.2.5) | Poletto y Sarkar (1999). Alternativa del libro para el informe: coloreo de grafos (Aho §8.8.4) |
 | Política de elección de registro | El registro libre desde hace más tiempo; si empatan, el menor | Aho §10.2.3 |

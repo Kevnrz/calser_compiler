@@ -17,12 +17,9 @@ B3: successors [B4]
 B4: successors [B6, B5]
   if j >= $limite_S1 goto B6
 B5: successors [B4]
-  t0 = x
-  t1 = i
-  t2 = j
-  t3 = t1 * t2
-  t4 = t0 + t3
-  x = t4
+  t0 = i * j
+  t1 = x + t0
+  x = t1
   j = j + 1
   goto B4
 B6: successors [B2]

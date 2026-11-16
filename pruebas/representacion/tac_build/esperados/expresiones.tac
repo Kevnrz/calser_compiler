@@ -7,70 +7,44 @@ B1: successors [B3, B2]
   t0 = neg 3
   x = t0
   y = 2
-  t1 = x
-  t2 = y
-  t3 = t1 + t2
+  t1 = x + y
+  a = t1
+  t2 = a - x
+  a = t2
+  t3 = x * y
   a = t3
-  t4 = a
-  t5 = x
-  t6 = t4 - t5
+  t4 = a / y
+  a = t4
+  t5 = a % y
+  a = t5
+  t6 = a ^ y
   a = t6
-  t7 = x
-  t8 = y
-  t9 = t7 * t8
-  a = t9
-  t10 = a
-  t11 = y
-  t12 = t10 / t11
-  a = t12
-  t13 = a
-  t14 = y
-  t15 = t13 % t14
-  a = t15
-  t16 = a
-  t17 = y
-  t18 = t16 ^ t17
-  a = t18
-  t19 = x
-  t20 = y
-  t21 = t19 < t20
-  b = t21
-  t22 = x
-  t23 = y
-  t24 = t22 <= t23
-  b = t24
-  t25 = x
-  t26 = y
-  t27 = t25 > t26
-  b = t27
-  t28 = x
-  t29 = y
-  t30 = t28 >= t29
-  b = t30
-  t31 = x
-  t32 = y
-  t33 = t31 == t32
-  b = t33
-  t34 = x
-  t35 = y
-  t36 = t34 != t35
-  b = t36
-  t37 = b
-  t38 = not t37
-  b = t38
-  t39 = b
-  t40 = t39
-  if t40 == 0 goto B3
+  t7 = x < y
+  b = t7
+  t8 = x <= y
+  b = t8
+  t9 = x > y
+  b = t9
+  t10 = x >= y
+  b = t10
+  t11 = x == y
+  b = t11
+  t12 = x != y
+  b = t12
+  t13 = not b
+  b = t13
+  t14 = b
+  if t14 == 0 goto B3
 B2: successors [B3]
-  t40 = 1
+  t14 = 1
   goto B3
 B3: successors [B5, B4]
-  t41 = t40
-  if t41 != 0 goto B5
+  t15 = t14
+  if t15 != 0 goto B5
 B4: successors [B5]
-  t41 = 0
+  t15 = 0
   goto B5
 B5: successors []
-  b = t41
+  b = t15
   return
 

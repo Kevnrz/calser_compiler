@@ -390,9 +390,14 @@ límite auxiliar no son candidatos.
 
 Cada TacFunction HIGH posee `loop_marks`, creada al traducir S/L. Una marca
 presta cabecera, cuerpo y latch opcional, y conserva profundidad sintáctica.
-En S presta control/límite y guarda operandos de inicio/fin **ya capturados** y
-paso: no contiene expresiones para reevaluar. No cambia IDs, CFG ni el .tac de -i.
-Las marcas no se copian a ISA.
+En S presta control/límite y paso. `initial` es INTEGER/TEMP existente, o NONE
+si el inicio era VARIABLE. `bound` es INTEGER/TEMP existente, o VARIABLE cuyo
+Symbol es exactamente `limit`, la captura real del fin en `$limite_Sk`. No
+contiene expresiones para reevaluar. El límite tiene una sola definición
+explícita por identidad de Symbol; su bloque está fuera del lazo natural y
+domina la cabecera. Cada condición tiene un diagnóstico propio. La unicidad
+explícita no garantiza ausencia de alias por memoria (diseño §9.18).
+No cambia IDs, CFG ni el .tac de -i. Las marcas no se copian a ISA.
 
 `tac_loops_analyze` recalcula alcanzabilidad y dominadores desde entry (Aho
 §9.6.1). Retroceso significa destino que domina al origen (§9.6.4); algoritmo
@@ -605,19 +610,38 @@ orden de lista. Cada función termina con RETURN implícito si queda un camino
 abierto; `tac_rebuild_edges` y `tac_validate` comprueban el resultado. Puede haber
 bloques sin predecesores: esta etapa no elimina código muerto.
 
-Cada lectura escalar se captura en un temporal antes de evaluar el operando
-siguiente (Aho §6.4). En asignaciones, el valor derecho se evalúa antes que los
-índices del destino. Los índices se capturan de izquierda a derecha; una matriz
-usa `(fila * columnas + columna) * 4` bytes (Aho §6.4.3). Las llamadas capturan
-sus argumentos antes de formar el grupo PARAM; los CALL anidados se resuelven
-primero. Arreglos declarados pasan por ADDRESS; parámetros arreglo leen la
-dirección recibida mediante COPY.
+P15 usa `TAC_VARIABLE` directamente para una lectura escalar: Aho §6.4,
+`E -> id: E.place = id.place` (diseño §9.18). Al combinar subexpresiones de
+izquierda a derecha, captura mediante COPY un operando VARIABLE si una
+subexpresión posterior contiene una llamada a función, incluso anidada. El
+otro caso de captura es R, por la asignación simultánea de parámetros. Los
+literales y los temporales no requieren otra captura. Esto protege binarios,
+argumentos, fila antes de columna, inicio antes de fin de S, valor derecho
+antes de índices del destino y los argumentos de cifrar/descifrar. Una matriz
+usa `(fila * columnas + columna) * 4` bytes (Aho §6.4.3). Las llamadas forman
+el grupo PARAM después de evaluar los argumentos; los CALL anidados se
+resuelven primero. Arreglos declarados pasan por ADDRESS; parámetros arreglo
+leen la dirección recibida mediante COPY.
+
+El contrato de marcas de S usa la captura privada del fin; no agrega una copia
+a TEMP solo para metadatos. P15 está integrado en este árbol: make check completo
+(incluidos 22 esperados HIGH y 12 ISA), make ejercicios y equivalencia O1/O0
+independiente 39/39 aprobaron. Las 84 imágenes O0 y las 154 consultas del IDE
+conservan la referencia; las diferencias de texto son únicamente las rutas
+conocidas. En los esperados ISA se aceptan renumeración biyectiva, copias de
+VARIABLE eliminadas y sus cargas desplazadas hacia el uso en el mismo bloque,
+con igual base/dirección; ninguna otra diferencia. PARAM conserva su bajada.
+Los totales HIGH pasan 2029→1673, bundles 5872→5898 y ciclos del simulador
+85143→85487; las ocho subidas se explican por carga al uso. El antes se
+reconstruyó fuera del repo y coincidió con las capturas pre-P15. El detalle,
+las dos imágenes externas y los límites de medición están en diseño §9.18 y
+`build/p15/final/reporte.txt`.
 
 `&` y `|` crean saltos y una unión con el temporal del resultado: el lado
 derecho solo se ejecuta cuando corresponde (Aho §6.6). No se traducen a
 TAC_AND/TAC_OR de evaluación plena. C/A/residual prueba las ramas en orden;
-L reevalúa la condición. S captura inicio y fin antes de escribir el control,
-compara con extremo exclusivo según el signo del paso y conserva el fin en un
+L reevalúa la condición. S evalúa inicio y fin antes de escribir su control nuevo,
+compara con extremo exclusivo según el signo del paso y captura el fin en un
 Symbol auxiliar `$limite_SN`, en la dirección `limit_address` que ya reservó el
 semántico. Ese Symbol pertenece al resultado, no a los ámbitos prestados.
 

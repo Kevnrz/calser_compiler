@@ -11,10 +11,8 @@ B1: successors [B2]
 B2: successors [B4, B3]
   if i >= $limite_S0 goto B4
 B3: successors [B2]
-  t0 = x
-  t1 = i
-  t2 = t0 + t1
-  x = t2
+  t0 = x + i
+  x = t0
   i = i + 200000
   goto B2
 B4: successors []

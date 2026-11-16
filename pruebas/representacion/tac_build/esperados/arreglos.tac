@@ -11,16 +11,13 @@ B1: successors [B2]
 B2: successors [B4, B3]
   if j >= $limite_S0 goto B4
 B3: successors [B2]
-  t0 = s
-  t1 = f
-  t2 = j
-  t3 = t1 * 3
-  t4 = t3 + t2
-  t5 = t4 * 4
-  t6 = m
-  t7 = t6[t5]
-  t8 = t0 + t7
-  s = t8
+  t0 = f * 3
+  t1 = t0 + j
+  t2 = t1 * 4
+  t3 = m
+  t4 = t3[t2]
+  t5 = s + t4
+  s = t5
   j = j + 1
   goto B2
 B4: successors []
@@ -30,10 +27,9 @@ function poner (entry B0)
 B0: successors [B1]
   goto B1
 B1: successors []
-  t0 = k
-  t1 = t0 * 4
-  t2 = v
-  t2[t1] = 7
+  t0 = k * 4
+  t1 = v
+  t1[t0] = 7
   return
 
 function main (entry B0)

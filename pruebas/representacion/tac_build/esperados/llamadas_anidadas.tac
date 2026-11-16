@@ -5,8 +5,7 @@ B0: successors [B1]
   result = 0
   goto B1
 B1: successors []
-  t0 = x
-  result = t0
+  result = x
   return result
 
 function add (entry B0)
@@ -14,10 +13,8 @@ B0: successors [B1]
   result = 0
   goto B1
 B1: successors []
-  t0 = a
-  t1 = b
-  t2 = t0 + t1
-  result = t2
+  t0 = a + b
+  result = t0
   return result
 
 function main (entry B0)

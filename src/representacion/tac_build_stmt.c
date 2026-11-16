@@ -43,6 +43,10 @@ static void assignment(TacBuilder *builder, ASTNode *node) {
     if (target->kind == AST_IDENTIFIER) {
         tb_emit(builder, node, TAC_COPY, tac_variable(symbol), value, tac_none());
     } else {
+        /* Aho §6.4, diseño §9.18: los índices pueden cambiar el valor derecho. */
+        if (tb_contains_call(target)) {
+            value = tb_capture(builder, right, value);
+        }
         symbol = tb_symbol(tb_child(target, 0));
         TacOperand offset = tb_array_offset(builder, target);
         TacOperand base = tac_variable(symbol);
@@ -61,7 +65,14 @@ static void crypto(TacBuilder *builder, ASTNode *node) {
     TacInstruction *instruction;
     if (!strcmp(name, "cifrar") || !strcmp(name, "descifrar")) {
         TacOperand origin = tb_expression(builder, arg);
+        /* Los tres valores se consumen juntos: Aho §6.4, diseño §9.18. */
+        if (tb_contains_call(arg->next) || tb_contains_call(arg->next->next)) {
+            origin = tb_capture(builder, arg, origin);
+        }
         TacOperand dest = tb_expression(builder, arg->next);
+        if (tb_contains_call(arg->next->next)) {
+            dest = tb_capture(builder, arg->next, dest);
+        }
         TacOperand count = tb_expression(builder, arg->next->next);
         instruction = tb_emit(builder, node, !strcmp(name, "cifrar") ?
                               TAC_CIFRAR : TAC_DESCIFRAR, origin, dest, count);

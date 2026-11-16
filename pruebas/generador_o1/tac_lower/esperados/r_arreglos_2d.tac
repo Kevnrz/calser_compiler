@@ -3,42 +3,42 @@ B0: successors [B1]
   sw rz, 36(rz)
   jef B1
 B1: successors [B3, B2]
-  lw v0, 44(rz)
-  mov v21, 2
-  sle v1, v21, v0
-  beq v1, rz, B3
+  lw v15, 44(rz)
+  mov v16, 2
+  sle v0, v16, v15
+  beq v0, rz, B3
 B2: successors []
-  lw v2, 48(rz)
-  sw v2, 36(rz)
+  lw v17, 48(rz)
+  sw v17, 36(rz)
   jefR rz, rl
 B3: successors [B1]
-  mov v3, 16
-  lw v4, 44(rz)
-  saddi v5, v4, 1
-  lw v6, 48(rz)
-  lw v7, 44(rz)
-  mov v22, 2
-  pseudo.mul v8, v7, v22
-  saddi v9, v8, 0
-  mov v23, 4
-  pseudo.mul v10, v9, v23
-  lw v11, 40(rz)
-  add v24, v11, v10
-  lw v12, 0(v24)
-  add v13, v6, v12
-  lw v14, 44(rz)
+  mov v1, 16
+  lw v18, 44(rz)
+  saddi v2, v18, 1
+  lw v19, 44(rz)
+  mov v20, 2
+  pseudo.mul v3, v19, v20
+  saddi v4, v3, 0
+  mov v21, 4
+  pseudo.mul v5, v4, v21
+  lw v6, 40(rz)
+  add v22, v6, v5
+  lw v7, 0(v22)
+  lw v23, 48(rz)
+  add v8, v23, v7
+  lw v24, 44(rz)
   mov v25, 2
-  pseudo.mul v15, v14, v25
-  saddi v16, v15, 1
+  pseudo.mul v9, v24, v25
+  saddi v10, v9, 1
   mov v26, 4
-  pseudo.mul v17, v16, v26
-  lw v18, 40(rz)
-  add v27, v18, v17
-  lw v19, 0(v27)
-  add v20, v13, v19
-  sw v3, 40(rz)
-  sw v5, 44(rz)
-  sw v20, 48(rz)
+  pseudo.mul v11, v10, v26
+  lw v12, 40(rz)
+  add v27, v12, v11
+  lw v13, 0(v27)
+  add v14, v8, v13
+  sw v1, 40(rz)
+  sw v2, 44(rz)
+  sw v14, 48(rz)
   jef B1
 B4: successors []
   jefR rz, rl

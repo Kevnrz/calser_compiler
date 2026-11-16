@@ -25,6 +25,32 @@ static TacOpcode binary_opcode(ASTKind kind) {
     }
 }
 
+/*
+ * Una llamada puede cambiar variables: diseño §9.18, Aho §6.4.
+ * Recorre solo este subárbol; los hermanos son otras subexpresiones.
+ */
+int tb_contains_call(ASTNode *node) {
+    if (!node) {
+        return 0;
+    }
+    if ((node->kind == AST_CALL || node->kind == AST_INDEX) &&
+        tb_symbol(tb_child(node, 0))->kind == SYMBOL_FUNCTION) {
+        return 1;
+    }
+    for (ASTNode *child = node->child; child; child = child->next) {
+        if (tb_contains_call(child)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Aho §6.4: E -> id: E.place = id.place; captura solo al diferir el uso (§9.18). */
+TacOperand tb_capture(TacBuilder *builder, ASTNode *node, TacOperand value) {
+    return value.kind == TAC_VARIABLE ?
+           tb_value(builder, node, TAC_COPY, value, tac_none()) : value;
+}
+
 /* Declarado: dirección estática; parámetro: valor de la dirección recibida. */
 TacOperand tb_array_base(TacBuilder *builder, ASTNode *node) {
     const Symbol *symbol = tb_symbol(node);
@@ -39,6 +65,9 @@ TacOperand tb_array_offset(TacBuilder *builder, ASTNode *node) {
     ASTNode *first = tb_child(arguments, 0);
     TacOperand row = tb_expression(builder, first);
     if (array->dimensions == 2) {
+        if (tb_contains_call(first->next)) {
+            row = tb_capture(builder, first, row);
+        }
         TacOperand column = tb_expression(builder, first->next);
         row = tb_value(builder, node, TAC_MUL, row, tac_integer(array->dim_sizes[1]));
         row = tb_value(builder, node, TAC_ADD, row, column);
@@ -57,6 +86,12 @@ TacOperand tb_call(TacBuilder *builder, ASTNode *node, int result_needed) {
         arguments[i] = argument;
         if (!callee->param_list[i]->dimensions) {
             values[i] = tb_expression(builder, argument);
+            for (ASTNode *later = argument->next; later; later = later->next) {
+                if (tb_contains_call(later)) {
+                    values[i] = tb_capture(builder, argument, values[i]);
+                    break;
+                }
+            }
         }
     }
     for (size_t i = count; i > 0; i--) {
@@ -76,9 +111,9 @@ TacOperand tb_call(TacBuilder *builder, ASTNode *node, int result_needed) {
 }
 
 /*
- * tb_expression — captura valores antes de cualquier evaluación posterior.
+ * tb_expression — usa variables directamente y captura ante llamadas posteriores (§9.18).
  * Entrada: builder con camino abierto; node semánticamente válido.
- * Salida: literal o TEMP con el valor; NONE si detecta nodo no soportado.
+ * Salida: literal, VARIABLE o TEMP con el valor; NONE si detecta nodo no soportado.
  * Efectos: agrega operaciones/bloques; no modifica símbolos (Aho §6.4).
  * Restricciones: las operaciones aritméticas conservan semántica de 32 bits;
  *   DIV/MOD/POW permanecen abstractas y pueden terminar por error en ejecución.
@@ -93,7 +128,7 @@ TacOperand tb_expression(TacBuilder *builder, ASTNode *node) {
         case AST_BOOLEAN:
             return tac_integer(node->number);
         case AST_IDENTIFIER:
-            return tb_value(builder, node, TAC_COPY, tac_variable(tb_symbol(node)), tac_none());
+            return tac_variable(tb_symbol(node));
         case AST_AND:
         case AST_OR:
             return tb_short_circuit(builder, node);
@@ -123,6 +158,9 @@ TacOperand tb_expression(TacBuilder *builder, ASTNode *node) {
                 return tac_none();
             }
             TacOperand left = tb_expression(builder, tb_child(node, 0));
+            if (tb_contains_call(tb_child(node, 1))) {
+                left = tb_capture(builder, tb_child(node, 0), left);
+            }
             TacOperand right = tb_expression(builder, tb_child(node, 1));
             return tb_value(builder, node, op, left, right);
         }

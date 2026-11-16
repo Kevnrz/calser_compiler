@@ -666,6 +666,18 @@ escrituras de `x` y la WAR entre la lectura y la segunda escritura, y una escrit
 memoria. `renamed = 1`. Si la declaración no tuviera inicializador (`Vm x : int ;` y después
 `x = a + b`), `x = 0` sería una definición más y `renamed = 2`.
 
+**Resultados medidos C3.3a.** La pasada local conserva el número de instrucciones
+HIGH y la última definición de cada candidata en su bloque. Los tres programas
+literales de 14.2 registran respectivamente `renombradas = 2, 2, 0`, con
+`salida = 18`, `g = 20` y, en r3, `g = 2, x = 2, y = 8`. Los listados completos
+antes/después y los estados exigidos se guardan en `pruebas/optimizador/rename/`;
+`make check-rename` comprueba la tabla y `make check-o1` los HIGH, el JSON y el simulador.
+En los 45 programas del corpus se registran 16 definiciones renombradas en seis
+programas, sin cambiar HIGH. `p08_comentarios` sube de 17 a 18 bundles y ciclos:
+la inicialización cero pasa de STORE con rz a MOV temporal y ocupa una ALU;
+rename conserva también los temporales muertos. Los otros programas no suben
+bundles ni ciclos; la equivalencia con O0 pasa tanto con rename como con rename,dce.
+
 ### 7.4 Unrolling (A4.2, tarea C3.1)
 
 **Usa lo que existe:** las marcas `TacLoopMark` (cabecera, cuerpo, retorno, control, límite,
@@ -1896,6 +1908,15 @@ can_rename(definicion, variable, es_main, raices):        // decisión 4.6.3
 | Fallo en `main` | `Vm x : int = 1 ; Vm y : int = a / b ; x = 2 ;` en `main` | `renamed = 0`: la división está entre las dos definiciones |
 | División que lee la variable | En `main`: `x = 1 ; y = x / b ; x = 2` | `renamed = 0`: la división puede fallar y `x` debe estar escrita |
 
+**Resultados medidos C3.3a.** `pruebas/optimizador/rename/probar.c` verifica los
+ocho casos de esta tabla sobre HIGH construido desde fuente: contadores
+`1, 2, 2, 0, 0, 0, 0, 0`, sin diferencias con los esperados. Otros seis casos
+comprueban dos lecturas del mismo valor, `CALL`, `MOD`, `POW`, la exclusión de
+la guarda fuera de main y la inicialización redundante anterior a la escritura
+protegida. Se compara memoria observable incluso cuando el intérprete termina
+por división entre cero o exponente negativo; una segunda ejecución no agrega
+renombramientos ni temporales.
+
 ### 11.4 Unrolling (`src/optimizador/tac_pass_unroll.c`)
 
 **Forma de un lazo `S` en la representación** (la que construye `tac_build_flow.c`, medida en
@@ -2699,6 +2720,17 @@ F main [] : void ;
 Esperado: `renombradas = 0`. Parámetro, global y retorno no son candidatos; en `main`, `x`
 está protegida por la división que la lee entre sus dos definiciones (decisión 4.6.3). La
 división es entre `x`, que vale 1, así que el programa no se detiene.
+
+**Resultados medidos C3.3a.** Se conservaron literalmente r1, r2 y r3 en
+`pruebas/optimizador/rename/`, con seis capturas `.antes.tac`/`.despues.tac` y
+`esperados.json`. El JSON de `--metrics` confirma `2, 2, 0` definiciones renombradas;
+el simulador confirma `salida = 18`, `g = 20` y `g = 2, x = 2, y = 8`, respectivamente,
+con memoria externa cero y patrón de 1024 bytes. En r2, `--opt=reorder` da
+47 bundles y 48 ciclos, y `--opt=rename,reorder` da 41 bundles y 42 ciclos en
+ambas imágenes. La pasada reorder sigue vacía (`reordenadas = 0` en ambos modos):
+la diferencia medida corresponde al renombramiento y a su bajada/emisión actuales,
+sin verificar una calendarización futura. Los ciclos provienen del simulador;
+`ciclos_sim` del compilador sigue siendo `null`.
 
 ### 14.3 DCE
 

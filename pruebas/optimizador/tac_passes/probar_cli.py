@@ -63,10 +63,57 @@ def check_dce(folder):
     print('PASS DCE CLI: d1=3/0 g=3 v=4; d2=0/1 g=2; d3=3/0 datos=[8,0]; 6 HIGH exactos')
 
 
+def check_rename(folder):
+    """C3.3a: HIGH exacto, JSON y estado observable de §14.2 en el simulador."""
+    sys.path.insert(0, str(ROOT / 'pruebas/generador_o1/tac_emit'))
+    from comparar import compile_new, execute, observable
+    cases = json.loads((ROOT / 'pruebas/optimizador/rename/esperados.json').read_text())
+    for name, case in cases.items():
+        renamed = case['renombradas']
+        expected = case['valores']
+        source = ROOT / 'pruebas/optimizador/rename' / (name + '.cls')
+        before, after = folder / 'antes.tac', folder / 'despues.tac'
+        subprocess.run([str(ROOT / 'build/probar_rename'), str(source), str(before),
+                        str(after), str(renamed)], check=True)
+        assert before.read_bytes() == source.with_suffix('.antes.tac').read_bytes()
+        assert after.read_bytes() == source.with_suffix('.despues.tac').read_bytes()
+        metrics = folder / 'rename.json'
+        base = folder / name
+        result = subprocess.run([str(BINARY), '-O1', '--opt=rename', '-s', '-i',
+            '--metrics', str(metrics), str(source), '-o', str(base) + '.bin'],
+            capture_output=True, timeout=30)
+        assert result.returncode == 0, result.stderr
+        data = json.loads(metrics.read_text())
+        assert data['contadores']['renombradas'] == renamed
+        assert data['alto_nivel']['despues']['rename'] == data['alto_nivel']['inicial']
+        # -i conserva el HIGH inicial; el auxiliar captura el resultado de la pasada.
+        assert base.with_suffix('.tac').read_bytes() == before.read_bytes()
+        baseline, regions = compile_new(BINARY, source, folder / 'sin_rename')
+        for external in (bytes(1024), bytes(range(256)) * 4):
+            sim = execute(base, external)
+            assert observable(sim, regions) == observable(execute(baseline, external), regions)
+            selected = False
+            values = {}
+            for line in base.with_suffix('.asm').read_text().splitlines():
+                scope = re.match(r'#\s+Scope \d+: (\w+)(?: (\w+))?$', line)
+                if scope:
+                    selected = scope[1] == 'GLOBAL' or scope[2] == 'main'
+                symbol = re.search(r'#\s+(\w+).* width=(\d+) addr=0x([0-9A-Fa-f]+)', line)
+                if selected and symbol:
+                    address = int(symbol[3], 16)
+                    values[symbol[1]] = [int.from_bytes(sim.memory[a:a+4], 'little', signed=True)
+                                        for a in range(address, address + int(symbol[2]), 4)]
+            assert all(values.get(k) == v for k, v in expected.items()), (name, values)
+            if 'auth' in case:
+                assert sim.auth == case['auth'] and sim.exc == case['exc']
+    print('PASS rename CLI: r1=2 salida=18; r2=2 g=20; r3=0 g=2 x=2 y=8; 6 HIGH exactos')
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix='calser_e_') as temporary:
         folder = Path(temporary)
         check_dce(folder)
+        check_rename(folder)
         output = folder / 'salida.bin'
         metrics = folder / 'metricas.json'
 

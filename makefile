@@ -246,13 +246,14 @@ check-o1-equivalence: $(TARGET)
 $(BUILD_DIR)/probar_tac_passes: pruebas/optimizador/tac_passes/probar.c $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-check-o1: $(TARGET) $(BUILD_DIR)/probar_tac_passes $(BUILD_DIR)/probar_dce
+check-o1: $(TARGET) $(BUILD_DIR)/probar_tac_passes $(BUILD_DIR)/probar_dce $(BUILD_DIR)/probar_rename
 	$(BUILD_DIR)/probar_tac_passes
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/optimizador/tac_passes/probar_cli.py
 
-check: check-dce check-pasadas check-pasadas-isa check-ide-options check-o1 check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles check-recovery check-clones-json check-repairs-json check-suggestions-json check-tokens-json check-success check-analysis check-analysis-json
+check: check-rename check-dce check-pasadas check-pasadas-isa check-ide-options check-o1 check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles check-recovery check-clones-json check-repairs-json check-suggestions-json check-tokens-json check-success check-analysis check-analysis-json
 
 clean:
+	rm -f $(BUILD_DIR)/probar_rename
 	rm -f $(BUILD_DIR)/probar_dce
 	rm -f $(BUILD_DIR)/probar_tac_passes
 	rm -f $(BUILD_DIR)/probar_tac_emit
@@ -351,3 +352,12 @@ check-dce: $(TARGET) $(BUILD_DIR)/probar_dce
 	$(BUILD_DIR)/probar_dce
 
 .PHONY: check-dce
+
+# C3.3a: renombramiento sobre HIGH real; Aho §10.2.3 y diseño §11.3.
+$(BUILD_DIR)/probar_rename: pruebas/optimizador/rename/probar.c pruebas/representacion/tac_build/interpretar.c $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+check-rename: $(TARGET) $(BUILD_DIR)/probar_rename
+	$(BUILD_DIR)/probar_rename
+
+.PHONY: check-rename

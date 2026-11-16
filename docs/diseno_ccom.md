@@ -818,6 +818,15 @@ dependencias no existen.
 En un programa fuente el bloque real incluye las inicializaciones, las cargas de cada lectura,
 los stores y el retorno: el contador del programa es mayor (14.4).
 
+**Resultados medidos C3.3b.** La pasada se implementó sin control de presión.
+En los 48 programas del corpus, 47 compilan y conservan el estado observable con
+reorder, rename,reorder y rename,dce,reorder, usando memoria externa cero y patrón.
+`cuadradas.cls` deja de compilar en las tres combinaciones: en sumar, los TEMP vivos
+pasan de 3 a 12 y los intervalos solapados de 4 a 13. Por ese fallo no pasan
+check-pasadas-isa, make check ni el check interno de make ejercicios. Ejercicio3
+pasa de 705 a 664 bundles y p04_memoria de 148 a 149; el calendario virtual no
+predice las preservaciones ni todas las esperas de la emisión física.
+
 ### 7.6 Spilling (tarea C3.4)
 
 **Qué es cada cosa (decisión 4.6.5).**
@@ -2150,6 +2159,14 @@ En los programas fuente el contador es de todo el programa (incluye, por ejemplo
 preparación de parámetros en `main`); su valor exacto se fija con el listado ISA de cada
 prueba en el PR.
 
+**Resultados medidos C3.3b.** La prueba de dos cadenas ISA manual produce el
+orden 1,3,2,4 y reordered=2; una cadena da 0. Los casos fuente verifican alias,
+dirección desconocida, barrera, fallo/store y salto último; se comprueba internamente
+RAW=2 tanto con salto final como con fallo/store, sin rebajarlo por otra regla.
+Los seis listados ISA de 14.4 y sus JSON registran reordered=25,16,18. Se verificó
+que ninguna instrucción cambia de bloque ni de contenido al permutar; el auxiliar
+libera liveness e intervalos antes de la edición y mide la presión antes de asignar.
+
 ### 11.6 Spilling (`src/generador_o1/tac_allocate_color.c`, `tac_allocate_sites.c` y la emisión)
 
 **Interfaz** (la deja el refactor, P12; la estrategia la elige el interruptor)
@@ -2891,6 +2908,17 @@ F main [] : void ;
 
 Esperado: nada cruza el `jas`; la escritura y la lectura del arreglo (base calculada)
 conservan su orden.
+
+**Resultados medidos C3.3b.** Los tres programas literales se guardan en
+pruebas/optimizador/reorder/ con esperados.json y capturas .antes.isa/.despues.isa.
+Con reorder, o1 registra 25 posiciones cambiadas y pasa de 50 a 38 bundles
+(51 a 39 ciclos); o2 registra 16 y pasa de 62 a 49 (52 a 43 ciclos); o3 registra
+18 y pasa de 76 a 81 (114 a 119 ciclos). En o1/o2 no hay variables globales ni
+locales de main que comparar; en o3 datos=[12,0]. En todos se conserva memoria
+externa y estado CRYPTO, con ambas imágenes. En o3 la asignación preserva cuatro
+valores a través de MUL, frente a cero sin reorder; las posiciones cambiadas no
+garantizan mejora de bundles ni ciclos. Los ciclos se midieron con el simulador,
+no con ciclos_sim del JSON del compilador, que sigue null.
 
 ### 14.5 Spilling
 

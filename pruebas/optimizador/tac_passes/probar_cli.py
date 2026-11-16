@@ -5,6 +5,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -16,9 +17,56 @@ KEYS = {'programa', 'nivel', 'pasadas', 'alto_nivel', 'isa_antes_expandir', 'emi
         'tiempo_ms', 'contadores', 'ciclos_sim'}
 
 
+def check_dce(folder):
+    """C3.2: HIGH exacto, JSON y estado observable de §14.3 en el simulador."""
+    sys.path.insert(0, str(ROOT / 'pruebas/generador_o1/tac_emit'))
+    from comparar import compile_new, execute, observable
+    cases = json.loads((ROOT / 'pruebas/optimizador/dce/esperados.json').read_text())
+    for name, case in cases.items():
+        removed, blocks = case['eliminadas'], case['bloques_eliminados']
+        expected = case['valores']
+        source = ROOT / 'pruebas/optimizador/dce' / (name + '.cls')
+        before, after = folder / 'antes.tac', folder / 'despues.tac'
+        subprocess.run([str(ROOT / 'build/probar_dce'), str(source), str(before),
+                        str(after), str(removed), str(blocks)], check=True)
+        assert before.read_bytes() == source.with_suffix('.antes.tac').read_bytes()
+        assert after.read_bytes() == source.with_suffix('.despues.tac').read_bytes()
+        metrics = folder / 'dce.json'
+        base = folder / name
+        result = subprocess.run([str(BINARY), '-O1', '--opt=dce', '-s', '-i',
+            '--metrics', str(metrics), str(source), '-o', str(base) + '.bin'],
+            capture_output=True, timeout=30)
+        assert result.returncode == 0, result.stderr
+        data = json.loads(metrics.read_text())
+        assert data['contadores']['eliminadas'] == removed
+        assert data['contadores']['bloques_eliminados'] == blocks
+        # -i conserva el HIGH inicial; el auxiliar captura el resultado de la pasada.
+        assert base.with_suffix('.tac').read_bytes() == before.read_bytes()
+        baseline, regions = compile_new(BINARY, source, folder / 'sin_dce')
+        for external in (bytes(1024), bytes(range(256)) * 4):
+            sim = execute(base, external)
+            assert observable(sim, regions) == observable(execute(baseline, external), regions)
+            selected = False
+            values = {}
+            for line in base.with_suffix('.asm').read_text().splitlines():
+                scope = re.match(r'#\s+Scope \d+: (\w+)(?: (\w+))?$', line)
+                if scope:
+                    selected = scope[1] == 'GLOBAL' or scope[2] == 'main'
+                symbol = re.search(r'#\s+(\w+).* width=(\d+) addr=0x([0-9A-Fa-f]+)', line)
+                if selected and symbol:
+                    address = int(symbol[3], 16)
+                    values[symbol[1]] = [int.from_bytes(sim.memory[a:a+4], 'little', signed=True)
+                                        for a in range(address, address + int(symbol[2]), 4)]
+            assert all(values.get(k) == v for k, v in expected.items()), (name, values)
+            if 'auth' in case:
+                assert sim.auth == case['auth'] and sim.exc == case['exc']
+    print('PASS DCE CLI: d1=3/0 g=3 v=4; d2=0/1 g=2; d3=3/0 datos=[8,0]; 6 HIGH exactos')
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix='calser_e_') as temporary:
         folder = Path(temporary)
+        check_dce(folder)
         output = folder / 'salida.bin'
         metrics = folder / 'metricas.json'
 

@@ -1,0 +1,35 @@
+{
+  "d1_asignaciones": {
+    "eliminadas": 3,
+    "bloques_eliminados": 0,
+    "valores": {
+      "g": [
+        3
+      ],
+      "v": [
+        4
+      ]
+    }
+  },
+  "d2_inalcanzable": {
+    "eliminadas": 0,
+    "bloques_eliminados": 1,
+    "valores": {
+      "g": [
+        2
+      ]
+    }
+  },
+  "d3_efectos": {
+    "eliminadas": 3,
+    "bloques_eliminados": 0,
+    "valores": {
+      "datos": [
+        8,
+        0
+      ]
+    },
+    "auth": false,
+    "exc": true
+  }
+}

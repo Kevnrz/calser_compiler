@@ -11,37 +11,38 @@ sale de otra fuente se indica.
 | 1 | Requisitos del enunciado | Escrita |
 | 2 | Mapa de componentes | Escrita |
 | 3 | Flujos y datos entre componentes | Escrita |
-| 4 | Decisiones tomadas | Escrita |
+| 4 | Decisiones tomadas, incluido lo que Calser permite (4.5) y las decisiones del 15/11 (4.6) | Escrita |
 | 5 | Diseño contra el código actual | Escrita |
 | 6 | Efecto de la integración del IDE sobre el léxico y el parser | Escrita |
-| 7 | Contrato de integración de las optimizaciones | Escrita |
+| 7 | Contrato de integración de las optimizaciones | Corregida contra el TAC real (15/11) |
 | 8 | Conexión con el IDE y las métricas | Escrita |
-| 9 | Plan de implementación del refactor (pasos P0 a P15) y su cierre | P0–P12, P14 y P15 integrados; P13 pospuesto |
+| 9 | Plan de implementación del refactor (pasos P0 a P15) y su cierre | P0–P12, P14 y P15 integrados en `develop`; P13 pospuesto |
 | 10 | Lo que se queda como está | Escrita |
-| 11 | Diseño técnico de las optimizaciones (estructuras, pseudocódigo, casos de prueba) | Escrita |
+| 11 | Diseño técnico de las optimizaciones (estructuras, pseudocódigo, casos de prueba) | Corregida contra el TAC real (15/11) |
 | 12 | Enlazado de archivos (`P`) | Escrita |
 | 13 | IDE y medición (archivo `.tac`, nivel y pasadas en F5, medición, gráficas) | Escrita |
-| 14 | Las 15 pruebas obligatorias | Escrita |
+| 14 | Las 15 pruebas obligatorias | Corregida contra el TAC real (15/11) |
 | 15 | Avisos para el cerebro | Escrita |
 | A | Anexo: decisiones vigentes del camino optimizante (absorbe `diseno_camino_optimizante.md`) | Escrito |
 
-**Estado del refactor (15/11).** P0 a P12 y P14 están integrados en la rama `refactor-c6`
-(PR #18 a #23, commit `29f0665`) y pasaron la validación final (9.17). Después de revisar las
-optimizaciones contra las presentaciones del curso se tomaron dos decisiones (4.4): P15 (lectura
-de variables en el TAC al estilo del curso, antes del PR a `develop`) y Chaitin como ruta
-alterna del spilling (se implementa con C3.4). P15 está integrado y validado en el árbol de
-`feature/c6-tac-curso` (9.18); no se atribuye un PR ni un commit nuevos. Siguiente: un solo PR
-de `refactor-c6` hacia `develop`; después, las optimizaciones (parte 7 y parte 11). P13
-(cascadas) queda pospuesto para después de las optimizaciones, junto con la revisión del IDE
-y de los errores (9.14).
+**Estado (15/11).** El refactor está integrado en `develop` (`0195d1e`, PR #25). Los pasos se
+revisaron por partes en los PR #18 a #24 hacia `refactor-c6`; P15 entró por el PR #24
+(`3d3993a`, merge `66c7d54`). P13 (cascadas) queda pospuesto para la etapa del IDE y de los
+errores (9.14).
 
-Para retomar en otro chat: leer este apartado, la parte 4, 9.0 y 9.17.
+El 15/11 el diseño de las optimizaciones (partes 4.4, 7, 11 y 14) se revisó contra el TAC real
+que genera el constructor y contra lo que Calser permite y rechaza (4.5), con una revisión
+del agente sobre 75 programas y el corpus. Se corrigieron esperados, supuestos y cinco
+puntos de algoritmo (4.6). Siguen las optimizaciones, cada una en su rama y su PR hacia
+`develop`, con este diseño como especificación.
 
-**Base del análisis.** Código de `Kevnrz/calser_compiler`, rama `develop`, commit `6ad9fb4`,
-leído directamente; comparado con `2268981` (antes de integrar el IDE). Bison 3.8.2 se ejecutó
-sobre las dos gramáticas. **No se pudo compilar ni correr ninguna suite** en el entorno del
-chat (no hay Flex): toda afirmación sobre comportamiento sale de leer el código, y cada paso
-debe confirmarla con las protecciones.
+Para retomar en otro chat: leer este apartado, 4.4 a 4.6, 9.0 y la sección de la parte 7 y 11
+de la optimización que toque.
+
+**Base del análisis.** Código de `Kevnrz/calser_compiler`, rama `develop`. El chat no puede
+compilar ni correr suites (no hay Flex): las afirmaciones sobre comportamiento salen de leer
+el código y de los reportes del agente, que sí ejecuta; cada paso las confirma con las
+protecciones.
 
 ## 1. Qué tiene que hacer el sistema
 
@@ -142,7 +143,7 @@ spilling). `-O1` es el camino sin pasadas, la línea base del "antes"; `-O2` las
 |---|---|---|---|---|
 | A5.1 Generador directo (`-O0`) | Traducir el AST anotado a instrucciones con registros reales. Es el generador del Proyecto I y la referencia de corrección | AST anotado | Lista de instrucciones | R13 |
 | A5.2 Selección de instrucciones (bajada) | Pasar de alto nivel a ISA virtual | Alto nivel | ISA virtual | R13 |
-| A5.3 Asignación de registros y spilling | Pasar de temporales a registros reales (*linear scan*, fuera de Aho). Si no alcanzan, derramar a memoria | ISA virtual, intervalos, profundidad de lazos | ISA física; plan de preservación; contadores de derrame | R10 |
+| A5.3 Asignación de registros y spilling | Pasar de temporales a registros reales. `-O1`: *linear scan* (fuera de Aho), sin derrame. Con `--opt=spill` o `-O2`: coloreo de Chaitin con derrame a memoria (7.6) | ISA virtual, intervalos, profundidad de lazos | ISA física; plan de preservación; contadores de derrame | R10 |
 | A5.4 Emisión y rutinas de máquina | Escribir las instrucciones finales. Las rutinas de máquina son las secuencias fijas que usan los dos caminos: aritmética por software, arreglos, CRYPTO, pila, preservación de registros, arranque y fin del programa | ISA física (o llamadas de A5.1) | Lista de instrucciones | R13 |
 | A5.5 Calendarización y empaquetado | Asignar cada instrucción a un slot según su unidad funcional y sus dependencias (RAW a distancia 2; WAR, WAW y memoria a distancia 1); rellenar con NOPs; verificar | Lista de instrucciones | Bundles | R12, R14 |
 | A5.6 Ensamblado y salidas | Resolver etiquetas en dos pasadas, codificar, comprobar el límite de la ROM y escribir `.asm`, `.bin`, `.hex`, `.mem` | Bundles en texto | Archivos | R13, R24 |
@@ -302,34 +303,93 @@ Revisión de las optimizaciones contra las presentaciones del curso (*Optimizaci
 | Tema | Curso | Diseño | Resultado |
 |---|---|---|---|
 | Validez | La salida observable (valores, errores, no terminación) no cambia | Regla 11.1 | Alineado |
-| DCE | Local y global con variables vivas, repitiendo hasta punto fijo | 7.2, 11.2 | Alineado |
+| Bloques y grafo de flujo | Líderes: la primera instrucción, los destinos de salto y la instrucción que sigue a un salto; arista cuando el control puede pasar de un bloque a otro | Los bloques se forman al construir el TAC; las caídas (la instrucción que sigue a un salto no tomado) son aristas del grafo | Alineado |
+| TAC de estructuras de control | `while`: `if` hacia el cuerpo y `goto` a la salida | La condición se invierte y el cuerpo se alcanza por caída (Aho §6.6.5, evitar saltos redundantes): una instrucción menos por lazo | Equivalente; alineado con el libro |
+| TAC de variables | `E → id { E.place = id.place }`: la variable se usa directo | P15 (9.18) | Alineado |
+| DCE | Local (resultado no usado, sin efectos) y global con variables vivas, repitiendo hasta punto fijo | 7.2, 11.2. Además se quitan bloques inalcanzables (Aho §8.7.2), que no están en la presentación | Alineado, más un complemento del libro |
 | Renombramiento | Nombre nuevo por temporal para liberar el bloque | 7.3, 11.3: los temporales ya nacen únicos; se renombran las variables locales | Alineado |
 | Reordenamiento | Intercambio de instrucciones independientes; RAW, WAR, WAW | 7.5, 11.5 | Alineado |
 | Unrolling | No está en las presentaciones; Aho §10.5.1 y notas de arqui §5.2.2 | 7.4, 11.4 | Alineado con el libro |
-| TAC | `E → id { E.place = id.place }`: la variable se usa directo | Se copiaba toda lectura a un temporal | **Decisión 1: P15** (9.18) |
-| Spilling | Coloreo de Chaitin; víctima por costo/grado con 10^profundidad | *Linear scan*; víctima por profundidad y fin | **Decisión 2: Chaitin como ruta alterna** (7.6) |
+| Spilling | Coloreo de grafos de Chaitin; víctima por costo/grado con 10^profundidad | El spilling (`--opt=spill`, `-O2`) asigna y derrama con Chaitin (7.6, 11.6). `-O1` conserva su asignación actual, sin derrame | Alineado |
 
-**Decisión 1.** El TAC usa la variable directo, como el curso. Solo se copia a un temporal
+**Decisión 1 (P15).** El TAC usa la variable directo, como el curso. Solo se copia a un temporal
 si queda una llamada a función por evaluar en la misma construcción, o en `R`, para conservar
-la asignación simultánea de parámetros antes de sobrescribirlos. El fin de `S` se captura en
-su casilla privada, sin agregar una copia a TEMP solo para la marca. Se implementa en P15
-(9.18), antes del PR a `develop`.
+la asignación simultánea de parámetros antes de sobrescribirlos. Integrada (9.18).
 
-**Decisión 2.** El *linear scan* sigue como ruta principal. Se agrega el coloreo de Chaitin en
-su propio archivo, elegido con `--alloc=color`. Las dos estrategias entregan lo mismo (mapa
-temporal→registro y lista de derramados) y comparten la víctima del curso. Después se comparan
-bundles, ciclos y derramados para decidir cuál queda como principal. Se implementa con el
-spilling (C3.4).
+**Decisión 2 (spilling).** La asignación de registros de `-O1` (camino por el TAC sin ninguna
+optimización) se queda como está: *linear scan*, y error si no alcanzan los 12 registros.
+Asignar registros no es una optimización: el TAC usa temporales ilimitados y el procesador
+tiene 12, así que es parte de traducir. El spilling sí es una optimización (§4.2 del
+enunciado): con `--opt=spill` o `-O2`, la asignación la hace el coloreo de Chaitin, que asigna
+y derrama. Al *linear scan* no se le agrega derrame. Detalle en 7.6 y 11.6.
 
 **Fuera del alcance** (lo enseña el curso, no lo pide el enunciado): subexpresiones comunes,
 plegado y propagación de constantes, expresiones disponibles, definiciones alcanzables, código
 invariante, reducción de fuerza, intercambio de ciclos, *tiling* y la prueba del GCD.
 
 **Para la defensa.** Los bloques básicos se forman al construir el TAC, no con el algoritmo de
-líderes de la presentación; el resultado cumple la misma definición (entrada solo por la
-primera instrucción, salida solo por la última). El LL(1) (PRIMERO, SIGUIENTE, tabla M y
-analizador predictivo) ya existe en `ide/nucleo/` y `ide/docs/ll1/`; su revisión queda para la
-etapa del IDE.
+líderes de la presentación; el resultado cumple la misma definición. El LL(1) (PRIMERO,
+SIGUIENTE, tabla M y analizador predictivo) ya existe en `ide/nucleo/` y `ide/docs/ll1/`; su
+revisión queda para la etapa del IDE.
+
+### 4.5 Lo que Calser permite y lo que llega al TAC
+
+Las optimizaciones trabajan sobre el TAC, así que todo esperado y todo supuesto se calcula
+sobre el TAC real, no sobre el fuente. Lo que el análisis rechaza nunca llega al TAC: no se
+diseña ni se prueba como programa fuente.
+
+**Lo que Calser rechaza** (no llega al TAC)
+
+| Regla | Dónde |
+|---|---|
+| Sentencia inmediatamente después de `E` o `R` en el mismo bloque | `semantic.c:575` |
+| Función sin ningún `E` (o con `R` y sin `E`) | `semantic.c:1199-1203` |
+| Recursión: solo existe `R`, que reinicia la función actual; cualquier otro ciclo de llamadas se rechaza | `semantic_expr.c:468`, `:531` |
+| Invocar `main`; `main` que no sea `F main [] : void` | `semantic.c` |
+| `S` con paso cero (el paso es siempre un literal) | `semantic.c:711` |
+| `S` con inicio y fin constantes que nunca se ejecuta | `semantic.c:722` |
+| Asignar al control de un `S` o a cualquier `Vi` | e38 |
+| Índice constante fuera de rango | `semantic_expr.c:356` |
+| División entre cero o exponente negativo con constantes | `semantic_expr.c` |
+| Expresión constante que desborda `int` | `semantic_expr.c` |
+| Usar como valor una función `void`; usar CRYPTO como valor | `semantic_expr.c:898`, e65 |
+
+"Constante" en el semántico incluye expresiones (`2+2`). El TAC no pliega: `S [ i , 0 , 2+2 , 1 ]`
+llega con el fin como temporal, no como el entero 4.
+
+**Lo que Calser permite y sí llega al TAC**
+
+| Comportamiento | Consecuencia |
+|---|---|
+| Un `C` con `E` en todas sus ramas seguido de otra sentencia (la regla solo mira la sentencia inmediatamente anterior) | La unión queda inalcanzable, con todo lo que siga. Ocurre en 6 programas del corpus (`factorial_r`, los cuatro `r_arreglos`, `p07_retorno_recursion`) |
+| La variable de retorno arranca en 0 al entrar a la función (no al reentrar con `R`) | `r = 0` implícito en toda función con retorno (`tac_build.c:82-84`) |
+| Los locales se reinicializan en cada entrada, también con `R`; sin inicializador, a 0 | `x = 0` implícito por cada local escalar sin inicializador (`tac_build_init.c`); un local no conserva valor entre llamadas |
+| Grafo de llamadas sin ciclos; `R` vuelve a la entrada de la misma función | Las áreas estáticas por función son seguras |
+| `S`: control inmutable, paso literal distinto de cero, fin capturado una vez en `$limite_Sk` | El número de vueltas es constante solo si inicio y fin llegan como enteros a la marca |
+| `E` dentro del cuerpo de un `S` | Lazos con salida anticipada (`e_en_s`, la búsqueda de `ejercicio2`) |
+| Índices dinámicos | Sin comprobación en ejecución (`claude/mejoras_posibles.md`) |
+| CRYPTO solo como sentencia | Siempre es efecto, nunca una definición muerta |
+
+**Forma del TAC que generan las estructuras de control.** En `S`, `L` y `C` la cabecera o la
+condición entran al cuerpo (o a la rama verdadera) por caída, sin salto con etiqueta. El
+constructor no genera ciclos formados solo por saltos con etiqueta. Bloques de unión vacíos no
+aparecen en el corpus, pero la representación los admite.
+
+**Regla para los esperados.** Cada PR de optimización guarda en `pruebas/optimizador/<pasada>/`
+el listado HIGH (o ISA virtual, para reordenamiento y spilling) de cada programa de prueba,
+junto con su esperado, para que el número se pueda comprobar instrucción por instrucción.
+
+### 4.6 Decisiones del 15/11 sobre los algoritmos
+
+Tomadas tras la revisión contra el TAC real.
+
+| # | Tema | Decisión | Alternativas descartadas |
+|---|---|---|---|
+| 1 | Borrar bloques inalcanzables (DCE, unrolling total) | Usar `tac_block_remove` en un ciclo: reconstruir aristas, borrar cualquier bloque del conjunto que ya se pueda borrar y repetir hasta que no quede ninguno; lo que no se pueda borrar se deja, sin error | Función nueva que borre un conjunto (cubre casos que Calser no genera); borrar en orden fijo (falla con ciclos) |
+| 2 | Unrolling de un `S` con salida anticipada | No se desenrolla si algún bloque del lazo, salvo la cabecera, tiene un sucesor fuera del lazo | Ampliar la región clonada o convertir caídas en `goto`: más riesgo, poco beneficio en búsquedas |
+| 3 | Renombramiento en `main` | No renombrar una definición de una raíz observable de `main` si entre ella y la siguiente hay una instrucción con `may_trap` o `uses_globals` (en HIGH: `CALL`, `DIV`, `MOD`, `POW`) | Guardar el origen de cada lectura en la liveness; no renombrar nada en `main` |
+| 4 | Distancias del reordenamiento | La distancia entre dos instrucciones es la mayor de todas las reglas que se cumplen; RAW nunca baja de 2 | Ninguna razonable |
+| 5 | Asignación con spilling | Chaitin con `--opt=spill` y `-O2`; `-O1` conserva el *linear scan* sin derrame | Solo Chaitin también en `-O1` (cambiaría la línea base); *linear scan* con derrame |
 
 ## 5. Diseño contra el código actual
 
@@ -352,7 +412,7 @@ del refactor (parte 9) o a la tarea del plan.
 | A4.2 a A4.5 Pasadas | — | F | Tareas C3.1 a C3.3. Sus archivos y su registro los deja P8. Contrato en la parte 7, diseño técnico en la parte 11 |
 | A5.1 Generador `-O0` | `generate.c`, `generate_expr.c`, `generate_stmt.c`, `generate_init.c`, `generate_support.c`, `label_table.c` | E | Solo cambian llamadas (P2, P3) |
 | A5.2 Bajada | `tac_lower.c`, `tac_lower_control.c`, `tac_lower_value.c` | E | Solo cambian llamadas (P2, P7) |
-| A5.3 Asignación | `tac_allocate.c`, `tac_allocate_sites.c` | P | Sin derrame: `no_register_available` solo da error. No recibe interruptor ni profundidad de lazos → P12. La lógica del derrame es la tarea C3.4 |
+| A5.3 Asignación | `tac_allocate.c`, `tac_allocate_sites.c` | P | Sin derrame: `no_register_available` solo da error. No recibe interruptor ni profundidad de lazos → P12. El derrame es la tarea C3.4, con Chaitin en un archivo propio (7.6); el *linear scan* de `-O1` queda sin derrame |
 | A5.4 Emisión y rutinas | `tac_emit.c`, `tac_emit_pseudo.c`, `codegen_arith.c`, `codegen_array.c`, `codegen_crypto.c`, más cuatro funciones en `generate_support.c` y `generate_expr.c` | P | Preservación en `temp_base`, fin de programa, arranque de pila y registros fijos de CRYPTO repetidos entre caminos; la emisión de `-O1` depende del generador `-O0` → P3 |
 | A5.5 Calendarización | `codegen.c`, `codegen_schedule.c`, `codegen_instruction.c`, `codegen_verify.c` | E | Se queda |
 | A5.6 Ensamblado | `assembler.c`, `write_outputs` en `main.c` | P | El límite de ROM solo se comprueba en `-O1` → P5 |
@@ -504,98 +564,142 @@ mide su tiempo; si falla, corta con "error interno en pasada X" y el detalle.
 
 ### 7.2 DCE (A4.4, tarea C3.2)
 
-**Usa lo que existe:** `tac_live_analyze`, `tac_live_instruction`, `tac_live_contains`,
-`tac_instruction_info`, `tac_definitions`, `tac_remove`, `tac_loops_analyze`,
-`tac_loops_reachable`, `tac_block_remove`. **Le falta (P10):** `tac_observable_roots`.
+**Usa lo que existe:** `tac_observable_roots`, `tac_live_analyze`, `tac_live_instruction`,
+`tac_live_contains`, `tac_instruction_info`, `tac_definitions`, `tac_remove`,
+`tac_loops_analyze`, `tac_loops_reachable`, `tac_block_remove`, `tac_rebuild_edges`. No le
+falta infraestructura.
 
 Diseño interno: 11.2. Regla ante un fallo: 11.1.
 
 **Algoritmo**
 
 1. Calcular las raíces observables: variables escalares globales y de `main`.
-2. Por función: calcular liveness (las raíces solo cuentan al salir de `main`).
+2. Por función: calcular liveness. Las raíces cuentan al salir de `main`; `RETURN` y `CALL`
+   leen todas las globales en cualquier función (`uses_globals`), y en `main` las
+   instrucciones que pueden fallar y las llamadas leen además las raíces (11.1).
 3. Recorrer las instrucciones. Se elimina una instrucción si se cumple todo:
    - define un valor y ese valor no está vivo después de ella;
    - sus propiedades no la protegen: no es `nonremovable`, no escribe memoria, no toca el
-     estado CRYPTO, no es barrera (llamada);
-   - si puede fallar (`/`, `%`, `^`): el divisor es una constante distinta de cero, o el
-     exponente es una constante mayor o igual que cero. Sin esa prueba no se elimina.
+     estado CRYPTO, no es barrera, no es un salto ni un retorno;
+   - si puede fallar (`/`, `%`, `^`): el divisor es un entero distinto de cero, o el
+     exponente es un entero mayor o igual que cero. Sin esa prueba no se elimina.
 4. Si se eliminó algo, recalcular liveness y repetir desde 3.
-5. Eliminar los bloques inalcanzables desde la entrada.
-6. Anotar `removed` y `removed_blocks`.
+5. Quitar los bloques inalcanzables desde la entrada (decisión 4.6.1).
+6. Anotar `removed` (instrucciones del barrido) y `removed_blocks` (bloques quitados). Las
+   instrucciones de un bloque quitado no se suman a `removed`.
 
-**Ejemplo**
+**Qué elimina en los programas reales.** Sobre todo instrucciones que el constructor agrega
+solo: `r = 0` cuando la función asigna `r` en todos los caminos antes de retornar, `x = 0` de un
+local sin inicializador que se asigna antes de leerse (fuera de `main`, o en `main` sin una
+llamada o división en medio), y copias de resultados a locales que nunca se leen. Las
+uniones inalcanzables después de un `C` que retorna en todas sus ramas se quitan como
+bloques.
+
+**Ejemplo, sobre el TAC real** (programa `d1` de 14.3)
 
 ```
-F f [ a : int ] : int r ;        alto nivel de f (con P15):
-    Vm x : int = a * 2 ;           t1 = a * 2      x = t1
-    Vm y : int = a + 1 ;           t2 = a + 1      y = t2
-    r = y ;                        r = y
-    E ;                            return
-.
+tocar:     t0 = g + k ; g = t0 ; return
+calcular:  r = 0 ; t0 = a * 2 ; x = t0 ; t1 = a + 1 ; y = t1 ;
+           param a, 0 ; call tocar, 1 ; r = y ; return r
+main:      v = 0 ; param 3, 0 ; t0 = call calcular, 1 ; v = t0 ; return
 ```
 
-`x` no se lee nunca y `f` no es `main`, así que `x` no está viva después de `x = t1`.
-Primera vuelta: se elimina `x = t1`. Segunda: `t1` ya no está viva, se elimina `t1 = a * 2`
-(la multiplicación no puede fallar). Resultado: `removed = 2`.
-Si la misma función fuera `main`, `x` sería raíz observable y no se eliminaría nada.
+- `tocar`: `g = t0` se conserva porque `return` lee las globales.
+- `calcular`: primera vuelta, `r = 0` (lo sobrescribe `r = y` sin lecturas en medio) y
+  `x = t0` (`x` nunca se lee); segunda vuelta, `t0 = a * 2`. `removed = 3`.
+- `main`: `v = 0` se conserva porque la llamada lee las raíces de `main`.
+
+**Comprobación C3.2.** `src/optimizador/tac_pass_dce.c` implementa este recorrido.
+`make check-dce` comprueba la tabla de 11.2 y la idempotencia. Las capturas HIGH de
+`pruebas/optimizador/dce/*.antes.tac` y `*.despues.tac` fijan los programas de 14.3;
+`make check-o1` contrasta esas capturas, los contadores del JSON y el estado observable
+con el simulador. `check-pasadas` compara globales y variables de `main`, sin exigir
+igual número de instrucciones ejecutadas ni conservar locales de otras funciones.
 
 ### 7.3 Renombramiento local (A4.3, tarea C3.3a)
 
-**Usa lo que existe:** `tac_variable_is_rename_candidate` (excluye globales, arreglos,
-parámetros, variable de retorno, contador de `S` y su límite), `tac_definitions`,
-`tac_temp_new`, `tac_replace_reads`. **No le falta infraestructura.**
+**Usa lo que existe:** `tac_variable_is_rename_candidate` (solo locales `Vm` escalares de la
+función; excluye globales, arreglos, parámetros, variable de retorno, control de `S` y su
+límite), `tac_definitions`, `tac_temp_new`, `tac_replace_reads`, `tac_instruction_info`. No le
+falta infraestructura.
 
-Diseño interno: 11.3. Una definición no se renombra si entre ella y la siguiente hay una
-instrucción que puede fallar o una llamada que lea esa variable (11.1).
+Diseño interno: 11.3.
 
 **Algoritmo**, por bloque básico:
 
 1. Recorrer el bloque de arriba abajo.
-2. Para cada variable candidata `v` con más de una definición en el bloque: cada definición
-   **menos la última** pasa a escribir un temporal nuevo `t`.
+2. Para cada variable candidata `v` con más de una definición en el bloque (contando las
+   implícitas, como `x = 0`): cada definición **menos la última** pasa a escribir un temporal
+   nuevo `t`, salvo que la regla de seguridad lo impida.
 3. Las lecturas de `v` entre esa definición y la siguiente pasan a leer `t`.
-4. La última definición del bloque sigue escribiendo `v`: así la variable queda con su valor
+4. La última definición del bloque sigue escribiendo `v`: la variable queda con su valor
    correcto al salir del bloque, sin agregar copias.
 5. Anotar `renamed`: definiciones que pasaron a un temporal.
 
-No cruza bloques: la información de otros caminos no se usa (forma local; la forma global
-sería SSA, fuera del alcance).
+**Regla de seguridad (decisión 4.6.3).** En `main`, una definición de una raíz observable no se
+renombra si entre ella y la siguiente definición de la misma variable hay una instrucción con
+`may_trap` o `uses_globals` (en HIGH: `CALL`, `DIV`, `MOD`, `POW`; `RETURN` siempre cierra el
+bloque). Esas instrucciones leen el estado observable (11.1): si el programa se detiene ahí, la
+variable tiene que estar escrita en memoria. Fuera de `main` esas lecturas implícitas solo
+cubren globales, que no son candidatas, así que la regla no bloquea nada.
 
-**Ejemplo**
+No cruza bloques (forma local; la global sería SSA, fuera del alcance).
+
+**Ejemplo, sobre el TAC real**
 
 ```
-antes                         después
-x = t1 + t2      (def 1)      t9 = t1 + t2
-c = x * 2                     c = t9 * 2
-x = t4 + 1       (def 2)      x = t4 + 1
+Vm x : int = a + b ;          t0 = a + b      x = t0        (def 1)
+c = x * 2 ;                   t1 = x * 2      c = t1
+x = a - b ;                   t2 = a - b      x = t2        (def 2)
 ```
 
-La primera escritura de `x` y la segunda eran una dependencia WAW; la lectura intermedia y la
-segunda escritura, una WAR. Ya no comparten nombre. Además desaparece una escritura a memoria,
-porque toda variable se guarda en memoria en cada definición. `renamed = 1`.
+La definición 1 (`x = t0`) pasa a escribir un temporal nuevo `t9`, y la lectura de la MUL lee
+`t9`:
+
+```
+antes:    t0 = a + b ; x  = t0 ; t1 = x  * 2 ; c = t1 ; t2 = a - b ; x = t2
+después:  t0 = a + b ; t9 = t0 ; t1 = t9 * 2 ; c = t1 ; t2 = a - b ; x = t2
+```
+
+Desaparecen la WAW entre las dos
+escrituras de `x` y la WAR entre la lectura y la segunda escritura, y una escritura de `x` a
+memoria. `renamed = 1`. Si la declaración no tuviera inicializador (`Vm x : int ;` y después
+`x = a + b`), `x = 0` sería una definición más y `renamed = 2`.
 
 ### 7.4 Unrolling (A4.2, tarea C3.1)
 
-**Usa lo que existe:** las marcas `TacLoopMark` que deja la construcción (para cada `S`:
-bloque de cabecera, de cuerpo y de retorno; variable de control; límite; inicio, fin y paso ya
-evaluados), `tac_loop_mark_state`, `tac_loops_analyze`, `tac_loops_contains`,
-`tac_block_insert_after`, `tac_rebuild_edges`. **Le falta (P11):** `tac_blocks_clone`.
+**Usa lo que existe:** las marcas `TacLoopMark` (cabecera, cuerpo, retorno, control, límite,
+inicio, fin y paso, con el contrato B de P15: `initial` es INTEGER, TEMP o NONE; `bound` es
+INTEGER, TEMP o exactamente `tac_variable($limite_Sk)`), `tac_loop_mark_state`,
+`tac_loops_analyze`, `tac_loops_contains`, `tac_block_insert_after`, `tac_blocks_clone`,
+`tac_block_remove`, `tac_rebuild_edges`.
 
-**Qué lazos.** Solo `S` cuya marca está en estado "con arista de retroceso". Los `L` no: no se
-conoce su número de vueltas. El semántico ya prohíbe asignar la variable de un `S` dentro de
-su cuerpo, así que el contador solo lo cambia el propio lazo.
+**Qué lazos.** Solo `S` cuya marca está en estado "con arista de retroceso". Se omiten:
+- los `L` (no se conoce su número de vueltas);
+- un `S` que contiene la cabecera de otra marca, sea `S` o `L` (solo se desenrollan los
+  internos);
+- un `S` con salida anticipada: algún bloque de su lazo natural, salvo la cabecera, tiene un
+  sucesor fuera del lazo (un `E` dentro del cuerpo, o una caída hacia un `RETURN`). Clonarlo
+  perdería esa caída (decisión 4.6.2).
+
+El semántico prohíbe asignar el control, así que solo lo cambia el propio lazo.
+
+**Constante.** Un `S` tiene número de vueltas constante solo si `initial` y `bound` de la marca
+son INTEGER. Un fin escrito como expresión constante en el fuente (`2+2`) llega como TEMP y
+cuenta como no constante: el TAC no pliega.
 
 **Heurística** (factor cuando no se da `--unroll=N`)
 
 | Caso | Acción |
 |---|---|
-| Inicio, fin y paso constantes y N ≤ 8 vueltas | Desenrollado total: N copias del cuerpo, sin prueba ni salto de retroceso |
+| `initial` y `bound` INTEGER y N ≤ 8 vueltas | Desenrollado total: N copias del cuerpo, sin la prueba del `S` ni salto de retroceso |
 | Cualquier otro | Factor 4, con el lazo original como residuo |
-| El crecimiento estimado haría pasar el programa de la ROM | No se desenrolla ese lazo |
+| El crecimiento estimado supera el presupuesto | No se desenrolla ese lazo |
 
-Con `--unroll=N` (2 a 16) se usa ese factor en lugar de 4. La comprobación definitiva de la
-ROM es la del ensamblado.
+Con `--unroll=N` (2 a 16) se usa ese factor en lugar de 4. El presupuesto
+(`UNROLL_BUDGET`) es una cota heurística del crecimiento en instrucciones HIGH: no cuenta la
+guarda ni la expansión de las operaciones complejas. La comprobación definitiva de la ROM es
+la del ensamblado.
 
 **Transformación parcial, con factor k y paso positivo**
 
@@ -612,38 +716,62 @@ L:  i = i + paso ; ir a H          U:  cuerpo ; i = i + paso  ┐
                                    L:  i = i + paso ; ir a H
 ```
 
-La entrada al lazo pasa a apuntar a `G`. Con paso negativo las comparaciones se invierten.
-Cada copia se obtiene con `tac_blocks_clone` sobre los bloques del lazo (los que
-`tac_loops_contains` reporta) menos la cabecera. Las salidas anticipadas (`E` dentro del
-cuerpo) se conservan: sus destinos están fuera del conjunto clonado y no se renombran.
+La entrada al lazo pasa a apuntar a `G`. Con paso negativo las comparaciones se invierten. En
+el TAC real, el cuerpo y el retorno suelen ser el mismo bloque, y un `C` dentro del cuerpo
+agrega bloques que se alcanzan por caída; la clonación conserva el orden relativo de los
+bloques del conjunto, y con eso sus caídas.
 
-**Ejemplo, total.** `S [ i , 0 , 3 , 1 ] ;  s = s + i ;  .` tiene N = 3 ≤ 8:
+**Transformación total.** Las N copias reemplazan la prueba y el retroceso. Se conservan el
+`goto` de entrada (redirigido a la primera copia) y los saltos entre copias. Después de
+redirigir y reconstruir aristas, la cabecera y el cuerpo originales quedan inalcanzables y se
+quitan con el ciclo de borrado de la decisión 4.6.1.
+
+**Ejemplo, total, sobre el TAC real** (`S [ i , 0 , 4 , 1 ] ; suma = suma + i ; .`):
 
 ```
-s = s + i ; i = i + 1
-s = s + i ; i = i + 1
-s = s + i ; i = i + 1
+antes                                          después
+B1: i = 0 ; $limite_S0 = 4 ; goto B2           B1: i = 0 ; $limite_S0 = 4 ; goto C1
+B2: if i >= $limite_S0 goto B4                 C1: t1 = suma + i ; suma = t1 ; i = i + 1 ; goto C2
+B3: t0 = suma + i ; suma = t0 ; i = i + 1      C2: …                                  ; goto C3
+    goto B2                                    C3: …                                  ; goto C4
+B4: return                                     C4: …                                  ; goto B4
+                                               B4: return
 ```
 
-Sin prueba ni saltos. Se anota `{linea del S, factor 3}`.
+Se anota `{linea del S, factor 4}`. Ese par no distingue un desenrollado total de uno parcial ni
+prueba equivalencia: el PR acompaña cada prueba con su listado transformado.
 
-**Ejemplo, parcial.** Con fin 10 y factor 4: `G` deja pasar mientras `i + 3 < 10`; se ejecutan
-dos rondas de 4 (i = 0..7) y el residuo hace las 2 vueltas restantes.
+**Ejemplo, parcial.** Con fin en una variable que vale 10 y factor 4: `G` deja pasar mientras
+`i + 3 < 10`; se ejecutan dos rondas de 4 (i = 0..7) y el residuo hace las 2 vueltas restantes.
 
 ### 7.5 Reordenamiento (A4.5, tarea C3.3b)
 
-**Usa lo que existe:** `tac_locations_visit` (qué ubicaciones lee y escribe cada instrucción,
-incluidas las implícitas), `tac_instruction_info` (barrera, puede fallar, memoria), la unidad
-funcional de cada instrucción (`isa.instruction->unit`, `isa_unit_slots`). **Le falta (P11):**
-`tac_block_set_order`. El grafo de dependencias es lógica propia de la pasada.
+**Usa lo que existe:** `tac_locations_visit` (ubicaciones leídas y escritas, incluidas las
+implícitas), `tac_instruction_info` (barrera, puede fallar, memoria), la unidad funcional de
+cada instrucción ISA, `tac_block_set_order`. El grafo de dependencias es lógica propia de la
+pasada.
 
-**No puede reutilizar el organizador.** `cg_schedule_block` recibe lecturas y escrituras como
-máscaras de los 16 registros reales; aquí los valores son temporales virtuales. Es la frontera
-virtual/física. Lo que sí comparte son las reglas de distancia, que salen del ISA.
+**No puede reutilizar el organizador.** `cg_schedule_block` trabaja con máscaras de los 16
+registros reales; aquí los valores son temporales virtuales. Comparte las reglas de distancia,
+que salen del ISA.
 
-**Algoritmo**, por bloque (calendarización por lista, Aho §10.3–10.4):
+**Cómo llega el ISA virtual** (medido en la revisión):
+- Las variables escalares, globales y locales, son memoria con base `rz` y desplazamiento
+  constante: `lw v4, 4(rz)`, `sw v0, 20(rz)`. Cada lectura de una variable es su propia carga.
+- Un elemento de arreglo se calcula (índice × 4 más la base) y se accede con base TEMP:
+  dirección desconocida.
+- `PARAM` ya no existe como instrucción: se materializa como carga o `mov` y `sw` a la casilla
+  del parámetro. `CALL` es `jas`, una barrera dentro del bloque.
+- `*`, `/`, `%`, `^` y las CRYPTO son PSEUDO indivisibles (no tienen `isa.instruction`): ocupan
+  su ciclo solas; CRYPTO es además barrera.
+- Los bloques de los programas reales tienen entre 1 y 118 instrucciones.
 
-1. Construir el grafo de dependencias. Hay arista de `a` a `b` (con `a` antes que `b`) si:
+**Algoritmo**, por bloque con 3 a 256 instrucciones (fuera de ese rango no se toca y cuenta 0;
+calendarización por lista, Aho §10.3–10.4):
+
+1. Construir el grafo de dependencias. Hay arista de `a` a `b` (con `a` antes que `b`) cuando se
+   cumple alguna de estas reglas; **la distancia es la mayor de las que se cumplen**
+   (decisión 4.6.4):
 
    | Caso | Distancia |
    |---|---|
@@ -651,120 +779,104 @@ virtual/física. Lo que sí comparte son las reglas de distancia, que salen del 
    | `b` escribe lo que `a` lee (WAR) | 1 |
    | `a` y `b` escriben lo mismo (WAW) | 1 |
    | Uno escribe memoria y el otro la lee o la escribe, salvo que las dos direcciones sean `rz` más constantes distintas | 1 |
-   | `a` o `b` es barrera (llamada `jas`, CRYPTO) | 1, con todas |
+   | `a` o `b` es barrera (`jas`, CRYPTO) | 1, con todas |
    | Uno puede fallar (`/`, `%`, `^`) y el otro es un store, una llamada o CRYPTO | 1 |
    | `b` es el salto final del bloque | 1, con todas |
 
 2. Prioridad de cada instrucción: camino más largo hasta el final del bloque.
-3. Simular bundles: por ciclo caben 2 de ALU, 1 de salto y 1 de memoria. Se toma, entre las
-   instrucciones listas, la de mayor prioridad; en empate, la que estaba antes.
+3. Simular bundles: por ciclo caben 2 de ALU, 1 de salto y 1 de memoria; una PSEUDO ocupa el
+   ciclo sola. Se toma, entre las listas, la de mayor prioridad; en empate, la que estaba antes.
 4. El orden nuevo es por ciclo simulado y, dentro del ciclo, por posición original.
-5. Aplicarlo con `tac_block_set_order`. Anotar `reordered`.
-
-Las operaciones complejas (`*`, `/`, `%`, `^`) son una instrucción indivisible y ocupan su
-ciclo solas.
+5. Aplicarlo con `tac_block_set_order`. `reordered` suma, en todo el programa, las posiciones
+   que cambiaron en cada bloque.
 
 **Por qué va antes de asignar.** Después de asignar, dos valores sin relación pueden compartir
 registro y aparecer como dependientes (WAR y WAW falsas). Con temporales virtuales esas
-dependencias no existen, y la política de la asignación (el registro libre hace más tiempo)
-conserva el paralelismo expuesto.
+dependencias no existen.
 
-**Ejemplo**
+**Ejemplo (prueba unitaria sobre ISA virtual armado a mano**, no la bajada de un fuente):
 
 ```
-1: v1 = lw a(rz)            orden original: 1 2 3 4
-2: v2 = add v1, v1          dependencias: 1→2 (RAW), 3→4 (RAW); memoria: solo lecturas
-3: v3 = lw b(rz)
-4: v4 = add v3, v3          simulación: ciclo 0: 1 · ciclo 1: 3 · ciclo 2: 2 · ciclo 3: 4
-                            orden nuevo: 1 3 2 4      reordered = 2
+1: v1 = lw a(rz)            dependencias: 1→2 (RAW, 2), 3→4 (RAW, 2); memoria: solo lecturas
+2: v2 = add v1, v1
+3: v3 = lw b(rz)            simulación: ciclo 0: 1 · ciclo 1: 3 · ciclo 2: 2 · ciclo 3: 4
+4: v4 = add v3, v3          orden nuevo: 1 3 2 4      reordered = 2
 ```
 
-Las dos cargas quedan en ciclos seguidos y cada suma espera su distancia de 2 mientras se
-ejecuta la otra carga.
+En un programa fuente el bloque real incluye las inicializaciones, las cargas de cada lectura,
+los stores y el retorno: el contador del programa es mayor (14.4).
 
-### 7.6 Spilling (dentro de A5.3, tarea C3.4)
+### 7.6 Spilling (tarea C3.4)
 
-**Decisión del 15/11 (4.4).** Además del *linear scan*, que sigue como ruta principal, se
-implementa el coloreo de Chaitin, como en el curso, en `src/generador_o1/tac_allocate_color.c`,
-elegido con `--alloc=color` (`TacAllocationOptions` gana el campo de la estrategia). Chaitin
-construye el grafo de interferencia con los intervalos (dos temporales interfieren si sus
-intervalos se solapan), simplifica con k = 12, elige víctima cuando se atasca y selecciona
-colores. Las dos estrategias entregan el mismo mapa temporal→registro y la lista de
-derramados; todo lo demás (plan por instrucción, código de derrame con `rg`, preservación,
-operaciones complejas, emisión) es común. A diferencia del curso, no hace falta repetir el
-algoritmo después de un spill: el código de derrame usa `rg`, registro reservado que no entra
-al grafo y cumple el papel de los "temporales frescos". Después se comparan bundles, ciclos y
-derramados para decidir cuál queda como principal.
+**Qué es cada cosa (decisión 4.6.5).**
+- *Asignación de registros:* poner cada temporal virtual en uno de `t0`–`t11`. La hace siempre
+  el camino `-O1`, porque el TAC usa temporales ilimitados. En `-O1` la hace el *linear scan*
+  actual (`allocate_function` en `tac_allocate.c`), sin cambios: si no alcanzan los 12
+  registros, error "sin registros temporales disponibles".
+- *Spilling:* la optimización que permite compilar cuando no alcanzan los registros. Se activa
+  con `--opt=spill` o `-O2`, y entonces la asignación la hace el coloreo de Chaitin, como en el
+  curso.
 
-**Dónde.** En el recorrido del *linear scan*, en el punto que hoy es `no_register_available`
-(`tac_allocate.c`). No es una pasada del gestor.
-
-**Interfaz que deja el refactor (P12)**
+**Dónde.** Archivo nuevo `src/generador_o1/tac_allocate_color.c`. `tac_allocate_registers`
+elige la estrategia con el interruptor que ya existe desde P12:
 
 ```c
-typedef struct { int spill; } TacAllocationOptions;        /* NULL o spill = 0: sin derrame */
-
-TacAllocationResult *tac_allocate_registers(TacProgram *program, const char *source_name,
-    const TacAllocationOptions *options, char *error, size_t capacity);
-
-/* TacInterval gana: */        size_t loop_depth;   /* mayor profundidad de lazo donde aparece */
-/* TacAllocationMetrics gana: */ size_t spilled, spill_loads, spill_stores; double spill_ms;
+typedef struct { int spill; } TacAllocationOptions;   /* NULL o spill = 0: linear scan, sin derrame */
+                                                      /* spill = 1: Chaitin con derrame            */
 ```
 
-Sin el interruptor, todo sigue como hoy: error "sin registros temporales disponibles".
+Las dos estrategias entregan lo mismo: el mapa temporal→registro de cada función y, con
+Chaitin, la lista de derramados. Todo lo demás es común: intervalos, plan por instrucción
+(`tac_allocate_sites`), preservación, operaciones complejas y emisión.
 
-**Usa lo que existe:** `data_area_reserve_spill` (una reserva por función), `tac_loops_depth`,
-el plan por instrucción que ya arma la asignación (`TacEmissionSite`, `tac_allocate_sites`) y
-`cg_preserve` (P3).
+**Algoritmo de Chaitin** (presentación *Spilling de Registros*; Aho §8.8.4), por función:
 
-**Algoritmo** (Poletto y Sarkar 1999, fuera de Aho)
+1. Grafo de interferencia: un nodo por temporal; dos temporales interfieren si sus intervalos
+   de vida se solapan (los intervalos ya incluyen que las fuentes de una operación compleja
+   siguen vivas en la posición de escritura). k = 12 colores (`t0`–`t11`).
+2. Simplificar: mientras haya un nodo con grado < k, sacarlo y apilarlo. Si no hay, elegir
+   víctima: la de menor costo/grado, con costo = Σ 10^profundidad sobre cada definición y uso
+   del temporal y grado = vecinos en el grafo actual; en empate, el de intervalo más largo. Se
+   saca y se apila como posible derramado.
+3. Seleccionar: desapilar y dar a cada nodo un color que no tenga ningún vecino. Entre los
+   colores libres se elige el que se asignó hace más tiempo (rotación), para no reusar
+   enseguida un registro y no crear dependencias falsas que sumen bundles. Si un posible
+   derramado no tiene color libre, queda derramado; si lo tiene, no se derrama (coloreo
+   optimista de Briggs, refinamiento de Chaitin fuera de la presentación).
+4. Casillas: reservar `4 × derramados` bytes con `data_area_reserve_spill`; la casilla del
+   derramado `k` es `spill_base + 4·k`.
 
-1. Al llegar a un intervalo sin registro libre, los candidatos son los 12 activos y el nuevo.
-2. Víctima (la del curso, común a las dos estrategias): el de menor costo/grado, con
-   costo = Σ 10^profundidad sobre cada definición y uso del temporal, y grado = cantidad de
-   intervalos que se solapan con el suyo. En empate, el que termina más lejos.
-3. La víctima queda derramada para toda su vida (no hay partición de intervalos). Si era un
-   activo, su registro pasa al intervalo nuevo.
-4. Al terminar la función: reservar `4 × derramados` bytes con `data_area_reserve_spill`. La
-   casilla del derramado número `k` es `spill_base + 4·k`.
-5. Plan por instrucción. Las cargas y guardados **no se insertan como instrucciones nuevas**:
-   se anotan en el plan de la instrucción, igual que la preservación, y la emisión los escribe.
-   - lectura de un derramado: el plan anota "cargar la casilla en `aux`" y el operando pasa a
-     `aux`;
-   - escritura de un derramado: el operando pasa a `aux` y el plan anota "guardar `aux` en la
-     casilla".
+No hace falta repetir el algoritmo después de derramar, como en el curso: el código de
+derrame usa `rg`, registro reservado que no entra al grafo y cumple el papel de los
+"temporales frescos".
 
-   La emisión escribe, para toda instrucción con plan, en este orden: guardar los preservados,
-   cargas de derrame, la instrucción, guardados de derrame, restaurar los preservados. El
-   orden importa: si un registro prestado tiene un valor vivo, hay que guardarlo **antes** de
-   cargarle el valor derramado; por eso la carga no puede ser una instrucción suelta anterior.
-6. Elección de `aux`:
+**Plan por instrucción.** Las cargas y guardados no son instrucciones nuevas: se anotan en el
+plan de la instrucción (`TacEmissionSite`, campos `loads` y `stores` de P12) y la emisión
+escribe, en orden: guardar preservados, cargas de derrame, la instrucción, guardados de
+derrame, restaurar preservados.
 
-   | Situación | Auxiliar |
-   |---|---|
-   | Un solo operando derramado | `rg` |
-   | Dos fuentes derramadas y el destino tiene registro | `rg` y el registro del destino |
-   | Dos fuentes derramadas y no hay destino con registro (`sw`, salto condicional, o todo derramado) | `rg` y un registro prestado: uno de `t0`–`t11` que la instrucción no use; si está vivo, se guarda y se restaura en su casilla de `temp_base` |
-   | Operación compleja aritmética (exige operandos en `t0`–`t11`) | Registros prestados, elegidos junto con sus 8 auxiliares |
-   | CRYPTO | El valor se carga directo en su registro fijo |
+| Situación | Auxiliar |
+|---|---|
+| ISA normal con un operando derramado | `rg` |
+| ISA normal con dos fuentes derramadas y destino con registro | `rg` y el registro del destino |
+| ISA normal con dos fuentes derramadas y sin destino con registro | `rg` y un registro prestado de `t0`–`t11` que la instrucción no use; si está vivo, se guarda y restaura en su casilla de `temp_base` |
+| ISA normal con destino derramado | El registro de la primera fuente, o `rg`; después `sw` a la casilla |
+| Operación compleja (exige operandos y destino en `t0`–`t11` y 8 auxiliares distintos) | Registros prestados para fuentes y destino derramados, elegidos junto con sus 8 auxiliares; nunca `rg` |
+| CRYPTO | El valor se carga directo en su registro fijo |
 
-**Ejemplo.** 13 valores vivos; `v13` aparece solo fuera de lazos y termina último: es la
-víctima. Con `v2` en `t1` y `v14` en `t5`:
+Cuentan: `spilled` (temporales derramados), `spill_loads` (una carga por fuente derramada
+distinta en cada instrucción) y `spill_stores` (un guardado por destino derramado). No
+incluyen preservaciones ni auxiliares de expansión.
 
-```
-v14 = add v13, v2     →     lw  rg, casilla_v13(rz)
-                            add t5, rg, t1
+**Ejemplo.** En `s1` (14.5), `-O1` falla con 14 temporales vivos a la vez. Con `--opt=spill`,
+Chaitin derrama los de menor costo/grado (resultados de los primeros productos, que esperan
+vivos hasta el final de la expresión): cada uno se guarda al definirse y se carga al usarse.
+Los derramados exactos los fija el listado del PR de C3.4.
 
-v13 = add v2, v7      →     add rg, t1, t6
-                            sw  rg, casilla_v13(rz)
-```
-
-`spilled = 1`, y se cuenta una carga o un guardado por cada uso reescrito.
-
-**Lo más delicado:** las operaciones complejas con operandos derramados, porque sus rutinas
-exigen destino, fuentes y 8 auxiliares distintos entre `t0` y `t11`. El plan de auxiliares
-(`tac_allocate_sites`) ya elige y preserva; hay que extenderlo para que también asigne
-registro a los operandos derramados.
+**Efecto esperado.** En un programa que cabe en 12 registros (todo el corpus y `ejercicios/`),
+`--opt=spill` no derrama nada: mismas instrucciones, con otra asignación de registros; los
+bundles pueden variar levemente. En un programa que no cabe, `-O1` no compila y
+`--opt=spill` sí. En `-O2` permite que compile un lazo desenrollado que suba la presión.
 
 ### 7.7 Verificación de las pasadas (D2)
 
@@ -847,6 +959,9 @@ completo pasa la validación final (9.17); entonces entra con un solo PR de `ref
 | P13 | Cascadas (pospuesto) | P6 | — |
 | P14 | Búsqueda directa en la liveness | P10, P12 | Todas: tiempo de compilación de `-O1` |
 | P15 | Lectura de variables al estilo del curso (integrado; validación en 9.18) | P14 | DCE y renombramiento (TAC más limpio); métricas de alto nivel |
+
+Las decisiones del 15/11 (4.6) no agregan pasos de refactor: usan la infraestructura existente
+(`tac_block_remove`, `tac_blocks_clone`, el interruptor de P12) y un archivo nuevo para Chaitin.
 
 Qué necesita cada optimización para empezar:
 
@@ -1411,12 +1526,15 @@ por exceder la ROM, como debe).
 | #21 | P4, P6 | `38113d4` |
 | #22 | P7 a P12 | `de8f1a9` |
 | #23 | P14 | `11d5556` (merge `29f0665`) |
+| #24 | P15 | `3d3993a` (merge `66c7d54`) |
+| #25 | Refactor completo, de `refactor-c6` a `develop` | `0195d1e` |
 
 P0 no tiene PR: es la línea base, guardada fuera del repo en `refactor_ref/` (`ccom_ref`, `o0/`,
 `consultas/`, `manifest.json`).
 
-P15 está integrado en el árbol de `feature/c6-tac-curso`, con las comprobaciones completas de
-9.18. Este cierre local no registra un PR ni un commit adicionales.
+P15 entró por el PR #24, con las comprobaciones completas de 9.18. Antes del PR #25 se repitió
+sobre `refactor-c6` la validación de AddressSanitizer (92/92 limpios) y de `check-ide` (30
+fallos y 1 error conocidos, ninguno nuevo).
 
 ### 9.17 Validación final de `refactor-c6` (`29f0665`)
 
@@ -1498,7 +1616,7 @@ escriben directamente el temporal de unión; la biyección se verifica entre las
 que sobreviven. constantes_grandes permanece idéntico. No se modificaron el auxiliar, la
 suite ni el comparador para aceptar resultados. Auditoría: `build/p15/final/auditoria_isa.json`.
 
-**Resultados finales (15/11; P15 integrado en este árbol).**
+**Resultados finales (15/11; P15 integrado por el PR #24).**
 
 | Comprobación | Resultado de esta corrida |
 |---|---|
@@ -1597,7 +1715,7 @@ Ejemplo, en `main`: `x = 1 ;  y = a / b ;  x = 2 ;`. Sin la regla, `x = 1` parec
 
 | Función | Entrada | Salida | Errores |
 |---|---|---|---|
-| `int tac_pass_dce(TacPassContext *context, char *detail, size_t capacity)` | Programa de alto nivel válido | 1; programa sin instrucciones muertas ni bloques inalcanzables; `counters.removed` y `removed_blocks` actualizados | 0 con texto en `detail` si falla un análisis o una edición |
+| `int tac_pass_dce(TacPassContext *context, char *detail, size_t capacity)` | Programa de alto nivel válido | 1; programa sin instrucciones muertas y sin los bloques inalcanzables que se puedan quitar; `counters.removed` y `removed_blocks` actualizados | 0 con texto en `detail` si falla un análisis |
 
 **Funciones privadas**
 
@@ -1656,31 +1774,52 @@ trap_is_impossible(i):
     si i.op es TAC_POW:           i.src2 es entero y i.src2 ≥ 0
     si no: falso
 
-remove_unreachable(f):
-    lazos ← tac_loops_analyze(f);  si NULL: falló
-    lista ← bloques b de f con tac_loops_reachable(lazos, b) = 0
-    tac_loops_free(lazos)
-    para cada b en lista, del último al primero:
-        si tac_block_remove(f, b) = 0: falló
-    si lista no vacía: tac_rebuild_edges(f)
-    devolver tamaño de lista
+remove_unreachable(f):                    // decisión 4.6.1
+    m ← 0
+    repetir:
+        tac_rebuild_edges(f)
+        lazos ← tac_loops_analyze(f);  si NULL: falló
+        lista ← bloques b de f, en orden de lista, con tac_loops_reachable(lazos, b) = 0
+        tac_loops_free(lazos)
+        quitado ← falso
+        para cada b en lista, mientras no quitado:
+            si tac_block_remove(f, b) = 1: quitado ← verdadero;  m ← m + 1
+        si no quitado: devolver m         // vacía, o lo que queda no se puede quitar: se deja
 ```
 
-Dentro de una vuelta la liveness queda desactualizada al borrar, pero solo en el sentido
-seguro: puede dar por vivo algo que ya no lo está. La vuelta siguiente lo recalcula.
+`tac_block_remove` exige el grafo válido y rechaza un bloque al que otro le salte con etiqueta
+o que tenga una marca. Las marcas ya están descartadas cuando corre DCE: el gestor las
+descarta si unroll no está activo, y unroll las descarta al empezar. Como el constructor no
+genera ciclos formados solo por saltos con etiqueta (4.5), en cada vuelta hay al menos un bloque
+del conjunto que se puede quitar; si alguna vez no lo hubiera, quedan sin quitar y no es error.
 
-**Casos de prueba**
+Dentro de un barrido la liveness queda desactualizada al borrar, pero solo en el sentido seguro:
+puede dar por vivo algo que ya no lo está. El barrido siguiente lo recalcula.
+
+**Casos de prueba** (los de programa fuente se calculan sobre su HIGH real; los marcados
+"unitaria" usan HIGH armado a mano)
 
 | Caso | Entrada | Esperado |
 |---|---|---|
-| Local muerta | Función con `Vm x : int = a * 2 ;` y `x` nunca leída | Se eliminan sus 2 instrucciones (`t = a * 2`, `x = t`); `removed = 2` |
-| Llamada entre medias | Lo anterior con una llamada que modifica una global | La llamada se conserva; el resultado no cambia |
-| División constante | Local muerta con `a / 4` | Se elimina |
-| División variable | Local muerta con `a / b` | Se conserva |
-| Observable | La misma local muerta, pero en `main` | No se elimina nada |
-| Fallo en `main` | `x = 1 ; y = a / b ; x = 2 ;` en `main` | `x = 1` se conserva |
-| Inalcanzable | Sentencias después de `E` | `removed_blocks ≥ 1` |
-| Efectos | Escritura a arreglo y CRYPTO con resultado no usado | Se conservan |
+| Local muerta | Función `void` con `Vm x : int = a * 2 ;` y `x` nunca leída | Se eliminan `t0 = a * 2` y `x = t0`; `removed = 2` |
+| Local muerta con retorno | Lo mismo en una función `int r` que asigna `r` antes de retornar | Se eliminan además `r = 0`; `removed = 3` |
+| Llamada entre medias | Lo anterior con una llamada que modifica una global | `PARAM`, `CALL` y el efecto global se conservan |
+| División entre constante | Local muerta con `a / 4` | Se eliminan la división y su copia; `removed = 2` |
+| División entre variable | Local muerta con `a / b` | Se conserva la división (puede fallar); se elimina la copia `y = t`; `removed = 1` |
+| `MOD` y `POW` seguros | Locales muertas con `a % 3` y `a ^ 2` | Se eliminan; 2 instrucciones cada una |
+| Constante insegura (unitaria) | HIGH con divisor entero 0 o exponente negativo | Se conserva (en fuente, `a / 0` y `a ^ -1` son error semántico) |
+| Observable | Local con inicializador, sin redefinir, en `main` | No se elimina nada |
+| Fallo en `main` | `x = 1 ; y = a / b ; x = 2 ;` en `main`, con inicializadores | `x = 1` se conserva |
+| Unión inalcanzable | `C` con `E` en las dos ramas seguido de `E` | `removed_blocks = 1` |
+| Efectos | Escritura a arreglo y CRYPTO | Se conservan, junto con el cálculo de la dirección que usa el store |
+
+**Evidencia C3.2.** `pruebas/optimizador/dce/probar.c` construye HIGH desde fuentes
+para los diez casos fuente de la tabla; los divisores enteros cero (`DIV` y `MOD`) y
+el exponente negativo se arman directamente como HIGH. También comprueba que un ciclo
+inalcanzable de etiquetas se conserva sin error, y que dos bloques referenciados en
+orden inverso se retiran en vueltas sucesivas. Cada caso vuelve a ejecutar la pasada
+para exigir cero cambios adicionales. La eliminación de un bloque con `RETURN` suma
+solo `removed_blocks`, como confirma d2 (14.3).
 
 ### 11.3 Renombramiento (`src/optimizador/tac_pass_rename.c`)
 
@@ -1688,14 +1827,14 @@ seguro: puede dar por vivo algo que ya no lo está. La vuelta siguiente lo recal
 
 | Función | Entrada | Salida | Errores |
 |---|---|---|---|
-| `int tac_pass_rename(TacPassContext *context, char *detail, size_t capacity)` | Programa de alto nivel válido | 1; redefiniciones locales renombradas; `counters.renamed` actualizado | 0 si falla la liveness o un reemplazo |
+| `int tac_pass_rename(TacPassContext *context, char *detail, size_t capacity)` | Programa de alto nivel válido | 1; redefiniciones locales renombradas; `counters.renamed` actualizado | 0 si falla un reemplazo |
 
 **Estructura**
 
 ```c
 typedef struct {
     const Symbol *variable;   /* candidata definida más de una vez en el bloque */
-    size_t total;             /* cuántas definiciones tiene en el bloque */
+    size_t total;             /* cuántas definiciones tiene en el bloque, incluidas las implícitas */
     size_t seen;              /* cuántas se han recorrido */
     TacOperand current;       /* temporal que la reemplaza ahora; tac_none() si ninguno */
 } RenameEntry;
@@ -1705,14 +1844,15 @@ typedef struct {
 
 ```
 tac_pass_rename(contexto):
+    raices ← tac_observable_roots(contexto.scopes)
     para cada función f:
-        vivos ← tac_live_analyze(f, raíces observables)
+        es_main ← f es main
         para cada bloque b de f:
-            contadores.renamed ← contadores.renamed + rename_block(contexto, f, b, vivos)
-        tac_live_free(vivos)
+            contadores.renamed ← contadores.renamed + rename_block(contexto, f, b, es_main, raices)
+    liberar raices
     devolver 1
 
-rename_block(contexto, f, b, vivos):
+rename_block(contexto, f, b, es_main, raices):
     tabla ← collect(contexto, f, b)          // candidatas con total ≥ 2
     si tabla vacía: devolver 0
     n ← 0
@@ -1721,7 +1861,7 @@ rename_block(contexto, f, b, vivos):
             tac_replace_reads(b, i, tac_variable(e.variable), e.current)
         para cada definición d de i que sea la variable de una entrada e:
             e.seen ← e.seen + 1
-            si e.seen < e.total y can_rename(vivos, i, e.variable):
+            si e.seen < e.total y can_rename(i, e.variable, es_main, raices):
                 e.current ← tac_temp_new(f)
                 i.dest ← e.current
                 n ← n + 1
@@ -1735,63 +1875,65 @@ collect(contexto, f, b):
             sumar 1 al total de esa variable
     devolver las entradas con total ≥ 2
 
-can_rename(vivos, definicion, variable):
+can_rename(definicion, variable, es_main, raices):        // decisión 4.6.3
+    si no es_main o variable no está en raices: verdadero
     para cada instrucción j después de definicion, hasta la siguiente definición de variable:
-        si j lee variable sin tenerla como operando explícito:      // regla 11.1
-            falso
+        info ← tac_instruction_info(j)
+        si info.may_trap o info.uses_globals: falso
     verdadero
 ```
 
-"Lee sin tenerla como operando explícito" se comprueba con el conjunto `uses` de la
-instrucción en la liveness (`TacLiveInstruction.uses`) contra `tac_uses`.
-
-**Casos de prueba**
+**Casos de prueba** (sobre el HIGH real)
 
 | Caso | Entrada | Esperado |
 |---|---|---|
-| WAW y WAR | `x = a + b ; r = x * 2 ; x = a - b ; r = r + x ;` con `x` local | La primera `x` pasa a un temporal y su lectura también; la segunda escribe `x`. `renamed = 1` |
-| Tres definiciones | `x` definida tres veces en un bloque | `renamed = 2` |
-| Una definición | `x` definida una vez | `renamed = 0` |
-| Parámetro, global, retorno | Redefiniciones de cada uno | `renamed = 0` |
-| Entre bloques | `x` definida en un bloque y otra vez dentro de un `C` | `renamed = 0`: son bloques distintos |
-| Fallo en `main` | `x = 1 ; y = a / b ; x = 2 ;` en `main` | `renamed = 0` |
+| WAW y WAR | `Vm x : int = a + b ; c = x * 2 ; x = a - b ;` con `x` local | La primera `x` pasa a un temporal y su lectura también; `renamed = 1` |
+| Declaración sin inicializador | `Vm x : int ;` y después `x = a + b ; r = x * 2 ; x = a - b ; …` | `x = 0` es una definición más: `renamed = 2` |
+| Tres definiciones | `x` inicializada y redefinida dos veces en un bloque | `renamed = 2` |
+| Una definición | `x` con inicializador y sin redefinir | `renamed = 0` |
+| Parámetro, global, retorno | Redefiniciones de cada uno | `renamed = 0` (no son candidatas) |
+| Entre bloques | `x` inicializada en un bloque y redefinida dentro de un `C` | `renamed = 0` |
+| Fallo en `main` | `Vm x : int = 1 ; Vm y : int = a / b ; x = 2 ;` en `main` | `renamed = 0`: la división está entre las dos definiciones |
+| División que lee la variable | En `main`: `x = 1 ; y = x / b ; x = 2` | `renamed = 0`: la división puede fallar y `x` debe estar escrita |
 
 ### 11.4 Unrolling (`src/optimizador/tac_pass_unroll.c`)
 
-**Forma de un lazo `S` en la representación** (la que construye `tac_build_flow.c`):
+**Forma de un lazo `S` en la representación** (la que construye `tac_build_flow.c`, medida en
+la revisión):
 
 ```
 previo:  control = inicio ; limite = fin ; goto prueba
 prueba:  if control >= limite goto salida        (paso > 0; con paso < 0 es <=)
-cuerpo:  …
-retorno: control = control + paso ; goto prueba   (último bloque del cuerpo)
+cuerpo:  …                                       (se entra por caída)
+retorno: control = control + paso ; goto prueba   (muchas veces es el mismo bloque que el cuerpo)
 salida:
 ```
 
-La marca (`TacLoopMark`) da `header` (prueba), `body`, `latch` (retorno), `control`, `limit`,
-`initial`, `bound` y `step`. El destino de un salto es su operando `dest`.
+Un `C` dentro del cuerpo agrega bloques alcanzados por caída y una unión con el incremento. La
+marca da `header` (prueba), `body`, `latch` (retorno), `control`, `limit`, `initial`, `bound` y
+`step`. El destino de un salto es su operando `dest`.
 
 **Interfaz pública**
 
 | Función | Entrada | Salida | Errores |
 |---|---|---|---|
-| `int tac_pass_unroll(TacPassContext *context, char *detail, size_t capacity)` | Programa de alto nivel con marcas de lazos; `context->unroll_factor` (0 o 2..16) | 1; lazos desenrollados; un elemento en `counters.unrolled` por lazo | 0 si falla un análisis, una clonación o la reconstrucción de aristas |
+| `int tac_pass_unroll(TacPassContext *context, char *detail, size_t capacity)` | Programa de alto nivel con marcas; `context->unroll_factor` (0 o 2..16) | 1; lazos desenrollados; un elemento en `counters.unrolled` por lazo | 0 si falla un análisis, una clonación o la reconstrucción de aristas |
 
 **Estructura**
 
 ```c
 typedef struct {
     TacLoopMark mark;           /* copia: las marcas se descartan antes de editar */
-    const TacBlock **blocks;    /* bloques del lazo sin la cabecera, en orden de lista */
+    const TacBlock **blocks;    /* bloques del lazo natural sin la cabecera, en orden de lista */
     size_t block_count;
     size_t size;                /* instrucciones de esos bloques */
-    TacBlock *previous;         /* único bloque de fuera del lazo que salta a la cabecera */
+    TacBlock *previous;         /* único bloque de fuera del lazo que entra a la cabecera */
     TacBlock *exit;             /* destino de la prueba de la cabecera */
     int line;                   /* línea del S */
 } LoopPlan;
 
 enum { UNROLL_FULL_LIMIT = 8, UNROLL_DEFAULT_FACTOR = 4 };
-#define UNROLL_BUDGET (ISA_ROM_BUNDLES / 4)   /* crecimiento total permitido, en instrucciones */
+#define UNROLL_BUDGET (ISA_ROM_BUNDLES / 4)   /* cota heurística de crecimiento HIGH */
 ```
 
 **Pseudocódigo**
@@ -1821,14 +1963,17 @@ collect_plans(f):
     para cada marca m de f con kind = TAC_LOOP_S
                           y tac_loop_mark_state(lazos, m) = TAC_LOOP_MARK_WITH_BACKEDGE:
         bloques ← bloques b de f, en orden de lista, con tac_loops_contains(lazo de m, b) y b ≠ m.header
-        si algún bloque de bloques es header de otra marca: saltar m        // solo los internos
-        previous ← predecesor de m.header que no está en bloques
+        si algún bloque de bloques es header de otra marca (S o L): saltar m     // solo internos
+        si algún bloque de bloques tiene un sucesor fuera del lazo: saltar m     // salida anticipada (4.6.2)
+        exteriores ← predecesores de m.header que no están en el lazo
+        si exteriores no tiene exactamente un bloque: saltar m
+        previous ← ese bloque
         exit ← destino (dest) de la última instrucción de m.header
         guardar plan
     tac_loops_free(lazos)
 
 trip_count(p):
-    // Solo INTEGER: NONE, TEMP y VARIABLE($limite_Sk) son no constantes.
+    // Solo INTEGER en la marca: NONE, TEMP y VARIABLE($limite_Sk) son no constantes.
     si p.mark.initial o p.mark.bound no son enteros: devolver −1
     a ← initial;  b ← bound;  s ← step
     si s > 0: devolver máx(0, techo((b − a) / s))
@@ -1855,27 +2000,32 @@ unroll_total(f, p, N):
         salto de copias[j] .dest ← (j < N) ? etiqueta(primero de copias[j+1]) : etiqueta(p.exit)
     última instrucción de p.previous .dest ← (N > 0) ? etiqueta(primero de copias[1])
                                                      : etiqueta(p.exit)
-    para cada b en p.blocks, del último al primero: tac_block_remove(f, b)
-    tac_block_remove(f, header)
+    tac_rebuild_edges(f)
+    quitar {header} ∪ p.blocks con el ciclo de remove_unreachable de 11.2   // decisión 4.6.1
 ```
 
-La guarda asume que `control + (k−1)·paso` no desborda 32 bits; es una precondición
-documentada (los límites de un `S` en los programas de Calser son pequeños frente a ese rango).
+`trip_count` nunca da 0 para un `S` que llega al TAC con inicio y fin enteros: el semántico
+rechaza un `S` constante que no se ejecuta. La guarda asume que `control + (k−1)·paso` no
+desborda 32 bits; es una precondición documentada.
 
 **Casos de prueba**
 
 | Caso | Entrada | Esperado |
 |---|---|---|
-| Total | `S [ i , 0 , 4 , 1 ]` | 4 copias, sin prueba ni salto de retroceso; `{línea, 4}` |
-| Cero vueltas | `S [ i , 5 , 5 , 1 ]` | El lazo desaparece; `{línea, 0}` |
-| Parcial exacto | Fin en una variable que vale 8 | Guarda, 4 copias, residuo que no ejecuta ninguna vuelta |
+| Total | `S [ i , 0 , 4 , 1 ]` | 4 copias, sin la prueba del `S` ni salto de retroceso; `{línea, 4}` |
+| Paso negativo | `S [ i , 10 , 0 , -2 ]` | 5 vueltas, total |
+| Parcial exacto | Fin en una variable que vale 8 | `bound` = `$limite`; guarda, 4 copias; el residuo no ejecuta vueltas |
 | Parcial con residuo | Fin en una variable que vale 6 | Una ronda de 4 y 2 vueltas de residuo |
 | Menos que el factor | Fin en una variable que vale 3 | La guarda salta directo al residuo |
-| Paso negativo | `S [ i , 10 , 0 , -2 ]` | 5 vueltas, total |
+| Inicio variable | `S [ i , n , 10 , 1 ]` | `initial` = NONE: parcial, aunque `n` tenga valor inicial conocido |
+| Fin como expresión constante | `S [ i , 0 , 2 + 2 , 1 ]` | `bound` es TEMP: parcial, no total |
+| Inicio y fin dinámicos iguales | Inicio y fin en variables que valen lo mismo | Parcial; el lazo ejecuta 0 vueltas y el resultado no cambia |
 | Factor pedido | `--unroll=8` con 100 vueltas | 12 rondas de 8 y residuo de 4 |
-| Anidados | Un `S` dentro de otro | Solo se desenrolla el interno |
-| Con `E` dentro | Cuerpo con salida anticipada | Cada copia conserva su salida |
-| Sin presupuesto | Cuerpo muy grande | No se desenrolla; lista vacía |
+| Anidados | Un `S` dentro de otro, o un `L` dentro de un `S` | Solo se desenrolla el `S` interno; el externo se omite |
+| `C` dentro del cuerpo | Cuerpo con un `C` sin `E` | Se desenrolla; cada copia conserva sus caídas |
+| `E` dentro del cuerpo | Búsqueda con `E` dentro del `S` | No se desenrolla (salida anticipada) |
+| Sin retroceso | Cuerpo que siempre retorna | Marca sin retroceso: no se desenrolla |
+| Sin presupuesto | Cuerpo de cientos de instrucciones | No se desenrolla; lista vacía |
 
 ### 11.5 Reordenamiento (`src/optimizador/tac_pass_reorder.c`)
 
@@ -1899,8 +2049,8 @@ typedef struct {
     int accesses_memory, writes_memory;
     int memory_known;                 /* 1 si la dirección es rz + constante */
     int64_t memory_address;
-    IsaUnit unit;                     /* ALU, salto, memoria */
-    int alone;                        /* operación compleja: ocupa su ciclo sola */
+    IsaUnit unit;                     /* ALU, salto, memoria; las PSEUDO no tienen isa.instruction */
+    int alone;                        /* PSEUDO (operación compleja o CRYPTO): ocupa su ciclo sola */
     size_t priority;                  /* camino más largo hasta el final del bloque */
     size_t ready_at;                  /* primer ciclo permitido */
     size_t cycle;                     /* ciclo asignado */
@@ -1915,11 +2065,11 @@ typedef struct {
 reorder_block(f, b):
     n ← cantidad de instrucciones de b
     si n < 3 o n > REORDER_MAX_BLOCK: devolver 0
-    nodos[0..n) ← una por instrucción; llenar con tac_instruction_info y tac_locations_visit
+    nodos[0..n) ← una por instrucción; llenar con tac_instruction_info y tac_locations_visit;
+                  unidad desde isa.instruction si es ISA; alone = 1 si es PSEUDO
     D ← matriz n × n en ceros
     para a de 0 a n−1, para c de a+1 a n−1:
         D[a][c] ← dependency(nodos[a], nodos[c])
-    // prioridades, de atrás hacia adelante
     para a de n−1 a 0:
         nodos[a].priority ← máx sobre c con D[a][c] > 0 de (D[a][c] + nodos[c].priority), o 0
         nodos[a].pending  ← cantidad de c' < a con D[c'][a] > 0
@@ -1942,44 +2092,49 @@ reorder_block(f, b):
     si cambiadas > 0: tac_block_set_order(b, orden, n)
     devolver cambiadas
 
-dependency(a, c):                    // a está antes que c
-    si c es el terminador del bloque: 1
-    si a.info.barrier o c.info.barrier: 1
-    si (a.info.may_trap y (c.writes_memory o c.info.barrier))
-       o (c.info.may_trap y (a.writes_memory o a.info.barrier)): 1
+dependency(a, c):                    // a está antes que c; distancia mayor (decisión 4.6.4)
     d ← 0
-    si alguna ubicación de a.writes está en c.reads:  d ← 2          // RAW
+    si alguna ubicación de a.writes está en c.reads:  d ← máx(d, 2)  // RAW
     si alguna de a.reads está en c.writes:            d ← máx(d, 1)  // WAR
     si alguna de a.writes está en c.writes:           d ← máx(d, 1)  // WAW
     si a y c acceden memoria y al menos uno escribe:
         si no (a.memory_known y c.memory_known y a.memory_address ≠ c.memory_address):
             d ← máx(d, 1)
+    si c es el terminador del bloque:                 d ← máx(d, 1)
+    si a.info.barrier o c.info.barrier:               d ← máx(d, 1)
+    si (a.info.may_trap y (c.writes_memory o c.info.barrier))
+       o (c.info.may_trap y (a.writes_memory o a.info.barrier)): d ← máx(d, 1)
     devolver d
 ```
 
 Las ubicaciones se comparan con `tac_location_equal`. `memory_known` vale 1 cuando la
-instrucción es una carga o un guardado cuya base es el registro físico `rz`; la dirección es
-su desplazamiento.
+instrucción es una carga o un guardado cuya base es el registro físico `rz`; la dirección es su
+desplazamiento (las variables escalares, globales y locales, siempre lo cumplen).
 
 **Casos de prueba**
 
-| Caso | Entrada (ISA virtual de un bloque) | Esperado |
+| Caso | Entrada | Esperado |
 |---|---|---|
-| Dos cadenas | `v1 = lw a ; v2 = add v1,v1 ; v3 = lw b ; v4 = add v3,v3` | Orden 1, 3, 2, 4; `reordered = 2` |
-| Ya óptimo | Una sola cadena dependiente | Sin cambios; `reordered = 0` |
-| Memoria igual | `sw v1, 64(rz)` seguido de `lw v2, 64(rz)` | Nunca se invierten |
-| Memoria distinta | `sw v1, 64(rz)` y `lw v2, 68(rz)` | Pueden cambiar de orden |
-| Dirección calculada | Guardado en un elemento de arreglo y una carga cualquiera | Conservan su orden |
-| Barrera | Instrucciones a los dos lados de una llamada | Ninguna cruza la llamada |
+| Dos cadenas (unitaria) | ISA armado: `v1 = lw a ; v2 = add v1,v1 ; v3 = lw b ; v4 = add v3,v3` | Orden 1, 3, 2, 4; `reordered = 2` |
+| Una cadena (unitaria) | ISA armado con una sola cadena dependiente | Sin cambios; `reordered = 0` |
+| Memoria igual | `sw` y después `lw` en la misma dirección `rz` + constante | Nunca se invierten |
+| Memoria distinta | `sw` y `lw` en direcciones `rz` + constante distintas | Pueden cambiar de orden |
+| Dirección calculada | Guardado en un elemento de arreglo (base TEMP) y una carga escalar | Conservan su orden |
+| Barrera | Instrucciones a los dos lados de un `jas` | Ninguna cruza la llamada |
 | Puede fallar | Una división y un guardado | Conservan su orden relativo |
+| RAW con el salto final | Comparación que define un TEMP y el salto que lo lee | Distancia 2, no 1 |
 | Salto final | Bloque que termina en salto condicional | El salto queda último |
 
-### 11.6 Spilling (en `tac_allocate.c`, `tac_allocate_sites.c` y la emisión)
+En los programas fuente el contador es de todo el programa (incluye, por ejemplo, la
+preparación de parámetros en `main`); su valor exacto se fija con el listado ISA de cada
+prueba en el PR.
 
-**Interfaz** (la deja el refactor, P12)
+### 11.6 Spilling (`src/generador_o1/tac_allocate_color.c`, `tac_allocate_sites.c` y la emisión)
+
+**Interfaz** (la deja el refactor, P12; la estrategia la elige el interruptor)
 
 ```c
-typedef struct { int spill; } TacAllocationOptions;        /* NULL o spill = 0: sin derrame */
+typedef struct { int spill; } TacAllocationOptions;   /* NULL o spill = 0: linear scan sin derrame */
 
 TacAllocationResult *tac_allocate_registers(TacProgram *program, const char *source_name,
     const TacAllocationOptions *options, char *error, size_t capacity);
@@ -1987,61 +2142,66 @@ TacAllocationResult *tac_allocate_registers(TacProgram *program, const char *sou
 
 | Situación | Resultado |
 |---|---|
-| Alcanzan los registros | Igual que hoy, con o sin interruptor |
-| No alcanzan, sin interruptor | NULL y "sin registros temporales disponibles", como hoy |
-| No alcanzan, con interruptor | Resultado válido; planes con cargas y guardados; contadores de derrame |
-| No queda espacio de datos para las casillas | NULL y error de memoria de datos |
+| Sin interruptor (`-O1`) | *Linear scan* actual, igual que hoy; si no alcanzan los registros, NULL y "sin registros temporales disponibles" |
+| Con interruptor, alcanzan los registros | Chaitin colorea sin derramar |
+| Con interruptor, no alcanzan | Chaitin colorea y derrama; planes con cargas y guardados; contadores de derrame |
+| Con interruptor, no queda espacio de datos para las casillas | NULL y error de memoria de datos |
 
 **Estructuras**
 
 ```c
-/* TacInterval (tac_intervals.h) gana: */
-size_t loop_depth;        /* mayor profundidad de lazo de los bloques donde aparece */
+/* Grafo de interferencia, interno de tac_allocate_color.c */
+typedef struct {
+    size_t count;             /* temporales de la función */
+    unsigned char *adjacent;  /* matriz count × count */
+    size_t *degree;           /* grado actual (baja al simplificar) */
+    double *cost;             /* Σ 10^profundidad de cada definición y uso */
+} ColorGraph;
 
 /* TacFunctionAllocation (interna) gana: */
-int   *spill_slot;        /* por temporal: índice de casilla, o -1 si tiene registro */
+int   *spill_slot;            /* por temporal: índice de casilla, o -1 si tiene registro */
 size_t spill_count;
 
-/* TacEmissionSite (tac_allocate.h) gana: */
+/* TacEmissionSite (tac_allocate.h, P12): */
 typedef struct { unsigned physical_register; int address; } TacSpillMove;
 TacSpillMove loads[3];    size_t load_count;     /* después de preservar, antes de la instrucción */
 TacSpillMove stores[1];   size_t store_count;    /* después de la instrucción, antes de restaurar */
 
-/* TacAllocationMetrics gana: */
+/* TacAllocationMetrics (P12): */
 size_t spilled, spill_loads, spill_stores;  double spill_ms;
 ```
 
 **Pseudocódigo**
 
 ```
-// dentro de allocate_function, cuando no hay registro libre para el intervalo nuevo
-spill_under_pressure(estado, nuevo):
-    víctima ← choose_victim(estado, nuevo)
-    f.spill_slot[víctima.temp_id] ← f.spill_count;  f.spill_count ← f.spill_count + 1
-    f.registers[víctima.temp_id] ← 0
-    si víctima = nuevo: devolver 0 y marcar "sin registro"      // el recorrido sigue
-    registro ← el que tenía la víctima
-    quitar víctima de estado.active
-    devolver registro
-
-choose_victim(estado, nuevo):           // víctima del curso, común a scan y Chaitin
-    entre estado.active ∪ {nuevo}:
-        costo(v) ← Σ sobre cada definición y uso de v de 10^profundidad del bloque
-        grado(v) ← cantidad de intervalos que se solapan con el de v
-        menor costo/grado;  empate: mayor end;  empate: mayor temp_id
-
-// al terminar el recorrido de la función
-si f.spill_count > 0: data_area_reserve_spill(símbolo de f, 4 × f.spill_count)
-dirección(casilla k) ← frame.spill_base + 4 × k
+allocate_color(f, intervalos):
+    G ← grafo con un nodo por temporal; arista si sus intervalos se solapan
+    costo(v) ← Σ sobre cada definición y uso de v de 10^profundidad del bloque
+    pila ← vacía
+    mientras G tenga nodos:
+        si hay un nodo con grado < 12: sacar el de menor número, apilarlo (no posible derramado)
+        si no: v ← nodo de menor costo(v)/grado(v); empate: intervalo más largo; empate: mayor número
+               sacar v, apilarlo como posible derramado
+    ultimo_uso[0..11] ← 0;  reloj ← 0
+    mientras pila no vacía:
+        v ← desapilar
+        libres ← colores 0..11 no usados por vecinos ya coloreados de v
+        si libres vacío: f.spill_slot[v] ← f.spill_count;  f.spill_count ← f.spill_count + 1
+                         // un posible derramado que sí encuentra color no se derrama
+                         // (coloreo optimista de Briggs, refinamiento de Chaitin)
+        si no: c ← color de libres con menor ultimo_uso (rotación); registro(v) ← t_c
+               reloj ← reloj + 1;  ultimo_uso[c] ← reloj
+    si f.spill_count > 0: data_area_reserve_spill(símbolo de f, 4 × f.spill_count)
+    dirección(casilla k) ← frame.spill_base + 4 × k
 
 // en tac_allocate_sites, por cada instrucción con algún operando derramado
 plan_spill_site(f, vivos, i, sitio):
     fuentes ← operandos leídos de i que están derramados, sin repetir
     destino ← operando escrito de i si está derramado
     usados ← registros de los operandos no derramados de i
-    disponibles ← lista de auxiliares según el tipo de i:
+    disponibles ← según el tipo de i:
         ISA normal:  [rg]  +  [registro del destino, si tiene y no es fuente]  +  prestados
-        compleja aritmética:  prestados
+        compleja aritmética:  prestados (nunca rg)
         CRYPTO:  el registro fijo de cada argumento
     para cada fuente s:
         r ← siguiente de disponibles
@@ -2068,29 +2228,31 @@ cg_preserve(frame, máscara de preservados, restaurar)
 
 En CRYPTO, los argumentos que tienen carga no entran en la permutación paralela: primero se
 permutan los que vienen de registros, después se emiten las cargas directo al registro fijo.
-
-Caben siempre: una operación compleja usa como máximo 3 operandos y 8 auxiliares, 11 de los
-12 temporales.
+Caben siempre: una operación compleja usa como máximo 3 operandos y 8 auxiliares, 11 de los 12
+temporales.
 
 **Casos de prueba**
 
 | Caso | Entrada | Esperado |
 |---|---|---|
-| Sin presión | Cualquier programa del corpus con `--opt=spill` | Mismo `.asm` que `-O1`; `derramados = 0` |
-| 13 vivos | Expresión anidada a la derecha con 13 productos | Sin `spill`: error. Con `spill`: compila; mismo estado que el cálculo a mano; `derramados ≥ 1` |
-| Una fuente | Suma con una fuente derramada | `lw rg, …` antes; la suma lee `rg` |
-| Dos fuentes | Suma con las dos fuentes derramadas | `rg` y el registro del destino |
-| Sin destino | Salto condicional o guardado con dos fuentes derramadas | `rg` y un prestado; si estaba vivo, se guarda y se restaura |
-| Destino derramado | Definición de un derramado | `sw rg, …` después |
-| Dentro de un lazo | Valores vivos dentro y fuera de un `S` | Se derraman los de fuera |
-| Operación compleja | Multiplicación con operandos derramados | Operandos en temporales prestados; resultado correcto |
-| CRYPTO | Argumento derramado de `cifrar` | Carga directa al registro fijo |
+| Sin presión | Programas del corpus con `--opt=spill` | `derramados = 0`; mismo estado observable que `-O0` |
+| Presión en una expresión | `s1` de 14.5 | `-O1`: error; `--opt=spill`: compila, mismo valor que el cálculo a mano, `derramados ≥ 1` |
+| Una fuente derramada | ISA normal con una fuente derramada | `lw rg, …` antes; la instrucción lee `rg` |
+| Destino derramado | Definición de un derramado en ISA normal | `sw` a la casilla después |
+| Operación compleja | `s3` de 14.5 (fuentes de MUL derramadas) | Operandos en registros prestados; resultado correcto |
+| Dentro de un lazo | `s2` de 14.5 | Compila; la víctima sigue costo/grado, con costo ×10 dentro del lazo |
+| Dos fuentes, sin destino, CRYPTO | ISA armado que fuerce esas víctimas (unitaria) | Auxiliares según la tabla de 7.6; en fuente no se garantiza que ocurran |
 
 ### 11.7 Composición de `-O2` (tarea C3.5)
 
-`parse_options` en `main.c` deja de rechazar `-O2`: activa las cinco pasadas y fija el nivel 2.
-`pruebas/optimizador/tac_passes/probar_cli.py` hoy espera código 2 para `-O2`; esa aserción
-cambia en C3.5.
+`parse_options` en `main.c` deja de rechazar `-O2`: equivale a
+`--opt=unroll,rename,dce,reorder,spill` y fija el nivel 2. Como incluye `spill`, la asignación de
+`-O2` es Chaitin. `pruebas/optimizador/tac_passes/probar_cli.py` hoy espera código 2 para
+`-O2`; esa aserción cambia en C3.5.
+
+Los niveles responden a §7.3 del enunciado (benchmarks "con diferentes niveles de
+optimización"): `-O0` (Proyecto I), `-O1` (TAC sin optimizar, la línea base) y `-O2` (todas). La
+medición aislada de §6 usa `-O1` contra `-O1 --opt=X`.
 
 ## 12. Enlazado de archivos (`P`, tarea C2.2)
 
@@ -2408,7 +2570,9 @@ Archivo nuevo: `ide/interfaz/metricas.py`.
 ## 14. Las 15 pruebas obligatorias (tarea C4.1)
 
 Carpeta `pruebas/optimizador/<pasada>/`. Cada programa se verifica igual: equivalencia contra
-`-O0` en el simulador, y el contador esperado en el JSON de métricas.
+`-O0` en el simulador, y el contador esperado en el JSON de métricas. Los esperados se calculan
+sobre el TAC real (4.5); cada PR guarda junto al programa su listado HIGH (o ISA virtual) y, si
+el número medido difiere del de esta parte, lo corrige con el listado como evidencia.
 
 ### 14.1 Unrolling
 
@@ -2425,8 +2589,9 @@ F main [] : void ;
 .
 ```
 
-Esperado: `suma = 6`. Desenrollado total, `desenrollados = [{linea 4, factor 4}]`; sin saltos
-dentro de `main`; menos ciclos que `-O1`.
+Esperado: `suma = 6`. Desenrollado total, `desenrollados = [{linea 4, factor 4}]`; sin la
+prueba del `S` ni salto de retroceso (se conservan el `goto` de entrada y los saltos entre
+copias).
 
 `u2_variable.cls`: N variable pequeña.
 
@@ -2442,11 +2607,26 @@ F main [] : void ;
 .
 ```
 
-Esperado: `suma = 15`. Parcial con factor 4: una ronda y 2 vueltas de residuo.
+Esperado: `suma = 15`. `bound` = `$limite_S0`: parcial con factor 4, una ronda y 2 vueltas de
+residuo.
 
-`u3_grande.cls`: N grande. El mismo lazo con fin 100. Esperado: `suma = 4950`; con el factor
-por defecto, 25 rondas y residuo vacío; con `--unroll=8`, 12 rondas y residuo de 4. Más bytes
-y menos ciclos que `-O1`.
+`u3_grande.cls`: N grande.
+
+```
+Vm suma : int = 0 ;
+
+F main [] : void ;
+    S [ i , 0 , 100 , 1 ] ;
+        suma = suma + i ;
+    .
+    E ;
+.
+```
+
+Esperado: `suma = 4950`. N = 100 > 8: parcial; con el factor por defecto, 25 rondas y residuo
+vacío; con `--unroll=8`, 12 rondas y residuo de 4.
+
+Las mejoras de bundles y ciclos frente a `-O1` se reportan medidas, no se dan por supuestas.
 
 ### 14.2 Renombramiento
 
@@ -2470,13 +2650,55 @@ F main [] : void ;
 .
 ```
 
-Esperado: `salida = 18`; `renombradas = 1`.
+Esperado: `salida = 18`; `renombradas = 2`. En el HIGH, `x` tiene tres definiciones en el
+bloque (`x = 0` implícita, `x = t0`, `x = t2`): se renombran las dos primeras.
 
-`r2_war.cls`: una local leída y redefinida tres veces en el mismo bloque. Esperado:
-`renombradas = 2`; con `--opt=rename,reorder`, menos bundles que con `reorder` solo.
+`r2_war.cls`
 
-`r3_limites.cls`: las mismas redefiniciones sobre un parámetro, una global, la variable de
-retorno, y en `main` con una división en medio. Esperado: `renombradas = 0`.
+```
+Vm g : int = 0 ;
+
+F f [ int a , int b ] : void ;
+    Vm x : int = a ;
+    g = x ;
+    x = b ;
+    g = g + x ;
+    x = a + b ;
+    g = g + x ;
+    E ;
+.
+
+F main [] : void ;
+    f [ 8 , 2 ] ;
+    E ;
+.
+```
+
+Esperado: `g = 20`; `renombradas = 2` (tres definiciones de `x`). Con `--opt=rename,reorder`
+se reporta la diferencia de bundles frente a `reorder` solo.
+
+`r3_limites.cls`
+
+```
+Vm g : int = 0 ;
+
+F f [ int a , int b ] : int r ;
+    a = 1 ; a = 2 ; g = 1 ; g = 2 ; r = 1 ; r = 2 ;
+    E ;
+.
+
+F main [] : void ;
+    Vm x : int = 1 ;
+    Vm y : int = 8 / x ;
+    x = 2 ;
+    f [ 8 , 2 ] ;
+    E ;
+.
+```
+
+Esperado: `renombradas = 0`. Parámetro, global y retorno no son candidatos; en `main`, `x`
+está protegida por la división que la lee entre sus dos definiciones (decisión 4.6.3). La
+división es entre `x`, que vale 1, así que el programa no se detiene.
 
 ### 14.3 DCE
 
@@ -2505,44 +2727,207 @@ F main [] : void ;
 .
 ```
 
-Esperado: `g = 3`, `v = 4`. Se eliminan las 2 instrucciones de `x` (con P15); la llamada a
-`tocar` se conserva. `eliminadas = 2`.
+Esperado: `g = 3`, `v = 4`. `eliminadas = 3`: en `calcular`, `r = 0`, `x = t0` y `t0 = a * 2`; la
+llamada a `tocar` se conserva; en `main`, `v = 0` se conserva porque la llamada lee las raíces.
+`bloques_eliminados = 0`.
 
-`d2_inalcanzable.cls`: sentencias después de `E` y una rama `C [ falso ]`. Esperado:
-`bloques_eliminados ≥ 1`.
+`d2_inalcanzable.cls`: unión inalcanzable después de un `C` que retorna en todas sus ramas.
 
-`d3_efectos.cls`: resultado sin usar de una división entre constante, una división entre
-variable, una operación CRYPTO y una escritura a un arreglo. Esperado: solo se elimina la
-división entre constante.
+```
+Vm g : int = 0 ;
+
+F f [ int a , int b ] : void ;
+    C [ a == b ] ;
+        g = 1 ;
+        E ;
+    A ;
+        g = 2 ;
+        E ;
+    .
+    E ;
+.
+
+F main [] : void ;
+    f [ 8 , 2 ] ;
+    E ;
+.
+```
+
+Esperado: `g = 2`; `bloques_eliminados = 1` (el bloque del `E` final de `f`); `eliminadas = 0`.
+
+`d3_efectos.cls`
+
+```
+Vm datos : int [ 2 ] ;
+
+F f [ int a , int b ] : void ;
+    Vm x : int = a / 4 ;
+    Vm y : int = a / b ;
+    autenticar [ a ] ;
+    datos [ 0 ] = a ;
+    E ;
+.
+
+F main [] : void ;
+    f [ 8 , 2 ] ;
+    E ;
+.
+```
+
+Esperado: `eliminadas = 3`: la división entre 4 y su copia, y la copia del resultado de `a / b`.
+Se conservan la división entre `b` (puede fallar), la operación CRYPTO y la escritura al
+arreglo con el cálculo de su dirección.
+
+**Resultados ejecutados C3.2.** Los tres programas anteriores se conservan literalmente
+en `pruebas/optimizador/dce/`, con listados `.antes.tac` y `.despues.tac` y los
+estados y contadores exigidos en `esperados.json`. Los contadores
+medidos en el JSON de `--metrics` son, respectivamente, `3/0`, `0/1` y `3/0`
+(`eliminadas/bloques_eliminados`), sin diferencias con estos esperados. En d3,
+`datos = [8, 0]`; con memoria externa cero y con el patrón `0..255` repetido,
+`AUTH 8` termina con autenticación falsa y excepción CRYPTO activa, igual que sin DCE.
+El simulador comprueba además `g = 3, v = 4` en d1 y `g = 2` en d2, junto con el
+resto del estado observable, memoria externa y estado CRYPTO. Los ciclos se miden
+con el simulador; `ciclos_sim` del JSON del compilador sigue siendo `null`.
 
 ### 14.4 Reordenamiento
 
-`o1_cadenas.cls`: en una función, dos cálculos independientes escritos uno tras otro
-(`p = a + b ; q = p + p ; u = c + d ; w = u + u ;`). Esperado: `reordenadas > 0`; menos
-bundles que `-O1`.
+`o1_cadenas.cls`: dos cálculos independientes escritos uno tras otro.
+
+```
+F f [ int a , int b , int c , int d ] : void ;
+    Vm p : int ; Vm q : int ; Vm u : int ; Vm w : int ;
+    p = a + b ; q = p + p ; u = c + d ; w = u + u ;
+    E ;
+.
+
+F main [] : void ;
+    f [ 1 , 2 , 3 , 4 ] ;
+    E ;
+.
+```
+
+Esperado: `reordenadas > 0` (en el ISA virtual, `f` tiene un bloque de 21 instrucciones con dos
+cadenas de carga, suma y store); el valor exacto y los bundles frente a `-O1` se fijan con el
+listado del PR.
 
 `o2_saltos.cls`: un `C` con cálculos independientes antes del salto y dentro de cada rama.
+
+```
+F f [ int a , int b ] : void ;
+    Vm p : int = a + b ;
+    Vm q : int = a - b ;
+    C [ p > q ] ;
+        p = a + 1 ; q = b + 2 ;
+    A ;
+        p = a + 3 ; q = b + 4 ;
+    .
+    E ;
+.
+
+F main [] : void ;
+    f [ 8 , 2 ] ;
+    E ;
+.
+```
+
 Esperado: reordena dentro de cada bloque; ninguna instrucción cambia de bloque.
 
-`o3_funciones.cls`: llamadas a funciones entre cálculos, y una escritura seguida de una
-lectura de la misma posición de un arreglo. Esperado: nada cruza una llamada; la escritura y
-la lectura conservan su orden.
+`o3_funciones.cls`: una llamada entre cálculos, y una escritura seguida de una lectura de la
+misma posición de un arreglo.
+
+```
+Vm datos : int [ 2 ] ;
+
+F tocar [ int k ] : void ;
+    E ;
+.
+
+F f [ int a , int b ] : void ;
+    Vm x : int = a + b ;
+    tocar [ a ] ;
+    x = x + b ;
+    datos [ 0 ] = x ;
+    x = datos [ 0 ] ;
+    E ;
+.
+
+F main [] : void ;
+    f [ 8 , 2 ] ;
+    E ;
+.
+```
+
+Esperado: nada cruza el `jas`; la escritura y la lectura del arreglo (base calculada)
+conservan su orden.
 
 ### 14.5 Spilling
 
-`s1_expresion.cls`: una expresión anidada a la derecha con 13 productos
-(`a1 * b1 + ( a2 * b2 + ( … ) )`). Esperado: con `-O1`, error "sin registros temporales
-disponibles"; con `--opt=spill`, compila y da el valor correcto; `derramados ≥ 1`.
+`s1_expresion.cls`: una expresión anidada a la derecha con 13 productos.
 
-`s2_lazo.cls`: muchos valores vivos, unos usados dentro de un `S` y otros solo después.
-Esperado: los derramados son los que no se usan dentro del lazo.
+```
+F f [ int a1 , int b1 , int a2 , int b2 , int a3 , int b3 , int a4 , int b4 , int a5 , int b5 ,
+      int a6 , int b6 , int a7 , int b7 , int a8 , int b8 , int a9 , int b9 , int a10 , int b10 ,
+      int a11 , int b11 , int a12 , int b12 , int a13 , int b13 ] : int r ;
+    r = a1 * b1 + ( a2 * b2 + ( a3 * b3 + ( a4 * b4 + ( a5 * b5 + ( a6 * b6 + ( a7 * b7 +
+        ( a8 * b8 + ( a9 * b9 + ( a10 * b10 + ( a11 * b11 + ( a12 * b12 + ( a13 * b13 ) ) ) ) ) ) ) ) ) ) ) ) ;
+    E ;
+.
 
-`s3_compleja.cls`: una multiplicación y una llamada con la presión al máximo. Esperado:
-resultado correcto con operandos derramados de una operación compleja.
+F main [] : void ;
+    f [ 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2 ] ;
+    E ;
+.
+```
 
-Para el renombramiento conviene mostrar también la comparación contra `-O0`: antes de P15, en
-`-O1`, 9 programas del corpus tenían más bundles que en `-O0`. Se vuelve a medir después de
-P15.
+Esperado: con `-O1`, error "sin registros temporales disponibles" (14 temporales vivos a la
+vez, 15 intervalos solapados); con `--opt=spill`, compila, `r = 26` y `derramados ≥ 1`. Los
+derramados y las cargas y guardados exactos se fijan con el listado del PR.
+
+`s2_lazo.cls`: la misma presión dentro del cuerpo de un `S`. Muchos locales no bastan: cada
+variable vive en memoria y se carga al usarse, así que no crean presión de temporales.
+
+```
+Vm g : int = 0 ;
+
+F f [ int a1 , int b1 , int a2 , int b2 , int a3 , int b3 , int a4 , int b4 , int a5 , int b5 ,
+      int a6 , int b6 , int a7 , int b7 , int a8 , int b8 , int a9 , int b9 , int a10 , int b10 ,
+      int a11 , int b11 , int a12 , int b12 , int a13 , int b13 ] : void ;
+    S [ i , 0 , 3 , 1 ] ;
+        g = g + a1 * b1 + ( a2 * b2 + ( a3 * b3 + ( a4 * b4 + ( a5 * b5 + ( a6 * b6 + ( a7 * b7 +
+            ( a8 * b8 + ( a9 * b9 + ( a10 * b10 + ( a11 * b11 + ( a12 * b12 + ( a13 * b13 ) ) ) ) ) ) ) ) ) ) ) ) ;
+    .
+    E ;
+.
+
+F main [] : void ;
+    f [ 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2 ] ;
+    E ;
+.
+```
+
+Esperado: `-O1` falla; con `--opt=spill`, compila y `g = 78`. Los costos de los temporales del
+cuerpo se multiplican por 10; el PR reporta cuáles se derramaron.
+
+`s3_compleja.cls`: como `s1`, con los productos combinados por multiplicaciones, para que los
+derramados sean fuentes de operaciones complejas.
+
+```
+F f [ int a1 , int b1 , int a2 , int b2 , int a3 , int b3 , int a4 , int b4 , int a5 , int b5 ,
+      int a6 , int b6 , int a7 , int b7 , int a8 , int b8 , int a9 , int b9 , int a10 , int b10 ,
+      int a11 , int b11 , int a12 , int b12 , int a13 , int b13 ] : int r ;
+    r = a1 * b1 * ( a2 * b2 * ( a3 * b3 * ( a4 * b4 * ( a5 * b5 * ( a6 * b6 * ( a7 * b7 *
+        ( a8 * b8 * ( a9 * b9 * ( a10 * b10 * ( a11 * b11 * ( a12 * b12 * ( a13 * b13 ) ) ) ) ) ) ) ) ) ) ) ) ;
+    E ;
+.
+
+F main [] : void ;
+    f [ 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2 ] ;
+    E ;
+.
+```
+
+Esperado: `-O1` falla; con `--opt=spill`, compila, `r = 8192`, y las cargas de derrame alimentan
+operaciones `MUL` con registros prestados.
 
 ## 15. Avisos para el cerebro
 
@@ -2554,15 +2939,24 @@ P15.
 - Las "fugas del parser con errores de sintaxis" (plan §1.3) están resueltas por los
   destructores que agregó la integración del IDE: confirmado en P0 y con AddressSanitizer en la
   validación final (9.17).
-- `make check-ide` da 31 fallos y 1 error, no 29 y 1: los 2 nuevos son de la terminal integrada
-  (`test_prototipo`, esperan el prompt `calser:`), fallan igual en `feat/calside` y dependen del
-  entorno. La suite necesita `XDG_DATA_HOME` aislado; sin él, las pruebas de papelera real se
+- `make check-ide` da 30 fallos y 1 error (última validación, con P15). Respecto de la fase 1
+  hay uno más de la terminal integrada (`test_terminales_sesiones_independientes_e_interrupcion`);
+  `test_copiar_pegar_terminal_y_ctrl_c_sin_seleccion` falla o pasa según el entorno (largo del
+  prompt). La suite necesita `XDG_DATA_HOME` aislado; sin él, las pruebas de papelera real se
   cuelgan. Para la revisión del IDE.
 - El mensaje de ROM excedida sale como `archivo:0:0: error de generacion` también con `-x`,
   donde no hay generación. Para la revisión de los errores.
 - P13 (cascadas) se pospuso para después de las optimizaciones (9.14).
-- Alineación con el curso (4.4): P15 cambia el TAC (variables directo, como el curso) y el
-  spilling tendrá Chaitin como ruta alterna (`--alloc=color`). C3.4 cambia de contenido.
+- Alineación con el curso (4.4): P15 cambia el TAC (variables directo, como el curso). El
+  spilling se hace con el coloreo de Chaitin (`--opt=spill`, `-O2`); `-O1` conserva su
+  asignación, sin derrame. C3.4 cambia de contenido.
+- Revisión del 15/11 (4.5, 4.6): el diseño de las optimizaciones se corrigió contra el TAC real
+  y contra lo que Calser permite. Cambian esperados (por ejemplo, `d1` elimina 3 y `r1` renombra
+  2 por las inicializaciones implícitas), DCE conserva la eliminación de bloques inalcanzables
+  (6 programas del corpus tienen uniones muertas), el unrolling omite los `S` con salida
+  anticipada y el reordenamiento toma siempre la distancia mayor.
+- Pendiente para la etapa del IDE o de cierre: `ccom -i` escribe el TAC inicial, mientras 13.1
+  dice que el `.tac` refleja el TAC después de las pasadas de alto nivel.
 - P14 corrigió un error de diseño: la liveness hacía cúbica la asignación de -O1 (9.15).
 - Pregunta nueva para el profesor: qué se espera por tablas "eficientes" (§4.1).
 - `docs/compiler-integration.md` de arqui dice que `ccom` no usa `rg`; pasa a ser el registro
@@ -2597,14 +2991,14 @@ Sarkar (1999, *linear scan*), Goodman y Hsu (1988), Fisher, Faraboschi y Young.
 | Registros virtuales | Temporales virtuales ilimitados; los registros físicos se deciden una sola vez | "Registros simbólicos" (Aho §8.8.4), pseudorregistros (Aho §10.2.3) |
 | Lectura de variables (cambia con P15) | La variable se usa directo (`E.place = id.place`); solo se copia a un temporal si una llamada posterior en la misma expresión podría modificarla (9.18). En alto nivel una variable es una variable, no un acceso a memoria | Aho §6.4; presentación *Optimización de Código*, diapositiva 7. La copia restante conserva el orden de evaluación |
 | Destino distinto de las fuentes en `*`, `/`, `%`, `^` | La rutina exige destino, operandos y 8 auxiliares físicos todos distintos. En ISA virtual, si el destino coincide con una fuente, la bajada usa un temporal nuevo y agrega una copia. En la asignación, las fuentes de esas instrucciones se consideran vivas también en la posición de escritura | Restricción de la rutina del Proyecto I |
-| Asignación de registros | *Linear scan* sobre intervalos de vida (liveness, Aho §9.2.5) | Poletto y Sarkar (1999). Alternativa del libro para el informe: coloreo de grafos (Aho §8.8.4) |
+| Asignación de registros | `-O1`: *linear scan* sobre intervalos de vida (liveness, Aho §9.2.5), sin derrame. Con `--opt=spill` o `-O2`: coloreo de grafos de Chaitin con derrame (7.6) | Poletto y Sarkar (1999) para el *linear scan*; Aho §8.8.4 y la presentación *Spilling de Registros* para Chaitin; Briggs para el coloreo optimista |
 | Política de elección de registro | El registro libre desde hace más tiempo; si empatan, el menor | Aho §10.2.3 |
 | Renombramiento | Local al bloque básico, en alto nivel, sobre variables escalares modificables declaradas en la función. Quedan fuera: globales, arreglos, parámetros, variable de retorno, contador de `S` y su límite | Aho §10.2.1; la forma global (SSA, Cytron et al. 1991) queda fuera del alcance |
 | Dos calendarizaciones | El mismo algoritmo (calendarización por lista, Aho §10.3) antes de asignar (reordenamiento) y después de expandir (empaquetado, `cg_schedule`) | Aho §10.2.4; Goodman y Hsu (1988) |
 | Empaquetado en bundles | `cg_schedule` del Proyecto I en todos los niveles | Verificado; respeta los bundles fijos de CRYPTO |
 | Lazos: dos fuentes | Marcas de `S` y `L` al construir, solo para el unrolling; y análisis de lazos naturales recalculable en cualquier etapa (profundidad de cada bloque, para el spilling) | Aho §9.6.4 y algoritmo 9.46. Los lazos estructurados de Calser dan grafos reducibles |
 | Estado observable | Variables globales, variables de `main` (escalares y arreglos), memoria de datos externa (`0x1000`–`0xFFFF`) y estado CRYPTO. Las variables de otras funciones, la pila y las casillas de preservación no son observables | Es lo que comprueban las pruebas y el procesador |
-| Derrame | Extensión propia por función, al final de los datos (`spill_base`, `spill_size`). Solo en `-O1`/`-O2` | Appel; Cooper y Torczon |
+| Derrame | Extensión propia por función, al final de los datos (`spill_base`, `spill_size`). Solo con `--opt=spill` o `-O2` | Appel; Cooper y Torczon |
 | Pila en `-O1`/`-O2` | `mov rx, <fin de datos>` leído después de la última reserva de derrame, repitiendo antes la comprobación de 256 bytes libres | Igual que el Proyecto I, con el fin de datos definitivo |
 | Enlace de retorno | Alrededor de cada `jas`, la emisión guarda `rl` en la pila y lo recupera | Sin esto una función que llama a otra pierde su retorno |
 | Casillas de preservación | El registro `r` se guarda en `temp_base + 4·(r−4)`. Las preservaciones nunca están anidadas | Una casilla por registro |
@@ -2669,7 +3063,7 @@ fallida después de una pasada, con su nombre.
 
 | Tema | Definición |
 |---|---|
-| Heurística del unrolling | Si N es constante y vale 8 o menos: desenrollado total. Si no: factor 4 (o el de `--unroll=N`), con lazo de residuo para N no múltiplo del factor. Nunca superar el tope de 4096 bundles |
+| Heurística del unrolling | Si inicio y fin llegan como enteros a la marca y N vale 8 o menos: desenrollado total. Si no: factor 4 (o el de `--unroll=N`), con lazo de residuo para N no múltiplo del factor. No se desenrollan los `S` con salida anticipada ni los que contienen otro lazo. Nunca superar el tope de 4096 bundles |
 | Prueba de que `/`, `%` y `^` no fallan (DCE) | Solo por constantes: divisor constante distinto de cero, o exponente constante mayor o igual que cero. Sin esa prueba no se eliminan |
 | Independencia de memoria (reordenamiento) | Dos accesos son independientes solo si los dos son `rz` más constante, con constantes distintas. Cualquier dirección calculada (por ejemplo, un elemento de arreglo) se trata como dependiente de todo otro acceso |
 

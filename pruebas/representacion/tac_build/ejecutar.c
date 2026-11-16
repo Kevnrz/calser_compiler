@@ -58,9 +58,10 @@ static int unique_name(const char *name) {
  * print_result — exporta estados y valores de memoria, no instrucciones impresas.
  * Entrada: resultado vivo; símbolos del semántico vivos. Salida: ninguna.
  * Efectos: escribe JSON; cada dato se interpreta con signo de 32 bits.
- * Restricciones: solo publica valores cuando la ejecución terminó normalmente.
+ * Restricciones: solo publica valores al terminar normalmente; --observable
+ * limita la proyección a globales/main para §7.1, sin alterar otras suites.
  */
-static void print_result(const TacRunResult *result) {
+static void print_result(const TacRunResult *result, int observable) {
     fputs("{\"status\":", stdout);
     result_json_string(tac_run_status_name(result->status));
     printf(",\"steps\":%" PRIu64 ",\"diagnostic\":", result->steps);
@@ -69,15 +70,24 @@ static void print_result(const TacRunResult *result) {
     int comma = 0;
     if (result->status == TAC_RUN_OK) {
         for (const Scope *scope = scopes_first(); scope; scope = scope->next) {
+            if (observable && scope->kind != SCOPE_GLOBAL &&
+                (!scope->owner || strcmp(scope->owner->name, "main")))
+                continue;
             for (const Symbol *symbol = scope->symbols; symbol; symbol = symbol->next) {
-                if (symbol->kind == SYMBOL_FUNCTION || !unique_name(symbol->name)) {
+                if (symbol->kind == SYMBOL_FUNCTION || (!observable && !unique_name(symbol->name))) {
                     continue;
                 }
                 if (comma) {
                     putchar(',');
                 }
                 comma = 1;
-                result_json_string(symbol->name);
+                if (observable) {
+                    char key[256];
+                    snprintf(key, sizeof key, "%d:%s", symbol->address, symbol->name);
+                    result_json_string(key);
+                } else {
+                    result_json_string(symbol->name);
+                }
                 fputs(":[", stdout);
                 for (int offset = 0; offset < symbol->width; offset += 4) {
                     uint32_t word = 0;
@@ -106,9 +116,11 @@ int main(int argc, char **argv) {
     const char *source = NULL;
     unsigned passes = 0, factor = 0;
     uint64_t limit = UINT64_C(1000000);
-    int have_limit = 0;
+    int have_limit = 0, observable = 0;
     for (int k = 1; k < argc; k++) {
-        if (!strncmp(argv[k], "--opt=", 6)) {
+        if (!strcmp(argv[k], "--observable")) {
+            observable = 1;
+        } else if (!strncmp(argv[k], "--opt=", 6)) {
             const char *name = argv[k] + 6;
             do {
                 const char *end = strchr(name, ',');
@@ -197,7 +209,7 @@ int main(int argc, char **argv) {
                !memcmp(result.memory, repeated.memory, result.memory_size);
     }
     if (same) {
-        print_result(&result);
+        print_result(&result, observable);
     } else {
         fputs("dos ejecuciones del mismo TAC no coinciden\n", stderr);
     }

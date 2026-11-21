@@ -850,13 +850,11 @@ Chaitin, la lista de derramados. Todo lo demás es común: intervalos, plan por 
    víctima: la de menor costo/grado, con costo = Σ 10^profundidad sobre cada definición y uso
    del temporal y grado = vecinos en el grafo actual; en empate, el de intervalo más largo. Se
    saca y se apila como posible derramado.
-3. Seleccionar: desapilar y dar a cada nodo un color que no tenga ningún vecino. Entre los
-   colores libres se elige el que se asignó hace más tiempo (rotación), para no reusar
-   enseguida un registro y no crear dependencias falsas que sumen bundles. Si un posible
+3. Seleccionar: desapilar y dar a cada nodo un color que no tenga ningún vecino. Entre los colores libres se elige el más lejano en el programa: el de mayor separación entre el intervalo del nodo y los intervalos que ya tienen ese color (infinita si nadie lo tiene; en empate, el menor). Así dos temporales no conectados de instrucciones vecinas no comparten registro y no se crean dependencias falsas (WAR/WAW) que sumen bundles; es la idea del registro libre desde hace más tiempo del linear scan. Si un posible
    derramado no tiene color libre, queda derramado; si lo tiene, no se derrama (coloreo
    optimista de Briggs, refinamiento de Chaitin fuera de la presentación).
 4. Casillas: reservar `4 × derramados` bytes con `data_area_reserve_spill`; la casilla del
-   derramado `k` es `spill_base + 4·k`.
+   derramado `k` es `spill_base + 4·k`. Después de reservar se repite la comprobación de espacio de pila (`data_area_stack_short`).
 
 No hace falta repetir el algoritmo después de derramar, como en el curso: el código de
 derrame usa `rg`, registro reservado que no entra al grafo y cumple el papel de los
@@ -872,7 +870,7 @@ derrame, restaurar preservados.
 | ISA normal con un operando derramado | `rg` |
 | ISA normal con dos fuentes derramadas y destino con registro | `rg` y el registro del destino |
 | ISA normal con dos fuentes derramadas y sin destino con registro | `rg` y un registro prestado de `t0`–`t11` que la instrucción no use; si está vivo, se guarda y restaura en su casilla de `temp_base` |
-| ISA normal con destino derramado | El registro de la primera fuente, o `rg`; después `sw` a la casilla |
+| ISA normal con destino derramado | El registro de la primera fuente derramada (`rg`), o `rg` si no hay fuentes derramadas; después `sw` a la casilla |
 | Operación compleja (exige operandos y destino en `t0`–`t11` y 8 auxiliares distintos) | Registros prestados para fuentes y destino derramados, elegidos junto con sus 8 auxiliares; nunca `rg` |
 | CRYPTO | El valor se carga directo en su registro fijo |
 
@@ -889,6 +887,8 @@ Los derramados exactos los fija el listado del PR de C3.4.
 `--opt=spill` no derrama nada: mismas instrucciones, con otra asignación de registros; los
 bundles pueden variar levemente. En un programa que no cabe, `-O1` no compila y
 `--opt=spill` sí. En `-O2` permite que compile un lazo desenrollado que suba la presión.
+
+**Resultados medidos C3.4.** Con la selección por distancia, 45/45 programas del corpus (incluidos los tres ejercicios) conservan byte a byte las salidas O0/O1 de la referencia recompilada de develop y mantienen el estado observable de O0 con spill en dos imágenes externas, sin derramar. Suben bundles o ciclos en 5/45, frente a 12/45 con rotación; ejercicio3 pasa de 705/16285 (O1) y 711/16291 (rotación) a 705/16285 (distancia). s1, s2 y s3 siguen fuera del corpus: no compilan con `-O0` ni con `-O1`, y sí con `--opt=spill`; producen 26, 78 y 8192, con 3 derramados, 3 cargas y 3 guardados cada uno. Mantienen 336/467, 356/1366 y 532/1311 bundles/ciclos de la rotación; cambian los registros de las tres capturas ASM. Las suites generales excluyen esa carpeta y check-spill verifica sus errores, valores y contadores.
 
 ### 7.7 Verificación de las pasadas (D2)
 
@@ -2203,15 +2203,21 @@ allocate_color(f, intervalos):
         si hay un nodo con grado < 12: sacar el de menor número, apilarlo (no posible derramado)
         si no: v ← nodo de menor costo(v)/grado(v); empate: intervalo más largo; empate: mayor número
                sacar v, apilarlo como posible derramado
-    ultimo_uso[0..11] ← 0;  reloj ← 0
     mientras pila no vacía:
         v ← desapilar
         libres ← colores 0..11 no usados por vecinos ya coloreados de v
         si libres vacío: f.spill_slot[v] ← f.spill_count;  f.spill_count ← f.spill_count + 1
                          // un posible derramado que sí encuentra color no se derrama
                          // (coloreo optimista de Briggs, refinamiento de Chaitin)
-        si no: c ← color de libres con menor ultimo_uso (rotación); registro(v) ← t_c
-               reloj ← reloj + 1;  ultimo_uso[c] ← reloj
+        si no:
+            para cada color c de libres:
+                distancia(v,c) ← infinito
+                para cada intervalo u ya coloreado con c:
+                    si u.end < v.start: separación ← v.start − u.end
+                    si no: separación ← u.start − v.end
+                    distancia(v,c) ← mínimo(distancia(v,c), separación)
+            c ← color de libres con mayor distancia(v,c); en empate, el menor
+            registro(v) ← t_c
     si f.spill_count > 0: data_area_reserve_spill(símbolo de f, 4 × f.spill_count)
     dirección(casilla k) ← frame.spill_base + 4 × k
 
@@ -2263,6 +2269,8 @@ temporales.
 | Operación compleja | `s3` de 14.5 (fuentes de MUL derramadas) | Operandos en registros prestados; resultado correcto |
 | Dentro de un lazo | `s2` de 14.5 | Compila; la víctima sigue costo/grado, con costo ×10 dentro del lazo |
 | Dos fuentes, sin destino, CRYPTO | ISA armado que fuerce esas víctimas (unitaria) | Auxiliares según la tabla de 7.6; en fuente no se garantiza que ocurran |
+
+**Resultados medidos C3.4.** La distancia conserva las víctimas de rotación: f/v0,v1,v2 en s1 y s3, y f/v1,v2,v3 en s2; reserva 12 bytes por función y emite 3 cargas y 3 guardados por programa. Las unitarias distinguen distancia de rotación con intervalos disjuntos en distinto orden de IDs y verifican infinito/desempate y separaciones anteriores/posteriores, además de los casos de derrame, auxiliares y agotamiento ya cubiertos. En el corpus, los aumentos sin derrame bajan de 12/45 (rotación) a 5/45 (distancia), incluida una subida nueva de lectura_1d; el reporte compara los 45 programas individualmente. Las dos estrategias mantienen el estado observable de 7.1 en las dos imágenes externas; los ejemplos de presión se verifican contra 14.5, con los mismos contadores y sin usar O0 como referencia ejecutable.
 
 ### 11.7 Composición de `-O2` (tarea C3.5)
 

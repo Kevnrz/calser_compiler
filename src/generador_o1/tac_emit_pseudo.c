@@ -102,15 +102,19 @@ static int crypto(TacEmitter *e, const TacInstruction *i, const TacEmissionSite 
         .registers = {-1, -1, -1}, .k = i->selectors.k, .w = i->selectors.w};
     int loop = operation.operation == CG_CRYPTO_ENCRYPT || operation.operation == CG_CRYPTO_DECRYPT;
     int argument = operation.operation != CG_CRYPTO_LOGOUT && operation.operation != CG_CRYPTO_KV_LOCK;
-    RegisterCopy copies[3];
-    size_t count = 0;
+    RegisterCopy copies[3], loaded_copies[3];
+    size_t count = 0, loaded_count = 0;
     if (loop) {
         TacOperand sources[] = {i->dest, i->src1, i->src2};
         const int fixed[] = {CG_CRYPTO_REG_SOURCE, CG_CRYPTO_REG_DEST, CG_CRYPTO_REG_COUNT};
         for (size_t k = 0; k < 3; k++) {
             operation.registers[k] = fixed[k];
-            if (!loaded_argument(site, (unsigned)fixed[k]))
+            if (site && site->spill_registers[k]) {
+                if ((unsigned)fixed[k] != site->spill_registers[k])
+                    loaded_copies[loaded_count++] = (RegisterCopy){fixed[k], (int)site->spill_registers[k]};
+            } else if (!loaded_argument(site, (unsigned)fixed[k])) {
                 copies[count++] = (RegisterCopy){fixed[k], (int)sources[k].value.id};
+            }
         }
     } else if (argument) {
         operation.registers[0] = CG_CRYPTO_REG_ARGUMENT;
@@ -119,6 +123,7 @@ static int crypto(TacEmitter *e, const TacInstruction *i, const TacEmissionSite 
     }
     parallel_copies(copies, count);
     spill_moves(site, 0);
+    parallel_copies(loaded_copies, loaded_count);
     cg_gap(); /* La primera lectura de un bundle fijo no puede ver una escritura pendiente. */
     if (cg_crypto_emit_template(&operation, &e->arithmetic.next_label))
         return te_error(e, i, "falló la plantilla CRYPTO");

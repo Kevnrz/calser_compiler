@@ -1,10 +1,24 @@
+#define _POSIX_C_SOURCE 200809L
 /* Linear scan de intervalos: Poletto y Sarkar 1999 (fuera de Aho).
- * LRU de libres: Aho §10.2.3. No derrame, partición, conservación emitida ni CLI.
+ * LRU de libres: Aho §10.2.3. Con spill se elige Chaitin (§4.6.5), no se
+ * modifica el recorrido linear scan ni se intenta recuperar su error.
  */
 #include "tac_allocate_internal.h"
 #include <string.h>
+#include <time.h>
 
-/* Estado privado disponible en el punto de presión que extenderá C3.4. */
+/* Entrada: ninguna. Salida: ms monotónicos, cero si falla el reloj.
+ * Efectos: consulta el tiempo solo con spill; no añade dependencia del escritor
+ * JSON al asignador independiente, diseño §7.6 y anexo A.3.
+ */
+static double spill_clock(void) {
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0)
+        return 0;
+    return (double)now.tv_sec * 1000.0 + (double)now.tv_nsec / 1000000.0;
+}
+
+/* Estado privado del linear scan, sin derrame (decisión §4.6.5). */
 typedef struct {
     TacFunctionAllocation *function;
     const TacInterval *active[12];
@@ -13,16 +27,14 @@ typedef struct {
     uint16_t busy;
 } RegisterState;
 
-/* Entrada: instrucción que necesita registro y fuente prestados.
- * Salida: registro recuperado, o cero con diagnóstico (siempre en C2).
- * Efectos: escribe error; recibe estado mutable del recorrido para C3.4.
- * Restricciones: punto interno del recorrido, antes de avanzar; C3.4 reemplazará
- * este cuerpo por derrame integrado, no por una pasada después del error.
+/* Entrada: intervalo que necesita registro y nombre del fuente.
+ * Salida: cero con diagnóstico. Efectos: escribe error.
+ * Restricciones: solo linear scan; Chaitin es otra estrategia, §4.6.5.
  */
 static unsigned no_register_available(RegisterState *state, const TacInterval *range,
     const char *source, const TacAllocationOptions *options, char *error, size_t capacity) {
-    (void)options; /* Interruptor reservado, sin derrame en P12 (§9.13). */
-    (void)state; /* C3.4 retirará una víctima y devolverá su registro aquí. */
+    (void)options; /* La selección de estrategia ocurre antes de este recorrido. */
+    (void)state; /* El linear scan conserva su error bajo presión. */
     const TacInstruction *i = range->origin;
     tac_error(error, capacity,
         "%s:%d:%d: error de generacion: sin registros temporales disponibles",
@@ -124,9 +136,14 @@ TacAllocationResult *tac_allocate_registers(TacProgram *program, const char *sou
         assigned->metrics.demand = tac_live_max_temporaries(live);
         TacIntervalAnalysis *ranges = live ?
             tac_intervals_analyze(f, live, error, capacity) : NULL;
-        int ok = ranges && allocate_function(assigned, ranges, source, options, error, capacity);
+        int spill = options && options->spill;
+        double start = spill ? spill_clock() : 0;
+        int ok = ranges && (spill ? tac_allocate_color(assigned, ranges, source, error, capacity) :
+            allocate_function(assigned, ranges, source, options, error, capacity));
         if (ok)
-            tac_allocate_sites(result, assigned, live);
+            ok = tac_allocate_sites(result, assigned, live, error, capacity);
+        if (spill)
+            assigned->metrics.spill_ms = spill_clock() - start;
         tac_intervals_free(ranges);
         tac_live_free(live);
         if (!ok) {
@@ -138,11 +155,22 @@ TacAllocationResult *tac_allocate_registers(TacProgram *program, const char *sou
         TacFunctionAllocation *f = &result->functions[k];
         for (TacBlock *b = f->function->first; b; b = b->next) {
             for (TacInstruction *i = b->first; i; i = i->next) {
-                physical_operand(&i->dest, f->registers);
-                physical_operand(&i->src1, f->registers);
-                physical_operand(&i->src2, f->registers);
-                physical_operand(&i->isa.target, f->registers);
                 const TacEmissionSite *site = tac_allocation_site(result, i);
+                TacOperand *operands[] = {&i->dest, &i->src1, &i->src2};
+                for (size_t j = 0; j < 3; j++) {
+                    if (site && site->spill_registers[j])
+                        *operands[j] = tac_physical(site->spill_registers[j]);
+                    else {
+                        if (operands[j]->kind == TAC_TEMP &&
+                            !f->registers[operands[j]->value.id]) {
+                            tac_error(error, capacity, "temporal sin registro ni plan de derrame");
+                            tac_allocation_free(result);
+                            return NULL;
+                        }
+                        physical_operand(operands[j], f->registers);
+                    }
+                }
+                physical_operand(&i->isa.target, f->registers);
                 if (site && site->scratch_mask)
                     i->pseudo.scratch_clobbers = site->scratch_mask;
             }
@@ -182,8 +210,10 @@ const TacAllocationMetrics *tac_allocation_metrics(const TacAllocationResult *a,
 void tac_allocation_free(TacAllocationResult *a) {
     if (!a)
         return;
-    for (size_t k = 0; k < a->function_count; k++)
+    for (size_t k = 0; k < a->function_count; k++) {
         free(a->functions[k].registers);
+        free(a->functions[k].spill_slot);
+    }
     for (size_t k = 0; k < a->site_count; k++)
         free((void *)a->sites[k].preserved);
     free(a->functions);

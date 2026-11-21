@@ -483,6 +483,17 @@ static void pseudos(void) {
             source->selectors.k = info->selectors & TAC_SELECT_K ? 2 : -1;
             source->selectors.w = info->selectors & TAC_SELECT_W ? 3 : -1;
             TacProgram *isa = lower(&f, tac_none());
+            if (cases[k].high == TAC_MUL && zeros) {
+                /* Diseño §9.19: MUL por cero es MOV, sin PSEUDO ni auxiliares. */
+                named(at(isa, 0), "mov");
+                assert(at(isa, 0)->dest.value.id == d.value.id);
+                assert(at(isa, 0)->src2.kind == TAC_INTEGER);
+                assert(at(isa, 0)->src2.value.integer == 0);
+                assert(at(isa, 1)->pseudo.kind == TAC_PSEUDO_EXIT);
+                assert(isa->first->next_temp == f.function->next_temp);
+                release(&f, isa);
+                continue;
+            }
             TacInstruction target = {.op = TAC_PSEUDO, .pseudo = {.kind = cases[k].low}};
             TacOpInfo selected;
             assert(tac_instruction_info(&target, &selected));

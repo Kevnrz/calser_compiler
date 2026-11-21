@@ -393,6 +393,7 @@ Tomadas tras la revisión contra el TAC real.
 | 6 | Copias del unrolling (16/11) | Al final de la pasada, en cada función, se fusiona un bloque tocado por el unrolling con el siguiente cuando termina en `goto` a él y es su único predecesor. Las copias de un cuerpo sin `C` quedan en un solo bloque básico (notas §5.2.2) | Copias en bloques separados con `goto` (cada etiqueta y cada salto corta la región del calendarizador: las copias nunca se mezclan); solo quitar el `goto` (la etiqueta sigue cortando); cambiar el calendarizador (cambiaría `-O0`) |
 | 7 | Control en las copias del unrolling (20/11) | En la copia j, las lecturas del control se reemplazan por `tj = i + j·paso`; un solo incremento por ronda, en la última copia (notas §5.2.2) | Cada copia con su `i = i + paso` (3 accesos a memoria de `i` por copia en `-O1`) |
 | 8 | `--unroll=N` en un `S` constante de 8 vueltas o menos (20/11) | Sigue siendo total; `--unroll` solo cambia el factor del parcial | Usar el factor pedido (deja la prueba del lazo cada N vueltas) |
+| 9 | Multiplicación por constante en la bajada de -O1 (21/11) | Una MUL con un operando entero se baja a sll/add como -O0 (Horner sobre los bits; negativa con sub desde rz); DIV, MOD y POW siguen como pseudo | Dejar toda MUL como pseudo.mul (-O1 más caro que -O0 en arreglos) |
 
 ## 5. Diseño contra el código actual
 
@@ -1728,6 +1729,45 @@ la copia lógica eliminada está en una rama no ejecutada y la captura S sí se 
 Reporte A–G, tabla completa de 39 programas, diferencias de referencia y registros:
 `build/p15/final/reporte.txt`. Datos de medición: `tabla.json`, `tiempos.json`,
 `comprobaciones.json`; ASM completos antes/después y bloques de las subidas bajo esa carpeta.
+
+### 9.19 Multiplicación por constante en la bajada (21/11)
+
+`tb_array_offset` calcula fila por columnas y el desplazamiento por cuatro en HIGH.
+La bajada anterior convertía toda MUL en `pseudo.mul`, que requiere ocho auxiliares;
+`-O0` ya calculaba esas direcciones con desplazamientos y sumas. La reducción de
+fuerza se realiza únicamente en `tac_lower_value.c` (Aho §8.7.4), antes de seleccionar
+PSEUDO, cuando cualquiera de los operandos es INTEGER. No se modifica HIGH, las
+pasadas ni el generador de `-O0`; DIV, MOD y POW por constante conservan PSEUDO.
+
+Se materializa el otro operando x con `tl_value`. Para c=0 se emite MOV de cero;
+para c=1, ADD desde x y rz. Si |c| es una potencia de dos, se materializa su
+exponente en un temporal w y se emite SLL. En otro caso se materializa w=1,
+se copia x al resultado y se recorren los bits de |c| desde el segundo más alto:
+SLL por w y, cuando el bit vale uno, ADD de x. Para c negativo, su magnitud se
+calcula como entero sin signo de 32 bits (también para −2147483648) y se termina
+con SUB desde rz. Se conservan los 32 bits bajos sin detectar desborde, como la
+rutina sustituida. Si el destino coincide con x se calcula en otro temporal y se
+copia al final; `finish` publica el resultado en el destino HIGH original.
+
+Ejemplo `i*4`: cargar i en x; materializar w=2; emitir `sll dest,x,w`;
+publicar dest. El desplazamiento usa un registro, no un inmediato.
+Ejemplo `i*3`: sus bits son 11; cargar i en x; materializar w=1;
+`add dest,x,rz`; para el segundo bit, `sll dest,dest,w` y
+`add dest,dest,x`; publicar dest. Para `i*-3` se agrega `sub dest,rz,dest`.
+
+**Resultados medidos.** En 64 programas, incluidos los tres ejercicios y el nuevo
+`mul_constante.cls`, las 64 salidas O0 son idénticas byte a byte a la referencia.
+O1, unroll, rename, dce, spill y unroll,rename,dce conservan el estado observable
+de O0 con dos imágenes externas. O1 cambia en 25 programas y no aumenta bundles
+ni ciclos en ninguno; 11 todavía superan O0 en alguna de esas dos medidas.
+La suma estática de bundles O1 pasa de 8697 a 7112 y la suma de ciclos medidos de
+98730 a 68988. En `mul_constante.cls`, O0 mide 642 bundles/2987 ciclos y O1 pasa de
+716/3678 a 257/1736. Ejercicio3 pasa de 705/16285 a 693/15069 y p04_memoria de
+148/604 a 108/304. Los ejemplos de spill conservan 26, 78 y 8192; no cambian sus
+ASM esperados ni contadores. Se regeneran cinco listados ISA y la expectativa
+unitaria de las tres MUL por cero. Los 40 productos adicionales con fronteras
+INT_MIN/INT_MAX y las 20 selecciones con destino ligado pasan; make check y make
+ejercicios se registran en `build/o1_mul/reporte.md`, junto a la tabla por programa.
 
 ## 10. Lo que se queda como está
 

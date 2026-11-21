@@ -293,6 +293,75 @@ static int binary(TacLower *lower) {
 }
 
 /*
+ * multiply_constant — reduce una MUL entera a desplazamientos y sumas.
+ * Entrada:
+ *   lower con MUL y al menos un operando INTEGER de 32 bits.
+ * Salida:
+ *   1 si la selecciona; 0 si debe seguir la selección habitual.
+ * Efectos:
+ *   materializa la fuente, calcula Horner y publica con finish.
+ * Restricciones:
+ *   conserva los 32 bits bajos; no pisa la fuente si coincide con el destino.
+ *   Aho §8.7.4 y diseño §9.19; DIV/MOD/POW conservan su PSEUDO.
+ */
+static int multiply_constant(TacLower *lower) {
+    const TacInstruction *source = lower->source;
+    if (source->op != TAC_MUL) {
+        return 0;
+    }
+    TacOperand constant = source->src2;
+    TacOperand other = source->src1;
+    if (constant.kind != TAC_INTEGER) {
+        constant = source->src1;
+        other = source->src2;
+    }
+    if (constant.kind != TAC_INTEGER) {
+        return 0;
+    }
+    int64_t value = constant.value.integer;
+    uint32_t magnitude = (uint32_t)value;
+    if (value < 0) {
+        magnitude = 0u - magnitude;
+    }
+    TacOperand x = tl_value(lower, other, TL_SOURCE_FIXED_ALLOWED);
+    TacOperand result = destination(lower);
+    TacOperand zero = tac_physical(TAC_P1_RZ);
+    if (magnitude == 0) {
+        tl_constant(lower, result, 0);
+    } else if (magnitude == 1) {
+        tl_emit(lower, "add", result, x, zero);
+    } else {
+        TacOperand shift = tac_temp_new(lower->function);
+        if ((magnitude & (magnitude - 1)) == 0) {
+            unsigned count = 0;
+            for (uint32_t bits = magnitude; bits > 1; bits >>= 1) {
+                count++;
+            }
+            tl_constant(lower, shift, count);
+            tl_emit(lower, "sll", result, x, shift);
+        } else {
+            uint32_t top = 1;
+            while (top <= magnitude / 2) {
+                top <<= 1;
+            }
+            tl_constant(lower, shift, 1);
+            tl_emit(lower, "add", result, x, zero);
+            for (uint32_t bit = top >> 1; bit; bit >>= 1) {
+                tl_emit(lower, "sll", result, result, shift);
+                if (magnitude & bit) {
+                    tl_emit(lower, "add", result, result, x);
+                }
+            }
+        }
+    }
+    if (value < 0) {
+        tl_emit(lower, "sub", result, zero, result);
+    }
+    finish(lower, result);
+    return 1;
+}
+
+/*
  * pseudo — conserva una operación compleja como una sola instrucción de destino.
  * Entrada:
  *   lower con operación HIGH.
@@ -381,6 +450,6 @@ int tl_lower_value(TacLower *lower) {
             finish(lower, result);
             return 1;
         default:
-            return binary(lower) || pseudo(lower);
+            return binary(lower) || multiply_constant(lower) || pseudo(lower);
     }
 }

@@ -16,22 +16,22 @@ B3: successors [B1]
   lw v18, 44(rz)
   saddi v2, v18, 1
   lw v19, 44(rz)
-  mov v20, 2
-  pseudo.mul v3, v19, v20
+  mov v20, 1
+  sll v3, v19, v20
   saddi v4, v3, 0
-  mov v21, 4
-  pseudo.mul v5, v4, v21
+  mov v21, 2
+  sll v5, v4, v21
   lw v6, 40(rz)
   add v22, v6, v5
   lw v7, 0(v22)
   lw v23, 48(rz)
   add v8, v23, v7
   lw v24, 44(rz)
-  mov v25, 2
-  pseudo.mul v9, v24, v25
+  mov v25, 1
+  sll v9, v24, v25
   saddi v10, v9, 1
-  mov v26, 4
-  pseudo.mul v11, v10, v26
+  mov v26, 2
+  sll v11, v10, v26
   lw v12, 40(rz)
   add v27, v12, v11
   lw v13, 0(v27)

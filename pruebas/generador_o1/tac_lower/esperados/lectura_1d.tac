@@ -30,15 +30,15 @@ B1: successors [B2]
   sw rz, 104(rz)
   sw rz, 108(rz)
   mov v16, 3
-  mov v17, 4
-  pseudo.mul v0, v16, v17
+  mov v17, 2
+  sll v0, v16, v17
   mov v18, 7
   mov v19, 76
   add v20, v19, v0
   sw v18, 0(v20)
   mov v21, 3
-  mov v22, 4
-  pseudo.mul v1, v21, v22
+  mov v22, 2
+  sll v1, v21, v22
   mov v23, 76
   add v24, v23, v1
   lw v2, 0(v24)
@@ -51,8 +51,8 @@ B2: successors [B4, B3]
   beq v3, rz, B4
 B3: successors [B2]
   lw v27, 100(rz)
-  mov v28, 4
-  pseudo.mul v4, v27, v28
+  mov v28, 2
+  sll v4, v27, v28
   mov v29, 60
   add v30, v29, v4
   lw v5, 0(v30)
@@ -65,8 +65,8 @@ B3: successors [B2]
   jef B2
 B4: successors []
   mov v33, 2
-  mov v34, 4
-  pseudo.mul v8, v33, v34
+  mov v34, 2
+  sll v8, v33, v34
   mov v35, 60
   add v36, v35, v8
   lw v9, 0(v36)

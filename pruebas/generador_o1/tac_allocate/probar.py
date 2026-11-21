@@ -21,6 +21,9 @@ def main():
     failures = []
     print('archivo\tfunción\tvivos\tsolapamiento\tMUL\tDIV\tMOD\tPOW\tpreservación\tregistros\tresultado')
     for source in sorted([*Path('pruebas').rglob('*.cls'), *Path('ejercicios').rglob('*.cls')]):
+        # sus programas no compilan sin derrame; los comprueba check-spill (diseño 14.5)
+        if Path('pruebas/optimizador/spill') in source.parents:
+            continue
         result = subprocess.run([str(args.binario.resolve()), str(source)], cwd=ROOT,
                                 capture_output=True, text=True, timeout=30)
         invalid = source.parent == Path('pruebas') and re.fullmatch(r'e\d+_.*\.cls', source.name)

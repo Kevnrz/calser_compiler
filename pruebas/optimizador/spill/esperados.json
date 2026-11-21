@@ -1,0 +1,85 @@
+{
+  "s1_expresion": {
+    "error_o1": "pruebas/optimizador/spill/s1_expresion.cls:5:53: error de generacion: sin registros temporales disponibles\n",
+    "codigo_o1": 1,
+    "valores": {
+      "f.r": 26
+    },
+    "derramados": 3,
+    "cargas_derrame": 3,
+    "guardados_derrame": 3,
+    "error_o0": "pruebas/optimizador/spill/s1_expresion.cls:4:36: error de generacion: sin suficientes registros para la rutina aritmetica\n",
+    "codigo_o0": 1
+  },
+  "s2_lazo": {
+    "error_o1": "pruebas/optimizador/spill/s2_lazo.cls:8:57: error de generacion: sin registros temporales disponibles\n",
+    "codigo_o1": 1,
+    "valores": {
+      "GLOBAL.g": 78
+    },
+    "derramados": 3,
+    "cargas_derrame": 3,
+    "guardados_derrame": 3,
+    "error_o0": "pruebas/optimizador/spill/s2_lazo.cls:7:44: error de generacion: sin suficientes registros para la rutina aritmetica\n",
+    "codigo_o0": 1
+  },
+  "s3_compleja": {
+    "error_o1": "pruebas/optimizador/spill/s3_compleja.cls:5:53: error de generacion: sin registros temporales disponibles\n",
+    "codigo_o1": 1,
+    "valores": {
+      "f.r": 8192
+    },
+    "derramados": 3,
+    "cargas_derrame": 3,
+    "guardados_derrame": 3,
+    "error_o0": "pruebas/optimizador/spill/s3_compleja.cls:4:36: error de generacion: sin suficientes registros para la rutina aritmetica\n",
+    "codigo_o0": 1
+  },
+  "_corpus": [
+    "ejercicios/ejercicio1_factorial/ejercicio1.cls",
+    "ejercicios/ejercicio2_matriz/ejercicio2.cls",
+    "ejercicios/ejercicio3_cifrado/ejercicio3.cls",
+    "pruebas/generador_o0/etiquetas/globales_corto_circuito.cls",
+    "pruebas/generador_o0/matrices/cuadradas.cls",
+    "pruebas/generador_o0/matrices/rectangulares.cls",
+    "pruebas/generador_o0/programas/copia_arreglos.cls",
+    "pruebas/generador_o0/programas/corto_circuito.cls",
+    "pruebas/generador_o0/programas/e_en_s.cls",
+    "pruebas/generador_o0/programas/factorial_r.cls",
+    "pruebas/generador_o0/programas/lectura_1d.cls",
+    "pruebas/generador_o0/programas/r_arreglos.cls",
+    "pruebas/generador_o0/programas/r_arreglos_2d.cls",
+    "pruebas/generador_o0/programas/r_arreglos_local.cls",
+    "pruebas/generador_o0/programas/r_arreglos_parametro.cls",
+    "pruebas/generador_o0/programas/retorno_cero.cls",
+    "pruebas/generador_o0/programas/s_anidados.cls",
+    "pruebas/generador_o0/programas/s_negativo.cls",
+    "pruebas/generador_o0/programas/s_paso3.cls",
+    "pruebas/generador_o0/programas/s_paso_grande.cls",
+    "pruebas/generador_o0/programas/s_positivo.cls",
+    "pruebas/generador_o0/programas/sumar.cls",
+    "pruebas/optimizador/dce/d1_asignaciones.cls",
+    "pruebas/optimizador/dce/d2_inalcanzable.cls",
+    "pruebas/optimizador/dce/d3_efectos.cls",
+    "pruebas/optimizador/rename/r1_waw.cls",
+    "pruebas/optimizador/rename/r2_war.cls",
+    "pruebas/optimizador/rename/r3_limites.cls",
+    "pruebas/p01_llamada_adelante.cls",
+    "pruebas/p02_factorial.cls",
+    "pruebas/p03_suma.cls",
+    "pruebas/p04_memoria.cls",
+    "pruebas/p05_arreglos_llamadas.cls",
+    "pruebas/p06_tipos.cls",
+    "pruebas/p07_retorno_recursion.cls",
+    "pruebas/p08_comentarios.cls",
+    "pruebas/p09_crypto.cls",
+    "pruebas/p10_llamadas_anidadas.cls",
+    "pruebas/p11_ejercicio3.cls",
+    "pruebas/p12_ejercicio2.cls",
+    "pruebas/representacion/tac/ejemplo.cls",
+    "pruebas/representacion/tac_build/casos/condicionales.cls",
+    "pruebas/representacion/tac_build/casos/expresiones.cls",
+    "pruebas/representacion/tac_build/casos/inicializadores.cls",
+    "pruebas/rutinas/arreglos/matriz3x4.cls"
+  ]
+}

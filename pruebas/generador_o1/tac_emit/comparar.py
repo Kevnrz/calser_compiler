@@ -99,6 +99,9 @@ def main():
                       *ROOT.joinpath('ejercicios').rglob('*.cls')])
     with tempfile.TemporaryDirectory(prefix='calser_emit_') as temporary:
         for source in sources:
+            # sus programas no compilan sin derrame; los comprueba check-spill (diseño 14.5)
+            if ROOT / 'pruebas/optimizador/spill' in source.parents:
+                continue
             if source.parent == ROOT / 'pruebas' and re.fullmatch(r'e\d+_.*\.cls', source.name):
                 continue
             name = str(source.relative_to(ROOT))

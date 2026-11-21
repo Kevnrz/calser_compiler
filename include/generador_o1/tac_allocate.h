@@ -6,7 +6,7 @@
 #include "tac_intervals.h"
 
 typedef struct TacAllocationResult TacAllocationResult;
-/* Política futura del recorrido; NULL o spill=0: sin derrame (§7.6). */
+/* §4.6.5: NULL/spill=0 conserva linear scan; spill=1 usa Chaitin con derrame. */
 typedef struct { int spill; } TacAllocationOptions;
 typedef struct { unsigned physical_register; int address; } TacSpillMove;
 typedef struct {
@@ -15,11 +15,12 @@ typedef struct {
 } TacRegisterBinding;
 typedef struct {
     const TacInstruction *instruction; /* Sitio prestado del programa reescrito. */
-    /* Movimientos vacíos hasta C3.4; orden de emisión de §11.6. */
+    /* Movimientos del derrame; orden de emisión de §11.6. */
     TacSpillMove loads[3];
     size_t load_count;
     TacSpillMove stores[1];
     size_t store_count;
+    unsigned spill_registers[3];     /* D/A/B: sustituciones diferidas hasta reescritura física. */
     uint16_t scratch_mask;             /* Ocho auxiliares aritméticos o cero. */
     const TacRegisterBinding *preserved; /* Vector del resultado, orden físico. */
     size_t preserved_count;            /* Vivos afectados según C1. */
@@ -30,15 +31,15 @@ typedef struct {
     size_t pressure;                  /* Máximo de intervalos activos asignados. */
     /* Declaraciones adelantadas de P12 para la recolección de P9 (§9.10). */
     size_t spilled, spill_loads, spill_stores;
-    double spill_ms;                  /* Tiempo del derrame integrado, cero hoy. */
+    double spill_ms;                  /* Tiempo de Chaitin y de sus planes, §7.6. */
     unsigned register_count;           /* Cantidad de bits de la máscara. */
 } TacAllocationMetrics;
 
 /* Programa ISA_VIRTUAL validado, source_name obligatorio y prestado.
  * Reescribe TEMP a PHYS, auxiliares y stage; valida al terminar.
  * NULL con diagnóstico: se abandona la compilación, IR puede quedar inválido.
- * No derrama, emite, modifica símbolos ni reserva datos. C3.4 extenderá el punto
- * interno de presión dentro del recorrido; no hay resolutor ni procesamiento posterior.
+ * No emite. Sin spill conserva linear scan; con spill, Chaitin reserva casillas
+ * propias por función y comprueba de nuevo el espacio de pila (§4.6.5, §11.6).
  * Resultado posee planes, no el programa. Liberarlo antes de programa y símbolos.
  * Sin memoria termina según contrato TAC. error puede ser NULL solo con capacity=0.
  */

@@ -10,7 +10,7 @@ BUILD_DIR = build
 GEN_DIR = $(BUILD_DIR)/generated
 OBJ_DIR = $(BUILD_DIR)/obj
 
-SOURCES = main json_text codegen_common tac_passes tac_pass_unroll tac_pass_rename tac_pass_dce tac_pass_reorder tac_metrics tac_lower tac_lower_value tac_lower_control tac_intervals tac_allocate tac_allocate_sites tac_emit tac_emit_pseudo tac tac_loop_marks tac_live tac_locations tac_loops tac_edit tac_cfg tac_validate tac_isa tac_pseudo tac_print tac_build tac_build_expr tac_build_stmt tac_build_flow tac_build_init ast ast_constant symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table isa_constant codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler clones repairs syntax_service suggestions diagnostics_json
+SOURCES = main json_text codegen_common tac_passes tac_pass_unroll tac_pass_rename tac_pass_dce tac_pass_reorder tac_metrics tac_lower tac_lower_value tac_lower_control tac_intervals tac_allocate tac_allocate_color tac_allocate_sites tac_emit tac_emit_pseudo tac tac_loop_marks tac_live tac_locations tac_loops tac_edit tac_cfg tac_validate tac_isa tac_pseudo tac_print tac_build tac_build_expr tac_build_stmt tac_build_flow tac_build_init ast ast_constant symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table isa_constant codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler clones repairs syntax_service suggestions diagnostics_json
 OBJECTS = $(addprefix $(OBJ_DIR)/,$(addsuffix .o,$(SOURCES))) \
           $(OBJ_DIR)/parser.tab.o $(OBJ_DIR)/lex.yy.o
 
@@ -211,7 +211,7 @@ check-tac-loops: $(BUILD_DIR)/probar_tac_loops $(BUILD_DIR)/analizar_tac
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/representacion/tac_analysis/probar.py loops
 
 # C2: intervalos/asignación compartidos por ccom -O1 y las pruebas directas.
-TAC_ALLOCATE_SOURCES = src/representacion/tac_intervals.c src/generador_o1/tac_allocate.c src/generador_o1/tac_allocate_sites.c
+TAC_ALLOCATE_SOURCES = src/representacion/tac_intervals.c src/generador_o1/tac_allocate.c src/generador_o1/tac_allocate_color.c src/generador_o1/tac_allocate_sites.c
 TAC_ALLOCATE_HEADERS = include/analisis/data_area.h include/representacion/tac_intervals.h include/generador_o1/tac_allocate.h src/generador_o1/tac_allocate_internal.h
 
 $(BUILD_DIR)/probar_tac_intervals: pruebas/representacion/tac_intervals/probar.c src/representacion/tac_intervals.c $(TAC_ANALYSIS_SOURCES) $(TAC_SOURCES) $(TAC_HEADERS) $(TAC_ANALYSIS_HEADERS) $(TAC_ALLOCATE_HEADERS) | $(BUILD_DIR)
@@ -250,10 +250,12 @@ check-o1: $(TARGET) $(BUILD_DIR)/probar_tac_passes $(BUILD_DIR)/probar_dce $(BUI
 	$(BUILD_DIR)/probar_tac_passes
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/optimizador/tac_passes/probar_cli.py
 
-check: check-reorder check-rename check-dce check-pasadas check-pasadas-isa check-ide-options check-o1 check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles check-recovery check-clones-json check-repairs-json check-suggestions-json check-tokens-json check-success check-analysis check-analysis-json
+check: check-reorder check-unroll check-spill check-rename check-dce check-pasadas check-pasadas-isa check-ide-options check-o1 check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles check-recovery check-clones-json check-repairs-json check-suggestions-json check-tokens-json check-success check-analysis check-analysis-json
 
 clean:
 	rm -f $(BUILD_DIR)/probar_reorder $(BUILD_DIR)/unitarias_reorder
+	rm -f $(BUILD_DIR)/probar_unroll $(BUILD_DIR)/capturar_unroll
+	rm -f $(BUILD_DIR)/probar_spill $(BUILD_DIR)/unitarias_spill
 	rm -f $(BUILD_DIR)/probar_rename
 	rm -f $(BUILD_DIR)/probar_dce
 	rm -f $(BUILD_DIR)/probar_tac_passes
@@ -374,3 +376,28 @@ check-reorder: $(TARGET) $(BUILD_DIR)/unitarias_reorder $(BUILD_DIR)/probar_reor
 
 $(BUILD_DIR)/probar_reorder: pruebas/optimizador/reorder/probar.c $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+# C3.4: Chaitin y planes de derrame; Aho §8.8.4 y diseño §11.6.
+$(BUILD_DIR)/probar_spill: pruebas/optimizador/spill/probar.c | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $< $(LDLIBS)
+
+$(BUILD_DIR)/unitarias_spill: pruebas/optimizador/spill/unitarias.c $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+check-spill: $(TARGET) $(BUILD_DIR)/probar_spill $(BUILD_DIR)/unitarias_spill
+	$(BUILD_DIR)/unitarias_spill
+	$(BUILD_DIR)/probar_spill
+
+.PHONY: check-spill
+
+# C3.1: desenrollado sobre HIGH real, notas §5.2.2 y diseño §11.4.
+$(BUILD_DIR)/capturar_unroll: pruebas/optimizador/unroll/capturar.c pruebas/representacion/tac_build/interpretar.c $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+$(BUILD_DIR)/probar_unroll: pruebas/optimizador/unroll/probar.c | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $< $(LDLIBS)
+
+check-unroll: $(TARGET) $(BUILD_DIR)/capturar_unroll $(BUILD_DIR)/probar_unroll
+	$(BUILD_DIR)/probar_unroll
+
+.PHONY: check-unroll

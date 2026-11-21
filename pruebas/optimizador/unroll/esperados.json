@@ -1,0 +1,297 @@
+{
+  "anidados_l": {
+    "fuente": "pruebas/optimizador/unroll/casos/anidados_l.cls",
+    "valores": {
+      "GLOBAL.suma": 2,
+      "GLOBAL.x": 2
+    },
+    "desenrollados": [],
+    "opciones": [],
+    "tac_antes": "initial_data bytes=8\n  @00000000 = 00000000\n  @00000004 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = 2\n  goto B2\nB2: successors [B7, B3]\n  if i >= $limite_S0 goto B7\nB3: successors [B4]\n  goto B4\nB4: successors [B6, B5]\n  t0 = x < 2\n  if t0 == 0 goto B6\nB5: successors [B4]\n  t1 = x + 1\n  x = t1\n  goto B4\nB6: successors [B2]\n  t2 = suma + 1\n  suma = t2\n  i = i + 1\n  goto B2\nB7: successors []\n  return\n\n",
+    "tac_despues": "initial_data bytes=8\n  @00000000 = 00000000\n  @00000004 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = 2\n  goto B2\nB2: successors [B7, B3]\n  if i >= $limite_S0 goto B7\nB3: successors [B4]\n  goto B4\nB4: successors [B6, B5]\n  t0 = x < 2\n  if t0 == 0 goto B6\nB5: successors [B4]\n  t1 = x + 1\n  x = t1\n  goto B4\nB6: successors [B2]\n  t2 = suma + 1\n  suma = t2\n  i = i + 1\n  goto B2\nB7: successors []\n  return\n\n"
+  },
+  "anidados_s": {
+    "fuente": "pruebas/optimizador/unroll/casos/anidados_s.cls",
+    "valores": {
+      "GLOBAL.suma": 9
+    },
+    "desenrollados": [
+      {
+        "linea": 4,
+        "factor": 3
+      }
+    ],
+    "opciones": [],
+    "tac_antes": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = 2\n  goto B2\nB2: successors [B7, B3]\n  if i >= $limite_S0 goto B7\nB3: successors [B4]\n  j = 0\n  $limite_S1 = 3\n  goto B4\nB4: successors [B6, B5]\n  if j >= $limite_S1 goto B6\nB5: successors [B4]\n  t0 = suma + i\n  t1 = t0 + j\n  suma = t1\n  j = j + 1\n  goto B4\nB6: successors [B2]\n  i = i + 1\n  goto B2\nB7: successors []\n  return\n\n",
+    "tac_despues": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = 2\n  goto B2\nB2: successors [B4, B3]\n  if i >= $limite_S0 goto B4\nB3: successors [B2]\n  j = 0\n  $limite_S1 = 3\n  t2 = suma + i\n  t3 = t2 + j\n  suma = t3\n  t8 = j + 1\n  t4 = suma + i\n  t5 = t4 + t8\n  suma = t5\n  t9 = j + 2\n  t6 = suma + i\n  t7 = t6 + t9\n  suma = t7\n  j = t9 + 1\n  i = i + 1\n  goto B2\nB4: successors []\n  return\n\n"
+  },
+  "condicional": {
+    "fuente": "pruebas/optimizador/unroll/casos/condicional.cls",
+    "valores": {
+      "GLOBAL.suma": 21
+    },
+    "desenrollados": [
+      {
+        "linea": 3,
+        "factor": 4
+      }
+    ],
+    "opciones": [],
+    "tac_antes": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = 4\n  goto B2\nB2: successors [B7, B3]\n  if i >= $limite_S0 goto B7\nB3: successors [B5, B4]\n  t0 = i < 2\n  if t0 == 0 goto B5\nB4: successors [B6]\n  t1 = suma + i\n  suma = t1\n  goto B6\nB5: successors [B6]\n  t2 = suma + 10\n  suma = t2\n  goto B6\nB6: successors [B2]\n  i = i + 1\n  goto B2\nB7: successors []\n  return\n\n",
+    "tac_despues": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B3, B2]\n  i = 0\n  $limite_S0 = 4\n  t3 = i < 2\n  if t3 == 0 goto B3\nB2: successors [B4]\n  t4 = suma + i\n  suma = t4\n  goto B4\nB3: successors [B4]\n  t5 = suma + 10\n  suma = t5\n  goto B4\nB4: successors [B6, B5]\n  t15 = i + 1\n  t6 = t15 < 2\n  if t6 == 0 goto B6\nB5: successors [B7]\n  t7 = suma + t15\n  suma = t7\n  goto B7\nB6: successors [B7]\n  t8 = suma + 10\n  suma = t8\n  goto B7\nB7: successors [B9, B8]\n  t16 = i + 2\n  t9 = t16 < 2\n  if t9 == 0 goto B9\nB8: successors [B10]\n  t10 = suma + t16\n  suma = t10\n  goto B10\nB9: successors [B10]\n  t11 = suma + 10\n  suma = t11\n  goto B10\nB10: successors [B12, B11]\n  t17 = i + 3\n  t12 = t17 < 2\n  if t12 == 0 goto B12\nB11: successors [B13]\n  t13 = suma + t17\n  suma = t13\n  goto B13\nB12: successors [B13]\n  t14 = suma + 10\n  suma = t14\n  goto B13\nB13: successors []\n  i = t17 + 1\n  return\n\n"
+  },
+  "control_parcial": {
+    "fuente": "pruebas/optimizador/unroll/casos/control_parcial.cls",
+    "valores": {
+      "GLOBAL.datos": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ]
+    },
+    "desenrollados": [
+      {
+        "linea": 4,
+        "factor": 4
+      }
+    ],
+    "opciones": [],
+    "tac_antes": "initial_data bytes=44\n  @00000000 = 00000000\n  @00000004 = 00000000\n  @00000008 = 00000000\n  @0000000c = 00000000\n  @00000010 = 00000000\n  @00000014 = 00000000\n  @00000018 = 00000000\n  @0000001c = 00000000\n  @00000020 = 00000000\n  @00000024 = 00000000\n  @00000028 = 0000000a\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = limite\n  goto B2\nB2: successors [B4, B3]\n  if i >= $limite_S0 goto B4\nB3: successors [B2]\n  t0 = i * 4\n  datos[t0] = i\n  i = i + 1\n  goto B2\nB4: successors []\n  return\n\n",
+    "tac_despues": "initial_data bytes=44\n  @00000000 = 00000000\n  @00000004 = 00000000\n  @00000008 = 00000000\n  @0000000c = 00000000\n  @00000010 = 00000000\n  @00000014 = 00000000\n  @00000018 = 00000000\n  @0000001c = 00000000\n  @00000020 = 00000000\n  @00000024 = 00000000\n  @00000028 = 0000000a\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = limite\n  goto B2\nB2: successors [B4, B3]\n  t1 = i + 3\n  if t1 >= $limite_S0 goto B4\nB3: successors [B2]\n  t2 = i * 4\n  datos[t2] = i\n  t6 = i + 1\n  t3 = t6 * 4\n  datos[t3] = t6\n  t7 = i + 2\n  t4 = t7 * 4\n  datos[t4] = t7\n  t8 = i + 3\n  t5 = t8 * 4\n  datos[t5] = t8\n  i = t8 + 1\n  goto B2\nB4: successors [B6, B5]\n  if i >= $limite_S0 goto B6\nB5: successors [B4]\n  t0 = i * 4\n  datos[t0] = i\n  i = i + 1\n  goto B4\nB6: successors []\n  return\n\n"
+  },
+  "dos_seguidos": {
+    "fuente": "pruebas/optimizador/unroll/casos/dos_seguidos.cls",
+    "valores": {
+      "GLOBAL.suma": 9
+    },
+    "desenrollados": [
+      {
+        "linea": 3,
+        "factor": 4
+      },
+      {
+        "linea": 4,
+        "factor": 3
+      }
+    ],
+    "opciones": [],
+    "tac_antes": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = 4\n  goto B2\nB2: successors [B4, B3]\n  if i >= $limite_S0 goto B4\nB3: successors [B2]\n  t0 = suma + i\n  suma = t0\n  i = i + 1\n  goto B2\nB4: successors [B5]\n  j = 0\n  $limite_S1 = 3\n  goto B5\nB5: successors [B7, B6]\n  if j >= $limite_S1 goto B7\nB6: successors [B5]\n  t1 = suma + j\n  suma = t1\n  j = j + 1\n  goto B5\nB7: successors []\n  return\n\n",
+    "tac_despues": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors []\n  i = 0\n  $limite_S0 = 4\n  t2 = suma + i\n  suma = t2\n  t6 = i + 1\n  t3 = suma + t6\n  suma = t3\n  t7 = i + 2\n  t4 = suma + t7\n  suma = t4\n  t8 = i + 3\n  t5 = suma + t8\n  suma = t5\n  i = t8 + 1\n  j = 0\n  $limite_S1 = 3\n  t9 = suma + j\n  suma = t9\n  t12 = j + 1\n  t10 = suma + t12\n  suma = t10\n  t13 = j + 2\n  t11 = suma + t13\n  suma = t11\n  j = t13 + 1\n  return\n\n"
+  },
+  "exacto": {
+    "fuente": "pruebas/optimizador/unroll/casos/exacto.cls",
+    "valores": {
+      "GLOBAL.suma": 28
+    },
+    "desenrollados": [
+      {
+        "linea": 4,
+        "factor": 4
+      }
+    ],
+    "opciones": [],
+    "tac_antes": "initial_data bytes=8\n  @00000000 = 00000000\n  @00000004 = 00000008\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = limite\n  goto B2\nB2: successors [B4, B3]\n  if i >= $limite_S0 goto B4\nB3: successors [B2]\n  t0 = suma + i\n  suma = t0\n  i = i + 1\n  goto B2\nB4: successors []\n  return\n\n",
+    "tac_despues": "initial_data bytes=8\n  @00000000 = 00000000\n  @00000004 = 00000008\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = limite\n  goto B2\nB2: successors [B4, B3]\n  t1 = i + 3\n  if t1 >= $limite_S0 goto B4\nB3: successors [B2]\n  t2 = suma + i\n  suma = t2\n  t6 = i + 1\n  t3 = suma + t6\n  suma = t3\n  t7 = i + 2\n  t4 = suma + t7\n  suma = t4\n  t8 = i + 3\n  t5 = suma + t8\n  suma = t5\n  i = t8 + 1\n  goto B2\nB4: successors [B6, B5]\n  if i >= $limite_S0 goto B6\nB5: successors [B4]\n  t0 = suma + i\n  suma = t0\n  i = i + 1\n  goto B4\nB6: successors []\n  return\n\n"
+  },
+  "fin_expresion": {
+    "fuente": "pruebas/optimizador/unroll/casos/fin_expresion.cls",
+    "valores": {
+      "GLOBAL.suma": 6
+    },
+    "desenrollados": [
+      {
+        "linea": 3,
+        "factor": 4
+      }
+    ],
+    "opciones": [],
+    "tac_antes": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  t0 = 2 + 2\n  i = 0\n  $limite_S0 = t0\n  goto B2\nB2: successors [B4, B3]\n  if i >= $limite_S0 goto B4\nB3: successors [B2]\n  t1 = suma + i\n  suma = t1\n  i = i + 1\n  goto B2\nB4: successors []\n  return\n\n",
+    "tac_despues": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  t0 = 2 + 2\n  i = 0\n  $limite_S0 = t0\n  goto B2\nB2: successors [B4, B3]\n  t2 = i + 3\n  if t2 >= $limite_S0 goto B4\nB3: successors [B2]\n  t3 = suma + i\n  suma = t3\n  t7 = i + 1\n  t4 = suma + t7\n  suma = t4\n  t8 = i + 2\n  t5 = suma + t8\n  suma = t5\n  t9 = i + 3\n  t6 = suma + t9\n  suma = t6\n  i = t9 + 1\n  goto B2\nB4: successors [B6, B5]\n  if i >= $limite_S0 goto B6\nB5: successors [B4]\n  t1 = suma + i\n  suma = t1\n  i = i + 1\n  goto B4\nB6: successors []\n  return\n\n"
+  },
+  "iguales_dinamicos": {
+    "fuente": "pruebas/optimizador/unroll/casos/iguales_dinamicos.cls",
+    "valores": {
+      "GLOBAL.suma": 0
+    },
+    "desenrollados": [
+      {
+        "linea": 5,
+        "factor": 4
+      }
+    ],
+    "opciones": [],
+    "tac_antes": "initial_data bytes=12\n  @00000000 = 00000000\n  @00000004 = 00000003\n  @00000008 = 00000003\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = inicio\n  $limite_S0 = limite\n  goto B2\nB2: successors [B4, B3]\n  if i >= $limite_S0 goto B4\nB3: successors [B2]\n  t0 = suma + i\n  suma = t0\n  i = i + 1\n  goto B2\nB4: successors []\n  return\n\n",
+    "tac_despues": "initial_data bytes=12\n  @00000000 = 00000000\n  @00000004 = 00000003\n  @00000008 = 00000003\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = inicio\n  $limite_S0 = limite\n  goto B2\nB2: successors [B4, B3]\n  t1 = i + 3\n  if t1 >= $limite_S0 goto B4\nB3: successors [B2]\n  t2 = suma + i\n  suma = t2\n  t6 = i + 1\n  t3 = suma + t6\n  suma = t3\n  t7 = i + 2\n  t4 = suma + t7\n  suma = t4\n  t8 = i + 3\n  t5 = suma + t8\n  suma = t5\n  i = t8 + 1\n  goto B2\nB4: successors [B6, B5]\n  if i >= $limite_S0 goto B6\nB5: successors [B4]\n  t0 = suma + i\n  suma = t0\n  i = i + 1\n  goto B4\nB6: successors []\n  return\n\n"
+  },
+  "inicio_variable": {
+    "fuente": "pruebas/optimizador/unroll/casos/inicio_variable.cls",
+    "valores": {
+      "GLOBAL.suma": 44
+    },
+    "desenrollados": [
+      {
+        "linea": 4,
+        "factor": 4
+      }
+    ],
+    "opciones": [],
+    "tac_antes": "initial_data bytes=8\n  @00000000 = 00000000\n  @00000004 = 00000002\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = n\n  $limite_S0 = 10\n  goto B2\nB2: successors [B4, B3]\n  if i >= $limite_S0 goto B4\nB3: successors [B2]\n  t0 = suma + i\n  suma = t0\n  i = i + 1\n  goto B2\nB4: successors []\n  return\n\n",
+    "tac_despues": "initial_data bytes=8\n  @00000000 = 00000000\n  @00000004 = 00000002\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = n\n  $limite_S0 = 10\n  goto B2\nB2: successors [B4, B3]\n  t1 = i + 3\n  if t1 >= $limite_S0 goto B4\nB3: successors [B2]\n  t2 = suma + i\n  suma = t2\n  t6 = i + 1\n  t3 = suma + t6\n  suma = t3\n  t7 = i + 2\n  t4 = suma + t7\n  suma = t4\n  t8 = i + 3\n  t5 = suma + t8\n  suma = t5\n  i = t8 + 1\n  goto B2\nB4: successors [B6, B5]\n  if i >= $limite_S0 goto B6\nB5: successors [B4]\n  t0 = suma + i\n  suma = t0\n  i = i + 1\n  goto B4\nB6: successors []\n  return\n\n"
+  },
+  "menor": {
+    "fuente": "pruebas/optimizador/unroll/casos/menor.cls",
+    "valores": {
+      "GLOBAL.suma": 3
+    },
+    "desenrollados": [
+      {
+        "linea": 4,
+        "factor": 4
+      }
+    ],
+    "opciones": [],
+    "tac_antes": "initial_data bytes=8\n  @00000000 = 00000000\n  @00000004 = 00000003\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = limite\n  goto B2\nB2: successors [B4, B3]\n  if i >= $limite_S0 goto B4\nB3: successors [B2]\n  t0 = suma + i\n  suma = t0\n  i = i + 1\n  goto B2\nB4: successors []\n  return\n\n",
+    "tac_despues": "initial_data bytes=8\n  @00000000 = 00000000\n  @00000004 = 00000003\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = limite\n  goto B2\nB2: successors [B4, B3]\n  t1 = i + 3\n  if t1 >= $limite_S0 goto B4\nB3: successors [B2]\n  t2 = suma + i\n  suma = t2\n  t6 = i + 1\n  t3 = suma + t6\n  suma = t3\n  t7 = i + 2\n  t4 = suma + t7\n  suma = t4\n  t8 = i + 3\n  t5 = suma + t8\n  suma = t5\n  i = t8 + 1\n  goto B2\nB4: successors [B6, B5]\n  if i >= $limite_S0 goto B6\nB5: successors [B4]\n  t0 = suma + i\n  suma = t0\n  i = i + 1\n  goto B4\nB6: successors []\n  return\n\n"
+  },
+  "negativo": {
+    "fuente": "pruebas/optimizador/unroll/casos/negativo.cls",
+    "valores": {
+      "GLOBAL.suma": 30
+    },
+    "desenrollados": [
+      {
+        "linea": 3,
+        "factor": 5
+      }
+    ],
+    "opciones": [],
+    "tac_antes": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 10\n  $limite_S0 = 0\n  goto B2\nB2: successors [B4, B3]\n  if i <= $limite_S0 goto B4\nB3: successors [B2]\n  t0 = suma + i\n  suma = t0\n  i = i + -2\n  goto B2\nB4: successors []\n  return\n\n",
+    "tac_despues": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors []\n  i = 10\n  $limite_S0 = 0\n  t1 = suma + i\n  suma = t1\n  t6 = i + -2\n  t2 = suma + t6\n  suma = t2\n  t7 = i + -4\n  t3 = suma + t7\n  suma = t3\n  t8 = i + -6\n  t4 = suma + t8\n  suma = t4\n  t9 = i + -8\n  t5 = suma + t9\n  suma = t5\n  i = t9 + -2\n  return\n\n"
+  },
+  "paso_fuera_presupuesto": {
+    "fuente": "pruebas/optimizador/unroll/casos/paso_fuera_presupuesto.cls",
+    "valores": {
+      "GLOBAL.suma": 0
+    },
+    "desenrollados": [],
+    "opciones": [],
+    "tac_antes": "initial_data bytes=8\n  @00000000 = 00000000\n  @00000004 = 00000001\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = limite\n  goto B2\nB2: successors [B4, B3]\n  if i >= $limite_S0 goto B4\nB3: successors [B2]\n  t0 = suma + i\n  suma = t0\n  i = i + 2147483647\n  goto B2\nB4: successors []\n  return\n\n",
+    "tac_despues": "initial_data bytes=8\n  @00000000 = 00000000\n  @00000004 = 00000001\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = limite\n  goto B2\nB2: successors [B4, B3]\n  if i >= $limite_S0 goto B4\nB3: successors [B2]\n  t0 = suma + i\n  suma = t0\n  i = i + 2147483647\n  goto B2\nB4: successors []\n  return\n\n"
+  },
+  "salida_anticipada": {
+    "fuente": "pruebas/optimizador/unroll/casos/salida_anticipada.cls",
+    "valores": {
+      "GLOBAL.suma": 1
+    },
+    "desenrollados": [],
+    "opciones": [],
+    "tac_antes": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = 4\n  goto B2\nB2: successors [B7, B3]\n  if i >= $limite_S0 goto B7\nB3: successors [B5, B4]\n  t0 = i == 2\n  if t0 == 0 goto B5\nB4: successors []\n  return\nB5: successors [B6]\n  goto B6\nB6: successors [B2]\n  t1 = suma + i\n  suma = t1\n  i = i + 1\n  goto B2\nB7: successors []\n  return\n\n",
+    "tac_despues": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = 4\n  goto B2\nB2: successors [B7, B3]\n  if i >= $limite_S0 goto B7\nB3: successors [B5, B4]\n  t0 = i == 2\n  if t0 == 0 goto B5\nB4: successors []\n  return\nB5: successors [B6]\n  goto B6\nB6: successors [B2]\n  t1 = suma + i\n  suma = t1\n  i = i + 1\n  goto B2\nB7: successors []\n  return\n\n"
+  },
+  "sin_presupuesto": {
+    "fuente": "pruebas/optimizador/unroll/casos/sin_presupuesto.cls",
+    "valores": {
+      "GLOBAL.suma": 1080
+    },
+    "desenrollados": [],
+    "opciones": [],
+    "tac_antes": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = 4\n  goto B2\nB2: successors [B4, B3]\n  if i >= $limite_S0 goto B4\nB3: successors [B2]\n  t0 = suma + i\n  suma = t0\n  t1 = suma + i\n  suma = t1\n  t2 = suma + i\n  suma = t2\n  t3 = suma + i\n  suma = t3\n  t4 = suma + i\n  suma = t4\n  t5 = suma + i\n  suma = t5\n  t6 = suma + i\n  suma = t6\n  t7 = suma + i\n  suma = t7\n  t8 = suma + i\n  suma = t8\n  t9 = suma + i\n  suma = t9\n  t10 = suma + i\n  suma = t10\n  t11 = suma + i\n  suma = t11\n  t12 = suma + i\n  suma = t12\n  t13 = suma + i\n  suma = t13\n  t14 = suma + i\n  suma = t14\n  t15 = suma + i\n  suma = t15\n  t16 = suma + i\n  suma = t16\n  t17 = suma + i\n  suma = t17\n  t18 = suma + i\n  suma = t18\n  t19 = suma + i\n  suma = t19\n  t20 = suma + i\n  suma = t20\n  t21 = suma + i\n  suma = t21\n  t22 = suma + i\n  suma = t22\n  t23 = suma + i\n  suma = t23\n  t24 = suma + i\n  suma = t24\n  t25 = suma + i\n  suma = t25\n  t26 = suma + i\n  suma = t26\n  t27 = suma + i\n  suma = t27\n  t28 = suma + i\n  suma = t28\n  t29 = suma + i\n  suma = t29\n  t30 = suma + i\n  suma = t30\n  t31 = suma + i\n  suma = t31\n  t32 = suma + i\n  suma = t32\n  t33 = suma + i\n  suma = t33\n  t34 = suma + i\n  suma = t34\n  t35 = suma + i\n  suma = t35\n  t36 = suma + i\n  suma = t36\n  t37 = suma + i\n  suma = t37\n  t38 = suma + i\n  suma = t38\n  t39 = suma + i\n  suma = t39\n  t40 = suma + i\n  suma = t40\n  t41 = suma + i\n  suma = t41\n  t42 = suma + i\n  suma = t42\n  t43 = suma + i\n  suma = t43\n  t44 = suma + i\n  suma = t44\n  t45 = suma + i\n  suma = t45\n  t46 = suma + i\n  suma = t46\n  t47 = suma + i\n  suma = t47\n  t48 = suma + i\n  suma = t48\n  t49 = suma + i\n  suma = t49\n  t50 = suma + i\n  suma = t50\n  t51 = suma + i\n  suma = t51\n  t52 = suma + i\n  suma = t52\n  t53 = suma + i\n  suma = t53\n  t54 = suma + i\n  suma = t54\n  t55 = suma + i\n  suma = t55\n  t56 = suma + i\n  suma = t56\n  t57 = suma + i\n  suma = t57\n  t58 = suma + i\n  suma = t58\n  t59 = suma + i\n  suma = t59\n  t60 = suma + i\n  suma = t60\n  t61 = suma + i\n  suma = t61\n  t62 = suma + i\n  suma = t62\n  t63 = suma + i\n  suma = t63\n  t64 = suma + i\n  suma = t64\n  t65 = suma + i\n  suma = t65\n  t66 = suma + i\n  suma = t66\n  t67 = suma + i\n  suma = t67\n  t68 = suma + i\n  suma = t68\n  t69 = suma + i\n  suma = t69\n  t70 = suma + i\n  suma = t70\n  t71 = suma + i\n  suma = t71\n  t72 = suma + i\n  suma = t72\n  t73 = suma + i\n  suma = t73\n  t74 = suma + i\n  suma = t74\n  t75 = suma + i\n  suma = t75\n  t76 = suma + i\n  suma = t76\n  t77 = suma + i\n  suma = t77\n  t78 = suma + i\n  suma = t78\n  t79 = suma + i\n  suma = t79\n  t80 = suma + i\n  suma = t80\n  t81 = suma + i\n  suma = t81\n  t82 = suma + i\n  suma = t82\n  t83 = suma + i\n  suma = t83\n  t84 = suma + i\n  suma = t84\n  t85 = suma + i\n  suma = t85\n  t86 = suma + i\n  suma = t86\n  t87 = suma + i\n  suma = t87\n  t88 = suma + i\n  suma = t88\n  t89 = suma + i\n  suma = t89\n  t90 = suma + i\n  suma = t90\n  t91 = suma + i\n  suma = t91\n  t92 = suma + i\n  suma = t92\n  t93 = suma + i\n  suma = t93\n  t94 = suma + i\n  suma = t94\n  t95 = suma + i\n  suma = t95\n  t96 = suma + i\n  suma = t96\n  t97 = suma + i\n  suma = t97\n  t98 = suma + i\n  suma = t98\n  t99 = suma + i\n  suma = t99\n  t100 = suma + i\n  suma = t100\n  t101 = suma + i\n  suma = t101\n  t102 = suma + i\n  suma = t102\n  t103 = suma + i\n  suma = t103\n  t104 = suma + i\n  suma = t104\n  t105 = suma + i\n  suma = t105\n  t106 = suma + i\n  suma = t106\n  t107 = suma + i\n  suma = t107\n  t108 = suma + i\n  suma = t108\n  t109 = suma + i\n  suma = t109\n  t110 = suma + i\n  suma = t110\n  t111 = suma + i\n  suma = t111\n  t112 = suma + i\n  suma = t112\n  t113 = suma + i\n  suma = t113\n  t114 = suma + i\n  suma = t114\n  t115 = suma + i\n  suma = t115\n  t116 = suma + i\n  suma = t116\n  t117 = suma + i\n  suma = t117\n  t118 = suma + i\n  suma = t118\n  t119 = suma + i\n  suma = t119\n  t120 = suma + i\n  suma = t120\n  t121 = suma + i\n  suma = t121\n  t122 = suma + i\n  suma = t122\n  t123 = suma + i\n  suma = t123\n  t124 = suma + i\n  suma = t124\n  t125 = suma + i\n  suma = t125\n  t126 = suma + i\n  suma = t126\n  t127 = suma + i\n  suma = t127\n  t128 = suma + i\n  suma = t128\n  t129 = suma + i\n  suma = t129\n  t130 = suma + i\n  suma = t130\n  t131 = suma + i\n  suma = t131\n  t132 = suma + i\n  suma = t132\n  t133 = suma + i\n  suma = t133\n  t134 = suma + i\n  suma = t134\n  t135 = suma + i\n  suma = t135\n  t136 = suma + i\n  suma = t136\n  t137 = suma + i\n  suma = t137\n  t138 = suma + i\n  suma = t138\n  t139 = suma + i\n  suma = t139\n  t140 = suma + i\n  suma = t140\n  t141 = suma + i\n  suma = t141\n  t142 = suma + i\n  suma = t142\n  t143 = suma + i\n  suma = t143\n  t144 = suma + i\n  suma = t144\n  t145 = suma + i\n  suma = t145\n  t146 = suma + i\n  suma = t146\n  t147 = suma + i\n  suma = t147\n  t148 = suma + i\n  suma = t148\n  t149 = suma + i\n  suma = t149\n  t150 = suma + i\n  suma = t150\n  t151 = suma + i\n  suma = t151\n  t152 = suma + i\n  suma = t152\n  t153 = suma + i\n  suma = t153\n  t154 = suma + i\n  suma = t154\n  t155 = suma + i\n  suma = t155\n  t156 = suma + i\n  suma = t156\n  t157 = suma + i\n  suma = t157\n  t158 = suma + i\n  suma = t158\n  t159 = suma + i\n  suma = t159\n  t160 = suma + i\n  suma = t160\n  t161 = suma + i\n  suma = t161\n  t162 = suma + i\n  suma = t162\n  t163 = suma + i\n  suma = t163\n  t164 = suma + i\n  suma = t164\n  t165 = suma + i\n  suma = t165\n  t166 = suma + i\n  suma = t166\n  t167 = suma + i\n  suma = t167\n  t168 = suma + i\n  suma = t168\n  t169 = suma + i\n  suma = t169\n  t170 = suma + i\n  suma = t170\n  t171 = suma + i\n  suma = t171\n  t172 = suma + i\n  suma = t172\n  t173 = suma + i\n  suma = t173\n  t174 = suma + i\n  suma = t174\n  t175 = suma + i\n  suma = t175\n  t176 = suma + i\n  suma = t176\n  t177 = suma + i\n  suma = t177\n  t178 = suma + i\n  suma = t178\n  t179 = suma + i\n  suma = t179\n  i = i + 1\n  goto B2\nB4: successors []\n  return\n\n",
+    "tac_despues": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = 4\n  goto B2\nB2: successors [B4, B3]\n  if i >= $limite_S0 goto B4\nB3: successors [B2]\n  t0 = suma + i\n  suma = t0\n  t1 = suma + i\n  suma = t1\n  t2 = suma + i\n  suma = t2\n  t3 = suma + i\n  suma = t3\n  t4 = suma + i\n  suma = t4\n  t5 = suma + i\n  suma = t5\n  t6 = suma + i\n  suma = t6\n  t7 = suma + i\n  suma = t7\n  t8 = suma + i\n  suma = t8\n  t9 = suma + i\n  suma = t9\n  t10 = suma + i\n  suma = t10\n  t11 = suma + i\n  suma = t11\n  t12 = suma + i\n  suma = t12\n  t13 = suma + i\n  suma = t13\n  t14 = suma + i\n  suma = t14\n  t15 = suma + i\n  suma = t15\n  t16 = suma + i\n  suma = t16\n  t17 = suma + i\n  suma = t17\n  t18 = suma + i\n  suma = t18\n  t19 = suma + i\n  suma = t19\n  t20 = suma + i\n  suma = t20\n  t21 = suma + i\n  suma = t21\n  t22 = suma + i\n  suma = t22\n  t23 = suma + i\n  suma = t23\n  t24 = suma + i\n  suma = t24\n  t25 = suma + i\n  suma = t25\n  t26 = suma + i\n  suma = t26\n  t27 = suma + i\n  suma = t27\n  t28 = suma + i\n  suma = t28\n  t29 = suma + i\n  suma = t29\n  t30 = suma + i\n  suma = t30\n  t31 = suma + i\n  suma = t31\n  t32 = suma + i\n  suma = t32\n  t33 = suma + i\n  suma = t33\n  t34 = suma + i\n  suma = t34\n  t35 = suma + i\n  suma = t35\n  t36 = suma + i\n  suma = t36\n  t37 = suma + i\n  suma = t37\n  t38 = suma + i\n  suma = t38\n  t39 = suma + i\n  suma = t39\n  t40 = suma + i\n  suma = t40\n  t41 = suma + i\n  suma = t41\n  t42 = suma + i\n  suma = t42\n  t43 = suma + i\n  suma = t43\n  t44 = suma + i\n  suma = t44\n  t45 = suma + i\n  suma = t45\n  t46 = suma + i\n  suma = t46\n  t47 = suma + i\n  suma = t47\n  t48 = suma + i\n  suma = t48\n  t49 = suma + i\n  suma = t49\n  t50 = suma + i\n  suma = t50\n  t51 = suma + i\n  suma = t51\n  t52 = suma + i\n  suma = t52\n  t53 = suma + i\n  suma = t53\n  t54 = suma + i\n  suma = t54\n  t55 = suma + i\n  suma = t55\n  t56 = suma + i\n  suma = t56\n  t57 = suma + i\n  suma = t57\n  t58 = suma + i\n  suma = t58\n  t59 = suma + i\n  suma = t59\n  t60 = suma + i\n  suma = t60\n  t61 = suma + i\n  suma = t61\n  t62 = suma + i\n  suma = t62\n  t63 = suma + i\n  suma = t63\n  t64 = suma + i\n  suma = t64\n  t65 = suma + i\n  suma = t65\n  t66 = suma + i\n  suma = t66\n  t67 = suma + i\n  suma = t67\n  t68 = suma + i\n  suma = t68\n  t69 = suma + i\n  suma = t69\n  t70 = suma + i\n  suma = t70\n  t71 = suma + i\n  suma = t71\n  t72 = suma + i\n  suma = t72\n  t73 = suma + i\n  suma = t73\n  t74 = suma + i\n  suma = t74\n  t75 = suma + i\n  suma = t75\n  t76 = suma + i\n  suma = t76\n  t77 = suma + i\n  suma = t77\n  t78 = suma + i\n  suma = t78\n  t79 = suma + i\n  suma = t79\n  t80 = suma + i\n  suma = t80\n  t81 = suma + i\n  suma = t81\n  t82 = suma + i\n  suma = t82\n  t83 = suma + i\n  suma = t83\n  t84 = suma + i\n  suma = t84\n  t85 = suma + i\n  suma = t85\n  t86 = suma + i\n  suma = t86\n  t87 = suma + i\n  suma = t87\n  t88 = suma + i\n  suma = t88\n  t89 = suma + i\n  suma = t89\n  t90 = suma + i\n  suma = t90\n  t91 = suma + i\n  suma = t91\n  t92 = suma + i\n  suma = t92\n  t93 = suma + i\n  suma = t93\n  t94 = suma + i\n  suma = t94\n  t95 = suma + i\n  suma = t95\n  t96 = suma + i\n  suma = t96\n  t97 = suma + i\n  suma = t97\n  t98 = suma + i\n  suma = t98\n  t99 = suma + i\n  suma = t99\n  t100 = suma + i\n  suma = t100\n  t101 = suma + i\n  suma = t101\n  t102 = suma + i\n  suma = t102\n  t103 = suma + i\n  suma = t103\n  t104 = suma + i\n  suma = t104\n  t105 = suma + i\n  suma = t105\n  t106 = suma + i\n  suma = t106\n  t107 = suma + i\n  suma = t107\n  t108 = suma + i\n  suma = t108\n  t109 = suma + i\n  suma = t109\n  t110 = suma + i\n  suma = t110\n  t111 = suma + i\n  suma = t111\n  t112 = suma + i\n  suma = t112\n  t113 = suma + i\n  suma = t113\n  t114 = suma + i\n  suma = t114\n  t115 = suma + i\n  suma = t115\n  t116 = suma + i\n  suma = t116\n  t117 = suma + i\n  suma = t117\n  t118 = suma + i\n  suma = t118\n  t119 = suma + i\n  suma = t119\n  t120 = suma + i\n  suma = t120\n  t121 = suma + i\n  suma = t121\n  t122 = suma + i\n  suma = t122\n  t123 = suma + i\n  suma = t123\n  t124 = suma + i\n  suma = t124\n  t125 = suma + i\n  suma = t125\n  t126 = suma + i\n  suma = t126\n  t127 = suma + i\n  suma = t127\n  t128 = suma + i\n  suma = t128\n  t129 = suma + i\n  suma = t129\n  t130 = suma + i\n  suma = t130\n  t131 = suma + i\n  suma = t131\n  t132 = suma + i\n  suma = t132\n  t133 = suma + i\n  suma = t133\n  t134 = suma + i\n  suma = t134\n  t135 = suma + i\n  suma = t135\n  t136 = suma + i\n  suma = t136\n  t137 = suma + i\n  suma = t137\n  t138 = suma + i\n  suma = t138\n  t139 = suma + i\n  suma = t139\n  t140 = suma + i\n  suma = t140\n  t141 = suma + i\n  suma = t141\n  t142 = suma + i\n  suma = t142\n  t143 = suma + i\n  suma = t143\n  t144 = suma + i\n  suma = t144\n  t145 = suma + i\n  suma = t145\n  t146 = suma + i\n  suma = t146\n  t147 = suma + i\n  suma = t147\n  t148 = suma + i\n  suma = t148\n  t149 = suma + i\n  suma = t149\n  t150 = suma + i\n  suma = t150\n  t151 = suma + i\n  suma = t151\n  t152 = suma + i\n  suma = t152\n  t153 = suma + i\n  suma = t153\n  t154 = suma + i\n  suma = t154\n  t155 = suma + i\n  suma = t155\n  t156 = suma + i\n  suma = t156\n  t157 = suma + i\n  suma = t157\n  t158 = suma + i\n  suma = t158\n  t159 = suma + i\n  suma = t159\n  t160 = suma + i\n  suma = t160\n  t161 = suma + i\n  suma = t161\n  t162 = suma + i\n  suma = t162\n  t163 = suma + i\n  suma = t163\n  t164 = suma + i\n  suma = t164\n  t165 = suma + i\n  suma = t165\n  t166 = suma + i\n  suma = t166\n  t167 = suma + i\n  suma = t167\n  t168 = suma + i\n  suma = t168\n  t169 = suma + i\n  suma = t169\n  t170 = suma + i\n  suma = t170\n  t171 = suma + i\n  suma = t171\n  t172 = suma + i\n  suma = t172\n  t173 = suma + i\n  suma = t173\n  t174 = suma + i\n  suma = t174\n  t175 = suma + i\n  suma = t175\n  t176 = suma + i\n  suma = t176\n  t177 = suma + i\n  suma = t177\n  t178 = suma + i\n  suma = t178\n  t179 = suma + i\n  suma = t179\n  i = i + 1\n  goto B2\nB4: successors []\n  return\n\n"
+  },
+  "sin_retroceso": {
+    "fuente": "pruebas/optimizador/unroll/casos/sin_retroceso.cls",
+    "valores": {
+      "GLOBAL.suma": 1
+    },
+    "desenrollados": [],
+    "opciones": [],
+    "tac_antes": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = 4\n  goto B2\nB2: successors [B4, B3]\n  if i >= $limite_S0 goto B4\nB3: successors []\n  suma = 1\n  return\nB4: successors []\n  return\n\n",
+    "tac_despues": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = 4\n  goto B2\nB2: successors [B4, B3]\n  if i >= $limite_S0 goto B4\nB3: successors []\n  suma = 1\n  return\nB4: successors []\n  return\n\n"
+  },
+  "u1_constante": {
+    "fuente": "pruebas/optimizador/unroll/u1_constante.cls",
+    "valores": {
+      "GLOBAL.suma": 6
+    },
+    "desenrollados": [
+      {
+        "linea": 4,
+        "factor": 4
+      }
+    ],
+    "opciones": [],
+    "antes": "pruebas/optimizador/unroll/u1_constante.antes.tac",
+    "despues": "pruebas/optimizador/unroll/u1_constante.despues.tac"
+  },
+  "u2_variable": {
+    "fuente": "pruebas/optimizador/unroll/u2_variable.cls",
+    "valores": {
+      "GLOBAL.suma": 15
+    },
+    "desenrollados": [
+      {
+        "linea": 5,
+        "factor": 4
+      }
+    ],
+    "opciones": [],
+    "antes": "pruebas/optimizador/unroll/u2_variable.antes.tac",
+    "despues": "pruebas/optimizador/unroll/u2_variable.despues.tac"
+  },
+  "u3_grande": {
+    "fuente": "pruebas/optimizador/unroll/u3_grande.cls",
+    "valores": {
+      "GLOBAL.suma": 4950
+    },
+    "desenrollados": [
+      {
+        "linea": 4,
+        "factor": 4
+      }
+    ],
+    "opciones": [],
+    "antes": "pruebas/optimizador/unroll/u3_grande.antes.tac",
+    "despues": "pruebas/optimizador/unroll/u3_grande.despues.tac"
+  },
+  "factor_corto": {
+    "fuente": "pruebas/optimizador/unroll/u1_constante.cls",
+    "valores": {
+      "GLOBAL.suma": 6
+    },
+    "desenrollados": [
+      {
+        "linea": 4,
+        "factor": 4
+      }
+    ],
+    "opciones": [
+      "--unroll=2"
+    ],
+    "tac_antes": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = 4\n  goto B2\nB2: successors [B4, B3]\n  if i >= $limite_S0 goto B4\nB3: successors [B2]\n  t0 = suma + i\n  suma = t0\n  i = i + 1\n  goto B2\nB4: successors []\n  return\n\n",
+    "tac_despues": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors []\n  i = 0\n  $limite_S0 = 4\n  t1 = suma + i\n  suma = t1\n  t5 = i + 1\n  t2 = suma + t5\n  suma = t2\n  t6 = i + 2\n  t3 = suma + t6\n  suma = t3\n  t7 = i + 3\n  t4 = suma + t7\n  suma = t4\n  i = t7 + 1\n  return\n\n"
+  },
+  "factor8": {
+    "fuente": "pruebas/optimizador/unroll/u3_grande.cls",
+    "valores": {
+      "GLOBAL.suma": 4950
+    },
+    "desenrollados": [
+      {
+        "linea": 4,
+        "factor": 8
+      }
+    ],
+    "opciones": [
+      "--unroll=8"
+    ],
+    "tac_antes": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = 100\n  goto B2\nB2: successors [B4, B3]\n  if i >= $limite_S0 goto B4\nB3: successors [B2]\n  t0 = suma + i\n  suma = t0\n  i = i + 1\n  goto B2\nB4: successors []\n  return\n\n",
+    "tac_despues": "initial_data bytes=4\n  @00000000 = 00000000\n\nfunction main (entry B0)\nB0: successors [B1]\n  goto B1\nB1: successors [B2]\n  i = 0\n  $limite_S0 = 100\n  goto B2\nB2: successors [B4, B3]\n  t1 = i + 7\n  if t1 >= $limite_S0 goto B4\nB3: successors [B2]\n  t2 = suma + i\n  suma = t2\n  t10 = i + 1\n  t3 = suma + t10\n  suma = t3\n  t11 = i + 2\n  t4 = suma + t11\n  suma = t4\n  t12 = i + 3\n  t5 = suma + t12\n  suma = t5\n  t13 = i + 4\n  t6 = suma + t13\n  suma = t6\n  t14 = i + 5\n  t7 = suma + t14\n  suma = t7\n  t15 = i + 6\n  t8 = suma + t15\n  suma = t8\n  t16 = i + 7\n  t9 = suma + t16\n  suma = t9\n  i = t16 + 1\n  goto B2\nB4: successors [B6, B5]\n  if i >= $limite_S0 goto B6\nB5: successors [B4]\n  t0 = suma + i\n  suma = t0\n  i = i + 1\n  goto B4\nB6: successors []\n  return\n\n"
+  }
+}

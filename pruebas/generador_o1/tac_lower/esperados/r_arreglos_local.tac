@@ -22,8 +22,8 @@ B3: successors [B1]
   lw v13, 12(rz)
   saddi v2, v13, 1
   lw v14, 12(rz)
-  mov v15, 4
-  pseudo.mul v3, v14, v15
+  mov v15, 2
+  sll v3, v14, v15
   lw v4, 8(rz)
   add v16, v4, v3
   lw v5, 0(v16)

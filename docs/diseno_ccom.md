@@ -1004,7 +1004,7 @@ IDE (F5) ──► ccom  nivel, --opt=, --unroll=, --metrics m.json ──► m.
 
 | Eslabón | Estado | Qué falta |
 |---|---|---|
-| Banderas de `ccom` | Existen: `-O1`, `--opt=`, `--unroll=`, `--metrics`. `-O2` reservado hasta C3.5 | Nada del lado de `ccom` |
+| Banderas de `ccom` | Existen: `-O1`, `-O2`, `--opt=`, `--unroll=`, `--metrics`. `-O2` activa las cinco pasadas | Nada del lado de `ccom` |
 | JSON de métricas | Existe, con todas sus claves | Contadores reales y nivel real (P9) |
 | F5 del IDE | `ide/compilacion.py` define las banderas en una tabla de siete opciones de sí o no (`-s`, `-t`, `-m`, `-p`, `-v`, `--time`, `--no-schedule`) | No puede pedir nivel, lista de pasadas, factor ni archivo de métricas. Afecta a `ide/compilacion.py` y a `ide/interfaz/opciones_compilacion.py`. Las tres nuevas llevan valor, y la tabla actual solo admite casillas |
 | Ciclos | `tools/sim_asm.py` los cuenta (`Simulator.cycles`) y los imprime en una línea de texto | `ccom` no los conoce: su JSON deja `ciclos_sim` en `null`. Los agrega quien mide, usando la clase `Simulator` como ya hace `comparar.py` |
@@ -1017,7 +1017,7 @@ Mismas claves y mismo orden que hoy. Cambian tres valores:
 
 | Clave | Hoy | Después |
 |---|---|---|
-| `nivel` | `"O1"` fijo | `"O1"` o `"O2"` |
+| `nivel` | `"O1"` o `"O2"`, según el nivel efectivo de la compilación | `"O1"` o `"O2"` |
 | `contadores` | Todos en cero, como texto fijo | Los valores de `TacPassCounters` |
 | `contadores.desenrollados` | `[]` | Lista de `{"linea": L, "factor": k}` |
 
@@ -2463,6 +2463,29 @@ temporales.
 Los niveles responden a §7.3 del enunciado (benchmarks "con diferentes niveles de
 optimización"): `-O0` (Proyecto I), `-O1` (TAC sin optimizar, la línea base) y `-O2` (todas). La
 medición aislada de §6 usa `-O1` contra `-O1 --opt=X`.
+
+`-O2` equivale a `-O1 --opt=unroll,rename,dce,reorder,spill`, con el orden fijo de
+`tac_passes.c` y nivel efectivo 2: el JSON publica `"nivel":"O2"`. Como `-O0`,
+`-O2` rechaza cualquier `--opt=...` explícito con código 2, independientemente del
+orden de las opciones. Admite `--unroll=N` para N entre 2 y 16 y `--metrics`;
+la combinación con `-x` sigue siendo error de uso. Los niveles explícitos distintos
+siguen siendo incompatibles. La ayuda describe las cinco pasadas y la prueba CLI
+compara BIN/HEX/MEM/ASM byte a byte contra su composición explícita en un programa
+con lazos y arreglos.
+
+**Resultados medidos C3.5.** O0 y O1 sin pasadas conservan sus salidas byte a byte
+frente a develop en 67/67 programas; O2 es equivalente a O0 en los 67, con dos
+imágenes externas. La composición explícita también se comprueba en todo el corpus
+mediante check-pasadas-isa. Las sumas de bundles O0/O1/O2 son 9705/7275/10320 y las
+de ciclos del simulador 81366/69144/62271; 22 programas aumentan bundles o ciclos
+con O2 frente a O1, sin modificar las heurísticas. Los contadores O2 del corpus son
+35 marcas desenrolladas, 44 definiciones renombradas, 108 instrucciones eliminadas,
+7 bloques retirados, 2586 posiciones reordenadas y 24 intervalos derramados. Los
+casos s1/s2/s3, fuera del corpus ejecutable O0, conservan sus errores O0/O1 y con O2
+dan 26/78/8192; miden 349/936/545 bundles, 480/1327/1324 ciclos y 6/12/6 derrames.
+En p08, O1/rename/rename,dce/O2 miden 17/18/16/16 bundles y los mismos ciclos;
+DCE retira los dos temporales muertos creados por rename. Las comprobaciones y la
+tabla por programa están en `build/c35_o2/reporte.md`.
 
 ## 12. Enlazado de archivos (`P`, tarea C2.2)
 

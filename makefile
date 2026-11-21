@@ -344,6 +344,7 @@ check-pasadas: $(BUILD_DIR)/interpretar_tac
 check-pasadas-isa: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/generador_o1/tac_emit/comparar.py --opt=reorder
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/generador_o1/tac_emit/comparar.py --opt=spill
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/generador_o1/tac_emit/comparar.py --opt=unroll,rename,dce,reorder,spill
 
 .PHONY: check-pasadas check-pasadas-isa
 

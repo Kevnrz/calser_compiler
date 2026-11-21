@@ -1,8 +1,8 @@
 """Diálogo de perfiles: limita las casillas a las capacidades de ccom."""
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QComboBox,
-    QLineEdit, QCheckBox, QDialogButtonBox, QLabel, QPushButton, QHBoxLayout)
+    QLineEdit, QCheckBox, QDialogButtonBox, QLabel, QPushButton, QHBoxLayout, QSpinBox)
 from PySide6.QtWidgets import QFileDialog
-from ide.compilacion import MODOS, OPCIONES, validar
+from ide.compilacion import MODOS, OPCIONES, PASADAS, validar
 
 
 class OpcionesCompilacion(QDialog):
@@ -34,6 +34,25 @@ class OpcionesCompilacion(QDialog):
         fila.addWidget(self.destino)
         fila.addWidget(self.examinar)
         form.addRow('Destino', fila)
+        self.nivel = QComboBox()
+        self.nivel.addItems(['O0', 'O1', 'O2'])
+        self.nivel.setCurrentText(datos['nivel'])
+        form.addRow('Optimización', self.nivel)
+        self.pasadas = {}
+        for pasada in PASADAS:
+            casilla = QCheckBox(pasada)
+            casilla.setChecked(pasada in datos['pasadas'])
+            casilla.toggled.connect(self.actualizar)
+            self.pasadas[pasada] = casilla
+            form.addRow(casilla)
+        self.unroll = QSpinBox()
+        self.unroll.setRange(0, 16)
+        self.unroll.setSpecialValueText('0 = automático')
+        self.unroll.setValue(datos['unroll'])
+        form.addRow('Factor de unrolling', self.unroll)
+        self.metricas = QCheckBox('Guardar métricas')
+        self.metricas.setChecked(datos['metricas'])
+        form.addRow(self.metricas)
         layout.addLayout(form)
         self.aviso = QLabel()
         self.aviso.setWordWrap(True)
@@ -49,6 +68,7 @@ class OpcionesCompilacion(QDialog):
         botones.rejected.connect(self.reject)
         layout.addWidget(botones)
         self.modo.currentIndexChanged.connect(self.cambiar_modo)
+        self.nivel.currentIndexChanged.connect(self.actualizar)
         self.actualizar()
 
     def cambiar_modo(self):
@@ -61,6 +81,14 @@ class OpcionesCompilacion(QDialog):
         self.examinar.setEnabled(modo != 'analizar')
         for clave, casilla in self.casillas.items():
             casilla.setEnabled(modo in OPCIONES[clave][2])
+        compilar = modo == 'compilar'
+        nivel = self.nivel.currentText()
+        self.nivel.setEnabled(compilar)
+        for casilla in self.pasadas.values():
+            casilla.setEnabled(compilar and nivel == 'O1')
+        self.unroll.setEnabled(compilar and (nivel == 'O2' or
+                              (nivel == 'O1' and self.pasadas['unroll'].isChecked())))
+        self.metricas.setEnabled(compilar and nivel in ('O1', 'O2'))
         textos = {
             'analizar': 'Comprueba léxico, sintaxis y semántica sin generar artefactos.',
             'ast': 'Exportación sintáctica: no comprueba semántica ni genera un ejecutable.',
@@ -77,4 +105,7 @@ class OpcionesCompilacion(QDialog):
 
     def datos(self):
         return validar({'modo': self.modo.currentData(), 'destino': self.destino.text().strip(),
+                        'nivel': self.nivel.currentText(),
+                        'pasadas': [p for p, casilla in self.pasadas.items() if casilla.isChecked()],
+                        'unroll': self.unroll.value(), 'metricas': self.metricas.isChecked(),
                         **{clave: casilla.isChecked() for clave, casilla in self.casillas.items()}})

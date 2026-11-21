@@ -2743,6 +2743,8 @@ Con esto `validar` no deja pasar ninguna combinación que `ccom` rechace con có
 niveles; cinco casillas de pasadas, habilitadas solo con `O1`; un campo numérico "Factor de
 unrolling" (0 = automático); la casilla "Guardar métricas". `datos()` los incluye.
 
+**Resultado C1.2 (13.2).** El perfil y el diálogo permiten elegir O0/O1/O2, las cinco pasadas ordenadas solo con O1, el factor de unrolling automático o 2..16 cuando corresponde y las métricas con O1/O2 en `.metricas.json`, incluidas en las salidas previstas. La validación descarta opciones incompatibles y conserva los perfiles antiguos como O0. Ocho tests nuevos pasan, con 74 perfiles ejecutados contra ccom (todos con código 0), además de los controles del diálogo y la carga de preferencias. `make check` y `make ejercicios` dan 0. Con `XDG_DATA_HOME` temporal y el mismo entorno con PySide6, `check-ide` pasa de 427 a 435 tests: los 427 conservan su resultado, incluidos 34 fallos (29 métodos; uno con seis subcasos) y 1 error preexistentes; los ocho nuevos pasan. Evidencia y comparación test por test en `build/ide_niveles/reporte.md`.
+
 ### 13.3 Herramienta de medición
 
 Archivo nuevo: `tools/medir.py` (Python estándar). Objetivo de Make: `metricas`.

@@ -8,6 +8,7 @@ import hashlib
 
 MODOS = {'compilar': 'Compilar programa', 'analizar': 'Analizar sin generar archivos',
          'ast': 'Exportar AST a JSON', 'ensamblar': 'Ensamblar archivo .asm'}
+PASADAS = ('unroll', 'rename', 'dce', 'reorder', 'spill')
 OPCIONES = {
     'asm': ('Generar listado .asm (necesario para F6)', '-s', {'compilar'}),
     'ast_texto': ('Mostrar AST textual', '-t', {'compilar', 'ast'}),
@@ -32,6 +33,14 @@ def validar(datos):
     for clave, (_, _, modos) in OPCIONES.items():
         valor = datos.get(clave, clave == 'asm')
         limpio[clave] = modo in modos and type(valor) is bool and valor
+    nivel = datos.get('nivel')
+    limpio['nivel'] = nivel if modo == 'compilar' and nivel in ('O0', 'O1', 'O2') else 'O0'
+    pasadas = datos.get('pasadas', [])
+    limpio['pasadas'] = [p for p in PASADAS if p in pasadas] if limpio['nivel'] == 'O1' and isinstance(pasadas, list) else []
+    unroll = datos.get('unroll')
+    limpio['unroll'] = unroll if (type(unroll) is int and 2 <= unroll <= 16 and
+                                ('unroll' in limpio['pasadas'] or limpio['nivel'] == 'O2')) else 0
+    limpio['metricas'] = datos.get('metricas') is True and limpio['nivel'] != 'O0'
     return limpio
 
 
@@ -69,4 +78,14 @@ def preparar(datos, fuente):
     else:
         args = (['-x'] if modo == 'ensamblar' else []) + [str(fuente), '-o', str(destino)]
     args += [bandera for clave, (_, bandera, _) in OPCIONES.items() if perfil[clave]]
+    if perfil['nivel'] == 'O2':
+        args.append('-O2')
+    elif perfil['nivel'] == 'O1':
+        args.append('--opt=' + ','.join(perfil['pasadas']) if perfil['pasadas'] else '-O1')
+    if perfil['unroll']:
+        args.append('--unroll=%d' % perfil['unroll'])
+    if perfil['metricas']:
+        ruta = destino.with_suffix('.metricas.json')
+        args += ['--metrics', str(ruta)]
+        salidas.append(ruta)
     return perfil, destino, args, salidas

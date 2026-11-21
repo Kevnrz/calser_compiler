@@ -1,6 +1,7 @@
 """M1B: invocaciones reales, destinos, preferencias y vigencia de F6."""
 import json
 import os
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -17,6 +18,119 @@ APP = ejecucion.APP
 
 
 class Perfiles(unittest.TestCase):
+    def preparar_real(self, datos):
+        """Cada perfil de estas pruebas debe ser aceptado por el ccom del repo."""
+        root = Path(__file__).resolve().parents[2]
+        tmp = tempfile.TemporaryDirectory(prefix='ide-niveles-')
+        self.addCleanup(tmp.cleanup)
+        fuente = root / 'pruebas/p03_suma.cls'
+        if datos.get('modo') == 'ensamblar':
+            fuente = Path(tmp.name) / 'entrada.asm'
+            previo = subprocess.run([str(root / 'ccom'), str(root / 'pruebas/p03_suma.cls'),
+                                     '-s', '-o', str(fuente.with_suffix('.bin'))],
+                                    capture_output=True, text=True, timeout=30)
+            self.assertEqual(previo.returncode, 0, previo.stderr)
+        perfil, destino, args, salidas = compilacion.preparar(
+            {**datos, 'destino': str(Path(tmp.name) / ('salida.json' if datos.get('modo') == 'ast' else 'salida.bin'))}, fuente)
+        resultado = subprocess.run([str(root / 'ccom'), *args], capture_output=True,
+                                   text=True, timeout=30)
+        self.assertNotEqual(resultado.returncode, 2, (args, resultado.stderr))
+        self.assertEqual(resultado.returncode, 0, (args, resultado.stderr))
+        self.assertTrue(all(p.is_file() for p in salidas))
+        return perfil, destino, args, salidas
+
+    def test_niveles_y_orden_de_pasadas_con_ccom(self):
+        for datos, bandera in (({'nivel': 'O0'}, None), ({'nivel': 'O1'}, '-O1'),
+                               ({'nivel': 'O2'}, '-O2'),
+                               ({'nivel': 'O1', 'pasadas': ['spill', 'dce', 'unroll', 'rename', 'reorder', 'dce', 'ajena']},
+                                '--opt=' + ','.join(compilacion.PASADAS))):
+            with self.subTest(datos=datos):
+                perfil, _, args, _ = self.preparar_real(datos)
+                if bandera:
+                    self.assertIn(bandera, args)
+                else:
+                    self.assertFalse(any(a.startswith(('-O', '--opt=')) for a in args))
+                self.assertEqual(perfil['pasadas'], list(compilacion.PASADAS) if '--opt=' in (bandera or '') else [])
+
+    def test_o2_descarta_pasadas_con_ccom(self):
+        perfil, _, args, _ = self.preparar_real({'nivel': 'O2', 'pasadas': list(compilacion.PASADAS)})
+        self.assertEqual(perfil['pasadas'], [])
+        self.assertIn('-O2', args)
+        self.assertFalse(any(a.startswith('--opt=') for a in args))
+
+    def test_unroll_valido_e_incompatible_con_ccom(self):
+        for nivel, pasadas in (('O0', ['unroll']), ('O1', []), ('O1', ['unroll']), ('O2', [])):
+            for valor in (0, 1, 2, 16, 17, -2, True, 2.0, '4', None):
+                with self.subTest(nivel=nivel, pasadas=pasadas, valor=valor):
+                    perfil, _, args, _ = self.preparar_real({'nivel': nivel, 'pasadas': pasadas, 'unroll': valor})
+                    esperado = valor if type(valor) is int and 2 <= valor <= 16 and (nivel == 'O2' or nivel == 'O1' and 'unroll' in pasadas) else 0
+                    self.assertEqual(perfil['unroll'], esperado)
+                    self.assertEqual([a for a in args if a.startswith('--unroll=')], [f'--unroll={esperado}'] if esperado else [])
+
+    def test_metricas_por_nivel_con_ccom(self):
+        for nivel in ('O0', 'O1', 'O2'):
+            for valor in (True, False, 'true', 1):
+                with self.subTest(nivel=nivel, valor=valor):
+                    perfil, destino, args, salidas = self.preparar_real({'nivel': nivel, 'metricas': valor})
+                    esperado = nivel != 'O0' and valor is True
+                    self.assertEqual(perfil['metricas'], esperado)
+                    self.assertEqual('--metrics' in args, esperado)
+                    ruta = destino.with_suffix('.metricas.json')
+                    self.assertEqual(ruta in salidas, esperado)
+                    if esperado:
+                        self.assertEqual(args[args.index('--metrics') + 1], str(ruta))
+                        self.assertEqual(json.loads(ruta.read_text())['nivel'], nivel)
+
+    def test_otros_modos_descartan_optimizacion_con_ccom(self):
+        for modo in ('analizar', 'ast', 'ensamblar'):
+            for nivel in ('O1', 'O2'):
+                with self.subTest(modo=modo, nivel=nivel):
+                    perfil, _, args, salidas = self.preparar_real({'modo': modo, 'nivel': nivel,
+                        'pasadas': list(compilacion.PASADAS), 'unroll': 4, 'metricas': True})
+                    self.assertEqual([perfil[k] for k in ('nivel', 'pasadas', 'unroll', 'metricas')], ['O0', [], 0, False])
+                    self.assertFalse(any(a.startswith(('-O', '--opt=', '--unroll=', '--metrics')) for a in args))
+                    self.assertFalse(any(p.name.endswith('.metricas.json') for p in salidas))
+
+    def test_tipos_invalidos_de_nivel_y_pasadas_con_ccom(self):
+        for nivel in (None, [], {}, True, 'O3'):
+            with self.subTest(nivel=nivel):
+                perfil, _, _, _ = self.preparar_real({'nivel': nivel, 'metricas': True})
+                self.assertEqual(perfil['nivel'], 'O0')
+        for pasadas in (None, True, 'unroll', {'unroll': True}, [[], {}, 'dce']):
+            with self.subTest(pasadas=pasadas):
+                perfil, _, _, _ = self.preparar_real({'nivel': 'O1', 'pasadas': pasadas})
+                self.assertEqual(perfil['pasadas'], ['dce'] if isinstance(pasadas, list) else [])
+
+    def test_dialogo_optimizacion_segun_modo_y_nivel(self):
+        dialogo = OpcionesCompilacion({'nivel': 'O1', 'pasadas': ['unroll'], 'unroll': 4, 'metricas': True})
+        self.addCleanup(dialogo.deleteLater)
+        self.assertEqual(dialogo.datos()['unroll'], 4)
+        self.assertTrue(dialogo.datos()['metricas'])
+        for modo in compilacion.MODOS:
+            dialogo.modo.setCurrentIndex(dialogo.modo.findData(modo))
+            for nivel in ('O0', 'O1', 'O2'):
+                dialogo.nivel.setCurrentText(nivel)
+                for marcado in (False, True):
+                    with self.subTest(modo=modo, nivel=nivel, unroll=marcado):
+                        dialogo.pasadas['unroll'].setChecked(marcado)
+                        self.assertEqual(dialogo.nivel.isEnabled(), modo == 'compilar')
+                        for casilla in dialogo.pasadas.values():
+                            self.assertEqual(casilla.isEnabled(), modo == 'compilar' and nivel == 'O1')
+                        self.assertEqual(dialogo.unroll.isEnabled(), modo == 'compilar' and (nivel == 'O2' or nivel == 'O1' and marcado))
+                        self.assertEqual(dialogo.metricas.isEnabled(), modo == 'compilar' and nivel != 'O0')
+                        perfil = dialogo.datos()
+                        self.assertEqual(perfil['nivel'], nivel if modo == 'compilar' else 'O0')
+                        self.assertEqual(perfil['pasadas'], ['unroll'] if modo == 'compilar' and nivel == 'O1' and marcado else [])
+
+    def test_perfil_viejo_carga_como_o0(self):
+        with tempfile.TemporaryDirectory(prefix='ide-perfil-') as tmp:
+            settings = QSettings(str(Path(tmp) / 'prefs.ini'), QSettings.Format.IniFormat)
+            settings.setValue('estado_v1', json.dumps({'version': 1, 'compilacion': {'modo': 'compilar', 'asm': True}}))
+            perfil = preferencias.cargar(settings)['compilacion']
+            self.assertEqual([perfil[k] for k in ('nivel', 'pasadas', 'unroll', 'metricas')], ['O0', [], 0, False])
+            self.assertTrue(perfil['asm'])
+            self.preparar_real(perfil)
+
     def test_opciones_incompatibles_y_datos_invalidos(self):
         for modo in compilacion.MODOS:
             datos = compilacion.validar({'modo': modo, **{k: True for k in compilacion.OPCIONES}})

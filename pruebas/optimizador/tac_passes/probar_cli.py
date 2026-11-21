@@ -109,11 +109,53 @@ def check_rename(folder):
     print('PASS rename CLI: r1=2 salida=18; r2=2 g=20; r3=0 g=2 x=2 y=8; 6 HIGH exactos')
 
 
+def check_reorder(folder):
+    """C3.3b: ISA virtual exacto, métricas CLI y estado observable de §14.4."""
+    sys.path.insert(0, str(ROOT / 'pruebas/generador_o1/tac_emit'))
+    from comparar import compile_new, execute, observable
+    cases = json.loads((ROOT / 'pruebas/optimizador/reorder/esperados.json').read_text())
+    for name, case in cases.items():
+        source = ROOT / 'pruebas/optimizador/reorder' / (name + '.cls')
+        prefix = folder / (name + '_isa')
+        capture = subprocess.run([str(ROOT / 'build/probar_reorder'), str(source), str(prefix)],
+                                 capture_output=True, timeout=30)
+        assert capture.returncode == 0, capture.stderr
+        assert json.loads(capture.stdout)['reordenadas'] == case['reordenadas']
+        for stage in ('antes', 'despues'):
+            assert Path(str(prefix) + '.' + stage + '.asm').read_bytes() == \
+                source.with_suffix('.' + stage + '.asm').read_bytes()
+        metrics, base = folder / 'reorder.json', folder / name
+        result = subprocess.run([str(BINARY), '-O1', '--opt=reorder', '-s',
+            '--metrics', str(metrics), str(source), '-o', str(base) + '.bin'],
+            capture_output=True, timeout=30)
+        assert result.returncode == 0, result.stderr
+        assert json.loads(metrics.read_text())['contadores']['reordenadas'] == case['reordenadas']
+        baseline, regions = compile_new(BINARY, source, folder / 'sin_reorder')
+        for external in (bytes(1024), bytes(range(256)) * 4):
+            sim = execute(base, external)
+            assert observable(sim, regions) == observable(execute(baseline, external), regions)
+            assert bytes(sim.memory[0x1000:0x1400]) == external
+            assert sim.auth == case['auth'] and sim.exc == case['exc']
+            selected, values = False, {}
+            for line in base.with_suffix('.asm').read_text().splitlines():
+                scope = re.match(r'#\s+Scope \d+: (\w+)(?: (\w+))?$', line)
+                if scope:
+                    selected = scope[1] == 'GLOBAL' or scope[2] == 'main'
+                symbol = re.search(r'#\s+(\w+).* width=(\d+) addr=0x([0-9A-Fa-f]+)', line)
+                if selected and symbol:
+                    address = int(symbol[3], 16)
+                    values[symbol[1]] = [int.from_bytes(sim.memory[a:a+4], 'little', signed=True)
+                                        for a in range(address, address + int(symbol[2]), 4)]
+            assert values == case['valores'], (name, values)
+    print('PASS reorder CLI: o1=25, o2=16, o3=18 datos=[12,0]; seis ISA exactos y estado observable')
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix='calser_e_') as temporary:
         folder = Path(temporary)
         check_dce(folder)
         check_rename(folder)
+        check_reorder(folder)
         output = folder / 'salida.bin'
         metrics = folder / 'metricas.json'
 
@@ -173,7 +215,8 @@ def main():
         previous = output.with_suffix('.asm').read_bytes()
         run('--opt=unroll,rename,dce,reorder,spill', '-s')
         assert output.with_suffix('.asm').read_bytes() == previous
-        labels = run('-O1', '-m').stdout
+        # Reemitir ASM: las pasadas pueden cambiar las direcciones anteriores.
+        labels = run('-O1', '-s', '-m').stdout
         listing = output.with_suffix('.asm').read_text()
         for name, address in re.findall(r'^#\s+(\S+)\s+(\d+)(?:  \(interna\))?$', listing, re.M):
             assert f'  {name} = {address}' in labels

@@ -246,13 +246,14 @@ check-o1-equivalence: $(TARGET)
 $(BUILD_DIR)/probar_tac_passes: pruebas/optimizador/tac_passes/probar.c $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-check-o1: $(TARGET) $(BUILD_DIR)/probar_tac_passes $(BUILD_DIR)/probar_dce $(BUILD_DIR)/probar_rename
+check-o1: $(TARGET) $(BUILD_DIR)/probar_tac_passes $(BUILD_DIR)/probar_dce $(BUILD_DIR)/probar_rename $(BUILD_DIR)/probar_reorder
 	$(BUILD_DIR)/probar_tac_passes
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/optimizador/tac_passes/probar_cli.py
 
-check: check-unroll check-spill check-rename check-dce check-pasadas check-pasadas-isa check-ide-options check-o1 check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles check-recovery check-clones-json check-repairs-json check-suggestions-json check-tokens-json check-success check-analysis check-analysis-json
+check: check-reorder check-unroll check-spill check-rename check-dce check-pasadas check-pasadas-isa check-ide-options check-o1 check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles check-recovery check-clones-json check-repairs-json check-suggestions-json check-tokens-json check-success check-analysis check-analysis-json
 
 clean:
+	rm -f $(BUILD_DIR)/probar_reorder $(BUILD_DIR)/unitarias_reorder
 	rm -f $(BUILD_DIR)/probar_unroll $(BUILD_DIR)/capturar_unroll
 	rm -f $(BUILD_DIR)/probar_spill $(BUILD_DIR)/unitarias_spill
 	rm -f $(BUILD_DIR)/probar_rename
@@ -363,6 +364,19 @@ check-rename: $(TARGET) $(BUILD_DIR)/probar_rename
 	$(BUILD_DIR)/probar_rename
 
 .PHONY: check-rename
+
+# C3.3b: dependencias y calendario virtual, Aho §10.3–10.4; diseño §11.5.
+$(BUILD_DIR)/unitarias_reorder: pruebas/optimizador/reorder/unitarias.c src/optimizador/tac_pass_reorder.c $(filter-out $(OBJ_DIR)/main.o $(OBJ_DIR)/tac_pass_reorder.o,$(OBJECTS)) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $(filter-out src/optimizador/tac_pass_reorder.c,$^) $(LDLIBS)
+
+check-reorder: $(TARGET) $(BUILD_DIR)/unitarias_reorder $(BUILD_DIR)/probar_reorder
+	$(BUILD_DIR)/unitarias_reorder
+	$(BUILD_DIR)/probar_reorder
+
+.PHONY: check-reorder
+
+$(BUILD_DIR)/probar_reorder: pruebas/optimizador/reorder/probar.c $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 # C3.4: Chaitin y planes de derrame; Aho §8.8.4 y diseño §11.6.
 $(BUILD_DIR)/probar_spill: pruebas/optimizador/spill/probar.c | $(BUILD_DIR)

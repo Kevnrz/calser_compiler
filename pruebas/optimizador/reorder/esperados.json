@@ -1,0 +1,28 @@
+{
+  "o1_cadenas": {
+    "valores": {},
+    "reordenadas": 25,
+    "auth": false,
+    "exc": false,
+    "memoria_externa": "sin cambios"
+  },
+  "o2_saltos": {
+    "valores": {},
+    "reordenadas": 16,
+    "auth": false,
+    "exc": false,
+    "memoria_externa": "sin cambios"
+  },
+  "o3_funciones": {
+    "valores": {
+      "datos": [
+        12,
+        0
+      ]
+    },
+    "reordenadas": 16,
+    "auth": false,
+    "exc": false,
+    "memoria_externa": "sin cambios"
+  }
+}

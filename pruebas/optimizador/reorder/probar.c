@@ -13,6 +13,8 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/wait.h>
 extern ASTNode *root;
 
 /* Entrada: programa y flujo vivos. Salida: ninguna.
@@ -47,12 +49,39 @@ static void pressure(FILE *out, TacProgram *program) {
     fputc(']', out);
 }
 
-/* Entrada: fuente, prefijo de capturas y pasadas HIGH opcionales (rename/dce).
- * Salida: 0 y JSON de contadores/presión. Efectos: guarda .antes/.despues.isa.
+/* Entrada: ninguna. Salida: código de las pruebas CLI de §14.4.
+ * Efectos: reutiliza sus capturas exactas, JSON y simulador en un directorio temporal.
+ * Restricciones: ejecuta Python sin shell; no duplica el comparador observable.
+ */
+static int check_examples(void) {
+    static const char script[] =
+        "from pathlib import Path\n"
+        "import sys, tempfile\n"
+        "sys.dont_write_bytecode = True\n"
+        "sys.path.insert(0, str(Path('pruebas/optimizador/tac_passes').resolve()))\n"
+        "from probar_cli import check_reorder\n"
+        "with tempfile.TemporaryDirectory(prefix='calser_reorder_') as directory:\n"
+        " check_reorder(Path(directory))\n";
+    pid_t child = fork();
+    assert(child >= 0);
+    if (!child) {
+        execlp("python3", "python3", "-c", script, (char *)NULL);
+        perror("python3");
+        _exit(127);
+    }
+    int status;
+    assert(waitpid(child, &status, 0) == child);
+    return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+}
+
+/* Entrada: fuente, prefijo de capturas y pasadas HIGH opcionales (rename/dce/unroll).
+ * Salida: 0 y JSON de contadores/presión. Efectos: guarda .antes/.despues.asm.
  * Restricciones: captura antes de asignar; mide después planes de preservación
  * sin emitir código. Permite inspeccionar los fallos del backend. Conserva identidad, metadatos y bloque de cada nodo.
  */
 int main(int argc, char **argv) {
+    if (argc == 1)
+        return check_examples();
     if (argc < 3 || argc > 4)
         return 2;
     FILE *input = fopen(argv[1], "r");
@@ -73,16 +102,18 @@ int main(int argc, char **argv) {
             high = 1u << 1;
         else if (!strcmp(argv[3], "rename,dce"))
             high = (1u << 1) | (1u << 2);
+        else if (!strcmp(argv[3], "unroll,rename,dce"))
+            high = (1u << 0) | (1u << 1) | (1u << 2);
         else
             return 2;
     }
     TacMetrics metrics = {0};
-    TacPassContext context = {.program = build->program, .scopes = scopes_first(),
+    TacPassContext context = {.program = build->program, .build = build, .scopes = scopes_first(),
         .metrics = &metrics, .enabled = high, .source_name = argv[1]};
     assert(tac_passes_run(&context, TAC_PASS_HIGH, error, sizeof error));
     TacProgram *isa = tac_lower(build->program, error, sizeof error);
     assert(isa);
-    snprintf(path, sizeof path, "%s.antes.isa", argv[2]);
+    snprintf(path, sizeof path, "%s.antes.asm", argv[2]);
     FILE *out = fopen(path, "w");
     assert(out);
     tac_print(out, isa);
@@ -116,7 +147,7 @@ int main(int argc, char **argv) {
         assert(!memcmp(&copy, &o->saved, sizeof copy));
     }
     free(original);
-    snprintf(path, sizeof path, "%s.despues.isa", argv[2]);
+    snprintf(path, sizeof path, "%s.despues.asm", argv[2]);
     out = fopen(path, "w");
     assert(out);
     tac_print(out, isa);

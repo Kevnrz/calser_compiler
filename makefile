@@ -371,6 +371,7 @@ $(BUILD_DIR)/unitarias_reorder: pruebas/optimizador/reorder/unitarias.c src/opti
 
 check-reorder: $(TARGET) $(BUILD_DIR)/unitarias_reorder $(BUILD_DIR)/probar_reorder
 	$(BUILD_DIR)/unitarias_reorder
+	$(BUILD_DIR)/probar_reorder
 
 .PHONY: check-reorder
 

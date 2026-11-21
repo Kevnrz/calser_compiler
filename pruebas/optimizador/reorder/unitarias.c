@@ -66,6 +66,55 @@ static void chains(void) {
     puts("PASS dos cadenas: 1,3,2,4 (2); una cadena: 1,2,3 (0)");
 }
 
+/* Entrada: ninguna. Salida: ninguna. Efectos: prueba Operación compleja, §11.5.
+ * Restricciones: ISA manual, cargas independientes a ambos lados; §4.6.10.
+ * Cada lado conserva la calendarización por lista, sin cruzar la PSEUDO.
+ */
+static void complex_barrier(void) {
+    const TacPseudoKind kinds[] = {TAC_PSEUDO_MUL, TAC_PSEUDO_DIV,
+                                  TAC_PSEUDO_MOD, TAC_PSEUDO_POW};
+    for (size_t kind = 0; kind < sizeof kinds / sizeof kinds[0]; kind++) {
+        Fixture f;
+        fixture_init(&f, TAC_STAGE_ISA_VIRTUAL);
+        TacOperand values[9];
+        for (size_t k = 0; k < 9; k++)
+            values[k] = tac_temp_new(f.function);
+        TacInstruction *nodes[9];
+        for (size_t side = 0; side < 2; side++) {
+            size_t at = side ? 5 : 0, v = side ? 5 : 0;
+            nodes[at] = fixture_isa(f.entry, "lw", values[v], tac_physical(0), tac_none(), tac_none());
+            nodes[at + 1] = fixture_isa(f.entry, "add", values[v + 1], values[v], values[v], tac_none());
+            nodes[at + 2] = fixture_isa(f.entry, "lw", values[v + 2], tac_physical(0), tac_none(), tac_none());
+            nodes[at + 2]->isa.displacement = 4;
+            nodes[at + 3] = fixture_isa(f.entry, "add", values[v + 3], values[v + 2], values[v + 2], tac_none());
+            if (!side) {
+                TacSelectors selectors = {-1, -1, -1};
+                nodes[4] = tac_append_pseudo(f.entry, kinds[kind], values[4], values[1], values[3], selectors, 0);
+            }
+        }
+        fixture_exit(tac_block_new(f.function));
+        fixture_validate(&f);
+        ReorderNode before = {0}, barrier = {0}, after = {0};
+        char error[256];
+        assert(fill_node(&before, f.function, nodes[0], error, sizeof error));
+        assert(fill_node(&barrier, f.function, nodes[4], error, sizeof error));
+        assert(fill_node(&after, f.function, nodes[5], error, sizeof error));
+        assert(barrier.alone);
+        assert(dependency(&before, &barrier) == 1);
+        assert(dependency(&barrier, &after) == 1);
+        assert(run(f.program) == 4);
+        for (size_t k = 0; k < 4; k++) {
+            assert(position(f.entry, nodes[k]) < position(f.entry, nodes[4]));
+            assert(position(f.entry, nodes[k + 5]) > position(f.entry, nodes[4]));
+        }
+        const size_t order[] = {0, 2, 1, 3, 4, 5, 7, 6, 8};
+        for (size_t k = 0; k < 9; k++)
+            assert(position(f.entry, nodes[order[k]]) == k);
+        tac_program_free(f.program);
+    }
+    puts("PASS operación compleja: MUL/DIV/MOD/POW barrera; dos cadenas por lado (4)");
+}
+
 /* Entrada: fuente y clase de restricción de la tabla. Salida: ninguna.
  * Efectos: construye ISA real y comprueba posiciones/ventanas concretas.
  * Restricciones: libera todos los análisis antes de editar, §7.1.
@@ -182,6 +231,7 @@ static void source(const char *text, int kind) {
 
 int main(void) {
     chains();
+    complex_barrier();
     source("Vm g : int = 0 ; F f [ int a , int b ] : int r ; g = a ; r = g + b ; E ; .", 0);
     source("Vm g : int = 0 ; Vm h : int = 0 ; F f [ int a , int b ] : int r ; g = a ; r = h + b ; E ; .", 1);
     source("Vm g : int = 0 ; Vm datos : int [ 2 ] ; F f [ int a , int b ] : int r ; datos [ b ] = a ; r = g ; E ; .", 2);

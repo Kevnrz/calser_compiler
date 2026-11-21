@@ -122,8 +122,8 @@ def check_reorder(folder):
         assert capture.returncode == 0, capture.stderr
         assert json.loads(capture.stdout)['reordenadas'] == case['reordenadas']
         for stage in ('antes', 'despues'):
-            assert Path(str(prefix) + '.' + stage + '.isa').read_bytes() == \
-                source.with_suffix('.' + stage + '.isa').read_bytes()
+            assert Path(str(prefix) + '.' + stage + '.asm').read_bytes() == \
+                source.with_suffix('.' + stage + '.asm').read_bytes()
         metrics, base = folder / 'reorder.json', folder / name
         result = subprocess.run([str(BINARY), '-O1', '--opt=reorder', '-s',
             '--metrics', str(metrics), str(source), '-o', str(base) + '.bin'],

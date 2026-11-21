@@ -394,6 +394,7 @@ Tomadas tras la revisión contra el TAC real.
 | 7 | Control en las copias del unrolling (20/11) | En la copia j, las lecturas del control se reemplazan por `tj = i + j·paso`; un solo incremento por ronda, en la última copia (notas §5.2.2) | Cada copia con su `i = i + paso` (3 accesos a memoria de `i` por copia en `-O1`) |
 | 8 | `--unroll=N` en un `S` constante de 8 vueltas o menos (20/11) | Sigue siendo total; `--unroll` solo cambia el factor del parcial | Usar el factor pedido (deja la prueba del lazo cada N vueltas) |
 | 9 | Multiplicación por constante en la bajada de -O1 (21/11) | Una MUL con un operando entero se baja a sll/add como -O0 (Horner sobre los bits; negativa con sub desde rz); DIV, MOD y POW siguen como pseudo | Dejar toda MUL como pseudo.mul (-O1 más caro que -O0 en arreglos) |
+| 10 | Reordenamiento y operaciones complejas (21/11) | Toda PSEUDO (`*` sin constante, `/`, `%`, `^`, CRYPTO) es barrera, como `jas`: destruye registros igual que una llamada, y lo que la cruza se guarda y restaura | Tratarla solo como "ocupa su ciclo sola" (cuadradas dejaba de compilar y varios programas subían por preservaciones); un control de presión que revierta el orden (no corrige el modelo, solo esconde el fallo); estimar el costo de las preservaciones en el calendario (otro algoritmo) |
 
 ## 5. Diseño contra el código actual
 
@@ -834,8 +835,9 @@ que salen del ISA.
   dirección desconocida.
 - `PARAM` ya no existe como instrucción: se materializa como carga o `mov` y `sw` a la casilla
   del parámetro. `CALL` es `jas`, una barrera dentro del bloque.
-- `*`, `/`, `%`, `^` y las CRYPTO son PSEUDO indivisibles (no tienen `isa.instruction`): ocupan
-  su ciclo solas; CRYPTO es además barrera.
+- `*` (sin constante; la multiplicación por constante se baja a `sll`/`add`, decisión 4.6.9),
+  `/`, `%`, `^` y las CRYPTO son PSEUDO indivisibles (no tienen `isa.instruction`): ocupan su
+  ciclo solas y, con la decisión 4.6.10, todas son barrera.
 - Los bloques de los programas reales tienen entre 1 y 118 instrucciones.
 
 **Algoritmo**, por bloque con 3 a 256 instrucciones (fuera de ese rango no se toca y cuenta 0;
@@ -851,7 +853,7 @@ calendarización por lista, Aho §10.3–10.4):
    | `b` escribe lo que `a` lee (WAR) | 1 |
    | `a` y `b` escriben lo mismo (WAW) | 1 |
    | Uno escribe memoria y el otro la lee o la escribe, salvo que las dos direcciones sean `rz` más constantes distintas | 1 |
-   | `a` o `b` es barrera (`jas`, CRYPTO) | 1, con todas |
+   | `a` o `b` es barrera (`jas` o cualquier PSEUDO; decisión 4.6.10) | 1, con todas |
    | Uno puede fallar (`/`, `%`, `^`) y el otro es un store, una llamada o CRYPTO | 1 |
    | `b` es el salto final del bloque | 1, con todas |
 
@@ -861,6 +863,27 @@ calendarización por lista, Aho §10.3–10.4):
 4. El orden nuevo es por ciclo simulado y, dentro del ciclo, por posición original.
 5. Aplicarlo con `tac_block_set_order`. `reordered` suma, en todo el programa, las posiciones
    que cambiaron en cada bloque.
+
+**Operaciones complejas como barrera (decisión 4.6.10).** Una PSEUDO se expande en una rutina
+que usa 8 registros auxiliares: destruye registros igual que una llamada, y todo valor vivo a
+través de ella se guarda antes y se restaura después (2 instrucciones por valor). Las llamadas
+ya eran barrera por esa razón. Si el calendario sube una instrucción por encima de una PSEUDO,
+alarga la vida de ese valor a través de ella y agrega preservaciones que el calendario virtual
+no ve; es el problema de orden de fases entre calendarizar y asignar (Aho §10.2). Por eso nada
+cruza una PSEUDO: lo de antes se reordena entre sí y lo de después también. Ejemplo
+(`r = r + a * b`, con `a` y `b` variables):
+
+```
+1: v1 = lw a(rz)       sin barrera: 4 sube antes de 3, v4 queda vivo a través del MUL
+2: v2 = lw b(rz)       y se guarda y restaura (2 instrucciones de más)
+3: v3 = mul v1, v2     con barrera: 1 y 2 se reordenan entre sí; 4, 5 y 6 quedan después de 3
+4: v4 = lw r(rz)
+5: v5 = add v4, v3
+6: sw r(rz), v5
+```
+
+No hay control de presión: si con la barrera un programa pasara de 12 intervalos solapados sin
+spilling, se reporta con su medición y se decide con ese dato.
 
 **Por qué va antes de asignar.** Después de asignar, dos valores sin relación pueden compartir
 registro y aparecer como dependientes (WAR y WAW falsas). Con temporales virtuales esas
@@ -878,7 +901,7 @@ dependencias no existen.
 En un programa fuente el bloque real incluye las inicializaciones, las cargas de cada lectura,
 los stores y el retorno: el contador del programa es mayor (14.4).
 
-**Resultados medidos C3.3b.** La pasada se implementó sin control de presión.
+**Resultados medidos C3.3b.** Continuación con §4.6.10 y el develop actualizado: reorder y reorder,spill compilan y conservan el estado observable de O0 en 67/67 programas, con dos imágenes externas. rename,dce,reorder verifica 66/67; unroll,rename,dce,reorder verifica 63/67: las cinco compilaciones restantes fallan por registros, sin reversión ni control de presión. cuadradas con reorder compila y pasa de 347/8819 a 291/7564 bundles/ciclos; sumar tiene 3→11 intervalos solapados. Solo p09_crypto aumenta frente a O1 (143/3471→145/3473). Ejercicio3 baja de 693/15069 a 653/14880 y p04_memoria de 108/304 a 105/294. Estas cifras incluyen la bajada de MUL por constante: no aíslan el efecto de la barrera. Medición anterior, sobre develop viejo, como comparación: La pasada se implementó sin control de presión.
 En los 48 programas del corpus, 47 compilan y conservan el estado observable con
 reorder, rename,reorder y rename,dce,reorder, usando memoria externa cero y patrón.
 `cuadradas.cls` deja de compilar en las tres combinaciones: en sumar, los TEMP vivos
@@ -2271,7 +2294,7 @@ dependency(a, c):                    // a está antes que c; distancia mayor (de
         si no (a.memory_known y c.memory_known y a.memory_address ≠ c.memory_address):
             d ← máx(d, 1)
     si c es el terminador del bloque:                 d ← máx(d, 1)
-    si a.info.barrier o c.info.barrier:               d ← máx(d, 1)
+    si a.info.barrier o a.alone o c.info.barrier o c.alone: d ← máx(d, 1)   // 4.6.10
     si (a.info.may_trap y (c.writes_memory o c.info.barrier))
        o (c.info.may_trap y (a.writes_memory o a.info.barrier)): d ← máx(d, 1)
     devolver d
@@ -2291,6 +2314,7 @@ desplazamiento (las variables escalares, globales y locales, siempre lo cumplen)
 | Memoria distinta | `sw` y `lw` en direcciones `rz` + constante distintas | Pueden cambiar de orden |
 | Dirección calculada | Guardado en un elemento de arreglo (base TEMP) y una carga escalar | Conservan su orden |
 | Barrera | Instrucciones a los dos lados de un `jas` | Ninguna cruza la llamada |
+| Operación compleja | Cargas independientes antes y después de un `mul` entre variables (ISA armado) | Ninguna cruza el `mul`; las de cada lado se reordenan entre sí |
 | Puede fallar | Una división y un guardado | Conservan su orden relativo |
 | RAW con el salto final | Comparación que define un TEMP y el salto que lo lee | Distancia 2, no 1 |
 | Salto final | Bloque que termina en salto condicional | El salto queda último |
@@ -2299,7 +2323,7 @@ En los programas fuente el contador es de todo el programa (incluye, por ejemplo
 preparación de parámetros en `main`); su valor exacto se fija con el listado ISA de cada
 prueba en el PR.
 
-**Resultados medidos C3.3b.** La prueba de dos cadenas ISA manual produce el
+**Resultados medidos C3.3b.** Continuación: toda PSEUDO es barrera por alone, conservando la distancia máxima RAW=2. La unitaria de Operación compleja arma dos cadenas a cada lado de MUL/DIV/MOD/POW: ningún nodo cruza y el orden de cada lado es 1,3,2,4, con cuatro posiciones cambiadas. Las capturas ISA virtuales usan extensión .asm; o1/o2/o3 dan reordenadas=25/16/16 (antes 25/16/18). check-reorder ejecuta ahora unitarias y el auxiliar sin argumentos, que reutiliza la comprobación CLI de capturas exactas, métricas y estado. El auxiliar conserva identidad, contenido y bloque, y mide los intervalos antes/después; los fallos de las combinaciones alcanzan máximos de 21, 14, 14, 16 y 13 intervalos frente a 4, 5, 4, 5 y 4 antes de reorder. Medición anterior, sobre develop viejo, como comparación: La prueba de dos cadenas ISA manual produce el
 orden 1,3,2,4 y reordered=2; una cadena da 0. Los casos fuente verifican alias,
 dirección desconocida, barrera, fallo/store y salto último; se comprueba internamente
 RAW=2 tanto con salto final como con fallo/store, sin rebajarlo por otra regla.
@@ -3057,8 +3081,8 @@ F main [] : void ;
 Esperado: nada cruza el `jas`; la escritura y la lectura del arreglo (base calculada)
 conservan su orden.
 
-**Resultados medidos C3.3b.** Los tres programas literales se guardan en
-pruebas/optimizador/reorder/ con esperados.json y capturas .antes.isa/.despues.isa.
+**Resultados medidos C3.3b.** Continuación: las seis capturas .antes.asm/.despues.asm contienen ISA virtual, antes de asignar. o1 mantiene 25 posiciones y 50→38 bundles, 51→39 ciclos; o2 mantiene 16 y 62→49, 52→43; o3 pasa de 18 a 16 posiciones y ahora mide 51→48 bundles, 53→50 ciclos. Sus valores siguen siendo los prescritos (o1/o2 sin variables globales/main; o3 datos=[12,0]), con memoria externa y CRYPTO iguales en dos imágenes. La bajada actual convierte las MUL por constante de o3 en SLL; por ello no se atribuye toda la diferencia con el reporte viejo a §4.6.10. Medición anterior, sobre develop viejo, como comparación: Los tres programas literales se guardan en
+pruebas/optimizador/reorder/ con esperados.json y capturas .antes.asm/.despues.asm (antes de 4.6.10 se llamaban .isa).
 Con reorder, o1 registra 25 posiciones cambiadas y pasa de 50 a 38 bundles
 (51 a 39 ciclos); o2 registra 16 y pasa de 62 a 49 (52 a 43 ciclos); o3 registra
 18 y pasa de 76 a 81 (114 a 119 ciclos). En o1/o2 no hay variables globales ni

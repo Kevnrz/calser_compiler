@@ -90,7 +90,8 @@ static int intersects(const TacOperand *a, size_t n, const TacOperand *b, size_t
 }
 
 /* Entrada: nodos en orden original. Salida: mayor distancia aplicable, §4.6.4.
- * Efectos: ninguno. Restricciones: barrera/terminador/fallo no rebajan RAW=2.
+ * Efectos: ninguno. Restricciones: toda PSEUDO es barrera (§4.6.10);
+ * barrera/terminador/fallo no rebajan RAW=2.
  */
 static unsigned char dependency(const ReorderNode *a, const ReorderNode *b) {
     unsigned char distance = intersects(a->writes, a->write_count, b->reads, b->read_count) ? 2 : 0;
@@ -99,7 +100,8 @@ static unsigned char dependency(const ReorderNode *a, const ReorderNode *b) {
     if (a->accesses_memory && b->accesses_memory && (a->writes_memory || b->writes_memory) &&
         !(a->memory_known && b->memory_known && a->memory_address != b->memory_address))
         ordered = 1;
-    if (b->info.flow != TAC_FLOW_NEXT || a->info.barrier || b->info.barrier)
+    if (b->info.flow != TAC_FLOW_NEXT || a->info.barrier || a->alone ||
+        b->info.barrier || b->alone)
         ordered = 1;
     if ((a->info.may_trap && (b->writes_memory || b->info.barrier)) ||
         (b->info.may_trap && (a->writes_memory || a->info.barrier)))

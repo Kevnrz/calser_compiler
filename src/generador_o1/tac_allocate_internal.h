@@ -6,6 +6,8 @@
 typedef struct {
     TacFunction *function;
     unsigned *registers;
+    int *spill_slot;                 /* -1 con registro; casilla propia en Chaitin. */
+    size_t spill_count;
     TacAllocationMetrics metrics;
 } TacFunctionAllocation;
 struct TacAllocationResult {
@@ -14,6 +16,8 @@ struct TacAllocationResult {
     TacEmissionSite *sites;
     size_t site_count;
 };
-void tac_allocate_sites(TacAllocationResult *result, TacFunctionAllocation *function,
-                        const TacLiveAnalysis *live);
+int tac_allocate_color(TacFunctionAllocation *function, const TacIntervalAnalysis *ranges,
+                       const char *source, char *error, size_t capacity);
+int tac_allocate_sites(TacAllocationResult *result, TacFunctionAllocation *function,
+                        const TacLiveAnalysis *live, char *error, size_t capacity);
 #endif

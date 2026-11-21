@@ -390,6 +390,9 @@ Tomadas tras la revisión contra el TAC real.
 | 3 | Renombramiento en `main` | No renombrar una definición de una raíz observable de `main` si entre ella y la siguiente hay una instrucción con `may_trap` o `uses_globals` (en HIGH: `CALL`, `DIV`, `MOD`, `POW`) | Guardar el origen de cada lectura en la liveness; no renombrar nada en `main` |
 | 4 | Distancias del reordenamiento | La distancia entre dos instrucciones es la mayor de todas las reglas que se cumplen; RAW nunca baja de 2 | Ninguna razonable |
 | 5 | Asignación con spilling | Chaitin con `--opt=spill` y `-O2`; `-O1` conserva el *linear scan* sin derrame | Solo Chaitin también en `-O1` (cambiaría la línea base); *linear scan* con derrame |
+| 6 | Copias del unrolling (16/11) | Al final de la pasada, en cada función, se fusiona un bloque tocado por el unrolling con el siguiente cuando termina en `goto` a él y es su único predecesor. Las copias de un cuerpo sin `C` quedan en un solo bloque básico (notas §5.2.2) | Copias en bloques separados con `goto` (cada etiqueta y cada salto corta la región del calendarizador: las copias nunca se mezclan); solo quitar el `goto` (la etiqueta sigue cortando); cambiar el calendarizador (cambiaría `-O0`) |
+| 7 | Control en las copias del unrolling (20/11) | En la copia j, las lecturas del control se reemplazan por `tj = i + j·paso`; un solo incremento por ronda, en la última copia (notas §5.2.2) | Cada copia con su `i = i + paso` (3 accesos a memoria de `i` por copia en `-O1`) |
+| 8 | `--unroll=N` en un `S` constante de 8 vueltas o menos (20/11) | Sigue siendo total; `--unroll` solo cambia el factor del parcial | Usar el factor pedido (deja la prueba del lazo cada N vueltas) |
 
 ## 5. Diseño contra el código actual
 
@@ -694,7 +697,15 @@ INTEGER, TEMP o exactamente `tac_variable($limite_Sk)`), `tac_loop_mark_state`,
   sucesor fuera del lazo (un `E` dentro del cuerpo, o una caída hacia un `RETURN`). Clonarlo
   perdería esa caída (decisión 4.6.2).
 
-El semántico prohíbe asignar el control, así que solo lo cambia el propio lazo.
+El semántico prohíbe asignar el control, así que solo lo cambia el propio lazo. Además, el
+control lo declara el propio `S` (`declare_loop_control`): es local al lazo y ninguna función
+llamada desde el cuerpo puede leerlo ni cambiarlo.
+
+**Precisión del estado observable (§7.1).** El control que declara un `S` es local al lazo y no existe fuera de él. Tras una terminación anormal, su valor en memoria no es observable: ningún código Calser puede leerlo después del error. Por eso el incremento único de §4.6.7 puede dejar esa casilla con el valor anterior entre copias, sin excepciones al algoritmo; el resto del estado observable conserva el contrato de §7.1 y §11.1.
+
+**Precondición del paso.** Si `(k − 1) × |paso|` no cabe en 32 bits con signo (k = número de
+copias), el lazo no se desenrolla: esa constante la usan la guarda del parcial y el control de
+las copias.
 
 **Constante.** Un `S` tiene número de vueltas constante solo si `initial` y `bound` de la marca
 son INTEGER. Un fin escrito como expresión constante en el fuente (`2+2`) llega como TEMP y
@@ -704,11 +715,13 @@ cuenta como no constante: el TAC no pliega.
 
 | Caso | Acción |
 |---|---|
-| `initial` y `bound` INTEGER y N ≤ 8 vueltas | Desenrollado total: N copias del cuerpo, sin la prueba del `S` ni salto de retroceso |
+| `initial` y `bound` INTEGER y N ≤ 8 vueltas | Desenrollado total: N copias del cuerpo en un solo bloque, sin la prueba del `S` ni salto de retroceso |
 | Cualquier otro | Factor 4, con el lazo original como residuo |
 | El crecimiento estimado supera el presupuesto | No se desenrolla ese lazo |
 
-Con `--unroll=N` (2 a 16) se usa ese factor en lugar de 4. El presupuesto
+Con `--unroll=N` (2 a 16) se usa ese factor en lugar de 4, **solo en el parcial**: un `S`
+constante de 8 vueltas o menos se desenrolla total aunque se pida otro factor, porque quitar el
+lazo entero siempre es mejor que dejar una prueba cada N vueltas (decisión 4.6.8). El presupuesto
 (`UNROLL_BUDGET`) es una cota heurística del crecimiento en instrucciones HIGH: no cuenta la
 guarda ni la expansión de las operaciones complejas. La comprobación definitiva de la ROM es
 la del ensamblado.
@@ -719,9 +732,11 @@ la del ensamblado.
 antes                              después
 H:  si i >= lim → salida           G:  t = i + (k-1)·paso
 B:  cuerpo                             si t >= lim → H        (quedan menos de k vueltas)
-L:  i = i + paso ; ir a H          U:  cuerpo ; i = i + paso  ┐
-                                       …                      ├ k copias
-                                       cuerpo ; i = i + paso  ┘
+L:  i = i + paso ; ir a H          U:  cuerpo con i                       ┐
+                                       t1 = i + paso ; cuerpo con t1      │ k copias
+                                       …                                  ├ (un solo bloque,
+                                       tk-1 = i + (k-1)·paso ;            │  4.6.6 y 4.6.7)
+                                       cuerpo con tk-1 ; i = tk-1 + paso  ┘
                                        ir a G
                                    H:  si i >= lim → salida   (residuo: el lazo original)
                                    B:  cuerpo
@@ -733,28 +748,72 @@ el TAC real, el cuerpo y el retorno suelen ser el mismo bloque, y un `C` dentro 
 agrega bloques que se alcanzan por caída; la clonación conserva el orden relativo de los
 bloques del conjunto, y con eso sus caídas.
 
-**Transformación total.** Las N copias reemplazan la prueba y el retroceso. Se conservan el
-`goto` de entrada (redirigido a la primera copia) y los saltos entre copias. Después de
-redirigir y reconstruir aristas, la cabecera y el cuerpo originales quedan inalcanzables y se
-quitan con el ciclo de borrado de la decisión 4.6.1.
+**Control en las copias (decisión 4.6.7).** Como en las notas §5.2.2, cada copia usa su valor
+del control y hay un solo incremento por ronda. En la copia j (contando desde 0):
+
+- si j ≥ 1, al inicio de la copia se agrega `tj = i + j·paso` (temporal nuevo) y todas las
+  lecturas de `i` dentro de la copia se reemplazan por `tj`; la copia 0 lee `i` directo;
+- el incremento `i = i + paso` (la única escritura de `i` en el lazo) se quita de las copias
+  0 a k − 2; en la última copia se conserva, y como su lectura de `i` ya se reemplazó, queda
+  `i = tk-1 + paso`, que vale `i + k·paso`.
+
+Es correcto porque `i` no cambia dentro de la ronda (se quitó todo incremento salvo el último)
+y nadie más lo escribe. Cada `tj` es exactamente el valor que tenía `i` en la vuelta j del lazo
+original. Motivo: en `-O1` cada lectura de una variable es un `lw` y cada asignación un `sw`, y
+el calendarizador tiene un solo slot de memoria por bundle; con `suma = suma + i` y 4 copias,
+los accesos a memoria de `i` bajan de 12 a 5 (una lectura por copia y el incremento final).
+
+**Transformación total.** Las N copias reemplazan la prueba y el retroceso. El `goto` de
+entrada se redirige a la primera copia y cada copia salta a la siguiente; la última, a la
+salida. Después de reconstruir aristas, la cabecera y el cuerpo originales quedan
+inalcanzables y se quitan con el ciclo de borrado de la decisión 4.6.1.
+
+**Fusión de bloques (decisión 4.6.6).** El calendarizador empaqueta por bloque básico: cada
+etiqueta y cada salto cierran la región (`flush_region` en `codegen.c`). Si las copias quedaran
+en bloques separados unidos por `goto`, nunca compartirían bundles, y el objetivo del
+unrolling es un bloque básico u veces más grande cuyas copias el calendarizador entremezcla
+(notas §5.2.2). Por eso, después de desenrollar **todos** los lazos de una función, se fusiona
+un bloque X con el siguiente Y cuando:
+
+- X es el previo o una copia de un lazo desenrollado (Y puede ser la salida);
+- la última instrucción de X es `goto Y` y Y es el siguiente en la lista;
+- X es el único predecesor de Y, y Y no es la entrada de la función.
+
+Se quita el `goto`, las instrucciones de Y pasan al final de X y se borra Y. Se repite hasta
+que no haya más pares. Se hace al final y no lazo por lazo porque la salida de un lazo puede
+ser el previo del siguiente (dos `S` seguidos), y fusionarla antes invalidaría ese plan. Al
+fusionar, Y sale del conjunto y X se vuelve a revisar, porque ahora termina como terminaba Y.
+Solo se tocan bloques de la pasada: el resto de la función queda como en `-O1`, y la medición
+de `--opt=unroll` no mezcla otro efecto. No cambia el calendarizador ni `-O0`.
+
+En el parcial, `G` termina en un salto condicional y no se fusiona con la primera copia; las
+k copias quedan en un solo bloque que termina en `goto G`. Con un `C` dentro del cuerpo, cada
+copia conserva sus bloques internos y solo se fusionan los pares que cumplen la regla.
 
 **Ejemplo, total, sobre el TAC real** (`S [ i , 0 , 4 , 1 ] ; suma = suma + i ; .`):
 
 ```
-antes                                          después
-B1: i = 0 ; $limite_S0 = 4 ; goto B2           B1: i = 0 ; $limite_S0 = 4 ; goto C1
-B2: if i >= $limite_S0 goto B4                 C1: t1 = suma + i ; suma = t1 ; i = i + 1 ; goto C2
-B3: t0 = suma + i ; suma = t0 ; i = i + 1      C2: …                                  ; goto C3
-    goto B2                                    C3: …                                  ; goto C4
-B4: return                                     C4: …                                  ; goto B4
-                                               B4: return
+antes                                          después de copiar          después de ajustar el control y fusionar
+B1: i = 0 ; $limite_S0 = 4 ; goto B2           B1: … ; goto C1            B1: i = 0 ; $limite_S0 = 4
+B2: if i >= $limite_S0 goto B4                 C1: copia 0 ; goto C2          t1 = suma + i ; suma = t1
+B3: t0 = suma + i ; suma = t0 ; i = i + 1      C2: copia 1 ; goto C3          t2 = i + 1 ; t3 = suma + t2 ; suma = t3
+    goto B2                                    C3: copia 2 ; goto C4          t4 = i + 2 ; t5 = suma + t4 ; suma = t5
+B4: return                                     C4: copia 3 ; goto B4          t6 = i + 3 ; t7 = suma + t6 ; suma = t7
+                                               B4: return                     i = t6 + 1
+                                                                              return
 ```
+
+Todo el `S` queda en el bloque del previo: ninguna prueba, ningún salto, una sola región, y `i`
+se lee 4 veces y se escribe 1 (antes: 8 lecturas y 4 escrituras). Los números de temporal son
+ilustrativos.
 
 Se anota `{linea del S, factor 4}`. Ese par no distingue un desenrollado total de uno parcial ni
 prueba equivalencia: el PR acompaña cada prueba con su listado transformado.
 
 **Ejemplo, parcial.** Con fin en una variable que vale 10 y factor 4: `G` deja pasar mientras
 `i + 3 < 10`; se ejecutan dos rondas de 4 (i = 0..7) y el residuo hace las 2 vueltas restantes.
+
+**Resultados medidos C3.1.** En 63 programas (45 previos y 18 fuentes nuevas) se aceptan 33 marcas: 20 totales y 13 parciales; 28 programas tienen desenrollados y 27 aumentan bundles o ciclos. u1/u2/u3 conservan suma=6/15/4950: sus bundles pasan de 29/30/29 a 38/65/64 y sus ciclos de 85/120/1717 a 38/93/898. En u1 las copias y la salida se fusionan con el previo, pero el prólogo B0 no pertenece a los tocados: quedan dos bloques y su goto de entrada, en diferencia con el esperado textual «sin saltos». Las 63 entradas mantienen el estado observable de O0 en dos imágenes con unroll y con unroll,rename,dce; un testigo adicional fuera del corpus muestra una diferencia en la casilla del control de main al fallar en la segunda copia (i=1 frente a i=0). Conforme a la precisión de esta sección, ese control no es observable tras la terminación anormal. Se conserva §4.6.7 sin excepciones; el comparador y el corpus no cambian, y el testigo queda descrito en el reporte.
 
 ### 7.5 Reordenamiento (A4.5, tarea C3.3b)
 
@@ -1938,7 +1997,7 @@ marca da `header` (prueba), `body`, `latch` (retorno), `control`, `limit`, `init
 
 | Función | Entrada | Salida | Errores |
 |---|---|---|---|
-| `int tac_pass_unroll(TacPassContext *context, char *detail, size_t capacity)` | Programa de alto nivel con marcas; `context->unroll_factor` (0 o 2..16) | 1; lazos desenrollados; un elemento en `counters.unrolled` por lazo | 0 si falla un análisis, una clonación o la reconstrucción de aristas |
+| `int tac_pass_unroll(TacPassContext *context, char *detail, size_t capacity)` | Programa de alto nivel con marcas; `context->unroll_factor` (0 o 2..16) | 1; lazos desenrollados; un elemento en `counters.unrolled` por lazo | 0 si falla un análisis, una clonación, una fusión o la reconstrucción de aristas |
 
 **Estructura**
 
@@ -1972,12 +2031,29 @@ tac_pass_unroll(contexto):
                                                         : UNROLL_DEFAULT_FACTOR);  total ← falso
             crecimiento ← p.size × copias            // el parcial conserva además el original
             si total: crecimiento ← p.size × máx(0, copias − 1)
+            si (copias − 1) × |step| no cabe en 32 bits: continuar   // precondición del paso
             si crecimiento > presupuesto: continuar  // este lazo no se desenrolla
             presupuesto ← presupuesto − crecimiento
             si total: unroll_total(f, p, N)   si no: unroll_partial(f, p, copias)
+            agregar p.previous y los bloques de todas las copias a tocados   // decisión 4.6.6
             agregar {p.line, copias} a contadores.unrolled
         tac_rebuild_edges(f)
+        merge_blocks(f, tocados)                     // al final, nunca lazo por lazo
+        tac_rebuild_edges(f)
     devolver 1
+
+merge_blocks(f, tocados):
+    repetir mientras haya cambios:
+        para cada X de tocados (en orden de lista):
+            Y ← X.next
+            si Y = NULL, Y = f.entry o la última instrucción de X no es goto Y: seguir
+            si Y no tiene exactamente un predecesor (X): seguir
+            quitar el goto de X (tac_remove)
+            mover las instrucciones de Y al final de X, en orden
+            quitar Y de tocados;  tac_block_remove(f, Y)     // Y quedó vacío y sin referencias
+            tac_rebuild_edges(f)
+    // Usa solo funciones públicas existentes (tac_remove, tac_append, tac_block_remove,
+    // tac_rebuild_edges); no agrega nada a la representación.
 
 collect_plans(f):
     lazos ← tac_loops_analyze(f)
@@ -2012,6 +2088,7 @@ unroll_partial(f, p, k):
     para j de 1 a k:
         salto ← última instrucción del clon de latch en copias[j]       // era goto header
         salto.dest ← (j < k) ? etiqueta(primer bloque de copias[j+1]) : etiqueta(G)
+    adjust_control(f, p, copias, k)                                   // decisión 4.6.7
     última instrucción de p.previous .dest ← etiqueta(G)              // era goto header
 
 unroll_total(f, p, N):
@@ -2019,21 +2096,41 @@ unroll_total(f, p, N):
     para j de 1 a N: copias[j] ← tac_blocks_clone(…, anterior);  anterior ← último de copias[j]
     para j de 1 a N:
         salto de copias[j] .dest ← (j < N) ? etiqueta(primero de copias[j+1]) : etiqueta(p.exit)
+    adjust_control(f, p, copias, N)                                   // decisión 4.6.7
     última instrucción de p.previous .dest ← (N > 0) ? etiqueta(primero de copias[1])
                                                      : etiqueta(p.exit)
     tac_rebuild_edges(f)
     quitar {header} ∪ p.blocks con el ciclo de remove_unreachable de 11.2   // decisión 4.6.1
 ```
 
+```
+adjust_control(f, p, copias, k):                 // copias[1..k]; la copia j del texto es copias[j+1]
+    i ← variable(p.mark.control)
+    para j de 0 a k − 1:
+        bloques ← copias[j+1]
+        si j ≥ 1:
+            t ← tac_temp_new(f)
+            tac_insert_after(primer bloque de bloques, NULL, TAC_ADD, t, i, entero(j × step))
+            para cada instrucción x de bloques, salvo la recién insertada:
+                tac_replace_reads(bloque de x, x, i, t, …)
+        inc ← la instrucción de bloques cuyo destino es i    // el incremento; única escritura de i
+        si j < k − 1: tac_remove(bloque de inc, inc)
+        // en la última copia inc queda como i = t + paso (su lectura ya se reemplazó)
+```
+
 `trip_count` nunca da 0 para un `S` que llega al TAC con inicio y fin enteros: el semántico
-rechaza un `S` constante que no se ejecuta. La guarda asume que `control + (k−1)·paso` no
-desborda 32 bits; es una precondición documentada.
+rechaza un `S` constante que no se ejecuta. La constante `(k−1)·paso` se comprueba antes de
+desenrollar. Los valores `i + j·paso` que se calculan en ejecución son los mismos que el lazo
+original alcanza en sus vueltas (en el parcial, la guarda solo deja pasar rondas completas), así
+que no agregan desbordes que el original no tenga.
 
 **Casos de prueba**
 
 | Caso | Entrada | Esperado |
 |---|---|---|
-| Total | `S [ i , 0 , 4 , 1 ]` | 4 copias, sin la prueba del `S` ni salto de retroceso; `{línea, 4}` |
+| Total | `S [ i , 0 , 4 , 1 ]` | 4 copias fusionadas con el previo y la salida en un solo bloque, sin prueba ni saltos; `i` se lee 4 veces y se escribe 1; `{línea, 4}` |
+| Control en el parcial | Fin en una variable que vale 10, cuerpo que guarda `i` en un arreglo | Las copias 1 a 3 usan `i + 1`, `i + 2`, `i + 3`; un solo `i = t + paso` por ronda; el arreglo queda igual que en `-O1` |
+| Factor pedido en lazo corto | `--unroll=2` con `S [ i , 0 , 4 , 1 ]` | Total con 4 copias (decisión 4.6.8); `{línea, 4}` |
 | Paso negativo | `S [ i , 10 , 0 , -2 ]` | 5 vueltas, total |
 | Parcial exacto | Fin en una variable que vale 8 | `bound` = `$limite`; guarda, 4 copias; el residuo no ejecuta vueltas |
 | Parcial con residuo | Fin en una variable que vale 6 | Una ronda de 4 y 2 vueltas de residuo |
@@ -2043,10 +2140,13 @@ desborda 32 bits; es una precondición documentada.
 | Inicio y fin dinámicos iguales | Inicio y fin en variables que valen lo mismo | Parcial; el lazo ejecuta 0 vueltas y el resultado no cambia |
 | Factor pedido | `--unroll=8` con 100 vueltas | 12 rondas de 8 y residuo de 4 |
 | Anidados | Un `S` dentro de otro, o un `L` dentro de un `S` | Solo se desenrolla el `S` interno; el externo se omite |
-| `C` dentro del cuerpo | Cuerpo con un `C` sin `E` | Se desenrolla; cada copia conserva sus caídas |
+| `C` dentro del cuerpo | Cuerpo con un `C` sin `E` | Se desenrolla; cada copia conserva sus caídas y solo se fusionan los pares de 4.6.6 |
+| Dos `S` seguidos | Dos lazos constantes uno tras otro | Ambos totales; la salida del primero es el previo del segundo y todo queda en un bloque |
 | `E` dentro del cuerpo | Búsqueda con `E` dentro del `S` | No se desenrolla (salida anticipada) |
 | Sin retroceso | Cuerpo que siempre retorna | Marca sin retroceso: no se desenrolla |
 | Sin presupuesto | Cuerpo de cientos de instrucciones | No se desenrolla; lista vacía |
+
+**Resultados medidos C3.1.** La implementación usa las APIs públicas sin ampliar la representación; la fusión copia los nodos antes de retirar sus originales y mantiene un CFG válido mediante un goto transitorio cuando hay caída, restaurando después el terminador. El auxiliar enlazado con la pasada real conserva seis capturas HIGH de u1/u2/u3; los otros casos y los factores 2/8 se verifican con listados en esperados.json. La lista de u1 es [{linea:4,factor:4}], u2 [{linea:5,factor:4}] y u3 [{linea:4,factor:4}]; --unroll=2 conserva el total de cuatro copias y --unroll=8 da ocho copias parciales en u3. HIGH de u1 pasa de 10 a 16; sus cuatro lecturas del control y un incremento final se conservan, con el goto del prólogo aún presente. En el corpus el máximo posterior es 5 temporales vivos y 6 intervalos, sin fallos de registros. El testigo de fallo en main documentado en build/c31_unroll/reporte.md muestra una diferencia física en la casilla del control entre copias, no observable tras la terminación anormal según la precisión de §7.4. Se conserva el algoritmo sin excepciones y no se incorpora el testigo al corpus de equivalencia.
 
 ### 11.5 Reordenamiento (`src/optimizador/tac_pass_reorder.c`)
 
@@ -2618,9 +2718,9 @@ F main [] : void ;
 .
 ```
 
-Esperado: `suma = 6`. Desenrollado total, `desenrollados = [{linea 4, factor 4}]`; sin la
-prueba del `S` ni salto de retroceso (se conservan el `goto` de entrada y los saltos entre
-copias).
+Esperado: `suma = 6`. Desenrollado total, `desenrollados = [{linea 4, factor 4}]`; las 4
+copias quedan fusionadas en el bloque de `main`, sin prueba del `S` ni saltos (4.6.6), y las
+copias 1 a 3 leen `i + 1`, `i + 2` e `i + 3` con un solo incremento al final (4.6.7).
 
 `u2_variable.cls`: N variable pequeña.
 
@@ -2637,7 +2737,7 @@ F main [] : void ;
 ```
 
 Esperado: `suma = 15`. `bound` = `$limite_S0`: parcial con factor 4, una ronda y 2 vueltas de
-residuo.
+residuo. La ronda tiene un solo incremento de `i` (4.6.7).
 
 `u3_grande.cls`: N grande.
 

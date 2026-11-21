@@ -250,9 +250,10 @@ check-o1: $(TARGET) $(BUILD_DIR)/probar_tac_passes $(BUILD_DIR)/probar_dce $(BUI
 	$(BUILD_DIR)/probar_tac_passes
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/optimizador/tac_passes/probar_cli.py
 
-check: check-spill check-rename check-dce check-pasadas check-pasadas-isa check-ide-options check-o1 check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles check-recovery check-clones-json check-repairs-json check-suggestions-json check-tokens-json check-success check-analysis check-analysis-json
+check: check-unroll check-spill check-rename check-dce check-pasadas check-pasadas-isa check-ide-options check-o1 check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles check-recovery check-clones-json check-repairs-json check-suggestions-json check-tokens-json check-success check-analysis check-analysis-json
 
 clean:
+	rm -f $(BUILD_DIR)/probar_unroll $(BUILD_DIR)/capturar_unroll
 	rm -f $(BUILD_DIR)/probar_spill $(BUILD_DIR)/unitarias_spill
 	rm -f $(BUILD_DIR)/probar_rename
 	rm -f $(BUILD_DIR)/probar_dce
@@ -375,3 +376,15 @@ check-spill: $(TARGET) $(BUILD_DIR)/probar_spill $(BUILD_DIR)/unitarias_spill
 	$(BUILD_DIR)/probar_spill
 
 .PHONY: check-spill
+
+# C3.1: desenrollado sobre HIGH real, notas §5.2.2 y diseño §11.4.
+$(BUILD_DIR)/capturar_unroll: pruebas/optimizador/unroll/capturar.c pruebas/representacion/tac_build/interpretar.c $(filter-out $(OBJ_DIR)/main.o,$(OBJECTS)) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+$(BUILD_DIR)/probar_unroll: pruebas/optimizador/unroll/probar.c | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 $(LDFLAGS) -o $@ $< $(LDLIBS)
+
+check-unroll: $(TARGET) $(BUILD_DIR)/capturar_unroll $(BUILD_DIR)/probar_unroll
+	$(BUILD_DIR)/probar_unroll
+
+.PHONY: check-unroll

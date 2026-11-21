@@ -26,7 +26,8 @@ def main():
                      '--check', '--check-json', '--tokens-json', '--syntax-json',
                      '--suggest-json <n>', '--repair-json', '--clones-json <n>'):
             assert any(line.strip().startswith(flag) for line in long.stdout.splitlines()), flag
-        for text in ('Ejemplos:', 'Codigos de salida:', '.bin', '.hex', '.mem', '.asm', '.tac'):
+        for text in ('Ejemplos:', 'Codigos de salida:', '.bin', '.hex', '.mem', '.asm', '.tac',
+                     'Todas las pasadas: unroll,rename,dce,reorder,spill.'):
             assert text in long.stdout, text
         # La entrada es invalida y hay salidas preexistentes: la ayuda debe
         # terminar sin abrir el fuente, truncar archivos ni medir tiempos.

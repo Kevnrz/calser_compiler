@@ -82,12 +82,12 @@ typedef struct {
     int print_memory;          /* -m */
     int assemble_only;         /* -x */
     int print_bundles;         /* -p */
-    int level;                 /* Nivel efectivo: cero u O1. */
+    int level;                 /* Nivel efectivo: O0, O1 u O2. */
     int explicit_level;        /* Bit por nivel explícito; detecta contradicciones. */
     int opt_seen;              /* --opt explícito, incluso vacío. */
     unsigned passes;           /* Unión de listas sin duplicados. */
     unsigned unroll_factor;    /* Cero: heurística del §11. */
-    const char *metrics_path;  /* --metrics, solo con nivel efectivo O1. */
+    const char *metrics_path;  /* --metrics, solo con nivel efectivo O1/O2. */
 } Options;
 
 #define EXIT_USAGE 2
@@ -122,14 +122,14 @@ static void print_help(void) {
          "  -p                   Muestra los bundles en ensamblador y binario.\n"
          "  -x                   Ensambla la entrada .asm; ignora -s, -i, -t y -m.\n"
          "  --ast-json <json>    Exporta el AST; sin -s, -i, -m ni -p termina\n"
-         "                       despues del analisis sintactico, salvo con -O1.\n"
+         "                       despues del analisis sintactico, salvo con -O1/-O2.\n"
          "  --no-schedule        Desactiva la organizacion de bundles.\n"
          "  -O0                  Generador actual (predeterminado).\n"
          "  -O1                  Camino ISA con asignacion de registros.\n"
-         "  -O2                  Reservado hasta C3.5; por ahora es error de uso.\n"
+         "  -O2                  Todas las pasadas: unroll,rename,dce,reorder,spill.\n"
          "  --opt=lista          Implica -O1; unroll,rename,dce,reorder,spill.\n"
          "  --unroll=N           Factor 2..16; exige unroll activo.\n"
-         "  --metrics <json>     Metricas de una compilacion -O1 exitosa.\n"
+         "  --metrics <json>     Metricas de una compilacion -O1/-O2 exitosa.\n"
          "  --time               Muestra la duracion total en ms en stderr.\n"
          "  --check              Solo analisis lexico, sintactico y semantico;\n"
          "                       no genera archivos. Compatible con -v y --time.\n"
@@ -1356,11 +1356,16 @@ static int parse_options(int argc, char **argv, Options *options) {
         }
     }
 
-    if (options->explicit_level == 4 ||
-        (options->explicit_level && (options->explicit_level & (options->explicit_level - 1))) ||
-        (options->opt_seen && options->explicit_level == 1))
+    if ((options->explicit_level && (options->explicit_level & (options->explicit_level - 1))) ||
+        (options->opt_seen && (options->explicit_level == 1 || options->explicit_level == 4)))
         goto usage_error;
-    options->level = options->explicit_level == 2 || options->opt_seen;
+    // Diseño §11.7: O2 compone todas las pasadas en el orden fijo del gestor.
+    if (options->explicit_level == 4) {
+        options->level = 2;
+        options->passes = (1u << TAC_PASS_COUNT) - 1;
+    } else {
+        options->level = options->explicit_level == 2 || options->opt_seen;
+    }
     if ((options->unroll_factor && !(options->passes & 1u)) ||
         (options->metrics_path && !options->level) ||
         (options->assemble_only && (options->level || options->unroll_factor || options->metrics_path)))

@@ -147,7 +147,8 @@ def check_reorder(folder):
                     values[symbol[1]] = [int.from_bytes(sim.memory[a:a+4], 'little', signed=True)
                                         for a in range(address, address + int(symbol[2]), 4)]
             assert values == case['valores'], (name, values)
-    print('PASS reorder CLI: o1=25, o2=16, o3=18 datos=[12,0]; seis ISA exactos y estado observable')
+    counts = ', '.join(f"{name}={case['reordenadas']}" for name, case in cases.items())
+    print(f'PASS reorder CLI: {counts} datos=[12,0]; seis ISA exactos y estado observable')
 
 
 def main():
@@ -165,7 +166,10 @@ def main():
             assert result.returncode == expected, (args, result.returncode, result.stderr)
             return result
 
-        for args in [('-O2',), ('-O0', '-O1'), ('-O1', '-O0'),
+        for args in [('-O0', '-O1'), ('-O1', '-O0'),
+                     ('-O2', '-O0'), ('-O0', '-O2'), ('-O2', '-O1'), ('-O1', '-O2'),
+                     ('-O2', '--opt=dce'), ('--opt=dce', '-O2'),
+                     ('-O2', '--unroll=1'), ('-O2', '--unroll=17'),
                      ('--opt=',), ('--opt=dce,',), ('--opt=desconocida',),
                      ('--opt=dce', '-O0'), ('-O0', '--opt=dce'),
                      ('--unroll=2',), ('--opt=dce', '--unroll=2'),
@@ -215,6 +219,26 @@ def main():
         previous = output.with_suffix('.asm').read_bytes()
         run('--opt=unroll,rename,dce,reorder,spill', '-s')
         assert output.with_suffix('.asm').read_bytes() == previous
+        # Diseño §11.7: O2 es la composición exacta, con nivel propio en métricas.
+        arrays = ROOT / 'pruebas/p05_arreglos_llamadas.cls'
+        run('-O1', '--opt=' + ','.join(ORDER), '-s', '--metrics', metrics, source=arrays)
+        explicit = {ext: output.with_suffix(ext).read_bytes()
+                    for ext in ('.bin', '.hex', '.mem', '.asm')}
+        explicit_metrics = json.loads(metrics.read_text())
+        run('-O2', '-s', '--metrics', metrics, source=arrays)
+        optimized = json.loads(metrics.read_text())
+        assert optimized['nivel'] == 'O2' and explicit_metrics['nivel'] == 'O1'
+        assert optimized['pasadas'] == ORDER
+        assert list(optimized['alto_nivel']['despues']) == ORDER[:3]
+        assert list(optimized['tiempo_ms']['pasadas']) == ORDER
+        assert optimized['contadores'] == explicit_metrics['contadores']
+        assert all(output.with_suffix(ext).read_bytes() == content
+                   for ext, content in explicit.items())
+        for factor in (2, 16):
+            run('-O2', f'--unroll={factor}', '--metrics', metrics)
+            assert json.loads(metrics.read_text())['nivel'] == 'O2'
+        run('-O2', '-O2')
+        print('PASS O2: composición exacta BIN/HEX/MEM/ASM; nivel O2; factor 2/16 y errores de uso')
         # Reemitir ASM: las pasadas pueden cambiar las direcciones anteriores.
         labels = run('-O1', '-s', '-m').stdout
         listing = output.with_suffix('.asm').read_text()

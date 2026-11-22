@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QFileSystemModel, QTreeView, QRubberBand
 from ide.interfaz.orden_explorador import OrdenExplorador
 
 from ide.busqueda import EXCLUIDAS
-from ide.interfaz.iconos import icono_cls
+from ide.interfaz.iconos import icono_archivo
 
 
 class FiltroProyecto(QSortFilterProxyModel):
@@ -39,8 +39,8 @@ class FiltroProyecto(QSortFilterProxyModel):
     def data(self, indice, role=Qt.ItemDataRole.DisplayRole):
         if role == Qt.ItemDataRole.DecorationRole and indice.isValid() and indice.column() == 0:
             info = self.sourceModel().fileInfo(self.mapToSource(indice))
-            if info.suffix() == 'cls' and not info.isDir() and not info.isSymLink():
-                return icono_cls()
+            if info.suffix().lower() in ('cls', 'tac') and not info.isDir() and not info.isSymLink():
+                return icono_archivo(info.absoluteFilePath())
         return super().data(indice, role)
 
     def filterAcceptsRow(self, row, parent):
@@ -52,7 +52,7 @@ class FiltroProyecto(QSortFilterProxyModel):
             ruta = info.absoluteFilePath()
             ancestro = self.raiz.startswith(ruta.rstrip('/') + '/')
             return ruta == self.raiz or ancestro or info.fileName() not in EXCLUIDAS
-        return info.suffix() == 'cls'
+        return info.suffix().lower() in ('cls', 'tac')
 
 
 class Explorador(OrdenExplorador, QTreeView):
@@ -85,7 +85,7 @@ class Explorador(OrdenExplorador, QTreeView):
         self.archivos.setReadOnly(True)
         self.archivos.setFilter(QDir.Filter.AllDirs | QDir.Filter.Files |
                                 QDir.Filter.NoDotAndDotDot | QDir.Filter.NoSymLinks)
-        self.archivos.setNameFilters(['*.cls'])
+        self.archivos.setNameFilters(['*.cls', '*.tac'])
         self.archivos.setNameFilterDisables(False)
         self.filtro = FiltroProyecto(self)
         self.filtro.setSourceModel(self.archivos)
@@ -121,7 +121,7 @@ class Explorador(OrdenExplorador, QTreeView):
         self.collapsed.connect(self._registrar_cerrada)
         self.archivos.directoryLoaded.connect(self._directorio_cargado)
         self.archivos.rowsInserted.connect(self._filas_insertadas)
-        self.setToolTip('Subcarpetas y archivos .cls · se excluyen carpetas de compilación, dependencias y enlaces simbólicos')
+        self.setToolTip('Subcarpetas y archivos .cls y .tac · se excluyen carpetas de compilación, dependencias y enlaces simbólicos')
 
     def cargar(self, path):
         if self.filtro.raiz:

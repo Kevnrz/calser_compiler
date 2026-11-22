@@ -60,6 +60,20 @@ class Editor(QPlainTextEdit):
     analisisSolicitado = Signal(str, int, str)
     estadoAnalisisCambiado = Signal()
 
+    @property
+    def es_tac(self):
+        return self.path is not None and self.path.suffix.lower() == '.tac'
+
+    def configurar_formato(self):
+        if self.es_tac:
+            from ide.interfaz.resaltado_tac import ResaltadorTac
+            self.detener_analisis()
+            self.highlighter.setDocument(None)
+            self.highlighter.deleteLater()
+            self.highlighter = ResaltadorTac(self.document())
+            self.setReadOnly(True)
+            self.estado_analisis = self.estado_ccom = 'Listado TAC · solo lectura'
+
     def __init__(self, root):
         super().__init__()
         self.acciones_contextuales = ()
@@ -186,21 +200,29 @@ class Editor(QPlainTextEdit):
         self.analisis_revision = -1
         self.contiene_codigo = None
         self.establecer_problemas([])
-        self.highlighter.actualizar({})
+        if not self.es_tac:
+            self.highlighter.actualizar({})
         self.programar_analisis()
         self.contenidoCambiado.emit()
 
     def programar_analisis(self):
+        if self.es_tac:
+            self.detener_analisis()
+            return
         self.estado_analisis = "Esperando…"
         self.analisis_timer.start()
         self.estadoAnalisisCambiado.emit()
 
     def emitir_analisis(self):
+        if self.es_tac:
+            return
         self.estado_analisis = "Analizando…"
         self.estadoAnalisisCambiado.emit()
         self.analisisSolicitado.emit(self.documento_id, self.revision, self.toPlainText())
 
     def aplicar_analisis(self, result):
+        if self.es_tac:
+            return False
         if result.documento != self.documento_id or result.revision != self.revision:
             return False
         modified = self.document().isModified()
@@ -217,7 +239,7 @@ class Editor(QPlainTextEdit):
         self.analisis_timer.stop()
 
     def establecer_problemas(self, problems):
-        self.problemas = list(problems)
+        self.problemas = [] if self.es_tac else list(problems)
         self.linea_actual()
         self.margin.update()
 

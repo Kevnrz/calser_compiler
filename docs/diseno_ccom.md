@@ -2710,6 +2710,8 @@ un listado generado, de formato fijo. Por eso no pasa por `ccom`.
 | "Ver tres direcciones" sin compilar | Acción deshabilitada |
 | Explorador | Muestra `.cls` y `.tac`; no muestra `.bin`, `.hex`, `.mem` |
 
+**Resultado C1.2 (13.1, parcial).** El diálogo Abrir programa admite `.tac`; el editor los abre en solo lectura, sin guardado, compilación con F5, análisis, tokens, sugerencias, reparaciones ni marcas de error de Calser, con resaltado local según la tabla y la paleta existente. El explorador muestra `.cls` y `.tac` con icono genérico para estos últimos y conserva las carpetas excluidas; búsqueda y clones siguen limitados a `.cls`. Quedan fuera la opción `tac` del perfil, la acción «Ver tres direcciones» y el cambio de `-i` para escribir después de las pasadas. Las seis pruebas nuevas pasan. `make check` y `make ejercicios` terminan con código 0. Con `XDG_DATA_HOME` aislado y el mismo Python con PySide6, `check-ide` pasa de 435 a 441 pruebas: los 435 métodos existentes conservan su resultado, incluidos 34 fallos (29 métodos, uno con seis subcasos) y 1 error preexistentes, y las seis pruebas nuevas pasan. Reporte, comparación test por test, diffs y captura offscreen en `build/ide_tac/`.
+
 ### 13.2 Elegir nivel y pasadas en F5
 
 **`ide/compilacion.py`.** El perfil gana cuatro campos, válidos solo en modo `compilar`:

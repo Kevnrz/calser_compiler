@@ -502,7 +502,8 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         self.analizador.olvidar(editor.documento_id)
         self.comprobador.invalidar(editor.documento_id)
         self.auto_results.pop(editor, None)
-        editor.estado_ccom = "Esperando léxico…" if self.auto_action.isChecked() else "Desactivado"
+        editor.estado_ccom = ('Listado TAC · solo lectura' if editor.es_tac else
+                             "Esperando léxico…" if self.auto_action.isChecked() else "Desactivado")
         self.actualizar_titulo(editor)
         if editor.path and editor.document().isModified():
             self.clones_panel.invalidar(editor.path)
@@ -513,6 +514,8 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
             self.statusBar().showMessage("Documento modificado · los resultados anteriores pueden estar desactualizados")
 
     def solicitar_analisis_editor(self, editor, documento, revision, texto):
+        if editor.es_tac:
+            return
         # .asm es una entrada del ensamblador, no un programa Calser: no enviar
         # su texto al lexer/parser de .cls ni mostrar sus marcas como errores.
         if editor.path and editor.path.suffix.lower() == '.asm':
@@ -544,7 +547,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
 
     def fallo_analisis(self, documento, revision, message):
         editor = next((self.tabs.widget(i) for i in range(self.tabs.count()) if self.tabs.widget(i).documento_id == documento), None)
-        if editor and editor.revision == revision:
+        if editor and not editor.es_tac and editor.revision == revision:
             editor.estado_analisis = f"No disponible: {message}"
             pendiente = getattr(self, '_compilacion_esperando_lexico', None)
             if pendiente and pendiente[0] is editor and pendiente[1] == revision:
@@ -553,7 +556,9 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
             self.actualizar_estado()
 
     def programar_comprobacion(self, editor):
-        if editor.path and editor.path.suffix.lower() == '.asm':
+        if editor.es_tac:
+            editor.estado_ccom = 'Listado TAC · solo lectura'
+        elif editor.path and editor.path.suffix.lower() == '.asm':
             editor.estado_ccom = 'Usa Ensamblar (F5)'
         elif not self.auto_action.isChecked():
             editor.estado_ccom = "Desactivado"
@@ -647,7 +652,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         self.actualizar_estado()
 
     def elegir_archivo(self):
-        filename, _ = QFileDialog.getOpenFileName(self, "Abrir programa", str(self.project), "Calser (*.cls);;Todos los archivos (*)")
+        filename, _ = QFileDialog.getOpenFileName(self, "Abrir programa", str(self.project), "Calser (*.cls);;Tres direcciones (*.tac);;Todos los archivos (*)")
         if filename:
             self.abrir(Path(filename))
 
@@ -670,6 +675,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         if not editor or editor.path or editor.toPlainText() or editor.document().isModified():
             editor = self.nuevo()
         editor.path = path
+        editor.configurar_formato()
         self.establecer_version(editor, version)
         editor.setPlainText(text)
         editor.document().setModified(False)
@@ -702,7 +708,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
 
     def guardar(self, checked=False, como=False, editor=None):
         editor = editor or self.editor()
-        if not editor:
+        if not editor or editor.es_tac:
             return False
         path = editor.path
         elegir = como or path is None
@@ -902,6 +908,9 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
             return
         self.actualizar_perfil_compilacion()
         editor = self.editor()
+        if editor and editor.es_tac:
+            self.statusBar().showMessage('El listado TAC es de solo lectura; abre un programa .cls para compilar.')
+            return
         if self.perfil_compilacion['modo'] == 'ensamblar' and (not editor or not editor.path or editor.path.suffix.lower() != '.asm'):
             entrada, _ = QFileDialog.getOpenFileName(self, 'Entrada ensamblador', str(self.project), 'Ensamblador (*.asm)')
             if not entrada:

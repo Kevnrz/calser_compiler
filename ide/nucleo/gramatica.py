@@ -5,6 +5,10 @@ explícita. La interfaz productiva usa Flex/Bison en ccom, no este módulo.
 
 gramatica.py — gramática LL(1) de Calser como datos.
 
+Referencia verificada contra develop de834e2 el 2026-11-22. La herramienta
+tools/verificar_gramatica_ll1.py detecta cambios en las reglas de Bison.
+Esta rama prepara el traslado a C y aún no conecta LL(1) al editor.
+
 Fuente: ide/docs/ll1/gramatica_ll1.md §3, obtenida de grammar/parser.y quitando
 la recursión por la izquierda (Aho §4.3.3) y factorizando (Aho §4.3.4).
 Los no terminales nuevos llevan "_p" donde el documento usa apóstrofo

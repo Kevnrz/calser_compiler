@@ -2,9 +2,33 @@
 
 Tarea C1.1a (compi), Proyecto Grupal II, Grupo 6. Base para el parser predictivo del IDE (D4, D5).
 
-**Origen:** [gramatica_calser.md](gramatica_calser.md), extracción fiel de `grammar/parser.y` en `develop` (commit `7e9e811`, SHA-256 de `parser.y` `9da3995e…48d7d1`). La gramática original tiene 101 producciones, 43 no terminales, 47 terminales y 0 conflictos LALR.
+**Referencia vigente verificada el 2026-11-22 en `feat/ide-ll1-c`, desde `develop` en `de834e2`.** Se contrastaron las reglas reales de `grammar/parser.y` y los tokens de `grammar/lexer.l`. Bison mantiene 101 producciones del lenguaje válido, 43 no terminales y 47 terminales. Las transformaciones existentes siguen correspondiendo a esas reglas. No fue necesario cambiar el lenguaje reconocido.
 
-**Resultado:** gramática LL(1) equivalente, con **118 producciones, 60 no terminales, 47 terminales**. La tabla predictiva M tiene **336 entradas y ninguna celda con dos producciones**.
+**Resultado confirmado.** La gramática LL(1) tiene 118 producciones, 60 no terminales y 47 terminales. La tabla predictiva tiene 336 celdas ocupadas y cero conflictos.
+
+### Comprobación reproducible de la vigencia
+
+Desde la raíz del repositorio se puede ejecutar lo siguiente.
+
+```sh
+python3 -B tools/verificar_gramatica_ll1.py
+python3 -B -m unittest ide.pruebas.test_gramatica_vigente ide.pruebas.test_tabla ide.pruebas.test_parser
+```
+
+La herramienta pide a Bison un informe XML de sus reglas, en una carpeta temporal. Excluye las tres reglas de recuperación, el símbolo de aceptación y la acción intermedia de sugerencias. Normaliza los alias de identificador y número a `id` y `num`. Aplica las factorizaciones de la sección 2 y elimina la recursión izquierda directa. Después exige que todas las producciones resultantes coincidan con `ide/nucleo/gramatica.py` y que la tabla no tenga conflictos.
+
+Cada factorización manual comprueba sus reglas de entrada antes de transformarlas. Si Bison cambia esas reglas, la herramienta se detiene y pide revisar la transformación. Los cambios en las demás reglas también se detectan al comparar el resultado completo. No es un convertidor universal de gramáticas ni una prueba de equivalencia para cualquier lenguaje. La revisión de las transformaciones y las pruebas diferenciales complementan esta comprobación. En esta revisión pasaron 41 pruebas y se comparó la aceptación sintáctica de LL(1) y Bison en 163 fuentes sin errores léxicos.
+
+### Alcance cerrado para el parser C
+
+El paso 1 fija la gramática de entrada para trasladar el reconocedor a C. No cambia el parser de compilación ni conecta todavía LL(1) a la interfaz. Los datos Python se mantienen como referencia de desarrollo, no como una nueva dependencia del futuro motor C durante la ejecución.
+
+- Flex seguirá proporcionando los tokens del lenguaje. El futuro adaptador C deberá convertir sus códigos a los 47 terminales de esta gramática.
+- El marcador privado `TOKEN_CURSOR` pertenecía a las consultas anteriores de Bison y se retiró al cerrar la migración. No es un token del lenguaje. LL(1) consulta su pila al alcanzar la posición pedida.
+- Las acciones que construyen el AST y las producciones `error` de Bison no se trasladan como reglas del lenguaje. La recuperación del nuevo parser se decidirá por separado. En el alcance inicial puede detenerse en el primer error.
+- El reconocedor distingue sintaxis de semántica. Que exista `main`, que sus tipos sean correctos o que una variable esté declarada corresponde al análisis semántico de ccom.
+- Las reglas actuales no incluyen la directiva de enlazado `P` ni un token de cadena. Se conserva como pendiente del lenguaje y no se inventa soporte en LL(1). Si se incorpora a ccom, habrá que actualizar la referencia y sus pruebas.
+- Las transformaciones conservan el lenguaje reconocido, pero no la forma de un posible árbol. Este parser no construirá el AST usado para generar código.
 
 ## 1. Notación
 
@@ -351,4 +375,4 @@ La pila se escribe con el tope a la izquierda.
 1. **Sugerencias.** Son los terminales con entrada en la fila M[X, ·] del tope X. Si X es anulable, se juntan las filas de la pila hacia abajo hasta el primer símbolo no anulable. Ejemplo: después de `x` (tope *acceso'*) salen `[`, `^`, `*`, `/`, `%`, `+`, `-`, comparaciones, `==`, `!=`, `&`, `|`, `;`, `,`, `]` y `)`. Si el tope es un terminal, la sugerencia es ese terminal.
 2. **Autocorrección.** Recuperación a nivel de frase (Aho §4.4.5): se llenan las celdas vacías de M con rutinas de corrección. Su diseño queda pendiente (módulo `correccion`).
 3. **Anulables (21).** *globales*, *funciones'*, *params*, *lista_param'*, *modif_opt*, *dims_opt*, *dims'*, *cuerpo*, *elems'*, *resto_c*, *args*, *lista_arg'*, los siete *X'* de expresiones, *acceso'* e *indice*.
-4. **Pendiente D1.** Cuando C2.2 agregue la declaración de módulo P a `parser.y` (con su token de cadena), *programa* pasa a *programa* → *modulo_opt* *globales* *funciones*. Como P es un token nuevo, no genera conflictos, pero hay que recalcular la tabla.
+4. **Pendiente D1, confirmado en el paso 1.** La declaración de módulo `P` no aparece en el parser actual. Cuando se defina su sintaxis y se implemente en ccom, habrá que factorizar las nuevas reglas y recalcular la tabla. No se presupone aún una producción concreta ni ausencia de conflictos.

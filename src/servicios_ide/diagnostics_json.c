@@ -1,4 +1,4 @@
-/* Serialización y captura de --check-json / --tokens-json v1.
+/* Captura y serialización v1 de diagnóstico clásico, diagnóstico LL(1) y tokens.
  * main.c instala el modo antes de compilar/escanear y finish publica el resultado.
  * Acumula mensajes propios y rangos UTF-8; comentarios/tokens tienen kind estático.
  * No es reentrante. Al exceder límites marca informe incompleto y finish falla.
@@ -33,7 +33,7 @@ static size_t message_bytes;
 typedef struct { const char *kind; size_t start, end; } JsonToken;
 static JsonToken tokens[MAX_TOKENS];
 static size_t token_count;
-static int lexical_mode;
+static int lexical_mode, ll1_mode;
 extern int lexical_fatal;
 
 void diag_json_token(const char *kind, size_t start, size_t end) {
@@ -69,6 +69,7 @@ static void capture(const char *category, DiagPosition position,
 }
 
 void diag_json_begin(void) {
+    ll1_mode = 0;
     entry_count = truncated = failed = 0;
     lexical_mode = 0;
     token_count = 0;
@@ -83,6 +84,13 @@ void diag_json_lexical_begin(void) {
     lexical_mode = 1;
 }
 
+void diag_json_ll1_begin(void) {
+    diag_json_begin();
+    ll1_mode = 1;
+}
+
+void diag_json_limit(void) { truncated = 1; }
+
 int diag_json_finish(FILE *out, const char *source, int exit_code) {
     /* No presentar una recuperación agotada como lista completa. */
     if (!lexical_mode && parser_recovery_limited()) truncated = 1;
@@ -93,13 +101,13 @@ int diag_json_finish(FILE *out, const char *source, int exit_code) {
                            "No se pudo completar el analisis; consulta stderr.";
         exit_code = 1;
     } else if (truncated) {
-        status = "limit"; message = "El informe supera el limite de diagnosticos, mensajes o tokens.";
+        status = "limit"; message = "El analisis supera un limite de fuente, tokens, pila, pasos o informe.";
         exit_code = 1;
     } else if (exit_code || entry_count) {
         status = "errors"; exit_code = 1;
     } else status = "ok";
 
-    fprintf(out, "{\"schema_version\":1,\"operation\":\"%s\",\"offset_unit\":\"utf8\",\"source\":", lexical_mode ? "lex" : "check");
+    fprintf(out, "{\"schema_version\":1,\"operation\":\"%s\",\"offset_unit\":\"utf8\",\"source\":", lexical_mode ? "lex" : ll1_mode ? "check_ll1" : "check");
     json_write_string(out, source);
     fprintf(out, ",\"status\":\"%s\",\"exit_code\":%d,\"error_count\":%d,\"truncated\":%s,\"message\":",
             status, exit_code, diag_count(), truncated ? "true" : "false");

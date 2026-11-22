@@ -1,4 +1,4 @@
-"""Contratos M6 y recorrido aislado: ningún analizador LL(1) entra a producción."""
+"""Contratos M6 y recorrido aislado: ningún analizador Python entra a producción."""
 import copy
 import json
 import os
@@ -17,7 +17,7 @@ TEXTO = '# café 😀\r\nF main [] : void ; E ; .\n'
 class ContratosNativos(unittest.TestCase):
     def respuestas(self):
         paquete, _ = empaquetar({Path('/tmp/a.cls'): TEXTO, Path('/tmp/b.cls'): TEXTO})
-        consultas = [('check', TEXTO, ['--check-json']), ('lex', TEXTO, ['--tokens-json']),
+        consultas = [('check_ll1', TEXTO, ['--check-ll1-json']), ('check', TEXTO, ['--check-json']), ('lex', TEXTO, ['--tokens-json']),
                      ('suggest', 'F main [] : vo', ['--suggest-json', '14']),
                      ('repair', 'F main [] : void ; E ;', ['--repair-json']),
                      ('syntax', TEXTO, ['--syntax-json']), ('clones', paquete, ['--clones-json', '5'])]
@@ -25,7 +25,7 @@ class ContratosNativos(unittest.TestCase):
             salida, fuente, codigo = consultar(texto, argumentos, root=ROOT)
             yield operacion, salida, fuente, codigo
 
-    def test_los_seis_servicios_reales_comparten_cabecera(self):
+    def test_servicios_reales_comparten_cabecera(self):
         for operacion, salida, fuente, codigo in self.respuestas():
             with self.subTest(operacion=operacion):
                 d = ccom.informe_json(salida, fuente, codigo, operacion)

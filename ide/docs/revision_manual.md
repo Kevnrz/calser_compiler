@@ -2,6 +2,24 @@
 
 Estado: **pendiente de ejecución humana**. Esta guía es el registro activo de la revisión; completar cada caso al probarlo en la aplicación. No confundir las 384 pruebas automatizadas previas con resultados manuales aprobados.
 
+<a id="revision-ll1"></a>
+
+## Comprobación breve de la rama LL(1)
+
+Actualizada el 2026-11-22 para `feat/ide-ll1-c`. Las aprobaciones históricas que aparecen después corresponden al recorrido anterior y no certifican esta rama. En particular, R05 antes mostraba dos errores automáticos mediante Bison. Ahora LL(1) muestra el primero y revela el siguiente al corregirlo. F5 mantiene el diagnóstico de compilación de Bison.
+
+Estas pruebas humanas siguen pendientes. Las comprobaciones automatizadas y sus resultados están en la [referencia del parser](ll1/parser_predictivo.md#cierre-de-la-integración).
+
+| Caso | Acción | Resultado esperado | Estado |
+| --- | --- | --- | --- |
+| L01 | Abrir `errores/dos_sintacticos.cls` en una copia temporal. Corregir la primera expresión y después la segunda sin guardar | Primero se señala la línea 3, después la 4 y al completar ambas desaparecen los errores sintácticos. El archivo guardado no cambia | Pendiente |
+| L02 | Escribir `F main` y aceptar la propuesta gris con Tab. Continuar el retorno y la cabecera | Propone `[]: ` y después `void`. Tras aceptar el punto y coma no cierra la función ni inventa otra | Pendiente |
+| L03 | Escribir `E;` y pulsar Enter | El punto final se propone en la línea nueva. Tab acepta y Ctrl+Z revierte | Pendiente |
+| L04 | Abrir `errores/reparacion.cls`, consultar reparaciones y aplicar una | La copia se valida en C. Solo cambia el buffer y Ctrl+Z revierte | Pendiente |
+| L05 | Abrir `errores/semantico.cls` con sintaxis válida. Sustituir el nombre no declarado por `2` | El error semántico aparece y desaparece al corregirlo. Una sintaxis inválida impide revisar semántica | Pendiente |
+| L06 | Consultar asistencia y cambiar de pestaña o editar de inmediato. Probar un comentario válido y uno sin cerrar | No se aplica una respuesta antigua. El comentario válido no produce errores sintácticos. El bloque abierto conserva su error léxico | Pendiente |
+| L07 | Pulsar F5 en el documento con dos errores. Luego ejecutar `programas/suma.cls` con F5 y F6 | No se duplica el error automático con el manual. La suma compila y ejecuta y el resultado se observa en Ejecución | Pendiente |
+
 ## Preparación
 
 Desde la raíz del repositorio:

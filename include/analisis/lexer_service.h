@@ -15,9 +15,22 @@ int lexer_scan_only(void);
 int lexer_scan_text(const char *text, size_t length);
 size_t lexer_current_start(void);
 size_t lexer_current_end(void);
-/* Analiza exactamente length bytes, completos o prefijo. El llamador activa
- * suggestions_active o syntax_service_active para los destructores temporales.
- * El marcador de cursor solo se emite en modo sugerencias. No hace semántica.
- * Propiedad: libera pila/AST de consulta y buffers, no el texto del llamador. */
-int lexer_parse_text(const char *text, size_t length);
+/* Visita de tokens sin llamar a yyparse. EOF también se entrega al consumidor.
+ * Los identificadores se liberan después de cada visita, incluso al detenerse.
+ * El consumidor devuelve cero para detener el escaneo. Los errores conservan
+ * la línea y columna informadas por Flex. No se conservan los callbacks.
+ * Retorna cero sin errores léxicos, uno con errores y menos uno por argumentos
+ * inválidos. La longitud debe caber en un int y la visita no es reentrante.
+ */
+typedef int (*LexerTokenConsumer)(int token, size_t start, size_t end,
+                                  int line, int column, void *data);
+typedef void (*LexerErrorConsumer)(int line, int column, size_t width, void *data);
+int lexer_visit_text(const char *text, size_t length, LexerTokenConsumer token,
+                     LexerErrorConsumer error, void *data);
+/* Metadatos del comentario durante una visita. No analizan el texto de nuevo.
+ * comment_open también vale uno durante el evento de comentario de línea.
+ * Ambos valores se consultan únicamente desde los callbacks de la visita.
+ */
+int lexer_comment_open(void);
+int lexer_in_block_comment(void);
 #endif

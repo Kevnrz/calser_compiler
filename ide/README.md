@@ -2,6 +2,8 @@
 
 IDE de escritorio de Calser con Python/PySide6 y ccom como backend C. M1–M7 están implementados y verificados localmente; empaquetado y validación final en otra máquina siguen pendientes.
 
+El diagnóstico automático, las sugerencias y las reparaciones utilizan LL(1) en C. Si la sintaxis es válida, Bison construye el AST para reutilizar el semántico existente. La compilación conserva su recorrido normal. Python gestiona la interfaz, los documentos y el transporte. El parser Python queda fuera del flujo productivo. La [referencia del parser](docs/ll1/parser_predictivo.md) explica esta integración.
+
 ## Abrir en desarrollo
 
 Desde la raíz del repositorio, con Python 3.10 o posterior, GCC, Make, Flex y Bison:

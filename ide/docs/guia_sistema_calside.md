@@ -1,6 +1,6 @@
 # CALSIDE: guía unificada del sistema
 
-Estado vigente · 2026-11-11. M1–M7 implementados localmente; las decisiones del lenguaje reutilizan C y la interfaz/gestión del IDE usan Python. La validación registrada incluye 400 pruebas IDE y suite del compilador. Revisión humana, empaquetado y otra máquina conservan su propio cierre: [plan](plan_ide.md), [revisión manual](revision_manual.md). El [historial](bitacora_ide.md) conserva entregas anteriores.
+Estado vigente · 2026-11-22. M1–M7 y la integración LL(1) en C están implementados localmente. Python gestiona la interfaz y el IDE, mientras C decide el lenguaje. La validación final de esta rama incluye 158 pruebas dirigidas del IDE y regresiones seleccionadas del compilador. No se ejecutó de nuevo toda la suite. La revisión humana, el empaquetado y la prueba en otra máquina conservan su propio cierre en el [plan](plan_ide.md) y la [revisión manual](revision_manual.md). El [historial](bitacora_ide.md) conserva la evidencia anterior.
 
 Este documento sirve para entender el IDE antes de modificarlo y como recorrido para revisar y comentar sus archivos. La lista de revisión del final todavía no significa que todos los archivos hayan recibido nuevos comentarios.
 
@@ -35,6 +35,7 @@ Conviene distinguir estas responsabilidades:
 | Interfaz | Ventanas, editor, marcas, explorador, paneles, atajos y diálogos. | Python/PySide6 en `ide/interfaz/`. |
 | Lógica del IDE | Lectura/guardado, búsqueda, transporte de clones, conversiones de posiciones y política de asistencia. | Python en `ide/`. |
 | Núcleo del IDE | Modelos de asistencia productivos; lexer/gramática/tabla/parser LL(1) de consulta y pruebas, fuera del backend gráfico. | Python sin Qt en `ide/nucleo/`. |
+| Asistencia nativa | Reconocimiento LL(1), contexto del cursor, sugerencias y validación de reparaciones. | C en `src/servicios_ide/`, reutilizando Flex. |
 | Compilador | Análisis completo del lenguaje, semántica y generación de artefactos. | Ejecutable `ccom`; fuentes C en `src/` y gramática Flex/Bison en `grammar/`. |
 | Simulador | Ejecuta el listado generado y produce registros, memoria y traza. | Proceso Python externo: `tools/sim_asm.py`. |
 | Shell | Ejecuta comandos escritos por el usuario en una terminal independiente. | Shell del sistema mediante un auxiliar PTY en Linux. |
@@ -60,15 +61,19 @@ flowchart TD
     L --> A[Adaptador de posiciones y proceso ccom]
     A --> N[Flex mediante --tokens-json]
     L --> C[Comprobador automático]
-    C --> CC[ccom --check-json en proceso externo]
+    C --> CC[ccom --check-ll1-json en proceso externo]
+    CC --> LP[LL1 para sintaxis]
+    LP --> AST[Bison construye AST si LL1 acepta]
+    AST --> SEM[Semantica existente en C]
     V --> F[Compilación manual F5]
     F --> CB[ccom y artefactos de compilación]
     CB --> R[Ejecución F6]
     R --> S[tools/sim_asm.py en proceso externo]
     E --> AS[Controlador y coordinador de asistencia]
     AS --> MS[Sugerencias mediante ccom --suggest-json]
-    MS --> BP[Bison LAC y Flex]
+    MS --> BP[Flex y LL1 en C]
     AS --> RP[ccom --repair-json y verificacion --syntax-json]
+    RP --> BP
     AS --> PA[Política automática y validación con parser]
     AS --> ED[Aplicador de ediciones]
     ED --> E
@@ -237,7 +242,7 @@ Flex produce tokens, comentarios y errores. El adaptador valida el JSON y convie
 
 Después de recibir el léxico de esa revisión, `Ventana.programar_comprobacion` comprueba que esté habilitada, haya contenido y no existan errores léxicos. Entonces programa otra pausa de **600 ms** en `ComprobadorCcom`.
 
-El comprobador escribe una copia temporal del buffer, ejecuta `ccom --check-json copia.cls`, valida los diagnósticos estructurados de stdout y conserva los logs de stderr. Reasocia las rutas de la copia al documento original. No guarda el documento del usuario ni genera sus artefactos de compilación. También permite analizar documentos sin nombre.
+El comprobador escribe una copia temporal del buffer, ejecuta `ccom --check-ll1-json copia.cls`, valida los diagnósticos estructurados de stdout y conserva los logs de stderr. Reasocia las rutas de la copia al documento original. No guarda el documento del usuario ni genera sus artefactos de compilación. También permite analizar documentos sin nombre.
 
 Las pausas se reinician con las ediciones; los 300 + 600 ms describen el recorrido previsto, no un plazo de respuesta garantizado: influyen el tiempo del lexer y las tareas en cola.
 
@@ -245,11 +250,11 @@ Las pausas se reinician con las ediciones; los 300 + 600 ms describen el recorri
 
 `Problema`, en `ide/diagnosticos.py`, es el modelo común: archivo/documento, origen, categoría, mensaje, rango y unidad de columna. `ccom.diagnosticos_json` valida el protocolo del análisis automático; `ccom.diagnosticos` mantiene la lectura textual para F5. El adaptador léxico construye diagnósticos del núcleo. El léxico vivo utiliza `ccom.lexico_json` y origen ccom léxico. La categoría JSON ya viene decidida por C; Python no la deduce del mensaje.
 
-`Ventana.actualizar_problemas` combina los resultados válidos de las pestañas. Evita duplicados exactos entre ccom manual y automático y da prioridad a ccom sobre un error léxico equivalente del núcleo. No elimina indiscriminadamente todos los diagnósticos de otro origen.
+`Ventana.actualizar_problemas` combina los resultados válidos de las pestañas. Da prioridad al informe sintáctico vigente de F5 sobre el primer error automático LL(1), aunque los mensajes sean diferentes. Evita además duplicados exactos entre ccom manual y automático y da prioridad a ccom sobre un error léxico equivalente del núcleo. No elimina indiscriminadamente todos los diagnósticos de otro origen.
 
 `Editor.rango_problema` convierte la ubicación en una selección Qt. La tabla permite navegar; el margen y subrayado indican el lugar; la franja inferior muestra el detalle. Un error general como «falta main» se cuenta y muestra sin inventar línea o subrayado.
 
-La asistencia no publica actualmente otra fuente de diagnósticos del parser en Problemas. Esa integración y su prioridad se decidirán al recibir los motores.
+El diagnóstico automático usa LL(1) en C para la sintaxis y no publica otra lista procedente del motor de sugerencias. Si la sintaxis es válida, ccom construye el AST con Bison para ejecutar su semántica existente. Una revisión inválida se detiene antes de esa construcción. El resultado identifica la operación `check_ll1` y se rechaza una respuesta de otro servicio.
 
 ### Documentos sin código y datos de archivos
 
@@ -259,7 +264,7 @@ El editor rechaza `text/uri-list` al insertar/arrastrar/pegar archivos: la repre
 
 ### Recuperación de varios errores
 
-Bison puede continuar tras errores independientes usando separadores/cierres. La UI muestra la lista real; completar una expresión puede eliminar su diagnóstico y conservar otro. `parser_syntax_errors()` impide semántica, exportación de AST y generación si hubo errores, incluso con `yyparse()==0`. Los árboles parciales solo se conservan para limpieza.
+La compilación manual con Bison puede continuar tras errores independientes usando separadores y cierres. El análisis automático LL(1) muestra solo el primer error sintáctico. Al corregirlo consulta la nueva revisión y puede señalar el siguiente. La UI muestra los resultados del recorrido correspondiente. Completar una expresión puede eliminar su diagnóstico y conservar otro. `parser_syntax_errors()` impide semántica, exportación de AST y generación si hubo errores, incluso con `yyparse()==0`. Los árboles parciales solo se conservan para limpieza.
 
 Máximo 32 errores y 4096 tokens descartados sin ancla; un límite se informa como truncado. Un separador faltante puede hacer que se omita parte del código. Sugerencias/reparaciones mantienen primer error; esta recuperación no amplía la API del LL(1) Python. [Diseño y límites](../../docs/ccom_servicios_ide.md#recovery).
 
@@ -284,7 +289,7 @@ Máximo 32 errores y 4096 tokens descartados sin ancla; un límite se informa co
 8. Al terminar comprueba que el resultado siga correspondiendo a la fuente/revisión del inicio. Si quedó antiguo, lo informa y no lo registra como ejecutable vigente.
 9. Extrae problemas; solo una compilación completa con -s y artefactos renovados registra F6. Reanuda la comprobación automática.
 
-F5 tiene un límite de **30 segundos** y permite cancelar. La generación de `.bin`, `.hex`, `.mem` y `.asm` corresponde a ccom y sus opciones; el perfil inicial solicita `-s` para disponer del listado necesario para ejecutar. El botón dividido y el menú comparten QAction/F5: permiten analizar (`--check`), compilar, exportar AST JSON (solo sintaxis) y ensamblar `.asm` con `-x`. `ide/interfaz/opciones_compilacion.py` construye el diálogo de destino y casillas compatibles; `ide/preferencias.py` filtra su persistencia. El análisis automático mantiene su recorrido independiente con `--check-json`. Ver [detalles M1B](plan_ide.md).
+F5 tiene un límite de **30 segundos** y permite cancelar. La generación de `.bin`, `.hex`, `.mem` y `.asm` corresponde a ccom y sus opciones; el perfil inicial solicita `-s` para disponer del listado necesario para ejecutar. El botón dividido y el menú comparten QAction/F5: permiten analizar (`--check`), compilar, exportar AST JSON (solo sintaxis) y ensamblar `.asm` con `-x`. `ide/interfaz/opciones_compilacion.py` construye el diálogo de destino y casillas compatibles; `ide/preferencias.py` filtra su persistencia. El análisis automático mantiene su recorrido independiente con `--check-ll1-json`. Ver [detalles M1B](plan_ide.md).
 
 Los mensajes de éxito del compilador y el mensaje final del IDE son realimentación del proceso. No son el resultado de ejecutar el programa.
 
@@ -306,7 +311,16 @@ El programa Calser del usuario se simula: el botón no ejecuta el `.bin` como un
 
 ## 7. Núcleo LL(1)
 
-LL(1) describe un análisis que lee de izquierda a derecha, construye una derivación por la izquierda y decide con un token de anticipación. La API de consulta conservada permite estudiar reconocimiento y contexto; la interfaz productiva consulta Flex/Bison en C para esas tareas.
+
+### Reconocedor productivo en C
+
+`src/servicios_ide/ll1_parser.c` calcula los conjuntos y la tabla desde las producciones de `ll1_grammar.inc`. Reconoce con una pila propia y recibe los tokens reales de Flex. `ll1_context` consulta el prefijo hasta el cursor para las sugerencias. `syntax_service.c` reconoce documentos completos y verifica las copias de las reparaciones. `src/main.c` coordina el diagnóstico automático y solo construye el AST semántico cuando LL(1) acepta.
+
+El parser se detiene en el primer error y no construye AST ni consulta símbolos declarados. Sus límites evitan confundir una consulta incompleta con una aceptación. Las posiciones son bytes UTF-8 y los adaptadores las convierten a las unidades del editor. El scanner y los diagnósticos usan estado global, por lo que cada proceso atiende una consulta de forma serial. El IDE puede cancelar terminando ese proceso.
+
+La [referencia del parser](ll1/parser_predictivo.md) explica la API C, la gramática auditada y la evidencia de la migración. Los módulos Python descritos a continuación permanecen como referencia de desarrollo y estudio, fuera del flujo gráfico.
+
+LL(1) describe un análisis que lee de izquierda a derecha, construye una derivación por la izquierda y decide con un token de anticipación. La API de consulta conservada permite estudiar reconocimiento y contexto; las sugerencias y reparaciones productivas ya consultan Flex y LL(1) en C. El diagnóstico automático usa LL(1) para sintaxis y reutiliza Bison para construir el AST necesario en la semántica cuando la sintaxis es válida.
 
 ```text
 texto
@@ -334,7 +348,7 @@ La primera reconoce el programa completo. La segunda analiza un prefijo y devuel
 
 El parser tiene límites y cancelación. No genera AST, no comprueba declaraciones/tipos como ccom y no edita texto. Su recuperación posterior a errores por sincronización es una mejora pendiente.
 
-**Uso actual del núcleo Python:** clones ya no utiliza tokenización Python; la API LL(1) se conserva para consulta/pruebas. La política de reparaciones verifica en C. El resaltado y las sugerencias usan Flex/Bison en C; el análisis sintáctico/semántico habitual pasa por `ccom --check-json`. El LL(1) permanece disponible como API autorizada.
+**Uso actual del núcleo Python:** clones ya no utiliza tokenización Python; la API LL(1) se conserva para consulta/pruebas. La política de reparaciones verifica en C. El resaltado usa Flex y las sugerencias usan LL(1) en C. El análisis sintáctico/semántico habitual pasa por `ccom --check-ll1-json`. El LL(1) permanece disponible como API autorizada.
 
 ## 8. Sugerencias, reparaciones y política automática
 
@@ -360,13 +374,13 @@ ide/sugerencias_ccom.py  → sugerir(texto, cursor, *, cancelar=None, root=None,
 ide/reparaciones_ccom.py → proponer_reparaciones(texto, *, cancelar=None, root=None, configurado="")
 ```
 
-El coordinador los importa de forma diferida dentro del trabajador y captura root/ccom configurado. Para sugerencias, `servicio_ccom.py` lanza el proceso C cancelable y `sugerencias_ccom.py` valida JSON/convierte coordenadas. El contexto y el filtrado se resuelven con Flex y Bison/LAC, no con LL(1). Ver [M3](../../docs/ccom_servicios_ide.md#suggest). Si falta exactamente el módulo del motor informa ausencia; una dependencia interna rota se considera error. Las firmas y modelos ya están fijados y no necesitan widgets para conectarse.
+El coordinador los importa de forma diferida dentro del trabajador y captura root/ccom configurado. Para sugerencias, `servicio_ccom.py` lanza el proceso C cancelable y `sugerencias_ccom.py` valida JSON/convierte coordenadas. El contexto se resuelve con Flex y LL(1) en C. El filtrado y las preferencias también se calculan en C. Ver [M3](../../docs/ccom_servicios_ide.md#suggest). Si falta exactamente el módulo del motor informa ausencia; una dependencia interna rota se considera error. Las firmas y modelos ya están fijados y no necesitan widgets para conectarse.
 
 ### Sugerencias manuales y por pausa
 
 `AsistenciaEditor`, en `interfaz/sugerencias.py`, conecta cada editor con `CoordinadorAsistencia`. Ctrl+Espacio o el menú solicitan opciones; `ListaSugerencias` las presenta junto al cursor sin quitarle el foco. Flechas recorren, Enter/Tab o clic aceptan y Escape cancela.
 
-`SugerenciaInline` (`interfaz/sugerencia_inline.py`) dibuja por defecto el sufijo en gris al final de la línea: Tab acepta, Esc descarta, Alt+[ / Alt+] cambia de propuesta. No modifica el documento, la revisión ni Deshacer. C distingue propuestas preferidas para la vista gris de las alternativas ambiguas de la lista; no elige `C` por orden alfabético en una línea vacía. Un token completo permite consultar su continuación. Bison comunica el contexto de función al motor C: `F main` propone `[]: ` con cursor fuera y prioriza retorno `void`; las funciones normales conservan `[]` con cursor dentro y Tab/flecha para salir hacia `:`. Los tipos se ofrecen tras `:`. Tras la cabecera no se insinúan `.` ni `F` para cerrar/iniciar funciones; después de `E;` C prioriza el cierre `.` solo en una línea posterior y Enter consulta esa continuación; una lista válida sin preferencia no dispara la reparación alternativa que antes ofrecía un punto. Aceptar una propuesta consulta la siguiente, siempre con otra aceptación explícita para editar. Para reemplazos a mitad de línea se conserva la lista manual. Si no hay continuación, el controlador puede consultar reparaciones C y presentar una inserción de cierre en esa misma posición. Enter sigue creando una línea; aceptar la vista pasa por el aplicador y sus precondiciones.
+`SugerenciaInline` (`interfaz/sugerencia_inline.py`) dibuja por defecto el sufijo en gris al final de la línea: Tab acepta, Esc descarta, Alt+[ / Alt+] cambia de propuesta. No modifica el documento, la revisión ni Deshacer. C distingue propuestas preferidas para la vista gris de las alternativas ambiguas de la lista; no elige `C` por orden alfabético en una línea vacía. Un token completo permite consultar su continuación. Flex identifica la declaración y LL(1) valida su contexto antes de ofrecer la plantilla. `F main` propone `[]: ` con cursor fuera y prioriza retorno `void`; las funciones normales conservan `[]` con cursor dentro y Tab/flecha para salir hacia `:`. Los tipos se ofrecen tras `:`. Tras la cabecera no se insinúan `.` ni `F` para cerrar/iniciar funciones; después de `E;` C prioriza el cierre `.` solo en una línea posterior y Enter consulta esa continuación; una lista válida sin preferencia no dispara la reparación alternativa que antes ofrecía un punto. Aceptar una propuesta consulta la siguiente, siempre con otra aceptación explícita para editar. Para reemplazos a mitad de línea se conserva la lista manual. Si no hay continuación, el controlador puede consultar reparaciones C y presentar una inserción de cierre en esa misma posición. Enter sigue creando una línea; aceptar la vista pasa por el aplicador y sus precondiciones.
 
 La pausa utiliza `Editor.entradaAsistencia`, emitida después de una tecla que cambió el contenido. El temporizador captura el contexto y, si sigue vigente al vencer, consulta el motor. Consultar opciones no las acepta automáticamente.
 
@@ -710,6 +724,6 @@ La funcionalidad conectada de M1–M7 está implementada; eso no certifica todos
 | Evolución y documentación sustituida | [Bitácora](bitacora_ide.md) |
 | LL(1) autorizado para consulta/estudio | [README del núcleo](../nucleo/README.md) |
 
-`ccom.informe_json` valida la cabecera de las seis operaciones; cada adaptador valida contenido/estados. `make check-recorrido-ide` ejecuta varios documentos y todos los servicios productivos sin permitir importar los analizadores Python. Las pruebas académicas del LL(1) se mantienen separadas. Los comentarios de los servicios C y adaptadores documentan memoria, consumidores, unidades y cancelación; no equivalen a una auditoría de todo el generador o todos los widgets.
+`ccom.informe_json` valida la cabecera de las operaciones productivas; cada adaptador valida contenido/estados. `make check-recorrido-ide` ejecuta varios documentos y todos los servicios productivos sin permitir importar los analizadores Python. Las pruebas académicas del LL(1) se mantienen separadas. Los comentarios de los servicios C y adaptadores documentan memoria, consumidores, unidades y cancelación; no equivalen a una auditoría de todo el generador o todos los widgets.
 
 Al cambiar un flujo, modificar la sección que lo explica y su referencia técnica. Al cerrar trabajo, registrar la evidencia y decisiones en la bitácora. No añadir aquí anexos que contradigan el estado descrito ni duplicar pendientes del plan.

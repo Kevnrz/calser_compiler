@@ -1,4 +1,4 @@
-/* Reparaciones conservadoras: inserciones de cierres esperados por Bison/LAC,
+/* Reparaciones conservadoras: inserciones de cierres esperados por LL(1),
  * verificadas sobre copias completas. Una consulta por proceso; sin guardar. */
 #ifndef REPAIRS_H
 #define REPAIRS_H

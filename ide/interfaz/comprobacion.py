@@ -4,7 +4,8 @@ La ventana programa SolicitudCcom con documento/revisión y texto inmutable.
 ComprobadorCcom conserva una activa y la última pendiente por documento: usa
 señales/timers de Qt en el hilo gráfico, sin bloquear para esperar el proceso.
 C decide sintaxis/semántica; ccom.diagnosticos_json valida la respuesta. Un fallo
-de protocolo no se convierte en éxito ni en un análisis LL(1) de respaldo.
+de protocolo no se convierte en éxito ni activa otro parser de respaldo.
+LL(1) en C revisa sintaxis y ccom conserva su semántica sobre el AST existente.
 El temporal y QProcess pertenecen al comprobador hasta recoger el resultado;
 invalidar/cerrar mata el hijo y limpiar_temporal borra la copia. Suspender durante
 F5 conserva solo las solicitudes vigentes. Los bytes UTF-8 se adaptan al modelo
@@ -145,7 +146,7 @@ class ComprobadorCcom(QObject):
             self.process.finished.connect(self.finalizar)
             self.estado.emit(request, "Analizando…")
             self.limite.start(self.timeout_ms)
-            self.process.start(executable, ["--check-json", str(self.snapshot)])
+            self.process.start(executable, ["--check-ll1-json", str(self.snapshot)])
 
     def agregar(self, destination, data):
         if len(destination) + len(data) > 1_000_000:
@@ -185,13 +186,13 @@ class ComprobadorCcom(QObject):
         if not message and status == QProcess.ExitStatus.CrashExit:
             message = f"No se completó el análisis: {self.process.errorString()}"
         elif not message and code == 2:
-            message = "ccom no admite --check-json o rechazó sus opciones. Ejecuta make o configura una versión compatible."
+            message = "ccom no admite --check-ll1-json o rechazó sus opciones. Ejecuta make o configura una versión compatible."
         elif not message and code not in (0, 1):
             message = f"ccom terminó con código inesperado {code}."
         problems = []
         if not message:
             try:
-                recibidos = ccom.diagnosticos_json(bytes(self.stdout), self.snapshot, request.texto, code)
+                recibidos = ccom.diagnosticos_json(bytes(self.stdout), self.snapshot, request.texto, code, operacion="check_ll1")
                 problems = [replace(p, archivo=request.fuente, documento=request.documento,
                                     origen="ccom automático") for p in recibidos]
                 # La salida normal presenta diagnósticos, no el transporte JSON.

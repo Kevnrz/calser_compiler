@@ -144,7 +144,7 @@ class Interfaz(unittest.TestCase):
         self.assertEqual(len(problemas), 2)
         self.assertTrue(all(p.documento == e.documento_id and p.archivo is None for p in problemas))
         self.assertEqual(self.window.problems.topLevelItemCount(), 2)
-        self.assertIn('--check-json', self.window.auto_output.toPlainText())
+        self.assertIn('--check-ll1-json', self.window.auto_output.toPlainText())
         self.assertNotIn('schema_version', self.window.auto_output.toPlainText())
         self.assertEqual(e.toPlainText(), texto)
 

@@ -18,7 +18,7 @@ void parser_finish(void);
  *   analiza el flujo, entrega el árbol (parcial o NULL) y llama parser_finish.
  * Restricciones:
  *   el llamador libera siempre *tree; no abre/cierra input ni inicia diagnósticos.
- *   Las consultas del IDE conservan su modo lexer_parse_text independiente.
+ *   Las consultas de asistencia usan LL(1) y no pasan por este constructor.
  */
 int parser_accept(FILE *input, ASTNode **tree);
 #endif

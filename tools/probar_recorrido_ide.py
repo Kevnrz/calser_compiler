@@ -2,7 +2,7 @@
 
 Usa Qt offscreen por defecto; no abre ni altera proyectos del usuario. Todos los
 archivos viven en un directorio temporal. Bloquea la importación de analizadores
-LL(1) para comprobar que ningún recorrido productivo los necesita. No usa dobles
+LL(1) en Python para comprobar que los recorridos productivos usan C. No usa dobles
 de lenguaje. --captura guarda la ventana final antes de cerrar para revisión.
 """
 import argparse
@@ -117,7 +117,9 @@ def main():
             ventana.tabs.setCurrentWidget(primero)
             ventana.guardar()
             ventana.compilar()
-            esperar(lambda: ventana.process is None, 'Compilación F5', 15)
+            # F5 puede esperar primero el resultado léxico de la revisión vigente.
+            esperar(lambda: primero in ventana.compilados and ventana.process is None,
+                    'Compilación F5', 15)
             assert primero in ventana.compilados, ventana.output.toPlainText()
             assert ventana.ejecutar()
             esperar(lambda: ventana.run_process is None, 'Simulación F6', 15)

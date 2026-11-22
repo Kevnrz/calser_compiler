@@ -2,7 +2,7 @@
 
 Este módulo no inicia el compilador. Centraliza localización del ejecutable,
 lectura textual de F5 y validación JSON común. ComprobadorCcom usa QProcess
-para --check-json; los adaptadores M2–M5 usan servicio_ccom desde trabajadores.
+para --check-ll1-json; los adaptadores M2–M5 usan servicio_ccom desde trabajadores.
 Los estados y decisiones del lenguaje provienen de C; el regex de diagnosticos
 solo lee mensajes de la CLI clásica y no reconoce código Calser.
 
@@ -127,7 +127,7 @@ def _texto_json(valor, limite=4096):
 
 
 def informe_json(salida, source, codigo, operacion, *, limite=1_000_000):
-    """Cabecera común de los seis servicios JSON, sin interpretar Calser.
+    """Cabecera común de los servicios JSON, sin interpretar Calser.
 
     Comprueba UTF-8, duplicados, versión, operación, fuente y código real del
     proceso. Cada adaptador valida después sus estados y datos particulares.

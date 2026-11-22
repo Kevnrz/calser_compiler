@@ -1,9 +1,10 @@
 # Servicios de ccom para CALSIDE
 
-Referencia técnica vigente · 2026-11-11. Reúne los seis protocolos y la recuperación sintáctica. Los comandos reciben copias privadas; no editan documentos originales. Python adapta transporte/modelos/posiciones y C decide el lenguaje.
+Referencia técnica vigente · 2026-11-22. Reúne los protocolos y la recuperación sintáctica. Los comandos reciben copias privadas; no editan documentos originales. Python adapta transporte/modelos/posiciones y C decide el lenguaje.
 
 | Operación | Opción | Sección |
 | --- | --- | --- |
+| Diagnóstico automático LL(1) y semántica C | `--check-ll1-json` | [Diagnóstico del editor](#check-ll1) |
 | Análisis léxico/sintáctico/semántico | `--check-json` | [Diagnósticos](#check) |
 | Léxico para colores | `--tokens-json` | [Tokens](#tokens) |
 | Continuaciones en el cursor | `--suggest-json <bytes>` | [Sugerencias](#suggest) |
@@ -14,11 +15,23 @@ Referencia técnica vigente · 2026-11-11. Reúne los seis protocolos y la recup
 La cabecera común se valida en `ide/ccom.py:informe_json`; los estados y el contenido específico se validan en cada adaptador. No confundir `syntax` (solo sintaxis) con `check` (también semántica). [Arquitectura del IDE](../ide/docs/guia_sistema_calside.md), [asistencia y permisos](../ide/docs/asistencia.md).
 
 
+<a id="check-ll1"></a>
+
+## Diagnóstico LL(1) del editor
+
+Desde el 2026-11-22, CALSIDE utiliza `--check-ll1-json fuente.cls` para su diagnóstico automático. Esta operación admite únicamente `-v` y `--time`, usa una fuente de hasta 200000 bytes y no genera artefactos. Devuelve el sobre de diagnósticos v1 con `operation` igual a `check_ll1`. Los campos, categorías, códigos y rangos son los del servicio de análisis descrito abajo. La operación distinta permite rechazar una respuesta del recorrido anterior sin cambiar de motor silenciosamente.
+
+LL(1) en C decide la sintaxis y publica el primer obstáculo con sus terminales esperados. Ante un error no llama a Bison. Flex conserva sus mensajes léxicos. Si LL(1) acepta, ccom construye el AST con Bison y reutiliza su semántica existente. Un límite se devuelve como `status` igual a `limit`, código 1 e informe truncado. No se presenta como aceptación ni como una lista completa de errores.
+
+El análisis automático conserva copias sin guardar, cancelación, revisión por documento y navegación de rangos UTF-8. Los rangos explícitos permiten señalar EOF también después de una línea terminada. Tras corregir el primer error se analiza la siguiente revisión. Las sugerencias, reparaciones y verificaciones de copias también usan LL(1) en C. `--check-json` y la compilación mantienen Bison y su recuperación existente. Las secciones históricas M1 y M7 siguientes describen ese recorrido clásico.
+
+La prueba específica es `make check-ll1-ide`. La [referencia del parser](../ide/docs/ll1/parser_predictivo.md) explica la separación entre reconocimiento, AST y semántica.
+
 <a id="check"></a>
 
 ## Análisis completo y diagnósticos
 
-Implementado el 2026-11-11. La interfaz llama al front-end existente en C y recibe datos estructurados. No hay otra gramática, parser ni semántico para esta operación.
+Implementado el 2026-11-11. La operación clásica `--check-json` llama al front-end existente en C y recibe datos estructurados. La consulta del editor se trasladó después a `--check-ll1-json`, descrita arriba.
 
 ### Invocación y compatibilidad
 
@@ -128,7 +141,7 @@ En el IDE se mantienen el timeout de 5 segundos y el límite de 1 MB por canal. 
 
 - `ide/ccom.py:diagnosticos_json` valida UTF-8, versión, operación, fuente, estado/retorno, contadores, lista, categorías y rangos. Rechaza claves duplicadas, constantes no JSON, Unicode inválido y datos inconsistentes.
 - `Problema` conserva `codigo`, `categoria_explicita` y `rango_utf8`. Los lectores clásicos siguen funcionando con los campos previos.
-- `ComprobadorCcom` solicita `--check-json` sobre el buffer temporal, reasocia cada problema al documento original y presenta un log legible. No llama al lector de mensajes humanos como alternativa silenciosa.
+- `ComprobadorCcom` solicita `--check-ll1-json` sobre el buffer temporal, reasocia cada problema al documento original y presenta un log legible. No llama al lector de mensajes humanos como alternativa silenciosa.
 - Una versión antigua de ccom, una respuesta incompatible o `status=error/limit` produce «No disponible» con explicación. No se publica una lista vacía como si el programa fuera correcto.
 - F5 conserva el lector textual y F6 el simulador. El filtro léxico del editor usa Flex mediante `--tokens-json`; el LL(1) Python no participa en el recorrido productivo.
 
@@ -221,19 +234,19 @@ El servicio admite 2 millones de caracteres por instantánea en el IDE, 5 s para
 
 Al recibir, el editor comprueba documento/revisión. Los colores no cambian texto, guardado ni Deshacer. `Compilar → Configurar ccom` vuelve a solicitar léxico con el ejecutable elegido. Sin una versión compatible se informa el fallo: no hay fallback al lexer Python.
 
-El análisis sintáctico/semántico automático sigue usando `--check-json` después de otra pausa de 600 ms y solo si el léxico está libre de errores. F5/F6 mantienen los perfiles M1B. El LL(1) Python queda para consulta/pruebas; clones y validación de reparaciones utilizan C. La interfaz no carga otro tokenizador de Calser.
+El análisis sintáctico y semántico automático usa `--check-ll1-json` después de otra pausa de 600 ms y solo si el léxico está libre de errores. F5/F6 mantienen los perfiles M1B. El LL(1) Python queda para consulta/pruebas; clones y validación de reparaciones utilizan C. La interfaz no carga otro tokenizador de Calser.
 
 ### Verificación
 
-`make check-tokens-json`, incluido en `make check`: clasificación, comentarios, Unicode/CRLF, error léxico, EOF fatal, continuación sin parser, límites, opciones y salidas intactas. `make check-ide`: transporte inválido, posiciones Qt, cancelación real, proceso antiguo, edición/pestañas y Deshacer. Pruebas nuevas en `ide/pruebas/test_tokens_ccom.py`; la suite de comprobación usa Flex real al simular fallos únicamente de `--check-json`.
+`make check-tokens-json`, incluido en `make check`: clasificación, comentarios, Unicode/CRLF, error léxico, EOF fatal, continuación sin parser, límites, opciones y salidas intactas. `make check-ide`: transporte inválido, posiciones Qt, cancelación real, proceso antiguo, edición/pestañas y Deshacer. Pruebas nuevas en `ide/pruebas/test_tokens_ccom.py`; la suite de comprobación usa Flex real al simular fallos únicamente de la comprobación automática.
 
-M3 comparte este transporte en `ide/servicio_ccom.py` y añade [sugerencias desde Flex/Bison-LAC](ccom_servicios_ide.md#suggest). Los límites léxicos y el contrato de tokens M2 se conservan.
+M3 comparte este transporte en `ide/servicio_ccom.py` y añade [sugerencias desde Flex y LL(1) en C](ccom_servicios_ide.md#suggest). Los límites léxicos y el contrato de tokens M2 se conservan.
 
 <a id="suggest"></a>
 
 ## Sugerencias
 
-Implementado el 2026-11-11. Adapta el comportamiento de `origin/feat/reparaciones-sugerencias` a **Flex + Bison/LAC**, sin importar ni fusionar las dataclasses duplicadas de esa entrega. Reutiliza el lexer y las producciones de ccom. No llama al parser LL(1) Python, no ejecuta semántica, no repara errores ni genera artefactos.
+Implementado originalmente el 2026-11-11 y migrado a LL(1) en C el 2026-11-22. `--suggest-json` reutiliza los tokens de Flex y consulta el contexto del parser predictivo nativo. Conserva el contrato JSON y los criterios de presentación existentes. No llama al parser LL(1) Python ni a Bison, no ejecuta semántica y no genera artefactos.
 
 ### Uso
 
@@ -265,7 +278,7 @@ Solo admite una fuente y `-v`/`--time`. No se combina con `--check`, `--check-js
       "start": 12,
       "end": 14,
       "category": "palabra",
-      "detail": "Continuacion permitida por el parser de ccom (Bison/LAC)."
+      "detail": "Continuacion permitida por el parser predictivo LL(1) de ccom."
     }
   ]
 }
@@ -281,19 +294,19 @@ Solo admite una fuente y `-v`/`--time`. No se combina con `--check`, `--check-js
 
 Solo `ok` contiene propuestas. Todos los demás estados incluyen explicación y lista vacía. Cancelar mata el proceso desde el adaptador; no exige que el hijo emita JSON al ser interrumpido. stdout se reserva para el JSON; progreso y tiempo van a stderr.
 
-Las llamadas de Calser usan `nombre[argumentos]`. Si aparece `(` después de un identificador y LAC esperaba `[`, el diagnóstico C señala ese paréntesis y explica `nombre[...]`, en lugar de priorizar el mensaje genérico de `;` faltante. Esto no cambia la sintaxis ni reescribe la llamada.
+El diagnóstico de compilación y `--check-json` conserva Bison. Las llamadas de Calser usan `nombre[argumentos]`. Si aparece `(` después de un identificador y LAC esperaba `[`, el diagnóstico C señala ese paréntesis y explica `nombre[...]`, en lugar de priorizar el mensaje genérico de `;` faltante. Esto no cambia la sintaxis ni reescribe la llamada.
 
 ### Cómo calcula las propuestas
 
 1. `suggestions_run`, en `src/servicios_ide/suggestions.c`, lee la fuente acotada e instala un observador de diagnósticos silencioso.
 2. Flex recorre la fuente completa y publica sus rangos mediante `LexerObserver` (`include/analisis/lexer_service.h`). Se detectan comentarios, fragmento alrededor del cursor y errores anteriores. Los errores del sufijo posterior no bloquean el prefijo consultado.
 3. Para palabras/números, el fragmento se toma cuando `inicio < cursor <= fin`; para operadores extensibles `= ! < >`, cuando `inicio <= cursor < fin`. Los delimitadores y operadores ya completos se consideran parte del prefijo. Un carácter ASCII de reservada incompleta, como `V`, puede observarse como fragmento inválido y completarse a `Vi`/`Vm`; no se modifica la regla de Flex ni se tolera ese error al compilar.
-4. Se analiza únicamente el prefijo anterior al fragmento con el parser existente. En modo consulta, `syntax_lex` sustituye el EOF temporal por un **TOKEN_CURSOR privado**, que no pertenece a ninguna producción. `yyreport_syntax_error` consulta `yypcontext_expected_tokens` con **LAC**, distingue ese marcador de un error real anterior y recoge los terminales concretos.
+4. `ll1_context` analiza el prefijo anterior al fragmento con los tokens reales de Flex. Si el prefijo es válido, el motor recoge los terminales esperados desde toda la pila predictiva. Un error anterior bloquea la consulta. No se usa un marcador privado ni se llama a Bison.
 5. Así un programa completo también puede ofrecer continuaciones, sin confundir EOF con un error del usuario. No se derivan reglas a partir de mensajes humanos ni se copia una gramática a Python.
 6. C excluye identificadores genéricos, números genéricos, EOF y símbolos internos. Filtra por el prefijo escrito y ordena: palabras, delimitadores, operadores; alfabético dentro de cada grupo.
-7. Cada propuesta reemplaza el fragmento completo. En `vo|id` reemplaza `void`, evitando duplicar el sufijo. Si no hay una completación y Flex reconoció un token completo hasta el cursor, C vuelve a consultar LAC después de ese token. Así `F main` puede ofrecer su continuación sin exigir un espacio y `void` completo puede ofrecer `;`. No se avanza sobre un prefijo inválido.
-8. `inline_preferred` (booleano opcional) distingue propuestas útiles para la vista gris: prefijos escritos, tipos y puntuación local. No se priorizan `.` ni `F` sin prefijo por el mero hecho de ser continuaciones únicas. C sí prioriza `.` después de los tokens `E;` cuando existe un salto de línea entre el terminador y el cursor, LAC lo ofrece y no existe ya ese punto a la derecha; `F` continúa sin preferencia automática. Una lista válida sin preferencia tampoco deriva a reparaciones para cerrar el cuerpo. Una línea vacía con muchas instrucciones posibles conserva la lista manual, pero no elige `C` por orden alfabético. La ausencia del campo se interpreta como false.
-9. Cuando `[` es la única continuación, C puede devolver el par `[]` con `cursor_relative: 1`: al aceptar, el cursor queda dentro. En la declaración de `main` devuelve `[]: ` con cursor relativo 4, o solo `[]` con cursor relativo 2 si ya hay dos puntos a la derecha. El contexto de función procede de una acción de Bison, y los tokens Flex delimitan el nombre declarado; el atajo no afecta `[` dentro del cuerpo. En el retorno de main se prioriza `void`; los tipos locales y de otras funciones siguen disponibles. Este campo opcional mide bytes UTF-8 del texto propuesto y el adaptador lo convierte a caracteres Python. No se duplica un delimitador que ya está a la derecha del cursor.
+7. Cada propuesta reemplaza el fragmento completo. En `vo|id` reemplaza `void`, evitando duplicar el sufijo. Si no hay una completación y Flex reconoció un token completo hasta el cursor, C vuelve a consultar LL(1) después de ese token. Así `F main` puede ofrecer su continuación sin exigir un espacio y `void` completo puede ofrecer `;`. No se avanza sobre un prefijo inválido.
+8. `inline_preferred` (booleano opcional) distingue propuestas útiles para la vista gris: prefijos escritos, tipos y puntuación local. No se priorizan `.` ni `F` sin prefijo por el mero hecho de ser continuaciones únicas. C sí prioriza `.` después de los tokens `E;` cuando existe un salto de línea entre el terminador y el cursor, LL(1) lo ofrece y no existe ya ese punto a la derecha; `F` continúa sin preferencia automática. Una lista válida sin preferencia tampoco deriva a reparaciones para cerrar el cuerpo. Una línea vacía con muchas instrucciones posibles conserva la lista manual, pero no elige `C` por orden alfabético. La ausencia del campo se interpreta como false.
+9. Cuando `[` es la única continuación, C puede devolver el par `[]` con `cursor_relative: 1`: al aceptar, el cursor queda dentro. En la declaración de `main` devuelve `[]: ` con cursor relativo 4, o solo `[]` con cursor relativo 2 si ya hay dos puntos a la derecha. Los tokens de Flex identifican el nombre de la declaración y LL(1) valida el contexto antes de ofrecer la plantilla. El atajo no afecta `[` dentro del cuerpo. En el retorno de main se prioriza `void`; los tipos locales y de otras funciones siguen disponibles. Este campo opcional mide bytes UTF-8 del texto propuesto y el adaptador lo convierte a caracteres Python. No se duplica un delimitador que ya está a la derecha del cursor.
 
 Los comentarios de línea incluyen el punto antes de LF; los bloques abiertos incluyen EOF. Después de un bloque cerrado sí se puede consultar. No hay sugerencias dentro de comentarios.
 
@@ -301,9 +314,9 @@ Las propuestas son **continuaciones sintácticas**, no garantías semánticas. N
 
 ### Memoria, límites y cancelación
 
-Cada solicitud usa un proceso independiente. Límite nativo: **200000 bytes**, **50000 tokens/tramos** y **64 opciones**. Se informa límite sin publicar una lista parcial como completa. El máximo de opciones del contrato sustituye al límite opcional de 24 de la entrega Python; no se añadió una opción CLI de truncamiento arbitrario.
+Cada solicitud usa un proceso independiente. Límite nativo existente **200000 bytes**, **50000 tokens/tramos** y **64 opciones**. Se informa límite sin publicar una lista parcial como completa. El máximo de opciones del contrato sustituye al límite opcional de 24 de la entrega Python; no se añadió una opción CLI de truncamiento arbitrario.
 
-Flex libera las cadenas del escaneo completo que normalmente consumiría Bison. El escaneo del prefijo reinicia posiciones/estado y sus buffers. Los destructores liberan cadenas y subárboles descartados. El símbolo inicial distingue transferencia del AST a main de liberación en consultas; el marcador solo actúa en sugerencias. No se reutilizan pilas entre procesos.
+Flex libera las cadenas de los identificadores y los buffers de cada recorrido. LL(1) usa su propia pila y no construye AST. Los observadores se desconectan al terminar. Cada solicitud del IDE se atiende en un proceso independiente.
 
 `ide/servicio_ccom.py` comparte con M2 el transporte cancelable, sin shell. Captura stdout/stderr en temporales, los vigila y siempre mata/recoge el hijo si se cancela o falla. M3 limita su proceso a **2,5 s**, stdout a **1 MB** y stderr a **1 MB**; el coordinador mantiene su plazo general de 3 s. Las fuentes sin guardar nunca se escriben en la ruta del usuario: se consulta una copia privada eliminada al terminar.
 
@@ -317,7 +330,7 @@ Flex libera las cadenas del escaneo completo que normalmente consumiría Bison. 
 
 ### Pruebas
 
-`make check-suggestions-json`, incluido en `make check`, migra los ejemplos de la entrega y cubre Bison/LAC, palabras parciales, medio de palabra, tipos válidos, EOF de programa completo, comentarios, errores anteriores/posteriores, Unicode/CRLF, determinismo, límites y opciones. Se consultan además múltiples posiciones de una fuente real.
+`make check-suggestions-json`, incluido en `make check`, migra los ejemplos de la entrega y cubre LL(1) en C, palabras parciales, medio de palabra, tipos válidos, EOF de programa completo, comentarios, errores anteriores/posteriores, Unicode/CRLF, determinismo, límites y opciones. Se consultan además múltiples posiciones de una fuente real.
 
 `ide/pruebas/test_sugerencias_ccom.py` verifica el motor real y el contrato, rechazo de JSON incompatible, ausencia de consultas al lexer/LL(1) Python, cancelación/límites, Ctrl+Espacio, pausa, aceptación/Deshacer, configuración de ccom y cancelación del hijo por edición. `make check-ide` comprueba también las interfaces y descartes ya existentes.
 
@@ -328,7 +341,7 @@ El menú contextual conserva copiar/cortar/pegar y consulta en el punto pulsado 
 
 ## Reparaciones y validación sintáctica
 
-Implementado el 2026-11-11. Adapta el motor de `origin/feat/reparaciones-sugerencias` a Flex/Bison-LAC, conservando su alcance conservador: **insertar `;`, `.`, `]` o `)`** en el primer error, validar la copia y ofrecer solo candidatos que lo superan. No se fusionó la implementación Python ni sus dataclasses duplicadas.
+Implementado originalmente el 2026-11-11 y migrado a LL(1) en C el 2026-11-22. El motor conserva su alcance conservador de insertar `;`, `.`, `]` o `)` ante el primer error, validar cada copia completa y ofrecer solo candidatos que superan ese obstáculo. No inventa operandos ni consulta el parser Python.
 
 No inventa identificadores, operandos ni sentencias como `E;`. No repara semántica. Un programa sintácticamente válido que carece de E puede seguir teniendo un error semántico de ccom; en ese caso este motor no propone insertar E.
 
@@ -364,7 +377,7 @@ Cada propuesta contiene:
 
 ### Motor y memoria
 
-`syntax_service.c` escanea cada copia completa con Flex, observa los rangos de tokens reales y descarta candidaturas si hay errores léxicos. Después llama al parser real con EOF real. El hook `yyreport_syntax_error` consulta LAC y recoge posición del token inesperado, último token válido y los cuatro cierres esperados. No interpreta el texto humano de los diagnósticos.
+`syntax_service.c` escanea cada copia completa con Flex y conserva los rangos de los tokens reales. Si hay errores léxicos o límites, bloquea la reparación. Después llama a `ll1_analyze` con fin de entrada real. Obtiene el primer token inesperado y calcula los cierres posibles desde la continuación de la pila predictiva. El token anterior procede del recorrido de Flex. No interpreta mensajes humanos ni construye un AST.
 
 `repairs.c` enumera únicamente esos cierres, construye una copia por candidato y vuelve a llamar `syntax_analyze`. La copia se acepta como propuesta si el parser acepta todo el programa o supera el token original que causaba el error. En EOF se exige consumir la inserción hasta el EOF posterior. Las propuestas parciales quedan **solo manuales**.
 
@@ -374,7 +387,7 @@ Orden: aceptación completa primero, mayor avance después y catálogo fijo `; .
 
 Las precondiciones usan el token válido anterior y su texto exacto; el IDE además exige contexto completo vigente (documento/revisión/texto/cursor/selección) al aplicar. Eso sustituye la huella redundante y las precondiciones narrativas de la entrega, sin convertirlas en rangos vacíos.
 
-Cada análisis reinicia diagnósticos, posiciones, estados Flex, observadores y pila Bison. Los buffers y strings del escaneo se liberan. Los destructores liberan subárboles/cadenas temporales; el símbolo inicial distingue consulta de transferencia del AST a main. La compilación clásica libera los árboles parciales sin ejecutar fases posteriores. Las copias candidatas se liberan tras cada intento y no se reutilizan pilas corruptas.
+Cada análisis reinicia los diagnósticos, los estados y posiciones de Flex y la pila LL(1). Libera los buffers y cadenas de tokens, y desconecta sus observadores. Cada copia candidata se libera tras verificarla. La compilación clásica conserva por separado su parser Bison y su gestión del AST.
 
 Límites por análisis: **200000 bytes**, **50000 tokens/tramos**, cuatro candidatos. Si cualquier candidato supera límites o falla internamente, se devuelve límite/error sin propuestas parciales. El proceso del IDE tiene 2,5 s y 1 MB por canal, con cancelación que mata/recoge el hijo. El coordinador conserva su plazo general de 3 s, también durante las verificaciones automáticas posteriores.
 
@@ -398,7 +411,7 @@ Corchetes, paréntesis, puntos finales, EOF, candidatos parciales/ambiguos y lí
 
 - `make check-repairs-json`, incluido en `make check`: ejemplos de la entrega, cuatro cierres, EOF parcial, progreso/aceptación, operandos no inventados, Unicode/CRLF, comentarios, límites y opciones/salidas intactas.
 - `ide/pruebas/test_reparaciones_ccom.py`: 12 pruebas nuevas del motor/transporte real y la interfaz; precondiciones inválidas, timeout, cancelación con eliminación del snapshot, panel/Deshacer, regla optativa y aplicación automática sin cadena.
-- Política/interfaz previas: verificadas con el parser C, sin invocar LL(1) para validar lenguaje. La API Python LL(1) se conserva para consulta/pruebas; clones utiliza Flex y comparación C.
+- Política/interfaz previas: verificadas con LL(1) en C para validar el lenguaje. La API Python LL(1) se conserva para consulta y pruebas. Clones utiliza Flex y comparación C.
 
 <a id="clones"></a>
 
@@ -619,9 +632,9 @@ El árbol parcial no se expone como resultado válido. Si se construyó un nodo 
 
 ### Sugerencias y reparaciones
 
-`--suggest-json` y `--syntax-json`/`--repair-json` conservan el **primer error** para contexto, edición y validación. No aceptan un documento porque Bison pueda recuperarse. Tras capturar el contexto LAC, el envoltorio del lexer termina la consulta; no reinyecta indefinidamente el marcador privado del cursor durante la búsqueda de un ancla.
+`--suggest-json`, `--syntax-json` y `--repair-json` usan LL(1) en C desde el paso 4 de esta migración. Las sugerencias consultan un prefijo válido y las reparaciones verifican copias completas deteniéndose en el primer obstáculo. Estas rutas no llaman a Bison ni aceptan una copia por recuperación. La recuperación de múltiples errores descrita aquí sigue perteneciendo a `--check-json` y a la compilación.
 
-Los errores posteriores se descubren con `--check-json`. La reparación sigue conservadora: no se convierten varias propuestas parciales en autorización automática ni se amplía el catálogo de reglas por M7.
+La compilación y `--check-json` pueden descubrir errores posteriores mediante recuperación. El diagnóstico automático LL(1) revela el siguiente al corregir el primero. La reparación sigue conservadora: no se convierten varias propuestas parciales en autorización automática ni se amplía el catálogo de reglas por M7.
 
 ### Límites y estados
 

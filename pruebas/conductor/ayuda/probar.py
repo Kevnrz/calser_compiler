@@ -23,7 +23,7 @@ def main():
         for flag in ('-h, --help', '-t', '-m', '-v', '-o <salida>', '-s', '-p',
                      '-i, --tac', '-x', '--ast-json <json>', '--no-schedule', '--time',
                      '-O0', '-O1', '-O2', '--opt=lista', '--unroll=N', '--metrics <json>',
-                     '--check', '--check-json', '--tokens-json', '--syntax-json',
+                     '--check', '--check-json', '--check-ll1-json', '--tokens-json', '--syntax-json',
                      '--suggest-json <n>', '--repair-json', '--clones-json <n>'):
             assert any(line.strip().startswith(flag) for line in long.stdout.splitlines()), flag
         for text in ('Ejemplos:', 'Codigos de salida:', '.bin', '.hex', '.mem', '.asm', '.tac',

@@ -2,6 +2,7 @@
 from functools import lru_cache
 from pathlib import Path
 from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QApplication, QStyle
 
 
 @lru_cache(maxsize=1)
@@ -12,4 +13,6 @@ def icono_cls():
 
 
 def icono_archivo(path):
+    if path is not None and Path(path).suffix.lower() == '.tac':
+        return QApplication.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon)
     return icono_cls() if path is not None and Path(path).suffix == '.cls' else QIcon()

@@ -1,5 +1,5 @@
-/* Análisis sintáctico reutilizable en memoria: Flex/Bison reales, sin semántica.
- * Cada llamada reinicia buffers, diagnósticos y pila; los árboles son temporales.
+/* Análisis sintáctico LL(1) reutilizable en memoria, con tokens reales de Flex.
+ * Cada llamada reinicia buffers, diagnósticos y pila. No construye árboles.
  * Lo usan repairs.c y --syntax-json desde main.c. Estado estático de una sola
  * consulta; no reentrante. El resultado es por valor, sin punteros prestados.
  * Offsets absolutos en bytes UTF-8 [inicio,fin). No depende de archivos Qt. */
@@ -10,19 +10,20 @@
 #define SYNTAX_TOKEN_LIMIT 50000
 typedef struct {
     int accepted, lexical, limited, failed, eof, next_statement;
-    /* Bits 0..3: ; . ] ), exclusivamente si Bison/LAC los esperaba. */
+    /* Bits 0..3: ; . ] ), exclusivamente si LL(1) los esperaba. */
     unsigned closers;
     /* Token inesperado real y token anterior, no el rango visual del mensaje. */
     size_t offset, end, previous_start, previous_end;
 } SyntaxAnalysis;
 /* Texto prestado: no se modifica ni se guarda; bloquea ante errores léxicos. */
 SyntaxAnalysis syntax_analyze(const char *text, size_t length);
-int syntax_service_active(void);
-void syntax_service_error(int eof);
-void syntax_service_expected(const char *name);
-void syntax_service_failed(void);
 /* Retorna buffer sin prometer NUL, de *length bytes. El llamador hace free.
  * NULL distingue lectura/memoria fallida de límite mediante *limited. */
 char *syntax_read_source(const char *source, size_t *length, int *limited);
 int syntax_json_run(FILE *out, const char *source);
+/* Abre el informe check_ll1 y valida sintaxis con el reconocedor nativo.
+ * Retorna cero solo si se puede construir el AST para revisar semántica.
+ * El llamador termina el informe con diag_json_finish y libera diagnósticos.
+ */
+int syntax_check_ll1(const char *source);
 #endif

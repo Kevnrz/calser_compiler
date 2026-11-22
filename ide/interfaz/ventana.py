@@ -613,7 +613,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
 
     def registro_comprobacion(self, request, message, log):
         name = str(request.fuente or "Sin título")
-        self.auto_output.setPlainText(f"Análisis automático · {name} · revisión {request.revision}\nccom --check-json [copia temporal]\n{message}\n\n{log}")
+        self.auto_output.setPlainText(f"Análisis automático · {name} · revisión {request.revision}\nccom --check-ll1-json [copia temporal]\n{message}\n\n{log}")
 
     def actualizar_problemas(self):
         """Conserva diagnósticos de otros documentos y retira solo los obsoletos."""
@@ -623,7 +623,12 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
             manual = self.results.get(editor, [])
             compiled = list(manual)
             manual_keys = {(p.linea, p.columna, p.categoria, p.descripcion) for p in manual}
-            compiled.extend(p for p in self.auto_results.get(editor, []) if (p.linea, p.columna, p.categoria, p.descripcion) not in manual_keys)
+            # F5 puede describir el mismo obstáculo con otro mensaje de Bison.
+            # Su informe sintáctico vigente tiene prioridad sobre el automático.
+            manual_syntax = any(p.categoria == "Sintáctico" for p in manual)
+            compiled.extend(p for p in self.auto_results.get(editor, [])
+                            if not (manual_syntax and p.categoria == "Sintáctico")
+                            and (p.linea, p.columna, p.categoria, p.descripcion) not in manual_keys)
             # ccom tiene prioridad si informa el mismo error léxico/rango de
             # esta revisión. Conservar sus errores semánticos/sintácticos.
             keys = set()

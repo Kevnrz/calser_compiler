@@ -1,4 +1,4 @@
-/* Motor conservador de reparaciones: primer error, inserciones de cierres LAC
+/* Motor conservador de reparaciones: primer error, inserciones de cierres LL(1)
  * y reanálisis completo de cada copia. No inventa operandos, borra código,
  * ejecuta semántica ni escribe fuentes. Memoria y estado se reinician por copia.
  * main.c llama repairs_run; syntax_service aporta expectativas y reanálisis.
@@ -47,7 +47,7 @@ static int emit(FILE *out, const char *source, const char *text, SyntaxAnalysis 
         json_write_string(out, r.automatic ? "Unico punto y coma con aceptacion sintactica completa, sin errores lexicos." : "Requiere revision manual; no garantiza intencion ni semantica.");
         fprintf(out, "],\"validation\":{\"accepted\":%s,\"resolved\":true,\"reached\":%zu,\"target\":%zu,\"description\":",
                 r.accepted ? "true" : "false", r.reached, base.offset);
-        json_write_string(out, r.accepted ? "Bison/Flex: aceptacion sintactica completa de la copia; semantica no comprobada." : "Bison/Flex: primer error superado; aceptacion sintactica parcial, solo manual.");
+        json_write_string(out, r.accepted ? "LL(1)/Flex. Aceptacion sintactica completa de la copia, sin comprobar semantica." : "LL(1)/Flex. Primer error superado, aceptacion sintactica parcial para revision manual.");
         fputs("}}", out);
     }
     fputs("]}\n", out);

@@ -64,6 +64,11 @@ void diag_init(const char *filename);
  * Restricciones:
  *   diag_init previo; usa diag_verror.
  */
+/* Posición explícita calculada por el analizador, también para EOF vacío.
+ * Conserva el rango original al notificar al observador del protocolo.
+ */
+void diag_error_at(const char *category, DiagPosition position, const char *fmt, ...);
+
 void diag_error(const char *category,
                 int line, int column, int length,
                 const char *fmt, ...);

@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 #include "ast.h"
 #include "parser.tab.h"
@@ -29,6 +30,10 @@ static int column = 1;
  * El observador es inerte en la CLI clásica y no altera lo que recibe Bison. */
 static size_t lex_offset = 0, lex_start = 0, comment_start = 0;
 static LexerObserver lex_observer;
+/* Callbacks temporales del reconocedor LL(1). Son inertes en la compilación
+ * y en los servicios existentes. No modifican los tokens de Flex. */
+static LexerErrorConsumer visit_error;
+static void *visit_data;
 void lexer_set_observer(LexerObserver observer) { lex_observer = observer; }
 static void lexer_emit(const char *kind, size_t start, size_t end) {
     diag_json_token(kind, start, end);
@@ -64,6 +69,7 @@ int lexical_fatal = 0;
 // Posición del #[ que abrió el comentario de bloque actual.
 static int comment_line = 0;
 static int comment_column = 0;
+static int comment_open = 0;
 
 void yyerror(const char *msg);
 
@@ -96,6 +102,7 @@ static void lexical_error(int line, int col, int length,
     va_end(args);
 
     lexical_errors++;
+    if (visit_error) visit_error(line, col, length > 0 ? (size_t)length : 1, visit_data);
 }
 %}
 
@@ -129,10 +136,11 @@ static void lexical_error(int line, int col, int length,
                          comment_line = yylineno;
                          comment_column = yylloc.first_column;
 
+                         comment_open = 1;
                          BEGIN(COMMENT);
                        }
 
-<COMMENT>"]#"         { lexer_emit("comentario", comment_start, lex_offset); BEGIN(INITIAL); }
+<COMMENT>"]#"         { comment_open = 0; lexer_emit("comentario", comment_start, lex_offset); BEGIN(INITIAL); }
 
 <COMMENT>\n           { column = 1; }
 
@@ -157,7 +165,7 @@ static void lexical_error(int line, int col, int length,
  /* L-03: un # seguido de [ nunca es comentario de línea. Ante #[ esta regla
     solo alcanza el # (largo 1) y gana "#[" (largo 2) por prefijo más largo
     (libro §3.5.3). Un # solo al final de la línea sigue siendo comentario. */
-"#"([^\[\n][^\n]*)?   { lexer_emit("comentario", lex_start, lex_offset); }
+"#"([^\[\n][^\n]*)?   { comment_open = 1; lexer_emit("comentario", lex_start, lex_offset); comment_open = 0; }
 
  /* =========================================================================
   * PALABRAS RESERVADAS
@@ -330,6 +338,7 @@ int lexer_scan_only(void) {
     column = yylineno = 1;
     lex_offset = lex_start = comment_start = 0;
     lexical_errors = lexical_fatal = 0;
+    comment_open = 0;
     BEGIN(INITIAL);
     yyrestart(yyin);
     while ((token = yylex()) != 0) {
@@ -341,28 +350,6 @@ int lexer_scan_only(void) {
     return lexical_errors ? 1 : 0;
 }
 
-/* El parser recibe length bytes de un prefijo M3 o una copia completa M4.
- * Sus modos activan destructores de consulta; el AST nunca se entrega a main.
- * Flex copia la entrada: yy_delete_buffer libera esa copia, no el texto ajeno.
- * Destruir el escaneo anterior evita retener memoria al usar yy_scan_bytes. */
-int lexer_parse_text(const char *text, size_t length) {
-    extern int yyparse(void);
-    extern ASTNode *root;
-    root = NULL;
-    yylex_destroy();
-    column = yylineno = 1;
-    lex_offset = lex_start = 0;
-    lexical_errors = lexical_fatal = 0;
-    BEGIN(INITIAL);
-    YY_BUFFER_STATE buffer = yy_scan_bytes(text, (int) length);
-    int result = yyparse();
-    parser_finish();
-    root = NULL;  /* El servicio liberó los símbolos mediante destructores. */
-    yy_delete_buffer(buffer);
-    yylex_destroy();
-    return result;
-}
-
 /* Escaneo íntegro de una copia candidata: mismos tokens y recuperación, sin
  * archivo auxiliar ni AST. Nunca deja cadenas de identificadores sin liberar. */
 size_t lexer_current_start(void) { return lex_start; }
@@ -372,6 +359,7 @@ int lexer_scan_text(const char *text, size_t length) {
     column = yylineno = 1;
     lex_offset = lex_start = comment_start = 0;
     lexical_errors = lexical_fatal = 0;
+    comment_open = 0;
     BEGIN(INITIAL);
     YY_BUFFER_STATE buffer = yy_scan_bytes(text, (int) length);
     int token;
@@ -383,3 +371,39 @@ int lexer_scan_text(const char *text, size_t length) {
     yylex_destroy();
     return errors ? 1 : 0;
 }
+
+/* El reconocedor LL(1) consume los mismos tokens de Flex sin pasar por Bison.
+ * El buffer y los valores semánticos de identificador son propiedad de esta
+ * visita. Se liberan también cuando el consumidor detecta un error o cancela.
+ */
+int lexer_visit_text(const char *text, size_t length, LexerTokenConsumer consumer,
+                     LexerErrorConsumer error, void *data) {
+    if ((!text && length) || length > INT_MAX) return -1;
+    yylex_destroy();
+    column = yylineno = 1;
+    lex_offset = lex_start = comment_start = 0;
+    lexical_errors = lexical_fatal = 0;
+    comment_open = 0;
+    BEGIN(INITIAL);
+    visit_error = error;
+    visit_data = data;
+    YY_BUFFER_STATE buffer = yy_scan_bytes(text ? text : "", (int)length);
+    int token;
+    while ((token = yylex()) != 0) {
+        int more = consumer ? consumer(token, lex_start, lex_offset,
+                                        yylloc.first_line, yylloc.first_column, data) : 1;
+        if (token == TOKEN_IDENTIFIER) { free(yylval.str); yylval.str = NULL; }
+        if (!more) break;
+    }
+    if (!token && consumer) consumer(0, length, length, yylineno, column, data);
+    int errors = lexical_errors;
+    visit_error = NULL;
+    visit_data = NULL;
+    yy_delete_buffer(buffer);
+    yylex_destroy();
+    return errors ? 1 : 0;
+}
+
+/* Información producida por los estados y reglas de comentario de Flex. */
+int lexer_comment_open(void) { return comment_open; }
+int lexer_in_block_comment(void) { return YY_START == COMMENT; }

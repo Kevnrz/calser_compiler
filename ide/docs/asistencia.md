@@ -1,6 +1,6 @@
 # Asistencia de CALSIDE: modelos, aplicación y permisos
 
-Contrato vigente · 2026-11-11. Sugerencias y reparaciones están conectadas a motores C. `ide/nucleo/asistencia.py` mantiene modelos sin Qt ni dependencia del LL(1). El catálogo automático contiene INSERCION_PUNTO_COMA; está desactivado hasta habilitar automatización. El diálogo selecciona la primera regla revisada si todavía no hay ninguna seleccionada. La vista gris con Tab sí viene activada.
+Contrato vigente · 2026-11-22. Sugerencias y reparaciones están conectadas a motores C. `ide/nucleo/asistencia.py` mantiene modelos sin Qt ni dependencia del LL(1). El catálogo automático contiene INSERCION_PUNTO_COMA; está desactivado hasta habilitar automatización. El diálogo selecciona la primera regla revisada si todavía no hay ninguna seleccionada. La vista gris con Tab sí viene activada.
 
 Este documento define el contrato Python/UI. Las decisiones del lenguaje y formatos nativos se explican en [Servicios de ccom](../../docs/ccom_servicios_ide.md). [Guía del sistema](guia_sistema_calside.md), [prueba manual](revision_manual.md#asistencia).
 
@@ -17,7 +17,7 @@ Este documento define el contrato Python/UI. Las decisiones del lenguaje y forma
 | `ide/interfaz/sugerencias.py` | Vista gris, lista junto al cursor, aceptación y vigencia de propuestas. |
 | `ide/interfaz/sugerencia_inline.py` | Dibuja un sufijo sobre el viewport, sin editar el documento ni su historial. |
 | `ide/interfaz/reparaciones.py` | Panel manual con motivos, vista previa, cancelación y aplicación explícita. |
-| `ide/sugerencias_ccom.py` | Adaptador productivo del motor C Flex/Bison-LAC (`--suggest-json`). |
+| `ide/sugerencias_ccom.py` | Adaptador productivo del motor C Flex y LL(1) (`--suggest-json`). |
 | `ide/reparaciones_ccom.py` | Adaptador productivo de reparaciones y comprobación sintáctica C. |
 
 Importar los tipos compartidos; **no volver a definir** `EdicionTexto`, `Sugerencia`, `Reparacion` ni los resultados dentro de los motores. El LL(1) conserva sus propios tipos de consulta en `ide/nucleo/parser.py`, fuera de los modelos de propuestas productivas.
@@ -197,9 +197,9 @@ El coordinador también expone `establecer_motor`. El proveedor debe aceptar `ca
 
 Al escribir o borrar con Backspace/Supr, una pausa (350 ms iniciales, conservando la espera guardada) consulta el motor C. `sugerencias_inline=True` por defecto habilita esta presentación aunque el perfil antiguo tuviera desactivada la lista por pausa. Puede desactivarse en preferencias.
 
-C marca `inline_preferred` para prefijos escritos, tipos y puntuación local útil. Que una opción sea la única continuación gramatical no basta para insinuar cerrar una función (`.`) o iniciar otra (`F`). C sí prioriza `.` después de los tokens explícitos `E;`, únicamente cuando hay un salto de línea hasta el cursor, si LAC lo permite y el punto no está ya a la derecha; `F` permanece en la lista manual. Enter puede solicitar esa continuación al pasar a una línea nueva; si está habilitada la corrección con Enter y no se aplica una reparación, la consulta de continuación se mantiene. Una lista válida de opciones ambiguas sin preferencia no dispara reparaciones como alternativa; así no se propone un punto para cerrar un cuerpo todavía vacío.
+C marca `inline_preferred` para prefijos escritos, tipos y puntuación local útil. Que una opción sea la única continuación gramatical no basta para insinuar cerrar una función (`.`) o iniciar otra (`F`). C sí prioriza `.` después de los tokens explícitos `E;`, únicamente cuando hay un salto de línea hasta el cursor, si LL(1) lo permite y el punto no está ya a la derecha; `F` permanece en la lista manual. Enter puede solicitar esa continuación al pasar a una línea nueva; si está habilitada la corrección con Enter y no se aplica una reparación, la consulta de continuación se mantiene. Una lista válida de opciones ambiguas sin preferencia no dispara reparaciones como alternativa; así no se propone un punto para cerrar un cuerpo todavía vacío.
 
-Bison publica el nombre de la función durante la consulta, sin otra gramática en Python. Para la declaración de `main` sin corchetes se propone `[]: ` con el cursor después de los dos puntos y el espacio; `void` es su tipo preferido porque el compilador exige ese retorno y ningún parámetro. En funciones normales se conserva `[]` con cursor dentro; Tab o flecha derecha sale y consulta `:`. Después de `:` se pueden recorrer tipos con Alt+[ / Alt+]. La plantilla compacta no se aplica a lazos, condiciones ni llamadas dentro del cuerpo de main, y las variables locales conservan sus tipos.
+Flex identifica el nombre de la declaración y LL(1) valida el contexto en C, sin reglas de asistencia en Python. Para la declaración de `main` sin corchetes se propone `[]: ` con el cursor después de los dos puntos y el espacio; `void` es su tipo preferido porque el compilador exige ese retorno y ningún parámetro. En funciones normales se conserva `[]` con cursor dentro; Tab o flecha derecha sale y consulta `:`. Después de `:` se pueden recorrer tipos con Alt+[ / Alt+]. La plantilla compacta no se aplica a lazos, condiciones ni llamadas dentro del cuerpo de main, y las variables locales conservan sus tipos.
 
 La zona de salida proviene del cursor interno y la longitud de la propuesta C. Editar, seleccionar, mover el cursor o perder foco invalida ese salto especial. Los campos nativos opcionales `inline_preferred` y `cursor_relative` se validan en el adaptador y llegan como `preferida_inline` y `cursor_relativo`.
 
@@ -253,7 +253,7 @@ Abrir **Editar → Preferencias de asistencia…**. Aceptar aplica y guarda los 
 | Corregir al confirmar una línea con Enter | No | Requiere catálogo revisado y reglas seleccionadas. Sin catálogo el control está deshabilitado. |
 | Reglas permitidas | Ninguna | Permiso por código exacto; el indicador del motor no agrega permisos. |
 
-Estos ajustes son independientes de **Compilar → Análisis automático** (`ccom --check-json`), del lexer y de F5/F6. Se persisten bajo `asistencia` en el estado JSON existente; campos inválidos recuperan valores predeterminados, sin interpretar cadenas como booleanos.
+Estos ajustes son independientes de **Compilar → Análisis automático** (`ccom --check-ll1-json`), del lexer y de F5/F6. Se persisten bajo `asistencia` en el estado JSON existente; campos inválidos recuperan valores predeterminados, sin interpretar cadenas como booleanos.
 
 ### Disparadores y cancelación
 

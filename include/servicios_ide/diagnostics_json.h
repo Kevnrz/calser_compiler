@@ -1,4 +1,4 @@
-/* Servicio JSON de análisis: captura diagnósticos reales, sin otro analizador.
+/* Servicio JSON de análisis que captura diagnósticos reales de los motores C.
  * Un proceso atiende una solicitud. begin instala el observador y finish escribe
  * una respuesta acotada, libera la captura y devuelve el código final de salida. */
 #ifndef DIAGNOSTICS_JSON_H
@@ -6,6 +6,10 @@
 #include <stdio.h>
 #include "json_text.h"
 void diag_json_begin(void);
+/* Informe del editor con sintaxis LL(1). Conserva rangos y categorías v1. */
+void diag_json_ll1_begin(void);
+/* Impide publicar un análisis limitado como un documento correcto. */
+void diag_json_limit(void);
 /* begin/finish corresponden a una consulta M1/M2 por proceso, no son
  * reentrantes. Captura mensajes copiados; kind de Flex es estático prestado.
  * finish desconecta el observador y libera captura. No autoriza reparaciones.

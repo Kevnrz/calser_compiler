@@ -1,12 +1,10 @@
-/* Sugerencias sintácticas desde Flex + Bison/LAC, no desde otra gramática.
- * Conserva los criterios de la entrega Python: fragmento completo, comentarios,
- * prefijo válido, terminales concretos y orden determinista. Sin símbolos
- * inventados, reparaciones ni escritura de la fuente. Una consulta por proceso.
- * main.c -> suggestions_run -> observador Flex -> parser Bison con TOKEN_CURSOR.
- * Estado de contexto estático, no reentrante. text presta el buffer local solo
- * hasta emit; los esperados se copian a words. Todos los rangos son UTF-8 y se
- * refieren al original, aunque solo su prefijo se entregue al parser. Al salir
- * se liberan buffer/AST y observadores. La cancelación la gestiona el padre. */
+/* Sugerencias desde Flex y el contexto predictivo LL(1) de ccom.
+ * Flex delimita el fragmento completo y observa comentarios y palabras reales.
+ * LL(1) decide qué terminales pueden continuar en el cursor. La presentación
+ * filtra el prefijo y mantiene las plantillas y prioridades del contrato JSON.
+ * No inventa nombres, no construye AST y no modifica la fuente.
+ * El estado es serial por proceso y se limpia al terminar la consulta.
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,6 +13,7 @@
 #include "lexer_service.h"
 #include "diagnostics.h"
 #include "diagnostics_json.h"
+#include "ll1_parser.h"
 
 #define MAX_SOURCE 200000
 #define MAX_TOKENS 50000
@@ -22,29 +21,21 @@
 static const char *text;
 static size_t length, cursor, fragment_start, fragment_end, token_count;
 static size_t first_error, return_end;
-static int in_comment, limited, probe, context_ok, internal_error, complete_fragment;
+static int in_comment, limited, context_ok, internal_error, complete_fragment;
 static char words[MAX_OPTIONS][64];
 static size_t word_count;
 static int function_main, previous_f, main_name_at_cursor, previous_e, return_ended_at_cursor;
 extern FILE *yyin;
 
-int suggestions_active(void) { return probe; }
-void suggestions_context(int at_cursor) { context_ok = at_cursor; }
-void suggestions_parser_error(void) { internal_error = 1; }
-void suggestions_function(const char *name) { function_main = name && !strcmp(name, "main"); }
-
-/* Bison entrega sus alias concretos. Se eliminan las comillas externas, nunca
- * se infiere una producción a partir del mensaje humano de error. */
-void suggestions_expected(const char *name) {
+static void add_expected(const char *name) {
+    /* id y num describen categorías, no código concreto para insertar. */
+    if (!strcmp(name, "id") || !strcmp(name, "num") || !strcmp(name, "$")) return;
     size_t n = strlen(name);
-    if (n >= 2 && name[0] == '"' && name[n - 1] == '"') { name++; n -= 2; }
-    if (!n || n >= sizeof(words[0]) || word_count == MAX_OPTIONS) {
-        limited = 1; return;
-    }
+    if (!n || n >= sizeof(words[0]) || word_count == MAX_OPTIONS) { limited = 1; return; }
     for (size_t i = 0; i < word_count; i++)
-        if (strlen(words[i]) == n && !memcmp(words[i], name, n)) return;
-    memcpy(words[word_count], name, n);
-    words[word_count++][n] = 0;
+        if (!strcmp(words[i], name)) return;
+    memcpy(words[word_count], name, n + 1);
+    word_count++;
 }
 
 static void lexical_error(const char *category, DiagPosition position,
@@ -69,6 +60,8 @@ static void observe(const char *kind, size_t start, size_t end) {
     if (end <= cursor && strcmp(kind, "invalido")) {
         main_name_at_cursor = previous_f && !strcmp(kind, "identificador") &&
                               end - start == 4 && !memcmp(text + start, "main", 4);
+        if (previous_f && !strcmp(kind, "identificador"))
+            function_main = main_name_at_cursor;
         previous_f = !strcmp(kind, "reservada") && end - start == 1 && text[start] == 'F';
         return_ended_at_cursor = previous_e && end - start == 1 && text[start] == ';';
         if (return_ended_at_cursor) return_end = end;
@@ -114,11 +107,26 @@ static size_t option_count(void) {
     return count;
 }
 static int query_context(size_t position) {
-    word_count = 0; context_ok = internal_error = function_main = 0;
-    probe = 1;
-    int result = lexer_parse_text(text, position);
-    probe = 0;
-    return result;
+    word_count = 0;
+    context_ok = internal_error = 0;
+    LL1Context context = ll1_context(text, length, position, position, NULL, NULL, NULL);
+    switch (context.analysis.status) {
+        case LL1_PREFIX_VALID:
+            context_ok = 1;
+            for (size_t i = 0; ll1_terminal_name(i); i++)
+                if (context.analysis.expected & (UINT64_C(1) << i)) add_expected(ll1_terminal_name(i));
+            return 0;
+        case LL1_LIMIT:
+            limited = 1;
+            return 1;
+        case LL1_INTERNAL_ERROR:
+        case LL1_INVALID_CONTEXT:
+        case LL1_CANCELLED:
+            internal_error = 1;
+            return 2;
+        default:
+            return 1;
+    }
 }
 
 /* Una continuación sintáctica no implica intención de cerrar una función
@@ -173,7 +181,7 @@ static int emit(FILE *out, const char *source, const char *status, const char *e
             fprintf(out, ",\"inline_preferred\":%s", inline_preferred(word, count) ? "true" : "false");
             if (pair) fprintf(out, ",\"cursor_relative\":%d", main_header ? (existing_colon ? 2 : 4) : 1);
             fputs(",\"detail\":", out);
-            json_write_string(out, main_header ? "Cabecera de main sin parametros; continuar con retorno void." : pair ? "Par de corchetes esperado; el cursor queda dentro para escribir parametros." : "Continuacion permitida por el parser de ccom (Bison/LAC).");
+            json_write_string(out, main_header ? "Cabecera de main sin parametros; continuar con retorno void." : pair ? "Par de corchetes esperado; el cursor queda dentro para escribir parametros." : "Continuacion permitida por el parser predictivo LL(1) de ccom.");
             fputc('}', out);
         }
     }
@@ -185,10 +193,10 @@ int suggestions_run(FILE *out, const char *source, size_t requested_cursor) {
     cursor = requested_cursor;
     fragment_start = fragment_end = cursor;
     token_count = word_count = 0;
-    in_comment = limited = probe = context_ok = internal_error = 0;
+    in_comment = limited = context_ok = internal_error = 0;
     first_error = (size_t) -1;
     complete_fragment = 0;
-    previous_f = main_name_at_cursor = previous_e = return_ended_at_cursor = 0;
+    function_main = previous_f = main_name_at_cursor = previous_e = return_ended_at_cursor = 0;
     return_end = 0;
     FILE *file = fopen(source, "rb");
     if (!file) return emit(out, source, "error", "No se pudo abrir la fuente.");

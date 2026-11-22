@@ -1,4 +1,4 @@
-"""M3: casos migrados de la entrega y consultas reales Bison/LAC por cursor."""
+"""M3: casos migrados de la entrega y consultas reales LL(1) por cursor."""
 import json
 from pathlib import Path
 import subprocess
@@ -64,7 +64,7 @@ def main():
         a=consultar('F main [] : void ;\n'); b=consultar('F main [] : void ;\n')
         assert a == b
         # Verificar contexto hasta el cursor en muchas fronteras, sin accidentes
-        # del estado Flex/Bison ni dependencia de que la fuente esté completa.
+        # del estado Flex/LL(1) ni dependencia de que la fuente esté completa.
         texto = (ROOT / 'pruebas/p02_factorial.cls').read_text()
         for posicion in range(0, len(texto) + 1, 7):
             consultar(texto, posicion)
@@ -84,7 +84,7 @@ def main():
             assert run('--suggest-json', 0, *flags, fuente).returncode == 2
         assert run('--suggest-json', 0, carpeta/'ausente.cls').returncode == 1
         assert run('--suggest-json', 0, fuente, '-v', '--time').returncode == 0
-    print('PASS --suggest-json: prefijos LAC, fragmentos, comentarios, Unicode, errores, limites y CLI')
+    print('PASS --suggest-json: prefijos LL(1), fragmentos, comentarios, Unicode, errores, limites y CLI')
 
 
 if __name__ == '__main__': main()

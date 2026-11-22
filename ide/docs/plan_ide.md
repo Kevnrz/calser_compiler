@@ -1,12 +1,25 @@
 # CALSIDE: estado actual y plan de cierre
 
-Actualizado: 2026-11-11. Este es el único checklist vigente del IDE. El [historial](bitacora_ide.md) conserva entregas y decisiones anteriores; no se acumulan aquí anexos contradictorios.
+Actualizado el 2026-11-22. Este es el único checklist vigente del IDE. El [historial](bitacora_ide.md) conserva entregas y decisiones anteriores; no se acumulan aquí anexos contradictorios.
 
 ## Frontera del producto
 
 Python/PySide6 gestiona interfaz, documentos, archivos, permisos y procesos. C decide léxico, sintaxis, semántica, sugerencias, reparaciones y clones reutilizando ccom. LL(1) Python permanece como API de consulta/pruebas, fuera del flujo gráfico; el simulador Python externo está autorizado.
 
 CALSIDE puede ejecutarse desde Python en desarrollo. Una aplicación empaquetada instalable sigue pendiente; no confundir esos estados. Completar el IDE tampoco certifica las optimizaciones, ISA o entregas de Arquitectura/Compiladores ajenas a su interfaz.
+
+## Rama de trabajo LL(1) en C
+
+Trabajo iniciado el 2026-11-22 en `feat/ide-ll1-c`, desde `develop` en `de834e2`. El objetivo de esta rama es conectar un reconocedor LL(1) en C a la asistencia del IDE. La compilación seguirá usando Bison. Esta es una decisión de implementación de la rama y no una exigencia LL(1) atribuida al PDF del proyecto.
+
+- [x] Paso 1. Contrastar la gramática con Bison actual y comprobar las transformaciones, los terminales y la tabla sin conflictos. La sintaxis existente coincide y no requiere nuevas producciones. El enlazado `P` no está implementado en estas reglas.
+- [x] Paso 2. Reconocedor completo en C con tokens Flex, pila propia, PRIMERO/SIGUIENTE y tabla calculados en C. Comprobado frente a Bison en 171 archivos y 296 variantes, con límites, cancelación y sanitizadores.
+- [x] Paso 3. API C de contexto hasta el cursor, fragmentos parciales, terminales esperados y distinción entre prefijo válido y programa completo. Contrastada en 423 posiciones, con comentarios Flex y fronteras UTF-8.
+- [x] Paso 4. Sugerencias, reparaciones y verificación de copias mediante LL(1) en C, con JSON compatible y consultas comprobadas sin Bison.
+- [x] Paso 5. Diagnóstico automático mediante `--check-ll1-json`, con primer error LL(1) y semántica existente tras aceptación sintáctica. Sin fallback a otro parser.
+- [x] Paso 6. Limpieza de hooks antiguos, equivalencia sintáctica, 158 pruebas dirigidas del IDE, regresiones O0/O1 y sanitizadores. Documentación consolidada y revisión humana de esta rama preparada, todavía pendiente.
+
+La [gramática verificada](ll1/gramatica_ll1.md) registra el alcance del paso 1 y sus comandos de comprobación. El [reconocedor nativo](ll1/parser_predictivo.md) documenta el paso 2 y su API. Las sugerencias y reparaciones ya usan Flex y LL(1) en C. El análisis automático utiliza `--check-ll1-json`. LL(1) detecta el primer error sintáctico. Si acepta, Bison construye el AST para reutilizar la semántica existente. La compilación y `--check-json` conservan su recorrido clásico.
 
 ## Funcionalidades y estado
 
@@ -19,12 +32,12 @@ CALSIDE puede ejecutarse desde Python en desarrollo. Una aplicación empaquetada
 | F05 | Búsqueda/edición de texto | Implementado; búsqueda de proyecto incluye buffers. |
 | F06 | Compilar con ccom | Implementado mediante F5 y perfiles. |
 | F07 | Salida, cancelación y errores de procesos | Implementado para compilación/ejecución. |
-| F08 | Diagnósticos gráficos y navegación | Implementado desde C; incluye varios errores sintácticos con recuperación conservadora. |
+| F08 | Diagnósticos gráficos y navegación | Implementado desde C. LL(1) informa el primer error automático. La compilación conserva la recuperación de Bison. |
 | F09 | Colores y errores léxicos | Flex real mediante `--tokens-json`. |
-| F10 | Análisis automático | `--check-json` sobre copias sin guardar, por documento/revisión. |
-| F11 | Sugerencias | Motor C conectado; vista gris por defecto con Tab/Esc, alternativas Alt+[ / Alt+] y lista Ctrl+Espacio. No inventa identificadores ni instrucciones completas. |
-| F12 | Reparaciones propuestas | Motor C conectado; `;`, `.`, `]`, `)`, vista previa, precondiciones y Deshacer; cierres locales en gris aceptables con Tab. |
-| F13 | Corrección automática | Optativa para `;`, con una sola activación en preferencias y validación completa C. Comprobada con motor real; repetición humana de R12 pendiente. |
+| F10 | Análisis automático | `--check-ll1-json` sobre copias sin guardar, por documento y revisión. |
+| F11 | Sugerencias | Motor LL(1) en C conectado; vista gris por defecto con Tab/Esc, alternativas Alt+[ / Alt+] y lista Ctrl+Espacio. No inventa identificadores ni instrucciones completas. |
+| F12 | Reparaciones propuestas | Motor LL(1) en C conectado; `;`, `.`, `]`, `)`, vista previa, precondiciones y Deshacer; cierres locales en gris aceptables con Tab. |
+| F13 | Corrección automática | Optativa para `;`, con una sola activación en preferencias y validación completa LL(1) en C. Comprobada con motor real; repetición humana de R12 pendiente. |
 | F14 | Clones Tipo I | Comparación C, formato/comentarios ignorados. |
 | F15 | Clones Tipo II | Comparación C con biyección de identificadores y variación de literales por clase. No demuestra equivalencia semántica. |
 | F16 | Recuperación ante fallos | Protecciones implementadas; validar manualmente los recorridos entregados. |

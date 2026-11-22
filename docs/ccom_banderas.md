@@ -22,11 +22,12 @@ rutas generadas en stderr. La salida clásica mantiene los errores en stderr;
 | `--metrics archivo.json` | JSON solo tras compilación O1 exitosa | archivo JSON | Disponible |
 
 | `--clones-json <mínimo>` | Clones I/II de instantáneas CCL1; mínimo 5..100000 tokens | JSON v1 stdout | Disponible |
-| `--repair-json` | Reparaciones de cierres sobre copias verificadas con Flex/Bison; sin semántica ni artefactos | JSON v1 stdout; logs stderr | Disponible |
+| `--repair-json` | Reparaciones de cierres sobre copias verificadas con Flex y LL(1) en C; sin semántica ni artefactos | JSON v1 stdout; logs stderr | Disponible |
 | `--syntax-json` | Verificación independiente de léxico/sintaxis para la política del IDE; sin semántica | JSON v1 stdout; logs stderr | Disponible |
-| `--suggest-json <cursor>` | Continuaciones sintácticas Flex/Bison-LAC en el cursor UTF-8; sin semántica ni artefactos | JSON v1 en stdout; logs en stderr | Disponible |
+| `--suggest-json <cursor>` | Continuaciones sintácticas Flex y LL(1) en C en el cursor UTF-8; sin semántica ni artefactos | JSON v1 en stdout; logs en stderr | Disponible |
 | `--tokens-json` | Solo lexer Flex: tokens clasificados, comentarios y errores; sin parser ni artefactos | JSON v1 en stdout; logs en stderr | Disponible |
 | `--check-json` | Mismo front-end que `--check`, con diagnósticos estructurados v1; sin artefactos | JSON en stdout; logs en stderr | Disponible |
+| `--check-ll1-json` | Diagnóstico del editor con sintaxis LL(1) y semántica existente tras aceptación. Sin artefactos | JSON v1 con operación `check_ll1` en stdout | Disponible |
 | `--check` | Solo análisis léxico, sintáctico y semántico, sin archivos de salida | diagnósticos en stderr | Disponible |
 | `--time` | Muestra la duración total en milisegundos, con estado completado o fallido | stderr | Disponible |
 | `--no-schedule` | Desactiva el organizador local y conserva la emisión de una operación más separación; útil para comparar | archivos | Disponible |

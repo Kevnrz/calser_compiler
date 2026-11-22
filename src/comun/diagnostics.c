@@ -111,10 +111,10 @@ void diag_init(const char *filename) {
     fclose(file);
 }
 
-/* diag_verror — véase el contrato en diagnostics.h. */
-void diag_verror(const char *category,
-                 int line, int column, int length,
-                 const char *fmt, va_list args) {
+/* Presentación común con rango opcional aportado por el analizador. */
+static void report_error(const char *category,
+                         int line, int column, int length,
+                         const char *fmt, va_list args, const DiagPosition *given) {
     const char *filename = diag_filename ? diag_filename : "ccom";
 
     // Solo se muestra la posición si la línea existe en el archivo.
@@ -134,6 +134,7 @@ void diag_verror(const char *category,
             position = (DiagPosition) {1, line, column,
                 diag_offsets[line - 1] + local, diag_offsets[line - 1] + local + count};
         }
+        if (given) position = *given;
         va_list copy;
         va_copy(copy, args);
         diag_observer(category, position, fmt, copy, diag_observer_data);
@@ -185,6 +186,22 @@ void diag_verror(const char *category,
         fputc('^', stderr);
 
     fprintf(stderr, "\n");
+}
+
+/* Conserva las posiciones calculadas por el reconocedor, incluido EOF después
+ * de un salto de línea que no tiene texto cargado en diag_lines.
+ */
+void diag_error_at(const char *category, DiagPosition position, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    report_error(category, position.line, position.column,
+                 (int)(position.end - position.start), fmt, args, &position);
+    va_end(args);
+}
+
+void diag_verror(const char *category, int line, int column, int length,
+                 const char *fmt, va_list args) {
+    report_error(category, line, column, length, fmt, args, NULL);
 }
 
 /* diag_error — véase el contrato en diagnostics.h. */

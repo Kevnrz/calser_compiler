@@ -77,7 +77,7 @@ def main():
             assert json.loads(run(flag,fuente).stdout)['status']=='limite'
             fuente.write_text(VALIDO)
             assert run(flag,fuente,'-v','--time').returncode==0
-    print('PASS M4: cierres LAC, copias completas, precondiciones, EOF parcial, comentarios, Unicode y CLI')
+    print('PASS M4: cierres LL(1), copias completas, precondiciones, EOF parcial, comentarios, Unicode y CLI')
 
 
 if __name__=='__main__':main()

@@ -71,6 +71,7 @@ typedef struct {
     size_t suggest_cursor;
     int check_text;           /* distingue --check explícito en modo léxico */
     int tokens_json;          /* --tokens-json: solo lexer Flex y presentación */
+    int check_ll1_json;        /* Consulta del editor con sintaxis predictiva. */
     int check_json;           /* --check-json: mismo front-end, protocolo v1 */
     int check_only;            /* --check: fases léxica, sintáctica y semántica */
     int verbose;               /* -v */
@@ -95,11 +96,11 @@ typedef struct {
 enum {
     OPT_AST_JSON = 1000, OPT_NO_SCHEDULE, OPT_TIME,
     OPT_PASSES, OPT_UNROLL, OPT_METRICS,
-    OPT_CHECK, OPT_CHECK_JSON, OPT_TOKENS_JSON, OPT_SUGGEST_JSON,
+    OPT_CHECK, OPT_CHECK_JSON, OPT_CHECK_LL1_JSON, OPT_TOKENS_JSON, OPT_SUGGEST_JSON,
     OPT_REPAIR_JSON, OPT_SYNTAX_JSON, OPT_CLONES_JSON
 };
 
-#define USAGE "uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-i|--tac] [-p] [-x] [--check|--check-json|--tokens-json|--suggest-json <cursor>|--repair-json|--syntax-json|--clones-json <min>] [--ast-json <json>] [--no-schedule] [--time] [-O0|-O1|-O2] [--opt=lista] [--unroll=N] [--metrics archivo.json] <archivo> [-o <salida>]"
+#define USAGE "uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-i|--tac] [-p] [-x] [--check|--check-json|--check-ll1-json|--tokens-json|--suggest-json <cursor>|--repair-json|--syntax-json|--clones-json <min>] [--ast-json <json>] [--no-schedule] [--time] [-O0|-O1|-O2] [--opt=lista] [--unroll=N] [--metrics archivo.json] <archivo> [-o <salida>]"
 
 /*
  * print_help — describe las opciones sin requerir ni procesar una entrada.
@@ -135,9 +136,11 @@ static void print_help(void) {
          "                       no genera archivos. Compatible con -v y --time.\n"
          "  --check-json         Mismo analisis que --check; respuesta JSON v1 en\n"
          "                       stdout, sin archivos. Compatible con -v y --time.\n"
+         "  --check-ll1-json     Sintaxis LL(1) y semantica existente para el IDE.\n"
+         "                       JSON v1, sin artefactos. Admite -v y --time.\n"
          "  --tokens-json        Tokens, comentarios y errores del lexer Flex en\n"
          "                       JSON v1, sin parser ni salidas. Admite -v y --time.\n"
-         "  --suggest-json <n>   Sugerencias Bison/LAC en el cursor UTF-8 (bytes).\n"
+         "  --suggest-json <n>   Sugerencias LL(1) en el cursor UTF-8 (bytes).\n"
          "                       Sin semantica ni artefactos. Admite -v y --time.\n"
          "  --repair-json        Reparaciones de cierres validadas por el parser C.\n"
          "  --syntax-json        Solo sintaxis completa en JSON, para verificacion.\n"
@@ -1255,6 +1258,7 @@ static int parse_options(int argc, char **argv, Options *options) {
         {"metrics", required_argument, NULL, OPT_METRICS},
         {"check", no_argument, NULL, OPT_CHECK},
         {"check-json", no_argument, NULL, OPT_CHECK_JSON},
+        {"check-ll1-json", no_argument, NULL, OPT_CHECK_LL1_JSON},
         {"tokens-json", no_argument, NULL, OPT_TOKENS_JSON},
         {"suggest-json", required_argument, NULL, OPT_SUGGEST_JSON},
         {"repair-json", no_argument, NULL, OPT_REPAIR_JSON},
@@ -1315,6 +1319,7 @@ static int parse_options(int argc, char **argv, Options *options) {
             case OPT_TIME: options->show_time = 1; break;
             case OPT_CHECK: options->check_only = options->check_text = 1; break;
             case OPT_CHECK_JSON: options->check_only = options->check_json = 1; break;
+            case OPT_CHECK_LL1_JSON: options->check_only = options->check_ll1_json = 1; break;
             case OPT_TOKENS_JSON: options->check_only = options->tokens_json = 1; break;
             case OPT_SUGGEST_JSON: {
                 char *end = NULL;
@@ -1380,7 +1385,7 @@ static int parse_options(int argc, char **argv, Options *options) {
 
     options->input = argv[optind];
 
-    int services = options->check_json + options->tokens_json + options->suggest_json + options->repair_json + options->syntax_json + options->clones_json;
+    int services = options->check_ll1_json + options->check_json + options->tokens_json + options->suggest_json + options->repair_json + options->syntax_json + options->clones_json;
     if (services + options->check_text > 1) {
         fprintf(stderr, "ccom: las operaciones de consulta son excluyentes\n");
         free(options->output);
@@ -1393,7 +1398,7 @@ static int parse_options(int argc, char **argv, Options *options) {
             options->explicit_level || options->opt_seen || options->unroll_factor ||
             options->metrics_path) {
             fprintf(stderr, "ccom: %s solo admite -v y --time; no admite opciones de salida o ensamblado\n",
-                    options->clones_json ? "--clones-json" : options->repair_json ? "--repair-json" : options->syntax_json ? "--syntax-json" : options->suggest_json ? "--suggest-json" : options->tokens_json ? "--tokens-json" : "--check");
+                    options->clones_json ? "--clones-json" : options->repair_json ? "--repair-json" : options->syntax_json ? "--syntax-json" : options->suggest_json ? "--suggest-json" : options->tokens_json ? "--tokens-json" : options->check_ll1_json ? "--check-ll1-json" : "--check");
             free(options->output);
             return EXIT_USAGE;
         }
@@ -1517,6 +1522,13 @@ int main(int argc, char **argv) {
         }
         report_phase(&options, "fase 1: analisis lexico", code == 0);
     }
+    else if (options.check_ll1_json) {
+        /* Bison solo construye el AST si LL(1) aceptó la sintaxis completa.
+         * Se conserva la semántica existente y no se generan artefactos.
+         */
+        code = syntax_check_ll1(options.input);
+        if (!code) code = compile(&options);
+    }
     else if (options.assemble_only) {
 
         // La entrada ya es el .asm: -s lo sobrescribiría.
@@ -1532,10 +1544,10 @@ int main(int argc, char **argv) {
         code = compile(&options);
     }
 
-    if (options.check_json || options.tokens_json)
+    if (options.check_json || options.check_ll1_json || options.tokens_json)
         code = diag_json_finish(stdout, options.input, code);
 
-    if (options.tokens_json) diag_free();
+    if (options.tokens_json || options.check_ll1_json) diag_free();
     if (code == 0 && !options.suggest_json && !options.repair_json && !options.syntax_json && !options.clones_json) {
         if (options.tokens_json) fprintf(stderr, "ccom: Analisis lexico correcto.\n");
         else report_success(&options);

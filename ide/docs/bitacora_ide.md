@@ -2677,3 +2677,76 @@ Verificación: **384 pruebas IDE**, suite completa del compilador y casos M7 baj
 Se agregaron 12 programas independientes en `ide/ejemplos/revision_manual/recorridos`, con comentarios y una guía de resultados: operadores, llamadas adelantadas/anidadas, ramas, ciclos L/S, recursión con R, recorrido/copia/búsqueda de arreglos, suma/resta de matrices, transposición rectangular, producto matricial y corto circuito. La guía propone mutaciones individuales para asistencia y errores sin convertir el corpus válido en un conjunto de fuentes dañadas.
 
 Verificación específica del corpus: 12/12 pasan `ccom --check`, generación de artefactos y simulación; los valores finales coinciden con los esperados, con terminación normal y sin avisos de separación. Se usaron los auxiliares existentes de `pruebas/generador_o0/programas/probar.py`, con salidas temporales. No se ejecutó la suite completa. La revisión humana sigue pendiente; los estados manuales anteriores se conservan.
+
+## 2026-11-22 — Paso 1 de LL(1) en C
+
+En `feat/ide-ll1-c`, creada desde `develop` en `de834e2`, se contrastó la referencia LL(1) con las reglas vigentes de `grammar/parser.y` y los terminales de `grammar/lexer.l`. Las reglas válidas no cambiaron y no hizo falta agregar producciones. Se mantienen 101 producciones Bison y 43 no terminales, transformadas en 118 producciones LL(1) y 60 no terminales. Comparten 47 terminales. La tabla tiene 336 celdas ocupadas y cero conflictos. La directiva de enlazado `P` no aparece en estas reglas y sigue pendiente del lenguaje.
+
+Se agregó `tools/verificar_gramatica_ll1.py`. Extrae las reglas reales mediante el informe XML de Bison, excluye recuperación y acciones internas y comprueba las reescrituras revisadas. Detecta cambios en reglas factorizadas, en el resto de las producciones y en el alfabeto de Flex. Es una herramienta de desarrollo y no un nuevo analizador Python del editor. Se agregaron seis pruebas de vigencia y el objetivo `make check-ll1-grammar`. Se actualizaron la referencia de gramática y el plan de esta rama.
+
+Verificación realizada con ccom recompilado desde el código actual. Pasaron 41 pruebas de vigencia, tabla y parser. La prueba diferencial comparó la aceptación sintáctica de LL(1) y Bison en 163 fuentes sin errores léxicos. No se compara semántica ni se afirma que un corpus finito demuestre equivalencia para toda entrada. Bison no informó conflictos en la comprobación.
+
+La carpeta `build` existente contenía dependencias antiguas que apuntaban a `src/tac_passes.c`, anterior a su traslado. Se conservó esa carpeta y se compiló con `make -j2 BUILD_DIR=/tmp/calside-ll1-paso1-build check-ll1-grammar`. Las salidas de compilación intermedias quedaron en esa carpeta temporal. No se modificó el código de compilación ni se conectó todavía el parser LL(1) al IDE. El siguiente paso es implementar el reconocedor en C con los tokens de Flex.
+
+## 2026-11-22 — Paso 2 de LL(1) en C
+
+Se implementó `ll1_parser.c` con una pila por análisis y cálculo nativo de PRIMERO, SIGUIENTE, anulables y tabla predictiva. Las 118 producciones se exportan como datos C mediante `tools/generar_datos_ll1.py`. El generador solo se usa durante el desarrollo y el reconocimiento no necesita Python ni llama a Bison. La tabla confirma 47 terminales del lenguaje más EOF, 60 no terminales, 21 anulables, 336 celdas y cero conflictos.
+
+Se agregó `lexer_visit_text` al Flex existente. Entrega los tokens y posiciones al consumidor, comunica errores léxicos con su ubicación y libera los identificadores incluso al detenerse. El resultado del parser distingue aceptación, errores léxicos/sintácticos, límites, cancelación y fallos internos. No construye AST ni hace semántica. Se mantiene el uso exclusivo por proceso debido al estado global de Flex y diagnósticos.
+
+Verificación dirigida mediante `check-ll1-c`. Coincidieron el reconocedor nativo y Bison en 171 archivos y 296 variantes de un programa matricial. El auxiliar intercepta `yyparse` y abortaría ante una llamada accidental a Bison. Pasaron las comprobaciones de EOF, comentarios, UTF-8/CRLF, identificadores largos, profundidad real de pila, límites configurables, cancelación y 300 consultas repetidas. Las comprobaciones nativas también pasaron con ASan, UBSan y detección de fugas. Se corrigió la dependencia explícita de `parser.tab.h` para permitir compilaciones limpias en paralelo.
+
+Se ejecutaron las regresiones de tokens JSON, sugerencias, reparaciones, análisis JSON y recuperación sintáctica, todas correctas. No se ejecutó la suite completa. Los artefactos de prueba quedaron en `/tmp/calside-ll1-paso1-build` y `/tmp/calside-ll1-asan`. Se actualizó el plan y la referencia del parser. El motor del IDE no cambia todavía y las consultas de contexto del cursor corresponden al paso 3.
+
+## 2026-11-22 — Paso 3 de LL(1) en C
+
+Se agregó `ll1_context` a la API nativa. Consulta un prefijo hasta el cursor con un inicio explícito de fragmento parcial. Reutiliza la pila del reconocedor y obtiene los terminales posibles sin exigir un EOF de programa. Distingue prefijo válido, comentario y contexto inválido. `can_end` separa un prefijo válido de uno que ya puede terminar como programa completo. El sufijo posterior al cursor no aporta errores a la consulta. Se mantienen límites y cancelación.
+
+Flex expone metadatos del estado de comentario durante la visita. El contexto bloquea propuestas dentro de comentarios de línea y bloque, sin fabricar errores por un bloque que todavía se está escribiendo. El reconocimiento completo sigue rechazando comentarios sin cerrar. Se validan las fronteras UTF-8 y el inicio del fragmento para impedir cortes de caracteres o de tokens anteriores. Los callbacks se desconectan y los buffers se liberan al terminar. El uso continúa siendo exclusivo dentro de cada proceso.
+
+Verificación mediante el auxiliar nativo con `yyparse` interceptado. Estados y continuaciones coinciden con la referencia LL(1) en 423 posiciones de cursor. Se conservaron las comprobaciones de programas completos en 171 archivos y 296 variantes. También pasaron 300 análisis completos y 200 consultas de contexto repetidas bajo ASan, UBSan y detección de fugas. Pasaron las regresiones dirigidas de tokens, sugerencias, reparaciones, análisis JSON y recuperación. No se ejecutó la suite completa.
+
+Se actualizaron la referencia del parser y el plan. No se cambió el motor de la interfaz ni el contrato JSON productivo. La API Python solo actúa como referencia de desarrollo en las pruebas. La adaptación de sugerencias y reparaciones al contexto nativo corresponde al paso 4.
+
+
+## 2026-11-22 — Paso 4 de LL(1) en C
+
+Se conectaron los motores productivos de sugerencias y reparaciones al reconocedor predictivo nativo. `suggestions.c` obtiene las continuaciones mediante `ll1_context`, filtra los terminales concretos y conserva los reemplazos de palabras parciales, las plantillas de corchetes y las preferencias de vista gris. Flex identifica los nombres de las declaraciones para conservar el comportamiento particular de `main` sin depender de acciones de Bison.
+
+`syntax_service.c` obtiene el primer error y los cierres esperados mediante `ll1_analyze`. Conserva el recorrido previo de Flex para recoger posiciones y bloquear reparaciones ante errores léxicos. `repairs.c` verifica cada inserción sobre una copia completa con LL(1). Continúa ofreciendo únicamente punto y coma, punto final, corchete o paréntesis de cierre. No inventa operandos ni nombres y mantiene la automatización limitada a un único punto y coma seguro con aceptación completa, fuera de EOF.
+
+Las rutas `--suggest-json`, `--repair-json` y `--syntax-json` ya usan LL(1) en C. Conservan el formato JSON, los estados y las coordenadas UTF-8 de los adaptadores existentes. No se cambiaron los widgets ni se añadieron reglas del lenguaje en Python. Los hooks anteriores del parser clásico quedan inactivos de forma temporal. `--check-json`, el análisis semántico y la compilación conservan Bison. La conexión del diagnóstico sintáctico del editor corresponde al paso 5.
+
+Se amplió el auxiliar enlazado con `yyparse` interceptado para ejecutar los tres servicios reales. Pasaron 30 consultas que comprueban la ausencia de llamadas a Bison, igualdad del JSON con el ejecutable productivo y conservación de fuentes y artefactos. La comparación independiente contra Bison ahora usa `--ast-json`, porque `--syntax-json` ya pasó al nuevo reconocedor. Coincidieron 171 archivos y 296 variantes de programas completos, además de las 423 posiciones de contexto frente a la referencia de desarrollo.
+
+Pasaron las pruebas dirigidas de sugerencias, reparaciones, tokens, análisis JSON y recuperación, junto con 68 pruebas de adaptadores, interfaz inline y política automática. También pasaron las consultas nativas repetidas y las 30 consultas de servicios bajo ASan, UBSan y detección de fugas. No se ejecutó la suite completa. Las compilaciones intermedias quedaron en temporales para evitar la caché antigua de `build`. Se actualizaron el plan, los contratos de servicios, la guía del sistema y la referencia del parser. No se hizo commit ni push.
+
+
+## 2026-11-22 — Paso 5 de LL(1) en C
+
+Se conectó el diagnóstico automático del editor al reconocedor predictivo mediante `--check-ll1-json`. `ComprobadorCcom` consulta esta operación sobre la copia privada del documento y exige `operation` igual a `check_ll1` al validar la respuesta. Un ejecutable antiguo, un protocolo incompatible o un fallo no activan otro parser de respaldo. Se conservan las pausas, cancelación, timeout, límites de transporte y descarte por identidad y revisión del documento.
+
+`syntax_check_ll1`, en `syntax_service.c`, reconoce primero la sintaxis completa con LL(1). Publica el primer error y sus terminales esperados sin llamar a Bison. Los mensajes léxicos se obtienen de Flex. Los límites producen un informe incompleto, nunca éxito. La carga de diagnósticos no vuelve a leer una fuente que ya excedió el límite. Se agregó `diag_error_at` para conservar los offsets explícitos del reconocedor, incluido EOF después de un salto de línea o en un archivo vacío.
+
+Cuando LL(1) acepta, el conductor reutiliza el recorrido existente de ccom para construir el AST con Bison y ejecutar su semántica. LL(1) no construye árboles ni duplica las reglas semánticas. La compilación F5 y `--check-json` conservan su funcionamiento y recuperación de múltiples errores. El editor muestra un error sintáctico automático por consulta y revela el siguiente después de corregir la revisión. Los comentarios válidos sin código siguen filtrándose a partir de Flex.
+
+Se estableció la prioridad del informe sintáctico vigente de F5 sobre el diagnóstico automático de LL(1), porque ambos pueden describir el mismo obstáculo de forma diferente. Esto evita duplicados sin interpretar mensajes humanos. Editar retira los resultados anteriores. Se agregó una prueba real que compila un documento con dos errores y comprueba esa prioridad.
+
+`make check-ll1-ide` pasó en 15 documentos y comprobó semántica, fuente sin main, UTF-8, CRLF, EOF, límites, opciones excluyentes y archivos intactos. Los casos léxicos y sintácticos también pasaron mediante el auxiliar que aborta ante cualquier llamada a Bison. Las mismas consultas pasaron bajo ASan, UBSan y detección de fugas. Pasaron las regresiones dirigidas de ayuda, análisis JSON clásico, recuperación, sugerencias y reparaciones.
+
+Las pruebas dirigidas del IDE cubrieron análisis sin guardar, revisiones, pestañas, cancelación, comentarios, protocolos y corrección progresiva. El recorrido real con los analizadores Python bloqueados pasó por sugerencias, reparaciones, clones, F5 y F6 y comprobó el resultado final. Se corrigió su espera de F5 para que espere la compilación efectiva cuando aún está pendiente el léxico. No se ejecutó la suite completa. El plan, la guía y los contratos quedaron actualizados. El paso 6 permanece pendiente para la validación final. No se hizo commit ni push.
+
+
+## 2026-11-22 — Paso 6 y cierre de la integración LL(1) en C
+
+Se retiraron del parser Bison los hooks de sugerencias y reparaciones, el marcador privado `TOKEN_CURSOR` y `syntax_query_stop`. Se eliminaron sus declaraciones y funciones inactivas, además de `lexer_parse_text`, sin consumidores después de la migración. Se mantuvo la transferencia del símbolo inicial al conductor y la liberación de subárboles descartados. Al retirar la acción intermedia de la declaración de función se ajustaron las posiciones usadas al construir su AST.
+
+La extracción de reglas válidas sigue dando 101 producciones Bison. Su transformación conserva 118 producciones LL(1), 60 no terminales, 47 terminales, 336 celdas ocupadas y cero conflictos. Coincidió la aceptación en 171 archivos, de los cuales 146 fueron aceptados, y 296 variantes con arreglos y ciclos. El contexto nativo coincidió con la referencia de desarrollo en 423 posiciones de cursor. El auxiliar que intercepta `yyparse` pasó sus consultas repetidas, las 30 consultas de asistencia y los 15 documentos de diagnóstico. Las mismas comprobaciones pasaron bajo ASan, UBSan y detección de fugas.
+
+Pasaron las regresiones seleccionadas de AST, programas, matrices, análisis JSON clásico, recuperación, tokens, ayuda, sugerencias, reparaciones y clones. La comparación O0/O1 de 67 programas con dos patrones de datos externos no encontró diferencias. No se alteró el recorrido de generación para usar LL(1).
+
+Pasaron 158 pruebas dirigidas de gramática e integración del IDE en 34,685 segundos. Incluyen análisis automático sin guardar, protocolo, cancelación, revisión por documento, comentarios, diagnóstico progresivo, prioridades con F5, sugerencias, reparaciones, vista gris y política automática. El recorrido gráfico aislado pasó con los analizadores Python bloqueados y compiló y ejecutó el programa real. No se ejecutó toda la suite del repositorio. Qt emitió un aviso de API obsoleta en una prueba de arrastre existente, sin fallo asociado.
+
+Se consolidaron la guía unificada, los contratos de ccom, el README, la documentación del núcleo y la referencia del parser. La guía manual incorpora L01 a L07 para esta rama y distingue las aprobaciones históricas del recorrido anterior. Esos casos humanos continúan pendientes. El paso 6 se marca completado por la implementación, limpieza y verificación automatizada. El empaquetado, la prueba en otro equipo y la revisión visual no se declaran terminados.
+
+Los artefactos de compilación de la validación quedaron en `/tmp/calside-ll1-paso1-build` y `/tmp/calside-ll1-asan`, evitando la caché anterior de `build`. Los informes locales están en `/tmp/calser-ll1-paso6-nativo.log`, `/tmp/calser-ll1-paso6-ide.log` y `/tmp/calser-ll1-paso6-asan.log`. Son evidencia temporal y las órdenes reproducibles permanecen en el makefile y la referencia del parser. No se hizo commit ni push.

@@ -250,9 +250,10 @@ check-o1: $(TARGET) $(BUILD_DIR)/probar_tac_passes $(BUILD_DIR)/probar_dce $(BUI
 	$(BUILD_DIR)/probar_tac_passes
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/optimizador/tac_passes/probar_cli.py
 
-check: check-reorder check-unroll check-spill check-rename check-dce check-pasadas check-pasadas-isa check-ide-options check-o1 check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles check-recovery check-clones-json check-repairs-json check-suggestions-json check-tokens-json check-success check-analysis check-analysis-json
+check: check-medir check-reorder check-unroll check-spill check-rename check-dce check-pasadas check-pasadas-isa check-ide-options check-o1 check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles check-recovery check-clones-json check-repairs-json check-suggestions-json check-tokens-json check-success check-analysis check-analysis-json
 
 clean:
+	rm -rf $(BUILD_DIR)/metricas
 	rm -f $(BUILD_DIR)/probar_reorder $(BUILD_DIR)/unitarias_reorder
 	rm -f $(BUILD_DIR)/probar_unroll $(BUILD_DIR)/capturar_unroll
 	rm -f $(BUILD_DIR)/probar_spill $(BUILD_DIR)/unitarias_spill
@@ -403,3 +404,12 @@ check-unroll: $(TARGET) $(BUILD_DIR)/capturar_unroll $(BUILD_DIR)/probar_unroll
 	$(BUILD_DIR)/probar_unroll
 
 .PHONY: check-unroll
+
+# C4.2 A: mediciones de las quince pruebas y los seis programas reales.
+.PHONY: metricas check-medir
+metricas: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) tools/medir.py --modo optimizacion
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) tools/medir.py --modo nivel
+
+check-medir: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) pruebas/medir/probar.py

@@ -2788,6 +2788,39 @@ def main(argv) -> int                                     # 0 si todas equivalen
 `emitidas`, `bundles`, `bytes` y `tiempo_ms` salen del JSON de `ccom`; `ciclos`, del
 simulador; `contadores`, del JSON de después. Cubre las cinco métricas del enunciado (8.4).
 
+**Resultado C4.2 (A).** Implementados `python3 tools/medir.py --modo optimizacion` y `python3 tools/medir.py --modo nivel`, ambos con `--salida directorio` y programas `.cls` opcionales; sin programas usan las 15 pruebas por pasada o los seis programas reales, respectivamente. En optimización se infiere la pasada de la carpeta, o se indica `--pasada nombre` para programas explícitos. `make metricas` ejecuta ambos modos y deja un JSON por programa/modo, `indice.json`, artefactos y `reporte.html` autocontenido con SVG en línea en `build/metricas/`. En O0 las instrucciones se cuentan con `sim_asm.parse`: un slot cuyo mnemónico no sea `nopi` cuenta una operación; se excluyen comentarios, etiquetas y NOPs, incluyendo las expansiones y preservaciones ya emitidas, igual que el criterio de `tac_metrics_collect`. O1/O2 leen `emitidas` y los ocho contadores de `--metrics`. Los bundles se leen de la cabecera del BIN y los bytes de código son `16 × bundles`, sin cabecera ni datos iniciales. Los ciclos son `Simulator.cycles` con datos cero y la equivalencia reutiliza compilación, simulación y estado observable de `comparar.py`, también con el patrón externo de 1024 bytes; spill valida los valores de `esperados.json` y registra el código/mensaje esperado de O1 como «no compila». El tiempo es la mediana de cinco invocaciones con `--time`; las compilaciones auxiliares de referencia y obtención de tramos no integran esa mediana. Las cuatro pruebas rápidas de `check-medir` pasan (incluidos los tres casos spill); `make check`, `make ejercicios` y `make metricas` terminan con código 0, con 15/15 pruebas y 6/6 programas equivalentes. Los archivos de ejercicios se restauran después de la protección. Resultados de esta ejecución (tiempos dependientes de la carga del equipo):
+
+Optimización: antes O1 → después O1 con la pasada. Spill se valida contra esperados.json; su antes no compila.
+
+| Programa / pasada | Instrucciones | Bundles | Bytes de código | Ciclos | Mediana ms | Equivalente |
+|---|---:|---:|---:|---:|---:|---|
+| u1_constante / unroll | 20 → 29 | 29 → 38 | 464 → 608 | 85 → 38 | 1.426 → 1.959 | Sí |
+| u2_variable / unroll | 20 → 46 | 30 → 65 | 480 → 1040 | 120 → 93 | 1.434 → 2.598 | Sí |
+| u3_grande / unroll | 20 → 46 | 29 → 64 | 464 → 1024 | 1717 → 898 | 1.639 → 2.674 | Sí |
+| r1_waw / rename | 36 → 35 | 47 → 45 | 752 → 720 | 48 → 46 | 1.650 → 2.031 | Sí |
+| r2_war / rename | 34 → 30 | 47 → 41 | 752 → 656 | 48 → 42 | 1.847 → 1.961 | Sí |
+| r3_limites / rename | 64 → 64 | 71 → 71 | 1136 → 1136 | 438 → 438 | 2.083 → 2.122 | Sí |
+| d1_asignaciones / dce | 40 → 35 | 53 → 48 | 848 → 768 | 55 → 50 | 1.859 → 2.224 | Sí |
+| d2_inalcanzable / dce | 26 → 25 | 36 → 34 | 576 → 544 | 31 → 31 | 2.549 → 3.220 | Sí |
+| d3_efectos / dce | 85 → 54 | 112 → 73 | 1792 → 1168 | 858 → 453 | 4.045 → 2.073 | Sí |
+| o1_cadenas / reorder | 40 → 40 | 50 → 38 | 800 → 608 | 51 → 39 | 1.955 → 2.186 | Sí |
+| o2_saltos / reorder | 42 → 42 | 62 → 49 | 992 → 784 | 52 → 43 | 2.050 → 2.044 | Sí |
+| o3_funciones / reorder | 43 → 43 | 51 → 48 | 816 → 768 | 53 → 50 | 2.106 → 2.076 | Sí |
+| s1_expresion / spill | no compila → 325 | no compila → 336 | no compila → 5376 | no compila → 467 | no compila → 7.382 | Sí |
+| s2_lazo / spill | no compila → 337 | no compila → 356 | no compila → 5696 | no compila → 1366 | no compila → 7.334 | Sí |
+| s3_compleja / spill | no compila → 501 | no compila → 532 | no compila → 8512 | no compila → 1311 | no compila → 9.780 | Sí |
+
+Niveles: O0 → O1 → O2.
+
+| Programa | Instrucciones | Bundles | Bytes de código | Ciclos | Mediana ms | Equivalente |
+|---|---:|---:|---:|---:|---:|---|
+| ejercicio1 | 56 → 52 → 52 | 80 → 71 → 69 | 1280 → 1136 → 1104 | 231 → 224 → 219 | 2.179 → 3.558 → 4.183 | Sí |
+| ejercicio2 | 133 → 91 → 91 | 162 → 100 → 99 | 2592 → 1600 → 1584 | 383 → 255 → 249 | 3.420 → 4.913 → 8.240 | Sí |
+| ejercicio3 | 693 → 520 → 1634 | 927 → 693 → 2011 | 14832 → 11088 → 32176 | 17085 → 15069 → 14840 | 13.194 → 16.998 → 41.074 | Sí |
+| cuadradas | 473 → 337 → 445 | 604 → 347 → 365 | 9664 → 5552 → 5840 | 12166 → 8819 → 6754 | 8.614 → 6.864 → 20.694 | Sí |
+| rectangulares | 350 → 242 → 405 | 455 → 279 → 338 | 7280 → 4464 → 5408 | 7743 → 6133 → 5087 | 10.545 → 6.232 → 19.141 | Sí |
+| matriz3x4 | 180 → 152 → 151 | 242 → 174 → 170 | 3872 → 2784 → 2720 | 1219 → 1066 → 1057 | 4.079 → 7.405 → 4.499 | Sí |
+
 ### 13.4 Gráficas en el IDE
 
 Archivo nuevo: `ide/interfaz/metricas.py`.
@@ -3282,7 +3315,7 @@ Sarkar (1999, *linear scan*), Goodman y Hsu (1988), Fisher, Faraboschi y Young.
 | `-p` | Bundles en ensamblador y en binario: la bandera para ver la calendarización (R14). C3.5 verifica que muestre slots y NOPs por paquete |
 
 Errores de uso (código 2): `--opt=` junto con `-O0`; pasada desconocida; `--unroll=N` sin
-`unroll` activo o fuera de 2–16; `-O2` hasta C3.5. Error interno (código 1): validación
+`unroll` activo o fuera de 2–16; `-O2` junto con `--opt`. `-O2` está implementado y activa las cinco pasadas. Error interno (código 1): validación
 fallida después de una pasada, con su nombre.
 
 ### A.3 Definición de cada métrica

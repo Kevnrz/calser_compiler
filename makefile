@@ -108,6 +108,11 @@ ejercicios: $(TARGET)
 check-simulador: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/ensamblado/simulador/probar.py
 
+check-cache: $(TARGET) $(BUILD_DIR)/emitir_crypto $(BUILD_DIR)/emitir_organizador $(BUILD_DIR)/probar_dependencias
+	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/ensamblado/simulador/probar_cache.py --con-compilador
+
+.PHONY: check-cache
+
 check-etiquetas: $(TARGET)
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/generador_o0/etiquetas/probar.py
 
@@ -254,7 +259,7 @@ check-o1: $(TARGET) $(BUILD_DIR)/probar_tac_passes $(BUILD_DIR)/probar_dce $(BUI
 	$(BUILD_DIR)/probar_tac_passes
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/optimizador/tac_passes/probar_cli.py
 
-check: check-modulos check-ll1-c check-ll1-ide check-medir check-reorder check-unroll check-spill check-rename check-dce check-pasadas check-pasadas-isa check-ide-options check-o1 check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-bundles check-salidas validar-bundles check-recovery check-clones-json check-repairs-json check-suggestions-json check-tokens-json check-success check-analysis check-analysis-json
+check: check-modulos check-ll1-c check-ll1-ide check-medir check-reorder check-unroll check-spill check-rename check-dce check-pasadas check-pasadas-isa check-ide-options check-o1 check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-cache check-bundles check-salidas validar-bundles check-recovery check-clones-json check-repairs-json check-suggestions-json check-tokens-json check-success check-analysis check-analysis-json
 
 clean:
 	rm -rf $(BUILD_DIR)/metricas

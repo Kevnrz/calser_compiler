@@ -36,6 +36,7 @@
 #include "tac_passes.h"
 #include "semantic_scope.h"
 #include "assembler.h"
+#include "modules.h"
 
 extern FILE *yyin;
 
@@ -62,6 +63,7 @@ extern int lexical_errors;
  * el nombre base de -o.
  */
 typedef struct {
+    const char *module_dir;    /* Importaciones mínimas, diseño §12. */
     const char *input;         /* archivo fuente (.cls) o, con -x, .asm      */
     char       *output;        /* -o; por defecto: fuente sin extensión .bin */
     int show_time;             /* --time */
@@ -97,10 +99,10 @@ enum {
     OPT_AST_JSON = 1000, OPT_NO_SCHEDULE, OPT_TIME,
     OPT_PASSES, OPT_UNROLL, OPT_METRICS,
     OPT_CHECK, OPT_CHECK_JSON, OPT_CHECK_LL1_JSON, OPT_TOKENS_JSON, OPT_SUGGEST_JSON,
-    OPT_REPAIR_JSON, OPT_SYNTAX_JSON, OPT_CLONES_JSON
+    OPT_REPAIR_JSON, OPT_SYNTAX_JSON, OPT_CLONES_JSON, OPT_MODULE_DIR
 };
 
-#define USAGE "uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-i|--tac] [-p] [-x] [--check|--check-json|--check-ll1-json|--tokens-json|--suggest-json <cursor>|--repair-json|--syntax-json|--clones-json <min>] [--ast-json <json>] [--no-schedule] [--time] [-O0|-O1|-O2] [--opt=lista] [--unroll=N] [--metrics archivo.json] <archivo> [-o <salida>]"
+#define USAGE "uso: ccom [-h|--help] [-v] [-t] [-m] [-s] [-i|--tac] [-p] [-x] [--check|--check-json|--check-ll1-json|--tokens-json|--suggest-json <cursor>|--repair-json|--syntax-json|--clones-json <min>] [--ast-json <json>] [--no-schedule] [--time] [-O0|-O1|-O2] [--opt=lista] [--unroll=N] [--metrics archivo.json] [--module-dir carpeta] <archivo> [-o <salida>]"
 
 /*
  * print_help — describe las opciones sin requerir ni procesar una entrada.
@@ -132,6 +134,7 @@ static void print_help(void) {
          "  --unroll=N           Factor 2..16; exige unroll activo.\n"
          "  --metrics <json>     Metricas de una compilacion -O1/-O2 exitosa.\n"
          "  --time               Muestra la duracion total en ms en stderr.\n"
+         "  --module-dir carpeta Carpeta de modulos (compilacion y consultas check).\n"
          "  --check              Solo analisis lexico, sintactico y semantico;\n"
          "                       no genera archivos. Compatible con -v y --time.\n"
          "  --check-json         Mismo analisis que --check; respuesta JSON v1 en\n"
@@ -648,7 +651,7 @@ static void compile_release(Compilation *compilation) {
     if (compilation->root != NULL)
         ast_free(compilation->root);
 
-    diag_free();
+    modules_free();
 }
 
 /*
@@ -684,7 +687,7 @@ static void print_labels(const Compilation *compilation) {
  * phase_parse — fases 1–2: análisis léxico y sintáctico.
  *
  * Entrada:
- *   compilation  estado con options; el fuente ya está abierto en yyin.
+ *   compilation  estado con options; el cargador abre los archivos fuente.
  * Salida:
  *   1 si hay AST y la compilación sigue; 0 si corta (exit_code queda en 1).
  *   Efectos: inicializa diagnósticos, construye el AST y reporta errores.
@@ -696,16 +699,12 @@ static void print_labels(const Compilation *compilation) {
 static int phase_parse(Compilation *compilation) {
     const Options *options = compilation->options;
 
-    // §8.2: los errores muestran el archivo y la línea del programa.
-    diag_init(options->input);
+    // Importación mínima, diseño §12: un AST y una sola fase semántica.
+    compilation->root = modules_load(options->input, options->module_dir);
+    int accepted = compilation->root != NULL;
 
-    // Aceptación completa: docs/ccom_servicios_ide.md#contrato-yyparse.
-    int accepted = parser_accept(yyin, &compilation->root);
-
-    fclose(yyin);
-
-    // El árbol inicial, si llegó a construirse, pertenece a main. Un AST
-    // recuperado se libera normalmente, pero jamás se exporta ni se analiza.
+    // El árbol unido pertenece a main. El cargador libera los árboles
+    // recuperados y devuelve NULL si algún archivo tiene errores.
 
     if (lexical_errors > 0) {
         fprintf(stderr,
@@ -1188,13 +1187,14 @@ static int phase_emit(const Compilation *compilation) {
  */
 static int compile(const Options *options) {
     double started = options->metrics_path ? tac_metrics_clock() : 0;
-    yyin = fopen(options->input, "r");
-
-    if (!yyin) {
+    /* §12: conservar el diagnóstico clásico de apertura por nivel; el cargador
+     * vuelve a abrir el principal y controla todos los archivos del análisis. */
+    FILE *input = fopen(options->input, "r");
+    if (!input) {
         perror(options->level ? options->input : "fopen");
         return 1;
     }
-
+    fclose(input);
     Compilation compilation = { .options = options };
     int code;
 
@@ -1249,6 +1249,7 @@ static int parse_options(int argc, char **argv, Options *options) {
     // antes o después del archivo (ccom prog.cls -o prog.bin).
     static const struct option long_options[] = {
         {"help", no_argument, NULL, 'h'},
+        {"module-dir", required_argument, NULL, OPT_MODULE_DIR},
         {"ast-json", required_argument, NULL, OPT_AST_JSON},
         {"no-schedule", no_argument, NULL, OPT_NO_SCHEDULE},
         {"time", no_argument, NULL, OPT_TIME},
@@ -1313,6 +1314,7 @@ static int parse_options(int argc, char **argv, Options *options) {
                 options->unroll_factor = (unsigned)factor;
                 break;
             }
+            case OPT_MODULE_DIR: options->module_dir = optarg; break;
             case OPT_METRICS: options->metrics_path = optarg; break;
             case OPT_AST_JSON: options->ast_json = optarg; break;
             case OPT_NO_SCHEDULE: options->no_schedule = 1; break;
@@ -1384,6 +1386,10 @@ static int parse_options(int argc, char **argv, Options *options) {
     }
 
     options->input = argv[optind];
+
+    if (options->module_dir && (options->tokens_json || options->suggest_json ||
+        options->repair_json || options->syntax_json || options->clones_json ||
+        options->assemble_only)) goto usage_error;
 
     int services = options->check_ll1_json + options->check_json + options->tokens_json + options->suggest_json + options->repair_json + options->syntax_json + options->clones_json;
     if (services + options->check_text > 1) {

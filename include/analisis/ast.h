@@ -78,7 +78,8 @@ typedef enum {
     AST_NEG,
     AST_NOT,
 
-    AST_POWER
+    AST_POWER,
+    AST_IMPORT  /* Importaciones mínimas: diseño §12. */
 
 } ASTKind;
 
@@ -88,8 +89,12 @@ typedef struct ASTNode {
     char *text;
     long number;
 
+    int file;     // §12: 0 principal; módulos en orden de carga
     int line;     // línea del código fuente; 0 = sin línea
     int column;   // columna del código fuente; 0 = sin columna
+
+    /* §12: fin inclusivo de la directiva, solo para AST_IMPORT. */
+    int import_end_line, import_end_column;
 
     void *symbol;   // símbolo al que se refiere este nombre (no dueño); NULL si no aplica
 
@@ -114,6 +119,8 @@ typedef struct ASTNode {
  *   liberar con ast_free.
  */
 ASTNode *ast_new(ASTKind kind);
+/* §12: procedencia de los nodos creados durante el análisis de un archivo. */
+void ast_set_current_file(int file);
 /*
  * ast_add_child — agrega un hijo al final de una lista.
  *

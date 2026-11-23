@@ -43,6 +43,9 @@ def reglas_bison(xml):
 # Cada factorización tiene una precondición con las reglas Bison originales.
 # Si cambia una de ellas, hay que revisar la equivalencia antes de continuar.
 REESCRITURAS = (
+    # Importaciones mínimas: diseño §12.
+    ('importaciones -> ε | importaciones P cadena ;',
+     'importaciones -> P cadena ; importaciones | ε'),
     ('globales -> ε | globales decl', 'globales -> decl globales | ε'),
     ('cuerpo -> ε | cuerpo sentencia', 'cuerpo -> sentencia cuerpo | ε'),
     ('''condicional -> C [ expr ] ; cuerpo alts residual .
@@ -128,7 +131,9 @@ def verificar_terminales(lexer):
     """
     literales = re.findall(r'^\s*("(?:[^"\\]|\\.)*")\s+LEX_RETURN\(TOKEN_\w+,', lexer, re.M)
     terminales = {json.loads(literal) for literal in literales}
-    for token, nombre in (('TOKEN_IDENTIFIER', 'id'), ('TOKEN_NUMBER', 'num')):
+    if len(terminales) != len(literales):
+        raise ValueError('Los terminales Flex y LL(1) difieren: regla literal repetida')
+    for token, nombre in (('TOKEN_IDENTIFIER', 'id'), ('TOKEN_NUMBER', 'num'), ('TOKEN_STRING', 'cadena')):
         if not re.search(r'LEX_RETURN\(' + token + r'\s*,', lexer):
             raise ValueError(f'Falta la categoría Flex {token}')
         terminales.add(nombre)

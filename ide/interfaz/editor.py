@@ -13,7 +13,7 @@ class Resaltado(QSyntaxHighlighter):
         super().__init__(document)
         self.tramos = {}
         self.formats = {}
-        for category, color in {"reservada": "#efbb65", "tipo": "#8bd3cc", "numero": "#c1a0eb", "booleano": "#c1a0eb", "operador": "#efbb65", "identificador": "#d6dce7", "comentario": "#909bac"}.items():
+        for category, color in {"reservada": "#efbb65", "tipo": "#8bd3cc", "numero": "#c1a0eb", "cadena": "#c1a0eb", "booleano": "#c1a0eb", "operador": "#efbb65", "identificador": "#d6dce7", "comentario": "#909bac"}.items():
             fmt = QTextCharFormat()
             fmt.setForeground(QColor(color))
             self.formats[category] = fmt

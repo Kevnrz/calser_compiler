@@ -47,6 +47,18 @@ void diag_set_observer(DiagObserver observer, void *data, int emit_text);
  *   texto.
  */
 void diag_init(const char *filename);
+/* §12: carga/selecciona otra fuente sin reiniciar el contador ni el observador.
+ * La ruta es prestada y debe vivir hasta la siguiente selección o diag_free. */
+void diag_select(const char *filename);
+/* §12: selecciona una ruta registrada y conserva su índice como contexto de
+ * los siguientes diagnósticos. Un índice no registrado no cambia la fuente. */
+void diag_select_file(int file);
+/* §12: rango UTF-8 de la fuente seleccionada, último carácter inclusivo.
+ * Admite varias líneas; located=0 si los extremos no existen en la fuente. */
+DiagPosition diag_range(int line, int column, int end_line, int end_column);
+/* §12: selecciona la fuente del nodo; la regla común adapta el JSON. */
+void diag_semantic_verror(int file, int line, int column, int length,
+                          const char *fmt, va_list args);
 
 /*
  * diag_error — reporta un error con posición y formato.

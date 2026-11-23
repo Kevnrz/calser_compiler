@@ -221,7 +221,8 @@ void semantic_error(ASTNode *node, const char *fmt, ...) {
     va_list args;
 
     va_start(args, fmt);
-    diag_verror("error semantico", line, column, length, fmt, args);
+    /* §12: la procedencia del nodo determina archivo y anclaje JSON. */
+    diag_semantic_verror(node ? node->file : 0, line, column, length, fmt, args);
     va_end(args);
 }
 

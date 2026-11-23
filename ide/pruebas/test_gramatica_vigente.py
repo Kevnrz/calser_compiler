@@ -26,8 +26,8 @@ class GramaticaVigente(unittest.TestCase):
     def test_reglas_actuales_transformadas_coinciden_sin_conflictos(self):
         tabla = verificar(self.reglas)
         self.assertTrue(tabla.es_ll1)
-        self.assertEqual(len(tabla.m), 336)
-        self.assertEqual(sum(map(len, self.reglas.values())), 101)
+        self.assertEqual(len(tabla.m), 341)
+        self.assertEqual(sum(map(len, self.reglas.values())), 103)
 
     def test_extraccion_excluye_recuperacion_y_acciones_internas(self):
         self.assertNotIn('$accept', self.reglas)
@@ -54,7 +54,7 @@ class GramaticaVigente(unittest.TestCase):
 
     def test_alfabeto_flex_y_nuevo_terminal_no_pasan_inadvertidos(self):
         lexer = (ROOT / 'grammar/lexer.l').read_text()
-        self.assertEqual(len(verificar_terminales(lexer)), 47)
+        self.assertEqual(len(verificar_terminales(lexer)), 49)
         with self.assertRaisesRegex(ValueError, 'terminales Flex y LL'):
             verificar_terminales(lexer + '\n"P" LEX_RETURN(TOKEN_P, "reservada");\n')
 

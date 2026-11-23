@@ -118,8 +118,8 @@ static void context_tests(void) {
 static void self_test(void) {
     LL1GrammarInfo info;
     REQUIRE(ll1_grammar_info(&info));
-    REQUIRE(info.terminals == 47 && info.nonterminals == 60 && info.productions == 118);
-    REQUIRE(info.cells == 336 && info.nullable == 21 && info.conflicts == 0);
+    REQUIRE(info.terminals == 49 && info.nonterminals == 61 && info.productions == 120);
+    REQUIRE(info.cells == 341 && info.nullable == 22 && info.conflicts == 0);
     const char *valid[] = {
         "F main [] : void ; E ; .",
         "F f [] : int r ; r = desconocida + 1 ; E ; .",

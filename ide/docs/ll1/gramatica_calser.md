@@ -1,8 +1,14 @@
 # Gramática de Calser
 
-Fuente: `grammar/parser.y` y `grammar/lexer.l` integrados en C6, provenientes de CALSIDE sobre develop. Los motores del IDE permanecen dentro de ccom en C. Las 101 producciones del lenguaje válido se conservan respecto de develop; recuperación y consultas se describen por separado.
+Fuente: `grammar/parser.y` y `grammar/lexer.l` integrados en C6, provenientes de CALSIDE sobre develop. Los motores del IDE permanecen dentro de ccom en C. Con las importaciones mínimas de diseño §12 hay 103 producciones válidas, 44 no terminales y 49 terminales; recuperación y consultas se describen por separado.
 
 Se ejecutó `bison -v --defines=/tmp/c6-implementacion/parser.h -o /tmp/c6-implementacion/parser.c grammar/parser.y` con GNU Bison 3.8.2: código 0, sin diagnósticos ni conflictos. Informe: `/tmp/c6-implementacion/parser.output`.
+
+Las referencias de líneas y números de las tablas históricas siguientes son
+anteriores a la inserción de `importaciones`; conservan su uso didáctico.
+`cadena` corresponde a `TOKEN_STRING` y representa un literal sin escapes.
+La gramática LL(1) derivada tiene 120 producciones, 61 no terminales, 49
+terminales, 341 celdas y cero conflictos; antes tenía 118, 60, 47, 336 y 0.
 
 ## Notación y producciones
 
@@ -10,7 +16,9 @@ Se sigue la notación solicitada de Aho §4.2.1–4.2.2: cabeza → cuerpo, alte
 
 Las reglas 1–101 de esta exposición identifican el lenguaje válido y conservan la numeración didáctica usada por `gramatica_ll1.md`; no son los números actuales de Bison. La tabla de correspondencia muestra ambos números y las líneas actuales. Se omiten aquí las tres recuperaciones y la acción intermedia, que se detallan más abajo. Se omiten comentarios y acciones semánticas `{ ... }`. No se elimina recursión, no se factoriza, no se renombra ningún no terminal y se conserva el orden de las alternativas. Las referencias de cada grupo abarcan desde su cabeza hasta el `;` de cierre en `parser.y`; la tabla de correspondencia precisa las líneas de cada cuerpo, excluyendo las acciones. El símbolo inicial es *programa* (`%start programa`, línea 224).
 
-*programa* → *globales* *funciones*
+*programa* → *importaciones* *globales* *funciones*
+
+*importaciones* → ε | *importaciones* **P** **cadena** ;
 
 Referencia: `grammar/parser.y:236–242`; reglas del lenguaje válido 1.
 
@@ -318,7 +326,9 @@ Cada fila corresponde a una alternativa del grupo con la misma cabeza en la prim
 | Regla del lenguaje válido | Regla Bison actual | Producción en este documento | Líneas de parser.y |
 | ---: | ---: | --- | --- |
 | — | 0 | `$accept → programa $end` (aumentada; fuera de los conteos propios) | Generada por Bison; `%start` en 224 |
-| 1 | 1 | *programa* → *globales* *funciones* | 237 |
+| 1 | 1 | *programa* → *importaciones* *globales* *funciones*
+
+*importaciones* → ε | *importaciones* **P** **cadena** ; | 237 |
 | 2 | 2 | *globales* → ε | 252 |
 | 3 | 3 | *globales* → *globales* *decl* | 257 |
 | 4 | 5 | *funciones* → *funcion* | 279 |

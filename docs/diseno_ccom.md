@@ -2489,164 +2489,164 @@ tabla por programa están en `build/c35_o2/reporte.md`.
 
 ## 12. Enlazado de archivos (`P`, tarea C2.2)
 
-### 12.1 Sintaxis y semántica (decisión D1)
+### 12.1 Versión mínima implementada
+
+El principal admite `P "modulo" ;` al inicio, antes de cualquier global o
+función, una línea por módulo. Cada nombre busca `<carpeta>/<modulo>.cls`;
+la carpeta es la del principal o la indicada mediante `--module-dir <carpeta>`.
+Un `P` repetido con el mismo nombre incluye el módulo una sola vez.
+Solo el principal puede importar. Un módulo que contiene `P` produce
+`un modulo no puede importar otros modulos`, en ese archivo y línea.
+Un `P` fuera del prefijo del principal produce
+`'P' solo puede ir al inicio del archivo`.
+
+Flex devuelve `TOKEN_P` (tipo `reservada`) y `TOKEN_STRING` (tipo `cadena`),
+con patrón `\"[^\"\n]*\"`, valor sin comillas y sin escapes. Una cadena
+abierta produce `cadena sin cerrar` en su posición inicial.
+
+Bison incorpora las reglas:
 
 ```
-P "matrices" ;
-P "utilidades" ;
-
-Vm total : int = 0 ;
-F main [] : void ;
-    E ;
-.
+programa : importaciones globales funciones ;
+importaciones : %empty | importaciones TOKEN_P TOKEN_STRING TOKEN_SEMICOLON ;
 ```
 
-- `P "modulo" ;` solo al inicio del archivo, una línea por módulo.
-- Se busca `modulo.cls` en la carpeta del archivo que importa.
-- Todo se reúne en un solo programa: un análisis semántico, una generación, una salida.
-- Cada archivo se incluye una vez; repetidos y ciclos se ignoran sin error.
-- Nombres repetidos entre archivos dan el error "ya declarado" del semántico.
+Cada `AST_IMPORT` guarda el nombre en `text`, la posición del `P` y el fin
+inclusivo del `;` en `import_end_line`/`import_end_column`; queda
+como hijo al final del programa. Globales y funciones conservan los índices
+0 y 1. Sin importaciones no se agregan hijos al AST.
 
-### 12.2 Léxico y gramática
+### 12.2 Cargador y unión
 
-| Cambio | Detalle |
-|---|---|
-| Token `TOKEN_P` | La palabra `P`. No rompe ningún programa: los identificadores empiezan en minúscula. Tipo de token para el IDE: `reservada` |
-| Token `TOKEN_STRING` | Patrón `\"[^\"\n]*\"`. Su valor es el texto sin las comillas. Tipo de token para el IDE: `cadena` (nuevo) |
-| Cadena sin cerrar | Error léxico "cadena sin cerrar", con posición |
-| Gramática | `programa : importaciones globales funciones` ; `importaciones : %empty | importaciones TOKEN_P TOKEN_STRING TOKEN_SEMICOLON` |
-| AST | Tipo de nodo `AST_IMPORT`, con el nombre en `text` y su posición. La lista de importaciones es el **último** hijo del programa: globales y funciones siguen en las posiciones 0 y 1, que usan el semántico y los generadores |
-| `P` fuera del inicio | Caso propio en `yyreport_syntax_error`, cuando el token inesperado es `TOKEN_P`: "'P' solo puede ir al inicio del archivo" |
-| `--ast-json` | Las importaciones aparecen como un hijo más del programa |
-
-### 12.3 Cargador de módulos
-
-Archivos nuevos: `src/analisis/modules.c`, `include/analisis/modules.h`.
+`include/analisis/modules.h` expone:
 
 ```c
-/* Analiza main_path y, en profundidad, todos sus módulos. Devuelve un solo AST aceptado, o
- * NULL si algún archivo no se aceptó o no se encontró (el error ya quedó reportado).
- * module_dir: carpeta donde buscar los módulos del archivo principal; NULL = su carpeta.
- * El árbol devuelto se libera con ast_free; después, modules_free. */
 ASTNode *modules_load(const char *main_path, const char *module_dir);
-
-int         modules_count(void);            /* archivos cargados */
-const char *modules_file_name(int file);    /* ruta del archivo número file; 0 = principal */
-void        modules_free(void);
+void modules_free(void);
 ```
 
-**Estructura interna**
+El árbol devuelto pertenece al llamador, que ejecuta `ast_free` antes de
+`modules_free`. Un error devuelve NULL. El cargador registra el principal con
+índice 0 y los módulos con índices 1, 2, … en orden de carga. Conserva la ruta,
+el nombre importado, la línea/columna del primer P y el rango UTF-8 completo
+de esa directiva, desde P hasta el ; inclusive. El rango se calcula al registrar
+el módulo, con las líneas/offsets del principal seleccionadas.
+`modules_file_name`, `modules_import_name`, `modules_import_position` y
+`modules_import_range` consultan
+estos datos, prestados hasta `modules_free`. Su función privada
+`load_one` analiza UN archivo con `parser_accept` y transfiere sus declaraciones
+al programa destino. `lexer_begin` reinicia línea, columna, offsets, estado y
+contadores por archivo, incluso después de un comentario sin cerrar.
 
-```c
-typedef struct {
-    char *path;          /* como se mostrará en los errores */
-    char *canonical;     /* realpath, para reconocer repetidos y ciclos */
-    char *directory;     /* carpeta donde se buscan sus propios módulos */
-} ModuleFile;
-static ModuleFile *files;   static int file_count;
+Los globales y funciones de cada módulo se anteponen a los del principal,
+conservando el orden de los `P` y el orden interno de cada archivo. Los
+cascarones de los módulos se liberan tras transferir sus hijos. Después se
+realiza un solo análisis semántico y una sola generación. Nombres repetidos
+usan los diagnósticos existentes de «ya fue declarado».
+
+Si no se encuentra un módulo, se informa en la línea del `P` del principal:
+`modulo no encontrado: '<nombre>' (se busco <ruta>)`.
+Los errores léxicos y sintácticos conservan el archivo y la posición del módulo.
+Los errores semánticos también usan la ruta, línea, columna y texto reales
+del módulo al compilar, con `--check` y en la salida de compilación de F5.
+
+`ASTNode.file` identifica el archivo del nodo. Antes de cada `parser_accept`,
+el cargador llama a `ast_set_current_file(file)`; `ast_new` copia ese índice
+y la unión conserva los nodos sin recrearlos. Al terminar cada archivo y al
+liberar el cargador se restaura 0 para las construcciones ajenas a la carga.
+El campo es interno: el esquema de exportación de AST no cambia.
+
+`semantic_error` es el único punto de emisión semántica y delega en
+`diag_semantic_verror` con el índice del nodo. Esta función solo selecciona
+la procedencia y emite el error: no contiene reglas propias de anclaje JSON.
+`diag_select_file(file)` selecciona la ruta y registra el índice activo en
+diagnostics. El cargador usa esa misma selección antes de cada análisis.
+`diag_select(path)` recarga las líneas y offsets y restablece el contexto a 0,
+conservando contador y observador;
+`diag_init` queda para iniciar un análisis y poner el contador en cero.
+No se llama a `diag_init` para alternar entre errores del módulo y principal.
+
+### 12.3 Consultas y LL(1)
+
+`phase_parse` llama a `modules_load`: compilación, `--check`, `--check-json` y
+`--check-ll1-json` siguen las mismas importaciones y admiten `--module-dir`.
+Con las demás consultas del IDE esta opción es error de uso (código 2).
+El ensamblado `-x` tampoco admite una carpeta de módulos.
+
+`ide/nucleo/gramatica.py` incorpora la versión sin recursión izquierda:
+
+```
+programa -> importaciones globales funciones
+importaciones -> P cadena ; importaciones | ε
 ```
 
-**Pseudocódigo**
+`tools/verificar_gramatica_ll1.py` audita esta reescritura y la categoría
+`cadena`, y rechaza reglas literales Flex duplicadas. `ll1_grammar.inc` se
+regeneró exclusivamente con `tools/generar_datos_ll1.py`. La tabla conserva
+cero conflictos: 120 producciones, 61 no terminales, 49 terminales y 341 celdas
+ocupadas (antes: 118, 60, 47 y 336); hay 22 anulables (antes 21).
+Bison pasa de 101 a 103 producciones válidas y de 43 a 44 no terminales.
+
+El comprobador automático del IDE agrega `--module-dir <carpeta del documento>`
+a `--check-ll1-json` cuando el documento tiene ruta; sin título no agrega la
+opción. `cadena` es un estilo léxico válido y usa el color de `numero`.
+Los servicios de tokens y asistencia siguen analizando solo el texto recibido.
+
+En `--check-json` y `--check-ll1-json` hay una sola regla de anclaje, en
+`observe_error` de `src/comun/diagnostics.c`, invocada por el emisor común
+`report_error`. Si `diag_json_active` y el índice seleccionado pertenece a
+un módulo, cualquier diagnóstico léxico, sintáctico o semántico se notifica
+al observador con el rango de la primera directiva que importó ese módulo.
+También se adapta `un modulo no puede importar otros modulos`.
+
+El rango comienza en P y termina después del ;, incluyendo espacios,
+comentarios o saltos de línea interiores; excluye lo posterior al ;. Se guarda
+como intervalo UTF-8 [start,end), usando los extremos aportados por Bison y
+`diag_range`, sin buscar delimitadores en el texto. `modulo no encontrado`
+conserva su mensaje y categoría, pero también usa toda la directiva en JSON.
+
+Los mensajes conservan la posición original, por ejemplo:
 
 ```
-modules_load(principal, carpeta):
-    aceptado ← verdadero
-    árbol ← load_one(principal, carpeta o carpeta de principal, &aceptado)
-    si no aceptado: ast_free(árbol); devolver NULL
-    devolver árbol
-
-load_one(ruta, carpeta, aceptado):
-    número ← registrar archivo (ruta, realpath, carpeta)
-    diag_open(ruta);  ast_set_current_file(número)
-    abrir ruta;  lexer_begin(archivo)
-    si no parser_accept(archivo, &árbol): aceptado ← falso
-    cerrar archivo
-    si árbol = NULL: devolver NULL
-    para cada importación imp del árbol, en orden:
-        ruta_m ← carpeta + "/" + imp.text + ".cls"
-        si realpath(ruta_m) ya está registrado: continuar          // repetido o ciclo
-        si no existe:
-            diag_select(número)
-            error en la posición de imp: "modulo no encontrado: '<nombre>' (se busco <ruta_m>)"
-            aceptado ← falso;  continuar
-        módulo ← load_one(ruta_m, carpeta de ruta_m, aceptado)
-        si módulo ≠ NULL: merge(árbol, módulo)
-    devolver árbol
-
-merge(destino, módulo):
-    // los globales y las funciones del módulo quedan ANTES que los propios
-    anteponer los hijos de módulo.globales a destino.globales
-    anteponer los hijos de módulo.funciones a destino.funciones
-    liberar el cascarón de módulo (programa y listas vacías)
+error en el modulo 'a': token inesperado ';' (a.cls:3:14)
+error en el modulo 'a': 'desconocida' no ha sido declarado (a.cls:3:5)
 ```
 
-"Anteponer conservando el orden de los `P`": los módulos se procesan en orden y cada uno se
-inserta después de los ya insertados y antes de las declaraciones propias.
+La categoría, severidad y código de cada diagnóstico permanecen intactos;
+solo se adapta el mensaje y rango enviados al observador. No se cambia la
+fuente seleccionada durante esa notificación, de modo que los errores
+siguientes del mismo módulo siguen teniendo su procedencia real. El contador
+se incrementa una sola vez por diagnóstico. Se conservan todos los errores
+emitidos, incluidos los de recuperación del parser.
 
-**Ejemplo.** `main.cls` importa `a` y `b`; `a` importa `b`.
+El protocolo conserva un único `source`. Los errores propios del principal
+y el modo texto (compilación, --check y F5) no se contextualizan: conservan
+archivo, posición, texto y señalador anteriores.
 
-| Paso | Acción | Archivos |
-|---|---|---|
-| 1 | Analiza `main.cls` | 0: main |
-| 2 | `P "a"`: analiza `a.cls` | 0: main, 1: a |
-| 3 | Dentro de `a`, `P "b"`: analiza `b.cls` y lo une a `a` | 0: main, 1: a, 2: b |
-| 4 | `a` (ya con `b` delante) se une a `main` | |
-| 5 | En `main`, `P "b"`: ya registrado, se salta | |
-| Resultado | Orden de declaraciones: `b`, `a`, `main` | |
+### 12.4 Pruebas y trabajo pendiente
 
-### 12.4 Cada error con su archivo
+`make check-modulos` ejecuta `pruebas/analisis/modulos/probar.py`. Crea todos
+sus fuentes y salidas en temporales: dos módulos con globales y funciones,
+comparación con programa único y resultado 19 en simulación, importación
+repetida, módulo inexistente, `P` tardío, carpeta explícita y consultas,
+errores léxicos/sintácticos por archivo y nombres duplicados. La comparación
+incluye O0/O1/O2 y dos imágenes externas. También verifica errores semánticos
+textuales del módulo, ambos JSON anclados en el P (incluido UTF-8 antes de él),
+errores simultáneos del principal/módulo sin perder el contador, dos módulos
+y la selección de la primera importación cuando un P se repite. También
+verifica el anclaje léxico/sintáctico, los errores de importación anidada,
+módulo no encontrado, conservación de las cascadas existentes y directivas
+completas con UTF-8, CRLF, comentarios y varios renglones.
 
-| Cambio | Detalle |
-|---|---|
-| `ASTNode` | Campo nuevo `int file`. `ast_new` lo toma de la variable que fija `void ast_set_current_file(int file)` |
-| `diagnostics.c` | Tabla de archivos (nombre, líneas, posiciones) en vez de uno solo. `int diag_open(const char *path)` carga el archivo y devuelve su número; `void diag_select(int file)` elige el que usan los mensajes siguientes. `diag_init(path)` se conserva: equivale a vaciar la tabla, abrir y seleccionar |
-| Léxico | `void lexer_begin(FILE *input)`: `yyrestart(input)`, línea y columna a 1, posición en bytes a 0, contadores de error sin tocar (son del programa completo) |
-| Semántico | `semantic_error(node, …)` llama a `diag_select(node->file)` antes de reportar |
-| Generador `-O0` | `gen_report_error` usa `modules_file_name(node->file)` |
-| Camino `-O1` | Sus errores usan el archivo de la función: `modules_file_name` del nodo de declaración del símbolo |
-| `main.c` | `phase_parse` llama a `modules_load` en lugar de `parser_accept` |
+Ejemplo permanente: `ide/muestras/modulos/{main,a,b}.cls`; calcula
+`resultado = (4 + 3) + (3 * 4) = 19`. Se usó esta carpeta en lugar de
+`ide/ejemplos/modulos/` porque `pruebas/ll1/probar.py` e
+`ide/pruebas/test_parser.py` recorren recursivamente `ide/ejemplos/` como corpus
+de archivos independientes. La carpeta alternativa no pertenece a esos corpus.
 
-Con un solo archivo el número es 0 y todos los mensajes salen idénticos a hoy.
-
-### 12.5 Consultas del IDE
-
-El IDE analiza una copia temporal del documento, en una carpeta temporal
-(`ide/servicio_ccom.py`, `ide/interfaz/comprobacion.py`): ahí los módulos no están.
-
-| Consulta | Comportamiento |
-|---|---|
-| Opción nueva `--module-dir <carpeta>` | Válida en compilación normal, `--check` y `--check-json`. Con las demás consultas: código 2 |
-| `--check`, `--check-json` | Siguen los `P`, buscando en `--module-dir` si se dio |
-| Error dentro de un módulo, en `--check-json` | Un diagnóstico en el rango del `P` del documento analizado: "error en el modulo '<x>': <mensaje> (<x>.cls:L:C)". Categoría y severidad, las del error original. El protocolo no cambia: un solo `source` |
-| Error dentro de un módulo, en texto | Con el archivo, línea y columna del módulo |
-| `--tokens-json` | `P` como `reservada`; la cadena como `cadena` |
-| `--syntax-json`, `--suggest-json`, `--repair-json` | Solo el texto dado; no abren módulos |
-| `--clones-json` | Sin cambios |
-
-**Toca la frontera con el IDE**
-
-| Punto | Módulos del IDE | Cambio |
-|---|---|---|
-| Carpeta de módulos | `ide/interfaz/comprobacion.py` | Agregar `--module-dir <carpeta del documento>` a la llamada de `--check-json` |
-| Tipo de token `cadena` | `ide/ccom.py`, `ide/interfaz/editor.py` | Agregarlo a la lista de tipos válidos y darle formato de color |
-| Pruebas | `ide/pruebas/test_protocolo_ccom.py`, `ide/pruebas/test_tokens_ccom.py` | Casos con `P` |
-
-### 12.6 Casos de prueba
-
-Carpeta `pruebas/analisis/modulos/`.
-
-| Caso | Archivos | Esperado |
-|---|---|---|
-| Dos módulos | `main` importa `a` y `b`; usa una función de cada uno | Compila; mismo resultado que el programa escrito en un solo archivo |
-| Repetido | `main` importa `a` dos veces | Compila; `a` se incluye una vez |
-| Ciclo | `a` importa `b` y `b` importa `a` | Compila; cada uno una vez |
-| Diamante | `main` importa `a` y `b`; los dos importan `c` | Compila; `c` una vez |
-| No encontrado | `P "nada" ;` | Código 1; error en la línea del `P`, con el archivo que lo contiene |
-| `P` tarde | `P` después de una función | Código 1; "'P' solo puede ir al inicio del archivo" |
-| Nombre repetido | La misma función en `main` y en `a` | Código 1; "ya declarado" |
-| Error en módulo | `a.cls` con un error semántico | Código 1; el mensaje empieza con `a.cls:L:C` |
-| Un archivo | Cualquier programa del corpus | Salidas idénticas a las de antes |
-| Consulta | `--check-json --module-dir` sobre una copia de `main` | Encuentra los módulos; sin `--module-dir`, error de módulo no encontrado |
+Para la versión completa queda pendiente solo la importación anidada con
+detección de ciclos, haciendo recursiva `load_one` y manteniendo los archivos
+ya incluidos.
 
 ## 13. IDE y medición (tareas C1.2 y C4.2)
 

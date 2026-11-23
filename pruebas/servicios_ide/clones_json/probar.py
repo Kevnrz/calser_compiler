@@ -61,7 +61,7 @@ def main():
         assert not consulta([])['pairs']
         assert not consulta([('/vacío 😀',''),('/b','')])['pairs']
         # Real Flex errors must not be normalized or compared after recovery.
-        for invalid in ('@', 'ABC', '"cadena"', '2147483649', 'a'*33, '#[ abierto'):
+        for invalid in ('@', 'ABC', '"cadena', '2147483649', 'a'*33, '#[ abierto'):
             consulta([('/a','x=x+1;'+invalid),('/b','y=y+2;')],estado='lexical_error')
         consulta([('/a','x=x+1;')]*2,estado='error')
         for raw in (b'', b'CCL0'+struct.pack('<I',0), b'CCL1', paquete([])+b'extra',

@@ -17,6 +17,8 @@
 #include <string.h>
 
 #include "diagnostics.h"
+#include "modules.h"
+#include "diagnostics_json.h"
 
 // Nombre del archivo tal como se pasó a ccom (no es dueño de la cadena).
 static const char *diag_filename = NULL;
@@ -26,6 +28,8 @@ static char **diag_lines = NULL;
 static int diag_line_count = 0;
 
 static int diag_errors = 0;
+/* §12: contexto de procedencia; diag_select directo corresponde al principal. */
+static int diag_file;
 /* Offsets de inicio antes de quitar CR/LF: el protocolo cuenta bytes reales. */
 static size_t *diag_offsets = NULL;
 static DiagObserver diag_observer = NULL;
@@ -46,10 +50,15 @@ void diag_set_observer(DiagObserver observer, void *data, int emit_text) {
 
 /* diag_init — véase el contrato en diagnostics.h. */
 void diag_init(const char *filename) {
-    diag_free();
-
-    diag_filename = filename;
     diag_errors = 0;
+    diag_select(filename);
+}
+
+/* §12: cambiar de fuente conserva todos los errores ya reportados. */
+void diag_select(const char *filename) {
+    diag_free();
+    diag_filename = filename;
+    diag_file = 0;
 
     // Si no se puede abrir, los errores salen solo con la primera línea.
     FILE *file = filename ? fopen(filename, "r") : NULL;
@@ -111,6 +120,69 @@ void diag_init(const char *filename) {
     fclose(file);
 }
 
+/* §12: seleccionar una fuente registrada también fija su contexto. */
+void diag_select_file(int file) {
+    const char *path = modules_file_name(file);
+    if (path) {
+        diag_select(path);
+        diag_file = file;
+    }
+}
+
+DiagPosition diag_range(int line, int column, int end_line, int end_column) {
+    if (line < 1 || end_line < line || end_line > diag_line_count || column < 1 ||
+        end_column < 1 || (size_t)column > strlen(diag_lines[line - 1]) ||
+        (size_t)end_column > strlen(diag_lines[end_line - 1])) return (DiagPosition) {0};
+    size_t start = diag_offsets[line - 1] + (size_t)column - 1;
+    size_t end = diag_offsets[end_line - 1] + (size_t)end_column;
+    if (end <= start) return (DiagPosition) {0};
+    return (DiagPosition) {1, line, column, start, end};
+}
+
+/* §12: la semántica solo selecciona procedencia; no adapta mensajes/rangos. */
+void diag_semantic_verror(int file, int line, int column, int length,
+                          const char *fmt, va_list args) {
+    diag_select_file(file);
+    diag_verror("error semantico", line, column, length, fmt, args);
+}
+
+static void notify_observer(const char *category, DiagPosition position,
+                             const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    diag_observer(category, position, fmt, args, diag_observer_data);
+    va_end(args);
+}
+
+/* §12: ÚNICA regla de anclaje de módulos en JSON, común a todas las fases.
+ * No cambia la fuente seleccionada: el lexer/parser puede seguir reportando
+ * errores del mismo módulo. El contador se incrementa una sola vez. */
+static void observe_error(const char *category, DiagPosition position,
+                           int line, int column, const char *fmt, va_list args) {
+    const char *name = modules_import_name(diag_file);
+    if (diag_json_active() && name) {
+        va_list copy;
+        va_copy(copy, args);
+        int size = vsnprintf(NULL, 0, fmt, copy);
+        va_end(copy);
+        if (size < 0) { fprintf(stderr, "Error: formato de diagnostico invalido\n"); exit(EXIT_FAILURE); }
+        char *message = malloc((size_t)size + 1);
+        if (!message) { fprintf(stderr, "Error: out of memory\n"); exit(EXIT_FAILURE); }
+        va_copy(copy, args);
+        vsnprintf(message, (size_t)size + 1, fmt, copy);
+        va_end(copy);
+        notify_observer(category, modules_import_range(diag_file),
+                        "error en el modulo '%s': %s (%s.cls:%d:%d)",
+                        name, message, name, line, column);
+        free(message);
+    } else {
+        va_list copy;
+        va_copy(copy, args);
+        diag_observer(category, position, fmt, copy, diag_observer_data);
+        va_end(copy);
+    }
+}
+
 /* Presentación común con rango opcional aportado por el analizador. */
 static void report_error(const char *category,
                          int line, int column, int length,
@@ -135,10 +207,7 @@ static void report_error(const char *category,
                 diag_offsets[line - 1] + local, diag_offsets[line - 1] + local + count};
         }
         if (given) position = *given;
-        va_list copy;
-        va_copy(copy, args);
-        diag_observer(category, position, fmt, copy, diag_observer_data);
-        va_end(copy);
+        observe_error(category, position, line, column, fmt, args);
     }
     if (!diag_emit_text) return;
 

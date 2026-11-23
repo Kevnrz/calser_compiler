@@ -171,6 +171,7 @@ static void lexical_error(int line, int col, int length,
   * PALABRAS RESERVADAS
   * ====================================================================== */
 
+"P"                   LEX_RETURN(TOKEN_P, "reservada");
 "F"                   LEX_RETURN(TOKEN_F, "reservada");
 "Vm"                  LEX_RETURN(TOKEN_VM, "reservada");
 "Vi"                  LEX_RETURN(TOKEN_VI, "reservada");
@@ -241,6 +242,17 @@ static void lexical_error(int line, int col, int length,
  /* =========================================================================
   * LITERALES E IDENTIFICADORES
   * ====================================================================== */
+
+ /* Importaciones mínimas, diseño §12: no hay escapes en las cadenas. */
+\"[^\"\n]*\"       {
+                         yylval.str = strndup(yytext + 1, yyleng - 2);
+                         if (!yylval.str) { yyerror("out of memory"); exit(EXIT_FAILURE); }
+                         LEX_RETURN(TOKEN_STRING, "cadena");
+                       }
+\"[^\"\n]*           {
+                         lexical_error(yylloc.first_line, yylloc.first_column,
+                                       yyleng, "cadena sin cerrar");
+                       }
 
 [0-9]+                {
                          /* L-06: se convierte sin desbordar. Sin ceros a la
@@ -342,7 +354,7 @@ int lexer_scan_only(void) {
     BEGIN(INITIAL);
     yyrestart(yyin);
     while ((token = yylex()) != 0) {
-        if (token == TOKEN_IDENTIFIER) {
+        if (token == TOKEN_IDENTIFIER || token == TOKEN_STRING) {
             free(yylval.str);
             yylval.str = NULL;
         }
@@ -364,7 +376,7 @@ int lexer_scan_text(const char *text, size_t length) {
     YY_BUFFER_STATE buffer = yy_scan_bytes(text, (int) length);
     int token;
     while ((token = yylex()) != 0) {
-        if (token == TOKEN_IDENTIFIER) { free(yylval.str); yylval.str = NULL; }
+        if (token == TOKEN_IDENTIFIER || token == TOKEN_STRING) { free(yylval.str); yylval.str = NULL; }
     }
     int errors = lexical_errors;
     yy_delete_buffer(buffer);
@@ -392,7 +404,7 @@ int lexer_visit_text(const char *text, size_t length, LexerTokenConsumer consume
     while ((token = yylex()) != 0) {
         int more = consumer ? consumer(token, lex_start, lex_offset,
                                         yylloc.first_line, yylloc.first_column, data) : 1;
-        if (token == TOKEN_IDENTIFIER) { free(yylval.str); yylval.str = NULL; }
+        if (token == TOKEN_IDENTIFIER || token == TOKEN_STRING) { free(yylval.str); yylval.str = NULL; }
         if (!more) break;
     }
     if (!token && consumer) consumer(0, length, length, yylineno, column, data);
@@ -407,3 +419,15 @@ int lexer_visit_text(const char *text, size_t length, LexerTokenConsumer consume
 /* Información producida por los estados y reglas de comentario de Flex. */
 int lexer_comment_open(void) { return comment_open; }
 int lexer_in_block_comment(void) { return YY_START == COMMENT; }
+
+/* §12: cada archivo empieza en línea/columna 1, incluso tras un EOF fatal. */
+void lexer_begin(FILE *input) {
+    yylex_destroy();
+    yyin = input;
+    column = yylineno = 1;
+    lex_offset = lex_start = comment_start = 0;
+    lexical_errors = lexical_fatal = 0;
+    comment_open = 0;
+    BEGIN(INITIAL);
+    yyrestart(input);
+}

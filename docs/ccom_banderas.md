@@ -46,7 +46,7 @@ retorna 2. Solo el principal puede importar (diseño §12).
 | `-v` | Muestra el avance de cada fase (`ok` o `con errores`), incluido el ensamblado | stderr | Disponible |
 | `-o <archivo>` | Nombre del binario de salida. Sin `-o`: el nombre del fuente con `.bin` (`prog.cls` → `prog.bin`). Es también el nombre base de las demás salidas | archivos | Disponible |
 | `-s` | Escribe además el ensamblador (`.asm`) | archivo | Disponible |
-| `-i`, `--tac` | Construye y escribe la representación de alto nivel (`.tac`); continúa la compilación normal | archivo | Disponible |
+| `-i`, `--tac` | Escribe el TAC inicial (`.tac`) y, con O1/O2, el posterior a las pasadas HIGH (`.opt.tac`); continúa la compilación normal | archivo | Disponible |
 | `-p` | Muestra cada bundle en ensamblador y en binario | stdout | Disponible |
 | `-x` | Toma un `.asm` y genera el binario, sin compilar Calser | archivos | Disponible |
 
@@ -324,7 +324,17 @@ se escribe un `.tac` nuevo. Sin `-i` se conserva el modo sintáctico existente.
 `--time` incluye construcción y escritura y reporta compilación. Con `-x`, `-i`
 se ignora y avisa `ccom: aviso: -i se ignora con -x`.
 
-El `.tac` se escribe al completar la generación; si falla la escritura o el
+Con `-O1` o `-O2` y `-i` siempre se generan dos listados del mismo formato:
+`salida.tac` conserva el TAC inicial y `salida.opt.tac` muestra el resultado de
+las pasadas de alto nivel (`unroll`, `rename`, `dce`), justo antes de bajar a ISA
+virtual. Con `-O1` sin pasadas ambos son iguales. Reordenamiento y derrame
+ocurren después y no forman parte de `.opt.tac`. Con `-O0` se mantiene únicamente
+`.tac`; sin `-i` no se escribe ninguno de estos listados.
+
+El `.tac` se escribe al completar la generación, conservando la captura inicial
+previa a las pasadas en O1/O2. El `.opt.tac` se escribe en `phase_o1` tras las
+pasadas HIGH y antes de `tac_lower`: si una fase posterior falla puede quedar
+ese listado sin que la compilación haya terminado. Si falla la escritura o el
 cierre se informa error, se elimina el parcial y se devuelve 1. No puede
 sobrescribir el fuente, tampoco mediante enlaces al mismo archivo. Los errores
 anteriores no borran un `.tac` preexistente. El listado no genera binarios ni
@@ -347,7 +357,7 @@ pero O1 implica compilar. `-m` muestra todas las etiquetas emitidas con su
 Las operaciones completadas confirman su éxito en `stderr`, incluso sin `-v`:
 
 - `--check`: «Análisis correcto: sin errores», sin archivos generados.
-- Compilación O0/O1: «Compilación correcta», con rutas `.bin`, `.hex`, `.mem`, `.asm` si se pidió `-s`, `.tac` si se pidió `-i`/`--tac` y métricas si se solicitaron.
+- Compilación O0/O1/O2: «Compilación correcta», con rutas `.bin`, `.hex`, `.mem`, `.asm` si se pidió `-s`, `.tac` si se pidió `-i`/`--tac`, también `.opt.tac` con O1/O2 y `-i`, y métricas si se solicitaron.
 - `-x`: «Ensamblado correcto», con las tres imágenes de salida; no anuncia un `.asm` nuevo.
 - Exportación AST sola: confirma únicamente la exportación JSON, sin afirmar semántica ni generación de código.
 

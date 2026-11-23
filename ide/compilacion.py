@@ -11,6 +11,7 @@ MODOS = {'compilar': 'Compilar programa', 'analizar': 'Analizar sin generar arch
 PASADAS = ('unroll', 'rename', 'dce', 'reorder', 'spill')
 OPCIONES = {
     'asm': ('Generar listado .asm (necesario para F6)', '-s', {'compilar'}),
+    'tac': ('Generar tres direcciones (.tac y .opt.tac en O1/O2)', '-i', {'compilar'}),
     'ast_texto': ('Mostrar AST textual', '-t', {'compilar', 'ast'}),
     'tablas': ('Mostrar tablas de símbolos y etiquetas', '-m', {'compilar'}),
     'bundles': ('Mostrar bundles', '-p', {'compilar', 'ensamblar'}),
@@ -69,6 +70,10 @@ def preparar(datos, fuente):
         salidas = [destino] if modo == 'ast' else [destino.with_suffix(s) for s in ('.bin', '.hex', '.mem')]
         if modo == 'compilar' and perfil['asm']:
             salidas.append(destino.with_suffix('.asm'))
+        if perfil['tac']:
+            salidas.append(destino.with_suffix('.tac'))
+            if perfil['nivel'] != 'O0':
+                salidas.append(destino.with_suffix('.opt.tac'))
         if fuente in salidas:
             raise ValueError('El destino sobrescribiría la entrada.')
     if modo == 'analizar':

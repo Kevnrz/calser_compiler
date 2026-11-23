@@ -66,7 +66,7 @@ Una entrada correcta devuelve código `0`. Los errores de análisis devuelven
 | `-v` | Mostrar el avance de cada fase |
 | `-o <archivo>` | Nombre del binario de salida; es también el nombre base del `.hex` y el `.mem` |
 | `-s` | Escribir además el ensamblador `.asm` |
-| `-i`, `--tac` | Escribir además el listado de alto nivel `.tac` |
+| `-i`, `--tac` | Escribir el TAC inicial `.tac` y, con O1/O2, el optimizado `.opt.tac` |
 | `-O0` | Generador predeterminado |
 | `-O1` | Camino HIGH/ISA y asignación de registros; pasadas todavía vacías |
 | `-O2` | Reservado; devuelve error de uso 2 |
@@ -384,7 +384,10 @@ independiente del repositorio. Los avisos de los recursos Seti están en
 ### Representación intermedia desde AST (C2.1)
 
 `./ccom -i programa.cls` (o `--tac`) agrega `programa.tac`; con `-o salida.bin`
-usa `salida.tac`. La compilación continúa con el generador actual, conservando
+usa `salida.tac`. Con `-O1`/`-O2` escribe además `salida.opt.tac`, después de
+`unroll`, `rename` y `dce` y antes de bajar a ISA virtual. Con `-O1` sin pasadas
+los dos listados son iguales; `-O0` conserva solo el listado inicial. Ambos
+aparecen en «Archivos generados». La compilación continúa con el generador actual, conservando
 los binarios. El listado contiene imagen inicial, funciones y bloques de alto
 nivel. `make check-tac-build` prueba construcción y CLI con 22 esperados, sin
 intérprete todavía. Ver [la documentación de TAC](docs/representacion_intermedia.md)

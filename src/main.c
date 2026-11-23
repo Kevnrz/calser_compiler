@@ -121,7 +121,7 @@ static void print_help(void) {
          "  -v                   Muestra el avance de las fases en stderr.\n"
          "  -o <salida>          Nombre del .bin y base de las demas salidas.\n"
          "  -s                   Escribe ademas el ensamblador .asm.\n"
-         "  -i, --tac            Escribe ademas la representacion de alto nivel .tac.\n"
+         "  -i, --tac            Escribe .tac inicial y, con -O1/-O2, .opt.tac optimizado.\n"
          "  -p                   Muestra los bundles en ensamblador y binario.\n"
          "  -x                   Ensambla la entrada .asm; ignora -s, -i, -t y -m.\n"
          "  --ast-json <json>    Exporta el AST; sin -s, -i, -m ni -p termina\n"
@@ -150,7 +150,7 @@ static void print_help(void) {
          "                       Ambas sin semantica ni artefactos; -v/--time.\n"
          "  --clones-json <n>    Clones Tipo I/II sobre un paquete CCL1 de instantaneas.\n"
          "                       Minimo 5..100000 tokens; solo -v y --time.\n"
-         "\nConsultas: solo -v y --time; sin niveles, optimizacion, metricas ni -i.\n\nSalidas: .bin, .hex y .mem; con -s tambien .asm; con -i tambien .tac.\n"
+         "\nConsultas: solo -v y --time; sin niveles, optimizacion, metricas ni -i.\n\nSalidas: .bin, .hex y .mem; con -s tambien .asm; con -i tambien .tac (y .opt.tac con -O1/-O2).\n"
          "Sin -o se usa el nombre de la entrada con extension .bin.\n"
          "El exito y las rutas generadas se informan en stderr; stdout\n"
          "se conserva para AST, tablas y bundles.\n"
@@ -915,6 +915,8 @@ static void report_pass(void *user, const char *name, int ok) {
     report_phase(compilation->options, name, ok);
 }
 
+static int write_tac(const Compilation *compilation, int optimized);
+
 /* Entrada: compilación semánticamente válida. Salida: 1 o diagnóstico real.
  * Efectos: HIGH -> ISA -> asignación -> emisor D; Aho §8.1 y §10.2.3.
  * Restricciones: E no transforma ni derrama; D organiza y comprueba ROM una vez.
@@ -929,6 +931,11 @@ static int phase_o1(Compilation *c) {
         .report = report_pass, .report_user = c};
     if (!tac_passes_run(&context, TAC_PASS_HIGH, error, sizeof error))
         goto fail;
+    /* Foto HIGH final: antes de cualquier transformación a ISA virtual. */
+    if (o->emit_tac && write_tac(c, 1)) {
+        c->exit_code = 1;
+        return 0;
+    }
     c->isa = tac_lower(c->tac->program, error, sizeof error);
     report_phase(o, "O1: bajada a ISA virtual", c->isa != NULL);
     if (!c->isa)
@@ -1083,14 +1090,14 @@ static int assemble_generated(const Options *options, const char *header) {
 }
 
 /*
- * write_tac — escribe imagen y listado al completar la generación actual.
+ * write_tac — escribe imagen y listado inicial o posterior a las pasadas HIGH.
  * Entrada: compilation con TAC válido. Salida: 0 éxito; 1 ante error de archivo.
- * Efectos: crea .tac; ante error de escritura/cierre elimina el archivo parcial.
+ * Efectos: crea .tac o .opt.tac; elimina el parcial ante error de escritura/cierre.
  * Restricciones: no puede sobrescribir el fuente, tampoco por enlace al mismo inode.
  */
-static int write_tac(const Compilation *compilation) {
+static int write_tac(const Compilation *compilation, int optimized) {
     const Options *options = compilation->options;
-    char *path = with_extension(options->output, ".tac");
+    char *path = with_extension(options->output, optimized ? ".opt.tac" : ".tac");
     if (!path) {
         report_oom();
         return 1;
@@ -1109,7 +1116,7 @@ static int write_tac(const Compilation *compilation) {
         free(path);
         return 1;
     }
-    if (compilation->initial_tac)
+    if (!optimized && compilation->initial_tac)
         fputs(compilation->initial_tac, out);
     else
         tac_build_print(out, compilation->tac);
@@ -1163,7 +1170,7 @@ static int phase_emit(const Compilation *compilation) {
         output_failed = 1;
 
     if (!output_failed && options->emit_tac)
-        output_failed = write_tac(compilation);
+        output_failed = write_tac(compilation, 0);
 
     free(header);
 
@@ -1449,10 +1456,11 @@ static void report_success(const Options *options) {
     fprintf(stderr, "ccom: Archivos generados:\n");
 
     if (!ast_only) {
-        const char *extensions[] = { ".bin", ".hex", ".mem", ".asm", ".tac" };
-        int count = options->assemble_only ? 3 : 5;
+        const char *extensions[] = { ".bin", ".hex", ".mem", ".asm", ".tac", ".opt.tac" };
+        int count = options->assemble_only ? 3 : 6;
         for (int i = 0; i < count; i++) {
-            if ((i == 3 && !options->emit_asm) || (i == 4 && !options->emit_tac))
+            if ((i == 3 && !options->emit_asm) || (i >= 4 && !options->emit_tac) ||
+                (i == 5 && !options->level))
                 continue;
             char *path = with_extension(options->output, extensions[i]);
             if (path) {

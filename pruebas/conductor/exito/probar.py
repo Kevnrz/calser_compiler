@@ -42,7 +42,8 @@ def main():
             result = run(*flags, '--ast-json', json_path, source, '-o', output)
             assert result.returncode == 0 and 'Compilación correcta.' in result.stderr, result
             assert 'AST exportado correctamente.' not in result.stderr
-            for extension in ('.bin', '.hex', '.mem', *(['.tac'] if '-i' in flags else [])):
+            for extension in ('.bin', '.hex', '.mem', *(['.tac'] if '-i' in flags else []),
+                              *(['.opt.tac'] if '-i' in flags and '-O1' in flags else [])):
                 path = output.with_suffix(extension)
                 assert path.is_file() and f'  {path}\n' in result.stderr, result.stderr
             assert f'  {json_path}\n' in result.stderr

@@ -18,6 +18,15 @@ APP = ejecucion.APP
 
 
 class Perfiles(unittest.TestCase):
+    def test_salidas_tac_antes_y_despues_por_nivel(self):
+        for nivel in ('O0', 'O1', 'O2'):
+            for activo in (False, True):
+                with self.subTest(nivel=nivel, tac=activo):
+                    _, destino, args, salidas = self.preparar_real({'nivel': nivel, 'tac': activo})
+                    self.assertEqual('-i' in args, activo)
+                    self.assertEqual(destino.with_suffix('.tac') in salidas, activo)
+                    self.assertEqual(destino.with_suffix('.opt.tac') in salidas, activo and nivel != 'O0')
+
     def preparar_real(self, datos):
         """Cada perfil de estas pruebas debe ser aceptado por el ccom del repo."""
         root = Path(__file__).resolve().parents[2]

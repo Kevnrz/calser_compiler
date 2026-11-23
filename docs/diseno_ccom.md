@@ -2652,11 +2652,25 @@ ya incluidos.
 
 ### 13.1 Archivo de tres direcciones (`.tac`) en el IDE
 
-Hoy el IDE solo reconoce `.cls` (explorador, búsqueda, icono) y trata `.asm` como entrada de
-ensamblado. El `.tac` que escribe `ccom -i` no se puede generar ni ver desde el IDE.
+El IDE reconoce `.cls` y los listados `.tac` en el explorador; estos últimos se
+abren en solo lectura. La opción `tac` del perfil permite generarlos con F5.
+Los `.asm` se tratan como entradas de ensamblado. Búsqueda y clones siguen
+limitados a `.cls`.
 
-**Qué contiene un `.tac`.** La representación de alto nivel tal como queda después de las
-pasadas de alto nivel activas. Formato (el de `tac_print`):
+**Qué contienen los listados de `-i`.** `<salida>.tac` conserva la representación
+de alto nivel inicial. En O1/O2, `<salida>.opt.tac` contiene la representación
+después de las pasadas de alto nivel activas (`unroll`, `rename`, `dce`) y antes
+de la bajada a ISA virtual. Sin pasadas (`-O1` solo), ambos son iguales; en O0
+se conserva únicamente `.tac`. Los dos usan el mismo formato de `tac_print`:
+
+La captura inicial se toma en `phase_tac`, antes de las pasadas, y se escribe
+como `.tac` al finalizar la generación en `phase_emit`, como antes. La foto
+optimizada se escribe directamente en `phase_o1`, tras `tac_passes_run` HIGH
+y antes de `tac_lower`, con `tac_build_print` (que delega en `tac_print`).
+Ambos aparecen en «Archivos generados» al completar la compilación.
+El `.opt.tac` puede quedar disponible aunque falle una fase posterior.
+
+Formato:
 
 ```
 initial_data bytes=0
@@ -2676,7 +2690,7 @@ B3: successors [B2]
 
 | Módulo | Cambio |
 |---|---|
-| `ide/compilacion.py` | Opción nueva en `OPCIONES`: `'tac': ('Generar tres direcciones (.tac)', '-i', {'compilar'})`. Cuando está activa, `preparar` agrega `destino.with_suffix('.tac')` a las salidas previstas |
+| `ide/compilacion.py` | Opción `tac` en `OPCIONES`, asociada a `-i` en modo compilar. `preparar` agrega `.tac` y, en O1/O2, también `.opt.tac` a las salidas previstas |
 | `ide/interfaz/opciones_compilacion.py` | La casilla aparece sola: el diálogo recorre `OPCIONES` |
 | `ide/interfaz/explorador.py` | El filtro de nombres y las dos comprobaciones de extensión pasan de `cls` a un conjunto: `cls`, `tac`. Los `.tac` se muestran, no se crean desde el explorador |
 | `ide/interfaz/iconos.py` | Icono para `.tac` (el genérico de documento) |
@@ -2704,13 +2718,13 @@ un listado generado, de formato fijo. Por eso no pasa por `ccom`.
 
 | Caso | Esperado |
 |---|---|
-| Perfil con `tac` | Los argumentos incluyen `-i` y las salidas incluyen el `.tac` |
+| Perfil con `tac` | Los argumentos incluyen `-i`; las salidas incluyen `.tac` y, con O1/O2, `.opt.tac` |
 | `tac` en modo distinto de `compilar` | La opción se descarta |
 | Abrir un `.tac` | Pestaña de solo lectura; ninguna consulta a `ccom` |
 | "Ver tres direcciones" sin compilar | Acción deshabilitada |
 | Explorador | Muestra `.cls` y `.tac`; no muestra `.bin`, `.hex`, `.mem` |
 
-**Resultado C1.2 (13.1, parcial).** El diálogo Abrir programa admite `.tac`; el editor los abre en solo lectura, sin guardado, compilación con F5, análisis, tokens, sugerencias, reparaciones ni marcas de error de Calser, con resaltado local según la tabla y la paleta existente. El explorador muestra `.cls` y `.tac` con icono genérico para estos últimos y conserva las carpetas excluidas; búsqueda y clones siguen limitados a `.cls`. Quedan fuera la opción `tac` del perfil, la acción «Ver tres direcciones» y el cambio de `-i` para escribir después de las pasadas. Las seis pruebas nuevas pasan. `make check` y `make ejercicios` terminan con código 0. Con `XDG_DATA_HOME` aislado y el mismo Python con PySide6, `check-ide` pasa de 435 a 441 pruebas: los 435 métodos existentes conservan su resultado, incluidos 34 fallos (29 métodos, uno con seis subcasos) y 1 error preexistentes, y las seis pruebas nuevas pasan. Reporte, comparación test por test, diffs y captura offscreen en `build/ide_tac/`.
+**Resultado C1.2 (13.1, parcial).** El diálogo Abrir programa admite `.tac`; el editor los abre en solo lectura, sin guardado, compilación con F5, análisis, tokens, sugerencias, reparaciones ni marcas de error de Calser, con resaltado local según la tabla y la paleta existente. El explorador muestra `.cls` y `.tac` con icono genérico para estos últimos y conserva las carpetas excluidas; búsqueda y clones siguen limitados a `.cls`. La ampliación de `-i` y del perfil `tac` ya conserva ambos listados; queda fuera la acción «Ver tres direcciones». Las seis pruebas nuevas pasan. `make check` y `make ejercicios` terminan con código 0. Con `XDG_DATA_HOME` aislado y el mismo Python con PySide6, `check-ide` pasa de 435 a 441 pruebas: los 435 métodos existentes conservan su resultado, incluidos 34 fallos (29 métodos, uno con seis subcasos) y 1 error preexistentes, y las seis pruebas nuevas pasan. Reporte, comparación test por test, diffs y captura offscreen en `build/ide_tac/`.
 
 ### 13.2 Elegir nivel y pasadas en F5
 
@@ -3247,8 +3261,8 @@ operaciones `MUL` con registros prestados.
   2 por las inicializaciones implícitas), DCE conserva la eliminación de bloques inalcanzables
   (6 programas del corpus tienen uniones muertas), el unrolling omite los `S` con salida
   anticipada y el reordenamiento toma siempre la distancia mayor.
-- Pendiente para la etapa del IDE o de cierre: `ccom -i` escribe el TAC inicial, mientras 13.1
-  dice que el `.tac` refleja el TAC después de las pasadas de alto nivel.
+- Resuelto para `-i` (13.1): `.tac` conserva el TAC inicial y `.opt.tac` agrega
+  el resultado de las pasadas de alto nivel en O1/O2.
 - P14 corrigió un error de diseño: la liveness hacía cúbica la asignación de -O1 (9.15).
 - Pregunta nueva para el profesor: qué se espera por tablas "eficientes" (§4.1).
 - `docs/compiler-integration.md` de arqui dice que `ccom` no usa `rg`; pasa a ser el registro

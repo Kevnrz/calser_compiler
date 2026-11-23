@@ -170,6 +170,36 @@ def failures(folder):
     assert target.with_suffix('.tac').is_dir()
 
 
+def optimized_listings(folder):
+    """Tres casos directos: O1 sin pasadas, rename y unroll con O2."""
+    output = folder / 'o1.bin'
+    result = run('-O1', '-i', ROOT / CASES['expresiones'], '-o', output)
+    initial = output.with_suffix('.tac').read_text()
+    assert initial == (HERE / 'esperados/expresiones.tac').read_text()
+    assert output.with_suffix('.opt.tac').read_text() == initial
+    extensions = ('.bin', '.hex', '.mem', '.tac', '.opt.tac')
+    assert result.stderr == success_log(output, extensions)
+
+    output = folder / 'r1_waw.bin'
+    result = run('--opt=rename', '-i', ROOT / 'pruebas/optimizador/rename/r1_waw.cls', '-o', output)
+    initial = output.with_suffix('.tac').read_text()
+    optimized = output.with_suffix('.opt.tac').read_text()
+    assert initial != optimized
+    assert '  x = 0\n' in initial and '  x = t0\n' in initial
+    assert '  t4 = 0\n' in optimized and '  t5 = t0\n' in optimized
+    assert '  t1 = t5 * 2\n' in optimized and '  x = t2\n' in optimized
+    assert '  x = 0\n' not in optimized and '  x = t0\n' not in optimized
+    assert result.stderr == success_log(output, extensions)
+
+    output = folder / 'u1_constante.bin'
+    result = run('-O2', '-i', ROOT / 'pruebas/optimizador/unroll/u1_constante.cls', '-o', output)
+    initial = output.with_suffix('.tac').read_text()
+    optimized = output.with_suffix('.opt.tac').read_text()
+    assert initial != optimized and '  if ' in initial and '  if ' not in optimized
+    assert optimized.count(' = suma + ') == 4
+    assert result.stderr == success_log(output, extensions)
+
+
 def main():
     """Entrada: ninguna. Salida: 0 con todas las aserciones satisfechas.
 
@@ -181,6 +211,7 @@ def main():
         cases(folder)
         combinations(folder)
         failures(folder)
+        optimized_listings(folder)
     print(f'PASS construccion TAC: {len(CASES)} esperados, memoria, CLI y artefactos identicos')
     return 0
 

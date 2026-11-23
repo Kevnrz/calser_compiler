@@ -6,11 +6,41 @@ recibe. No importa Qt ni restaura documentos, buffers o procesos de terminal.
 
 Se utiliza la clave estado_v1 con un esquema versionado. Los campos desconocidos
 o inválidos se omiten; el consumidor utiliza sus valores predeterminados. El
-bloque de asistencia delega su validación a politica_asistencia.
+bloque de asistencia delega su validación a politica_asistencia. La selección
+de simulador utiliza el bloque independiente simulacion_v1 en los mismos settings.
 """
 import json
 from pathlib import Path
 from ide.politica_asistencia import validar_preferencias
+
+
+def validar_simulacion(datos):
+    """Valores cerrados; una configuración ausente conserva el F6 tradicional."""
+    datos = datos if isinstance(datos, dict) else {}
+    simulador = datos.get('simulador')
+    divisor = datos.get('mem_div')
+    return {'simulador': simulador if isinstance(simulador, str) and simulador in
+            ('sin_cache', '0', '1', '2') else 'sin_cache',
+            'mem_div': divisor if type(divisor) is int and divisor in (2, 4, 5) else 4}
+
+
+def cargar_simulacion(settings):
+    """Bloque independiente para no alterar el estado de proyecto existente."""
+    if settings is False:
+        return validar_simulacion(None)
+    try:
+        raw = settings.value('simulacion_v1', '{}')
+        return validar_simulacion(json.loads(raw) if isinstance(raw, str) and len(raw) <= 1024 else None)
+    except (TypeError, ValueError):
+        return validar_simulacion(None)
+
+
+def guardar_simulacion(settings, datos):
+    if settings is False:
+        return True
+    settings.setValue('simulacion_v1', json.dumps(validar_simulacion(datos)))
+    settings.sync()
+    return settings.status() == settings.Status.NoError
 
 
 def validar(datos):

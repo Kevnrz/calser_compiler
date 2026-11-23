@@ -13,13 +13,14 @@ from PySide6.QtWidgets import (
     QSizePolicy, QToolButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
-from ide import archivos, ccom, compilacion
+from ide import archivos, ccom, compilacion, preferencias as ajustes
 from ide.interfaz.editor import Editor
 from ide.interfaz.iconos import icono_archivo
 from ide.interfaz.explorador import Explorador
 from ide.interfaz.busqueda import BusquedaProyecto
 from ide.interfaz.acciones_archivos import AccionesArchivos
-from ide.interfaz.ejecucion import EjecucionVentana
+from ide.interfaz.ejecucion import EjecucionVentana, SIMULADORES, LATENCIAS
+from ide.interfaz.metricas import MetricasVentana
 from ide.interfaz.sugerencias import AsistenciaEditor
 from ide.interfaz.reparaciones import PanelReparaciones, ReparacionesVentana
 from ide.interfaz.proyecto import ProyectoVentana
@@ -44,7 +45,7 @@ class Esquina(QWidget):
         painter.drawPolygon(QPolygon([QPoint(0, 0), QPoint(32, 0), QPoint(32, 32)]))
 
 
-class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoVentana, QMainWindow):
+class Ventana(ReparacionesVentana, EjecucionVentana, MetricasVentana, AccionesArchivos, ProyectoVentana, QMainWindow):
     def __init__(self, root, *, preferencias=None):
         super().__init__()
         self.root = Path(root)
@@ -54,6 +55,8 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         self.process = None
         self.operacion_carpetas = None
         self.iniciar_ejecucion()
+        self.iniciar_metricas()
+        self.configuracion_simulacion = ajustes.validar_simulacion(None)
         self.stderr = ""
         self.compilation = None
         self.results = {}
@@ -121,6 +124,8 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         self.asistencia.contextoInvalidado.connect(self.reparaciones_panel.invalidar)
         self.nuevo()
         self.restaurar_preferencias()
+        self.configuracion_simulacion = ajustes.cargar_simulacion(self.settings)
+        self.actualizar_simulacion()
 
     def crear_interfaz(self):
         body = QWidget()
@@ -262,6 +267,9 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         self.run_output.setMaximumBlockCount(12000)
         self.run_output.setPlaceholderText("F5 compila el programa; F6 lo ejecuta y muestra la traza y los valores finales.")
         self.panels.addTab(self.run_output, "Ejecución")
+        self.metricas_output = QPlainTextEdit()
+        self.metricas_output.setReadOnly(True)
+        self.panels.addTab(self.metricas_output, "Métricas")
         self.reparaciones_panel = PanelReparaciones()
         self.reparaciones_panel.solicitar.connect(self.solicitar_reparaciones)
         self.reparaciones_panel.cancelar.connect(self.cancelar_reparaciones)
@@ -385,7 +393,40 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         build.addSeparator()
         self.actualizar_perfil_compilacion()
         self.run_action = self.accion(build, "Ejecutar archivo activo", "F6", self.ejecutar)
+        self.simulador_menu = build.addMenu('Simulador')
+        self.simuladores_group = QActionGroup(self)
+        self.acciones_simulador = {}
+        for valor, texto in SIMULADORES.items():
+            accion = self.accion(self.simulador_menu, texto, None,
+                                lambda checked=False, v=valor: self.seleccionar_simulacion('simulador', v))
+            accion.setCheckable(True)
+            self.simuladores_group.addAction(accion)
+            self.acciones_simulador[valor] = accion
+        self.latencia_menu = build.addMenu('Latencia de memoria')
+        self.latencias_group = QActionGroup(self)
+        self.acciones_latencia = {}
+        for divisor, ciclos in LATENCIAS.items():
+            accion = self.accion(self.latencia_menu, f'MEM_DIV {divisor} · {ciclos} ciclos', None,
+                                lambda checked=False, d=divisor: self.seleccionar_simulacion('mem_div', d))
+            accion.setCheckable(True)
+            self.latencias_group.addAction(accion)
+            self.acciones_latencia[divisor] = accion
+        self.actualizar_simulacion()
+        self.metricas_action = self.accion(build, 'Métricas de optimización…', None, self.ejecutar_metricas)
         self.accion(build, "Configurar ccom…", None, self.configurar_ccom)
+
+    def actualizar_simulacion(self):
+        self.acciones_simulador[self.configuracion_simulacion['simulador']].setChecked(True)
+        self.acciones_latencia[self.configuracion_simulacion['mem_div']].setChecked(True)
+        self.latencia_menu.setEnabled(self.configuracion_simulacion['simulador'] != 'sin_cache')
+
+    def seleccionar_simulacion(self, campo, valor):
+        if self.process or self.run_process or self.metricas_process:
+            return
+        self.configuracion_simulacion = ajustes.validar_simulacion({**self.configuracion_simulacion, campo: valor})
+        self.actualizar_simulacion()
+        if not ajustes.guardar_simulacion(self.settings, self.configuracion_simulacion):
+            self.error('No se pudieron guardar las preferencias', 'Revisa los permisos de la carpeta de configuración.')
 
     def editar_en_foco(self, metodo):
         widget = self.focusWidget()
@@ -861,7 +902,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
                 self.statusBar().showMessage("No se encontraron coincidencias")
 
     def configurar_ccom(self):
-        if self.process or self.run_process:
+        if self.process or self.run_process or self.metricas_process:
             return
         filename, _ = QFileDialog.getOpenFileName(self, "Seleccionar ejecutable ccom", str(self.root))
         if filename:
@@ -889,7 +930,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         self.compile_action.setToolTip(compilacion.MODOS[modo] + ' · Opciones de compilación para elegir destino y banderas')
 
     def seleccionar_modo(self, modo):
-        if self.process or self.run_process:
+        if self.process or self.run_process or self.metricas_process:
             self.actualizar_perfil_compilacion()
             return
         if modo != self.perfil_compilacion['modo']:
@@ -898,7 +939,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         self.guardar_preferencias()
 
     def configurar_compilacion(self):
-        if self.process or self.run_process:
+        if self.process or self.run_process or self.metricas_process:
             return
         from ide.interfaz.opciones_compilacion import OpcionesCompilacion
         dialogo = OpcionesCompilacion(self.perfil_compilacion, self)
@@ -909,7 +950,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         dialogo.deleteLater()
 
     def compilar(self):
-        if self.process or self.run_process:
+        if self.process or self.run_process or self.metricas_process:
             return
         self.actualizar_perfil_compilacion()
         editor = self.editor()
@@ -1090,6 +1131,7 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         self.controles_ejecucion(False)
 
     def cancelar(self):
+        self.cancelar_metricas()
         if self.run_process:
             self.cancelar_ejecucion()
         if self.process:
@@ -1123,6 +1165,10 @@ class Ventana(ReparacionesVentana, EjecucionVentana, AccionesArchivos, ProyectoV
         QMessageBox.warning(self, title, str(error))
 
     def closeEvent(self, event):
+        if self.metricas_process:
+            self.statusBar().showMessage('Cancela las métricas antes de cerrar el IDE')
+            event.ignore()
+            return
         if self.run_process:
             self.statusBar().showMessage("Cancela la ejecución antes de cerrar el IDE")
             event.ignore()

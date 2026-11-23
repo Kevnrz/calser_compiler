@@ -300,7 +300,7 @@ Los mensajes de éxito del compilador y el mensaje final del IDE son realimentac
 1. Buscan una compilación correcta registrada para el documento durante esta sesión.
 2. Verifican revisión, cambios sin guardar y huellas del fuente, `.asm` y `.mem`.
 3. Crean un subdirectorio `ejecucion-…` y copian allí los artefactos, comprobando sus huellas.
-4. Ejecutan con `QProcess` el Python de la aplicación y `tools/sim_asm.py`, con `.asm`, `--data-image`, `--traza` y límites explícitos.
+4. Ejecutan con `QProcess` el Python de la aplicación y el simulador elegido en Compilar → Simulador, con `.asm`, `--data-image`, `--traza` y límites explícitos.
 5. La pestaña Ejecución muestra salida del simulador y lee la traza de esa corrida, incluidos los estados finales de variables cuando el simulador los produce.
 
 F6 **no guarda ni recompila**. Al reiniciar se requiere otra compilación; no se confía automáticamente en cualquier artefacto que quedó en disco. Una corrida usa su propia traza para evitar confundirla con una anterior.
@@ -308,6 +308,45 @@ F6 **no guarda ni recompila**. Al reiniciar se requiere otra compilación; no se
 Editar durante la corrida es posible, pero su salida se identifica como correspondiente a la versión compilada anterior. Compilar/Ejecutar quedan bloqueados mientras corre; Cancelar detiene el proceso. El límite es 30 segundos, además de 100000 bundles y 5000 eventos de traza solicitados al simulador.
 
 El programa Calser del usuario se simula: el botón no ejecuta el `.bin` como un proceso nativo del sistema operativo anfitrión.
+
+### Simulador y latencia
+
+Debajo de Ejecutar archivo activo, el submenú Simulador ofrece opciones excluyentes:
+Sin caché (`tools/sim_asm.py`, predeterminada), Caché: solo memoria principal,
+Caché: L1 y Caché: L1 + L2 (`tools/sim_cache.py --cache 0/1/2`).
+Latencia de memoria se habilita para las tres opciones de caché y permite
+`--mem-div 2`, `4` o `5`, equivalentes a 39, 53 o 60 ciclos; el valor inicial es 4.
+
+`argumentos_simulador` conserva los argumentos anteriores de F6 y solo agrega
+`--cache` y `--mem-div` cuando corresponde. La cabecera de Ejecución identifica
+el simulador y su configuración; stdout y stderr se combinan para mostrar
+también las métricas de caché. Ambos simuladores usan 0 para éxito, 1 para
+avisos o límite de bundles y 2 para errores. Un cierre inesperado, una cancelación
+y el límite de 30 segundos conservan sus mensajes propios.
+
+`ide/preferencias.py` valida y guarda estas elecciones en el bloque JSON
+`simulacion_v1` de los mismos QSettings del IDE, independiente de `estado_v1`.
+Esto permite conservarlas sin modificar el módulo de preferencias de proyecto.
+Una configuración ausente o inválida recupera Sin caché y MEM_DIV 4.
+
+### Métricas de optimización
+
+Compilar → Métricas de optimización… inicia `MetricasVentana`, en
+`ide/interfaz/metricas.py`. Usa dos QProcess sucesivos con `sys.executable`:
+`tools/medir.py --modo optimizacion` y `tools/medir.py --modo nivel`, con
+directorio de trabajo en la raíz del repositorio. Requiere tener construido
+`ccom` allí, como `make metricas`. La pestaña Métricas muestra el comando de
+cada etapa, su avance y los errores combinando stdout y stderr.
+
+El editor sigue disponible. F5, F6 y la acción de métricas se excluyen entre sí.
+Cancelar mata el proceso de métricas activo e impide iniciar la etapa siguiente;
+se debe cancelar antes de cerrar el IDE. No aplica el límite de 30 segundos de
+F5/F6, porque las mediciones pueden tardar más. Un fallo de inicio, cierre
+inesperado o código distinto de 0 detiene la secuencia sin abrir el reporte.
+Después de dos códigos 0, comprueba `build/metricas/reporte.html` y lo abre con
+`QDesktopServices.openUrl(QUrl.fromLocalFile(...))`; si falta o el navegador no
+puede abrirlo, deja el mensaje y la ruta en la salida. La cancelación puede
+dejar archivos parciales de medición en `build/metricas`.
 
 ## 7. Núcleo LL(1)
 
@@ -712,7 +751,7 @@ Después de cada grupo se puede registrar aquí fecha, archivos revisados y duda
 
 ## 15. Pendientes y mantenimiento de esta guía
 
-La funcionalidad conectada de M1–M7 está implementada; eso no certifica todos los requisitos ni reemplaza la revisión humana. El [plan vigente](plan_ide.md) es el único checklist de cierre: revisión manual, empaquetado E8 y validación/documentación/defensa E9. La animación de inicio está implementada; esquina animada, predicción gris, más reglas y métricas mantienen su lista de mejoras futuras.
+La funcionalidad conectada de M1–M7 está implementada; eso no certifica todos los requisitos ni reemplaza la revisión humana. El [plan vigente](plan_ide.md) es el único checklist de cierre: revisión manual, empaquetado E8 y validación/documentación/defensa E9. La animación de inicio y la acción de métricas de optimización están implementadas; esquina animada, predicción gris y más reglas mantienen su lista de mejoras futuras.
 
 | Consulta | Referencia única |
 | --- | --- |

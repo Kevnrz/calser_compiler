@@ -33,7 +33,7 @@ Para compilar `ccom` solo se necesitan:
 - Flex y Bison.
 
 Python 3.9 o posterior se usa únicamente para `make check`, `make ejercicios`,
-el simulador (`tools/sim_asm.py`) y el paquete de VS Code; el compilador no lo
+los simuladores (`tools/sim_asm.py` y [`tools/sim_cache.py`](docs/sim_cache.md)) y el paquete de VS Code; el compilador no lo
 necesita. Bash se usa para el script de pruebas `pruebas/correr_pruebas.sh`.
 
 Los comandos siguientes se ejecutan desde la raíz del repositorio, en Linux

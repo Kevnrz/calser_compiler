@@ -10,7 +10,7 @@ BUILD_DIR = build
 GEN_DIR = $(BUILD_DIR)/generated
 OBJ_DIR = $(BUILD_DIR)/obj
 
-SOURCES = main json_text codegen_common tac_passes tac_pass_unroll tac_pass_rename tac_pass_dce tac_pass_reorder tac_metrics tac_lower tac_lower_value tac_lower_control tac_intervals tac_allocate tac_allocate_color tac_allocate_sites tac_emit tac_emit_pseudo tac tac_loop_marks tac_live tac_locations tac_loops tac_edit tac_cfg tac_validate tac_isa tac_pseudo tac_print tac_build tac_build_expr tac_build_stmt tac_build_flow tac_build_init ast ast_constant symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table isa_constant codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler clones repairs syntax_service suggestions diagnostics_json ll1_parser
+SOURCES = main modules json_text codegen_common tac_passes tac_pass_unroll tac_pass_rename tac_pass_dce tac_pass_reorder tac_metrics tac_lower tac_lower_value tac_lower_control tac_intervals tac_allocate tac_allocate_color tac_allocate_sites tac_emit tac_emit_pseudo tac tac_loop_marks tac_live tac_locations tac_loops tac_edit tac_cfg tac_validate tac_isa tac_pseudo tac_print tac_build tac_build_expr tac_build_stmt tac_build_flow tac_build_init ast ast_constant symbol_table semantic semantic_scope semantic_calls semantic_expr semantic_crypto data_area diagnostics label_table isa_table isa_constant codegen codegen_instruction codegen_schedule codegen_verify generate generate_support generate_expr generate_stmt generate_init codegen_crypto codegen_arith codegen_array assembler clones repairs syntax_service suggestions diagnostics_json ll1_parser
 OBJECTS = $(addprefix $(OBJ_DIR)/,$(addsuffix .o,$(SOURCES))) \
           $(OBJ_DIR)/parser.tab.o $(OBJ_DIR)/lex.yy.o
 
@@ -259,7 +259,7 @@ check-o1: $(TARGET) $(BUILD_DIR)/probar_tac_passes $(BUILD_DIR)/probar_dce $(BUI
 	$(BUILD_DIR)/probar_tac_passes
 	PYTHONDONTWRITEBYTECODE=1 python3 pruebas/optimizador/tac_passes/probar_cli.py
 
-check: check-ll1-c check-ll1-ide check-medir check-reorder check-unroll check-spill check-rename check-dce check-pasadas check-pasadas-isa check-ide-options check-o1 check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-cache check-bundles check-salidas validar-bundles check-recovery check-clones-json check-repairs-json check-suggestions-json check-tokens-json check-success check-analysis check-analysis-json
+check: check-modulos check-ll1-c check-ll1-ide check-medir check-reorder check-unroll check-spill check-rename check-dce check-pasadas check-pasadas-isa check-ide-options check-o1 check-tac-emit check-o1-equivalence check-tac-intervals check-tac-allocate check-tac-live check-tac-loops check-tac check-tac-build check-tac-values check-tac-lower check-arith check-arrays check-crypto check-ast check-asm check-programas check-diagnosticos-generacion check-constantes check-constantes-isa check-runner check-help check-time check-matrices check-etiquetas check-simulador check-cache check-bundles check-salidas validar-bundles check-recovery check-clones-json check-repairs-json check-suggestions-json check-tokens-json check-success check-analysis check-analysis-json
 
 clean:
 	rm -rf $(BUILD_DIR)/metricas
@@ -444,3 +444,8 @@ check-ll1-c: $(TARGET) $(BUILD_DIR)/probar_ll1
 .PHONY: check-ll1-ide
 check-ll1-ide: $(TARGET) $(BUILD_DIR)/probar_ll1
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) pruebas/ll1/probar_diagnosticos.py --binario $(BUILD_DIR)/probar_ll1
+
+# Importaciones mínimas de módulos, diseño §12.
+.PHONY: check-modulos
+check-modulos: $(TARGET)
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) pruebas/analisis/modulos/probar.py

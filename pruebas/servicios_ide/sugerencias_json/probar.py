@@ -37,7 +37,7 @@ def main():
             return datos
         def opciones(texto, cursor=None):
             return [s['text'] for s in consultar(texto, cursor)['suggestions']]
-        assert opciones('') == ['F', 'Vi', 'Vm']
+        assert opciones('') == ['F', 'P', 'Vi', 'Vm']
         assert consultar('F ')['status'] == 'sin_opciones'
         assert opciones('F main [] : vo') == ['void']
         medio = 'F main [] : void ; E ; .'
@@ -58,7 +58,7 @@ def main():
         for t in ('# comentario', '#[ sin cerrar', 'F main [] : void ; #[ bloque ]#'):
             cursor = len(t) if not t.endswith(']#') else t.index('bloque') + 2
             assert consultar(t, cursor)['status'] == 'bloqueado'
-        assert opciones('#[ cerrado ]# ') == ['F', 'Vi', 'Vm']
+        assert opciones('#[ cerrado ]# ') == ['F', 'P', 'Vi', 'Vm']
         unicode = '# á😀\r\n\tF main [] : vo'
         assert opciones(unicode) == ['void']
         a=consultar('F main [] : void ;\n'); b=consultar('F main [] : void ;\n')

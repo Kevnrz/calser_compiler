@@ -19,6 +19,7 @@
 #include "diagnostics.h"
 #include "parser_service.h"
 #include "lexer_service.h"
+#include "modules.h"
 
 extern int yylex(void);
 extern int yylineno;
@@ -60,6 +61,8 @@ static void syntax_reset(void);
 
 /* Palabras reservadas */
 
+%token TOKEN_P "P"
+%token <str> TOKEN_STRING "cadena"
 %token TOKEN_F "F"
 %token TOKEN_VM "Vm"
 %token TOKEN_VI "Vi"
@@ -139,6 +142,7 @@ static void syntax_reset(void);
  * ======================================================================= */
 
 
+%type <node> importaciones
 %type <node> programa
 %type <node> globales
 %type <node> funciones
@@ -226,15 +230,36 @@ static int syntax_recover(int *token, YYSTYPE *value, int body);
  * ======================================================================= */
 
 
-/* programa → globales funciones */
+/* §12: importaciones como últimos hijos; globales/funciones conservan 0/1. */
 programa
-    : globales funciones
+    : importaciones globales funciones
       {
-          root = ast_program($1, $2);
+          root = ast_program($2, $3);
+          ast_add_child(root, $1);
           $$ = root;
       }
     ;
 
+
+/* §12: cada AST_IMPORT posee su nombre y la posición del P. */
+importaciones
+    : %empty { $$ = NULL; }
+    | importaciones TOKEN_P TOKEN_STRING TOKEN_SEMICOLON
+      {
+          ASTNode *imp = ast_new(AST_IMPORT);
+          imp->text = $3;
+          ast_set_location(imp, @2.first_line, @2.first_column);
+          /* §12: el anclaje JSON incluye el ; de la directiva completa. */
+          imp->import_end_line = @4.last_line;
+          imp->import_end_column = @4.last_column;
+          if ($1) {
+              ASTNode *last = $1;
+              while (last->next) last = last->next;
+              last->next = imp;
+              $$ = $1;
+          } else $$ = imp;
+      }
+    ;
 
 /* ==========================================================================
  * GLOBALES
@@ -1724,7 +1749,7 @@ static int syntax_recover(int *token, YYSTYPE *value, int body) {
                 syntax_report(yylloc, "limite de recuperacion: mas de 4096 tokens sin sincronizacion");
                 return 0;
             }
-            if (*token == TOKEN_IDENTIFIER) { free(value->str); value->str = NULL; }
+            if (*token == TOKEN_IDENTIFIER || *token == TOKEN_STRING) { free(value->str); value->str = NULL; }
             *token = YYEMPTY;
         }
     }
@@ -1802,7 +1827,11 @@ static int yyreport_syntax_error(const yypcontext_t *context) {
     }
     YYLTYPE location = *yypcontext_location(context);
     char message[512];
-    if (unexpected == YYSYMBOL_YYEOF) {
+    if (unexpected == YYSYMBOL_TOKEN_P) {
+        snprintf(message, sizeof(message), "%s", modules_in_module()
+                 ? "un modulo no puede importar otros modulos"
+                 : "'P' solo puede ir al inicio del archivo");
+    } else if (unexpected == YYSYMBOL_YYEOF) {
         if (syntax_count) {
             SyntaxBlock *block = &syntax_blocks[syntax_count - 1];
             location = block->location;

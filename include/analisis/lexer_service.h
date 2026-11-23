@@ -5,6 +5,9 @@
 #ifndef LEXER_SERVICE_H
 #define LEXER_SERVICE_H
 #include <stddef.h>
+#include <stdio.h>
+/* Reinicia el scanner por archivo; importaciones mínimas, diseño §12. */
+void lexer_begin(FILE *input);
 typedef void (*LexerObserver)(const char *kind, size_t start, size_t end);
 /* Instalar antes de escanear y desconectar con NULL al terminar. */
 void lexer_set_observer(LexerObserver observer);

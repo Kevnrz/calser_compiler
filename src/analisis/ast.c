@@ -47,6 +47,10 @@ static char *ast_strdup(const char *str) {
     return copy;
 }
 
+/* §12: el cargador fija la procedencia antes de cada parser_accept. */
+static int current_file;
+void ast_set_current_file(int file) { current_file = file; }
+
 /* ast_new — véase el contrato en ast.h. */
 ASTNode *ast_new(ASTKind kind) {
     ASTNode *node = malloc(sizeof(ASTNode));
@@ -57,10 +61,12 @@ ASTNode *ast_new(ASTKind kind) {
     }
 
     node->kind = kind;
+    node->file = current_file;
     node->text = NULL;
     node->number = 0;
     node->line = 0;
     node->column = 0;
+    node->import_end_line = node->import_end_column = 0;
     node->symbol = NULL;
     node->child = NULL;
     node->next = NULL;
@@ -561,6 +567,7 @@ ASTNode *ast_index(char *name,
 static const char *ast_kind_name(ASTKind kind) {
     switch (kind) {
 
+        case AST_IMPORT:           return "IMPORT";
         case AST_PROGRAM:          return "PROGRAM";
         case AST_GLOBALS:          return "GLOBALS";
         case AST_FUNCTIONS:        return "FUNCTIONS";

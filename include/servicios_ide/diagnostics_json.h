@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include "json_text.h"
 void diag_json_begin(void);
+/* §12: permite anclar errores de módulos solo cuando hay captura JSON. */
+int diag_json_active(void);
 /* Informe del editor con sintaxis LL(1). Conserva rangos y categorías v1. */
 void diag_json_ll1_begin(void);
 /* Impide publicar un análisis limitado como un documento correcto. */

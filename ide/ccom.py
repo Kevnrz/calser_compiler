@@ -230,7 +230,7 @@ def _problemas_json(datos, source, texto, codigo):
     return problemas
 
 
-ESTILOS_LEXICOS = frozenset(('reservada', 'tipo', 'numero', 'booleano',
+ESTILOS_LEXICOS = frozenset(('reservada', 'tipo', 'numero', 'cadena', 'booleano',
                             'operador', 'identificador', 'comentario'))
 
 

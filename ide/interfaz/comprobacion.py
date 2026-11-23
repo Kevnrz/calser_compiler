@@ -146,7 +146,11 @@ class ComprobadorCcom(QObject):
             self.process.finished.connect(self.finalizar)
             self.estado.emit(request, "Analizando…")
             self.limite.start(self.timeout_ms)
-            self.process.start(executable, ["--check-ll1-json", str(self.snapshot)])
+            # Diseño §12: el snapshot temporal busca módulos junto al documento.
+            args = ["--check-ll1-json", str(self.snapshot)]
+            if request.fuente:
+                args += ["--module-dir", str(request.fuente.resolve().parent)]
+            self.process.start(executable, args)
 
     def agregar(self, destination, data):
         if len(destination) + len(data) > 1_000_000:

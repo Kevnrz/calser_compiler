@@ -33,7 +33,8 @@ static size_t message_bytes;
 typedef struct { const char *kind; size_t start, end; } JsonToken;
 static JsonToken tokens[MAX_TOKENS];
 static size_t token_count;
-static int lexical_mode, ll1_mode;
+static int lexical_mode, ll1_mode, active;
+int diag_json_active(void) { return active; }
 extern int lexical_fatal;
 
 void diag_json_token(const char *kind, size_t start, size_t end) {
@@ -69,6 +70,7 @@ static void capture(const char *category, DiagPosition position,
 }
 
 void diag_json_begin(void) {
+    active = 1;
     ll1_mode = 0;
     entry_count = truncated = failed = 0;
     lexical_mode = 0;
@@ -139,6 +141,7 @@ int diag_json_finish(FILE *out, const char *source, int exit_code) {
     fputs("}\n", out);
     lexical_mode = 0; token_count = 0;
     entry_count = 0;
+    active = 0;
     diag_set_observer(NULL, NULL, 1);
     if (fflush(out) != 0 || ferror(out)) {
         fprintf(stderr, "ccom: no se pudo escribir el informe JSON\n");

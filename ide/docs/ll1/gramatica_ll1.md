@@ -2,9 +2,9 @@
 
 Tarea C1.1a (compi), Proyecto Grupal II, Grupo 6. Base para el parser predictivo del IDE (D4, D5).
 
-**Referencia vigente verificada el 2026-11-22 en `feat/ide-ll1-c`, desde `develop` en `de834e2`.** Se contrastaron las reglas reales de `grammar/parser.y` y los tokens de `grammar/lexer.l`. Bison mantiene 101 producciones del lenguaje válido, 43 no terminales y 47 terminales. Las transformaciones existentes siguen correspondiendo a esas reglas. No fue necesario cambiar el lenguaje reconocido.
+**Referencia vigente verificada el 2026-11-22 en `feat/ide-ll1-c`, desde `develop` en `de834e2`.** Se contrastaron las reglas reales de `grammar/parser.y` y los tokens de `grammar/lexer.l`. Bison mantiene 103 producciones del lenguaje válido, 44 no terminales y 49 terminales. Las transformaciones existentes siguen correspondiendo a esas reglas. La versión mínima de importaciones de diseño §12 agrega `P cadena ;` al prefijo del programa.
 
-**Resultado confirmado.** La gramática LL(1) tiene 118 producciones, 60 no terminales y 47 terminales. La tabla predictiva tiene 336 celdas ocupadas y cero conflictos.
+**Resultado confirmado.** La gramática LL(1) tiene 120 producciones, 61 no terminales y 49 terminales. La tabla predictiva tiene 341 celdas ocupadas y cero conflictos.
 
 ### Comprobación reproducible de la vigencia
 
@@ -15,7 +15,7 @@ python3 -B tools/verificar_gramatica_ll1.py
 python3 -B -m unittest ide.pruebas.test_gramatica_vigente ide.pruebas.test_tabla ide.pruebas.test_parser
 ```
 
-La herramienta pide a Bison un informe XML de sus reglas, en una carpeta temporal. Excluye las tres reglas de recuperación, el símbolo de aceptación y la acción intermedia de sugerencias. Normaliza los alias de identificador y número a `id` y `num`. Aplica las factorizaciones de la sección 2 y elimina la recursión izquierda directa. Después exige que todas las producciones resultantes coincidan con `ide/nucleo/gramatica.py` y que la tabla no tenga conflictos.
+La herramienta pide a Bison un informe XML de sus reglas, en una carpeta temporal. Excluye las tres reglas de recuperación, el símbolo de aceptación y la acción intermedia de sugerencias. Normaliza los alias de identificador y número a `id` y `num`, e incorpora `cadena`. Aplica las factorizaciones de la sección 2 y elimina la recursión izquierda directa. Después exige que todas las producciones resultantes coincidan con `ide/nucleo/gramatica.py` y que la tabla no tenga conflictos.
 
 Cada factorización manual comprueba sus reglas de entrada antes de transformarlas. Si Bison cambia esas reglas, la herramienta se detiene y pide revisar la transformación. Los cambios en las demás reglas también se detectan al comparar el resultado completo. No es un convertidor universal de gramáticas ni una prueba de equivalencia para cualquier lenguaje. La revisión de las transformaciones y las pruebas diferenciales complementan esta comprobación. En esta revisión pasaron 41 pruebas y se comparó la aceptación sintáctica de LL(1) y Bison en 163 fuentes sin errores léxicos.
 
@@ -23,7 +23,7 @@ Cada factorización manual comprueba sus reglas de entrada antes de transformarl
 
 El paso 1 fija la gramática de entrada para trasladar el reconocedor a C. No cambia el parser de compilación ni conecta todavía LL(1) a la interfaz. Los datos Python se mantienen como referencia de desarrollo, no como una nueva dependencia del futuro motor C durante la ejecución.
 
-- Flex seguirá proporcionando los tokens del lenguaje. El futuro adaptador C deberá convertir sus códigos a los 47 terminales de esta gramática.
+- Flex seguirá proporcionando los tokens del lenguaje. El futuro adaptador C deberá convertir sus códigos a los 49 terminales de esta gramática.
 - El marcador privado `TOKEN_CURSOR` pertenecía a las consultas anteriores de Bison y se retiró al cerrar la migración. No es un token del lenguaje. LL(1) consulta su pila al alcanzar la posición pedida.
 - Las acciones que construyen el AST y las producciones `error` de Bison no se trasladan como reglas del lenguaje. La recuperación del nuevo parser se decidirá por separado. En el alcance inicial puede detenerse en el primer error.
 - El reconocedor distingue sintaxis de semántica. Que exista `main`, que sus tipos sean correctos o que una variable esté declarada corresponde al análisis semántico de ccom.
@@ -53,11 +53,19 @@ No hay recursión izquierda indirecta (anexo de `gramatica_calser.md`). Las regl
 
 **Precedencia y asociatividad.** Se conservan los niveles. *unario* y *potencia* quedan igual que en Bison: `-2^2` es `-(2^2)`, `2^3^4` es `2^(3^4)` y `2^-3` es válido. Quitar la recursión izquierda no cambia el lenguaje, pero sí la forma del árbol. Si el IDE llega a construir árboles, la asociatividad izquierda se recupera con un atributo heredado (Aho §5.4.4). Para reconocer, sugerir y corregir no hace falta.
 
+La regla nueva de Bison `importaciones -> ε | importaciones P cadena ;`
+se reescribe con recursión derecha: `importaciones -> P cadena ; importaciones | ε`.
+Los datos C `ll1_grammar.inc` se regeneran con `tools/generar_datos_ll1.py`.
+Los números de reglas de las tablas históricas siguientes se conservan como
+referencias didácticas; las reglas nuevas se identifican por su cabeza.
+
 ## 3. Gramática LL(1)
 
 ### Programa y funciones
 
-*programa* → *globales* *funciones*
+*programa* → *importaciones* *globales* *funciones*
+
+*importaciones* → **P** **cadena** ; *importaciones* | ε
 
 *globales* → *decl* *globales* | ε
 
@@ -290,7 +298,7 @@ Una gramática es LL(1) si, para cada A → α | β: PRIMERO(α) ∩ PRIMERO(β)
 Las alternativas sin ε también son disjuntas: *decl'* (`;` / `=`), *sent_id'* (`=` / `[`), *tras_args* (`=` / `[` / `;`), *tras_a* (`[` / `;`), *inicial* y *elem* (𝒫 / `[`; 𝒫 no contiene `[`) y *sentencia* (un token inicial distinto por alternativa).
 
 **Comprobación con programa:**
-1. `ide/nucleo/tabla.py` calcula PRIMERO, SIGUIENTE y M completos: 336 entradas, 0 celdas dobles. Lo verifica `ide/pruebas/test_tabla.py` (`make check-ide`), junto con los ejemplos de Aho (Ej. 4.30, Fig. 4.17 y Ej. 4.33).
+1. `ide/nucleo/tabla.py` calcula PRIMERO, SIGUIENTE y M completos: 341 entradas, 0 celdas dobles. Lo verifica `ide/pruebas/test_tabla.py` (`make check-ide`), junto con los ejemplos de Aho (Ej. 4.30, Fig. 4.17 y Ej. 4.33).
 2. Equivalencia de lenguajes por prueba aleatoria (hecha una vez, fuera del repo): 792 programas generados desde una gramática fueron aceptados por la otra (el parser LL(1) contra un reconocedor Earley de la gramática original), sin fallas. Además, 226 programas mutados (un token borrado, duplicado o intercambiado) recibieron el mismo veredicto con ambas gramáticas. Esto es evidencia, no una prueba formal; la equivalencia por construcción viene de que §4.3.3 y §4.3.4 conservan el lenguaje.
 
 ## 6. Filas de la tabla M de las partes difíciles
@@ -374,5 +382,5 @@ La pila se escribe con el tope a la izquierda.
 
 1. **Sugerencias.** Son los terminales con entrada en la fila M[X, ·] del tope X. Si X es anulable, se juntan las filas de la pila hacia abajo hasta el primer símbolo no anulable. Ejemplo: después de `x` (tope *acceso'*) salen `[`, `^`, `*`, `/`, `%`, `+`, `-`, comparaciones, `==`, `!=`, `&`, `|`, `;`, `,`, `]` y `)`. Si el tope es un terminal, la sugerencia es ese terminal.
 2. **Autocorrección.** Recuperación a nivel de frase (Aho §4.4.5): se llenan las celdas vacías de M con rutinas de corrección. Su diseño queda pendiente (módulo `correccion`).
-3. **Anulables (21).** *globales*, *funciones'*, *params*, *lista_param'*, *modif_opt*, *dims_opt*, *dims'*, *cuerpo*, *elems'*, *resto_c*, *args*, *lista_arg'*, los siete *X'* de expresiones, *acceso'* e *indice*.
+3. **Anulables (22).** *importaciones*, *globales*, *funciones'*, *params*, *lista_param'*, *modif_opt*, *dims_opt*, *dims'*, *cuerpo*, *elems'*, *resto_c*, *args*, *lista_arg'*, los siete *X'* de expresiones, *acceso'* e *indice*.
 4. **Pendiente D1, confirmado en el paso 1.** La declaración de módulo `P` no aparece en el parser actual. Cuando se defina su sintaxis y se implemente en ccom, habrá que factorizar las nuevas reglas y recalcular la tabla. No se presupone aún una producción concreta ni ausencia de conflictos.

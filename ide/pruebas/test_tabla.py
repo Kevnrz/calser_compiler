@@ -69,16 +69,16 @@ class PruebasCalser(unittest.TestCase):
         cls.t = construir_tabla(CALSER)
 
     def test_conteos_del_documento(self):
-        # gramatica_ll1.md: 60 no terminales, 47 terminales,
-        # 118 producciones, 336 entradas, 0 conflictos.
-        self.assertEqual(len(CALSER.no_terminales), 60)
-        self.assertEqual(len(CALSER.terminales), 47)
-        self.assertEqual(len(CALSER.producciones), 118)
-        self.assertEqual(len(self.t.m), 336)
+        # gramatica_ll1.md: 61 no terminales, 49 terminales,
+        # 120 producciones, 341 entradas, 0 conflictos.
+        self.assertEqual(len(CALSER.no_terminales), 61)
+        self.assertEqual(len(CALSER.terminales), 49)
+        self.assertEqual(len(CALSER.producciones), 120)
+        self.assertEqual(len(self.t.m), 341)
         self.assertEqual(self.t.conflictos, [])
 
     def test_anulables(self):
-        self.assertEqual(len(self.t.anulables()), 21)
+        self.assertEqual(len(self.t.anulables()), 22)
         self.assertIn("resto_c", self.t.anulables())
         self.assertNotIn("sentencia", self.t.anulables())
 

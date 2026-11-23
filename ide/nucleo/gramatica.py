@@ -86,12 +86,13 @@ class Gramatica:
 
 
 # --------------------------------------------------------------------------
-# Gramática LL(1) de Calser (gramatica_ll1.md §3), 60 no terminales,
-# 118 producciones, 47 terminales. El orden sigue al documento.
+# Gramática LL(1) de Calser (gramatica_ll1.md §3), 61 no terminales,
+# 120 producciones, 49 terminales. El orden sigue al documento.
 # --------------------------------------------------------------------------
 TEXTO_CALSER = """
 // Programa y funciones
-programa -> globales funciones
+programa -> importaciones globales funciones
+importaciones -> P cadena ; importaciones | ε
 globales -> decl globales | ε
 funciones -> funcion funciones_p
 funciones_p -> funcion funciones_p | ε

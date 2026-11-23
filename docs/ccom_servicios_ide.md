@@ -668,3 +668,55 @@ make check-ide
 Verificación: **384 pruebas IDE**, suite completa del compilador y casos M7 bajo ASan/UBSan/LSan. Bison no añade conflictos shift/reduce ni reduce/reduce. El corpus de mutaciones comprueba límites, progreso y ausencia de diagnósticos repetidos en la misma posición.
 
 La evidencia histórica de conteos y sanitizadores está en la [bitácora](../ide/docs/bitacora_ide.md). El [plan](../ide/docs/plan_ide.md) contiene pendientes actuales; esta referencia describe contratos implementados.
+
+
+## Importaciones mínimas (diseño §12)
+
+`--check`, `--check-json` y `--check-ll1-json` siguen los `P "modulo" ;`
+iniciales y aceptan `--module-dir <carpeta>`. Sin la opción buscan junto al
+principal. El IDE la añade con la carpeta del documento guardado cuando
+comprueba su snapshot; un documento sin título no la añade. Las demás
+consultas rechazan `--module-dir` con código 2.
+
+`--tokens-json` reconoce `P` como `reservada` y una cadena entre comillas como
+`cadena`, incluido su rango con comillas. El valor de Bison no lleva comillas.
+No se admiten escapes; una cadena abierta produce `cadena sin cerrar`.
+El IDE acepta el estilo `cadena` y lo colorea como `numero`.
+
+La sintaxis LL(1) incorpora `importaciones -> P cadena ; importaciones | ε`
+y `programa -> importaciones globales funciones`; los datos C se regeneran
+con `tools/generar_datos_ll1.py`. Se conservan cero conflictos.
+
+En la terminal y en la compilación F5, los errores léxicos, sintácticos y
+semánticos muestran la ruta, línea, columna y texto reales del módulo.
+Cambiar la fuente con `diag_select_file` conserva el contador y registra el
+índice activo; los nodos semánticos conservan su procedencia en `ASTNode.file`.
+
+En `--check-json` y `--check-ll1-json`, una única regla en el emisor común de
+diagnostics adapta cualquier diagnóstico cuyo archivo seleccionado sea un
+módulo. El IDE subraya toda la directiva del principal, desde P hasta el ;
+inclusive. Si se repite la importación, se usa la primera. Por ejemplo, un
+`Vm x : int = ;` en la línea 3 de a.cls produce:
+
+```
+error en el modulo 'a': token inesperado ';' (a.cls:3:14)
+```
+
+Su categoría sigue siendo `syntax`, su código `CCOM_SYNTAX` y su severidad
+`error`. Los errores léxicos mantienen `lexical`/`CCOM_LEXICAL` y los semánticos
+`semantic`/`CCOM_SEMANTIC`. La prohibición de P dentro de un módulo se adapta
+igual. Los diagnósticos adicionales de recuperación se conservan, anclados
+también en la directiva correspondiente.
+
+El mensaje contiene la ubicación original; `range` pertenece al principal
+y usa sus offsets UTF-8. Incluye espacios/comentarios/saltos de línea entre P
+y ;, excluyendo lo que siga al ;. Un módulo no encontrado conserva su mensaje
+sin prefijo contextual, pero su rango también cubre la directiva completa.
+No cambia el protocolo ni el único `source`. Los errores del principal y la
+salida textual conservan sus mensajes y ubicaciones. El IDE no necesita
+interpretar el mensaje para ubicar el subrayado.
+
+El ejemplo permanente está en `ide/muestras/modulos/` (se evitó
+`ide/ejemplos/` porque sus fuentes forman parte de corpus recursivos).
+Para la versión completa queda pendiente la importación anidada con detección
+de ciclos.

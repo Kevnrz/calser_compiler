@@ -1,5 +1,6 @@
 # `ccom` — uso y banderas
 
+
 ```
 ccom [opciones] <archivo> [-o <salida>]
 ```
@@ -11,8 +12,16 @@ rutas generadas en stderr. La salida clásica mantiene los errores en stderr;
 
 ## Banderas
 
+### `--module-dir <carpeta>`
+
+Busca cada `P "modulo" ;` en `<carpeta>/<modulo>.cls`. Sin esta opción usa la
+carpeta del archivo principal. Está disponible al compilar y con `--check`,
+`--check-json` y `--check-ll1-json`; con las otras consultas del IDE o `-x`
+retorna 2. Solo el principal puede importar (diseño §12).
+
 | Bandera | Qué hace | Dónde sale | Estado |
 |---|---|---|---|
+| `--module-dir <carpeta>` | Carpeta de búsqueda de módulos del principal; compilación y consultas check | diagnósticos | Disponible (§12) |
 | `-h`, `--help` | Muestra todas las banderas, ejemplos y códigos de salida, sin requerir entrada | stdout | Disponible |
 | `-O0` | Generador actual, también predeterminado sin nivel | archivos | Disponible |
 | `-O1` | Construcción HIGH, selección ISA, asignación y emisión; pasadas vacías | archivos | Disponible |

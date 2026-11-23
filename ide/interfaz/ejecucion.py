@@ -11,6 +11,22 @@ from PySide6.QtGui import QTextCursor
 from ide import archivos
 
 
+SIMULADORES = {'sin_cache': 'Sin caché', '0': 'Caché: solo memoria principal',
+               '1': 'Caché: L1', '2': 'Caché: L1 + L2'}
+LATENCIAS = {2: 39, 4: 53, 5: 60}
+
+
+def argumentos_simulador(root, asm, memoria, traza, configuracion):
+    """Construye la misma invocación de F6, agregando caché solo si se eligió."""
+    cache = configuracion['simulador']
+    script = 'sim_asm.py' if cache == 'sin_cache' else 'sim_cache.py'
+    argumentos = [str(Path(root) / 'tools' / script), str(asm), '--data-image', str(memoria),
+                  '--traza', str(traza), '--max-bundles', '100000', '--traza-max', '5000']
+    if cache != 'sin_cache':
+        argumentos += ['--cache', cache, '--mem-div', str(configuracion['mem_div'])]
+    return argumentos
+
+
 @dataclass(frozen=True)
 class CompilacionEjecutable:
     fuente: Path
@@ -54,7 +70,7 @@ class EjecucionVentana:
             self.escribir_salida(f'No disponible para ejecutar: {error}\n')
 
     def ejecutar(self):
-        if self.process or self.run_process:
+        if self.process or self.run_process or self.metricas_process:
             return False
         editor = self.editor()
         info = self.compilados.get(editor)
@@ -64,7 +80,8 @@ class EjecucionVentana:
         if any(self.ruta_ocupada(p) for p in (info.fuente, info.asm, info.memoria)):
             self.error('Operación en curso', 'Espera a que termine la operación en los archivos del programa.')
             return False
-        simulador = self.root / 'tools/sim_asm.py'
+        simulador = Path(argumentos_simulador(self.root, info.asm, info.memoria,
+                                             'traza.txt', self.configuracion_simulacion)[0])
         if not simulador.is_file():
             self.error('Simulador no disponible', f'No se encontró {simulador}')
             return False
@@ -85,9 +102,14 @@ class EjecucionVentana:
         self.run_info, self.run_editor = info, editor
         self.run_cancelado = self.run_timeout = False
         self.run_decoder = codecs.getincrementaldecoder('utf-8')(errors='replace')
-        argumentos = [str(simulador), str(entradas[0]), '--data-image', str(entradas[1]),
-                      '--traza', str(self.run_trace), '--max-bundles', '100000', '--traza-max', '5000']
+        argumentos = argumentos_simulador(self.root, entradas[0], entradas[1],
+                                          self.run_trace, self.configuracion_simulacion)
+        configuracion = SIMULADORES[self.configuracion_simulacion['simulador']]
+        if self.configuracion_simulacion['simulador'] != 'sin_cache':
+            divisor = self.configuracion_simulacion['mem_div']
+            configuracion += f' · MEM_DIV={divisor} ({LATENCIAS[divisor]} ciclos)'
         self.run_output.setPlainText(f'Ejecutando · {info.fuente.name}\n'
+                                    f'Simulador: {configuracion}\n'
                                     f'Comando: {sys.executable} {argumentos}\n\n')
         self.results_action.setChecked(True)
         self.panels.setCurrentWidget(self.run_output)
@@ -106,6 +128,9 @@ class EjecucionVentana:
         return True
 
     def controles_ejecucion(self, activa):
+        self.metricas_action.setEnabled(not activa)
+        self.simulador_menu.setEnabled(not activa)
+        self.latencia_menu.setEnabled(not activa and self.configuracion_simulacion['simulador'] != 'sin_cache')
         self.opciones_compilacion_action.setEnabled(not activa)
         for accion in self.acciones_modos.values():
             accion.setEnabled(not activa)

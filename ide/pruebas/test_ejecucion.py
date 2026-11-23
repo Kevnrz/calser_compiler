@@ -6,6 +6,9 @@ import unittest
 from unittest.mock import patch
 from PySide6.QtCore import QTimer
 from ide.pruebas import test_carpetas as fixtures
+from ide import archivos, preferencias
+from ide.interfaz.ejecucion import argumentos_simulador, CompilacionEjecutable
+from PySide6.QtCore import QSettings
 
 APP = fixtures.APP
 SUMA = '''F suma [ int a, int b ] : int c ;
@@ -18,6 +21,76 @@ F main [] : void ;
     E ;
 .
 '''
+
+
+class SelectorSimulador(unittest.TestCase):
+    setUp = fixtures.Carpetas.setUp
+    limpiar = fixtures.Carpetas.limpiar
+    terminar = fixtures.Carpetas.terminar
+    esperar = fixtures.Carpetas.esperar
+
+    def test_menu_y_argumentos_para_cada_simulador_y_latencia(self):
+        w = self.window
+        self.assertTrue(w.acciones_simulador['sin_cache'].isChecked())
+        self.assertTrue(w.acciones_latencia[4].isChecked())
+        self.assertFalse(w.latencia_menu.isEnabled())
+        comunes = ['programa.asm', '--data-image', 'programa.mem', '--traza', 'traza.txt',
+                   '--max-bundles', '100000', '--traza-max', '5000']
+        for cache in ('sin_cache', '0', '1', '2'):
+            w.acciones_simulador[cache].trigger()
+            self.assertEqual(sum(a.isChecked() for a in w.acciones_simulador.values()), 1)
+            self.assertEqual(w.latencia_menu.isEnabled(), cache != 'sin_cache')
+            for divisor in (2, 4, 5):
+                w.seleccionar_simulacion('mem_div', divisor)
+                args = argumentos_simulador(w.root, 'programa.asm', 'programa.mem',
+                                            'traza.txt', w.configuracion_simulacion)
+                script = 'sim_asm.py' if cache == 'sin_cache' else 'sim_cache.py'
+                extra = [] if cache == 'sin_cache' else ['--cache', cache, '--mem-div', str(divisor)]
+                self.assertEqual(args, [str(w.root / 'tools' / script)] + comunes + extra)
+
+    def test_preferencia_persiste_al_reabrir(self):
+        settings = QSettings(str(self.base / 'preferencias.ini'), QSettings.Format.IniFormat)
+        self.window.settings = settings
+        self.window.seleccionar_simulacion('simulador', '2')
+        self.window.seleccionar_simulacion('mem_div', 5)
+        self.window.guardar_preferencias()
+        otra = fixtures.Ventana(fixtures.ROOT, preferencias=QSettings(
+            str(self.base / 'preferencias.ini'), QSettings.Format.IniFormat))
+        try:
+            self.assertEqual(otra.configuracion_simulacion, {'simulador': '2', 'mem_div': 5})
+            self.assertTrue(otra.acciones_simulador['2'].isChecked())
+            self.assertTrue(otra.acciones_latencia[5].isChecked())
+            self.assertTrue(otra.latencia_menu.isEnabled())
+        finally:
+            otra.monitor.timer.stop()
+            otra.close()
+            otra.deleteLater()
+        self.assertEqual(preferencias.validar_simulacion({'simulador': 'extra', 'mem_div': True}),
+                         {'simulador': 'sin_cache', 'mem_div': 4})
+
+    def test_f6_cache_muestra_salida_completa_y_codigos(self):
+        fuente = self.folder / 'programa.cls'
+        fuente.write_text('F main [] : void ; E ; .')
+        editor = self.window.abrir(fuente)
+        asm, mem = self.folder / 'programa.asm', self.folder / 'programa.mem'
+        asm.write_text('ensamblador de prueba')
+        mem.write_text('memoria de prueba')
+        self.window.compilados[editor] = CompilacionEjecutable(fuente, editor.revision,
+            archivos.estado(fuente), asm, mem, archivos.estado(asm), archivos.estado(mem))
+        root = self.base / 'simulador'
+        (root / 'tools').mkdir(parents=True)
+        self.window.root = root
+        self.window.seleccionar_simulacion('simulador', '2')
+        for codigo, mensaje in ((0, 'terminada correctamente'), (1, 'con avisos'), (2, 'fallida · código 2')):
+            (root / 'tools/sim_cache.py').write_text(
+                f'import sys\nprint("Métricas de caché: prueba")\nprint("aviso stderr", file=sys.stderr)\nsys.exit({codigo})\n')
+            self.assertTrue(self.window.ejecutar())
+            self.esperar(lambda: self.window.run_process is None)
+            salida = self.window.run_output.toPlainText()
+            self.assertIn('Simulador: Caché: L1 + L2 · MEM_DIV=4 (53 ciclos)', salida)
+            self.assertIn('Métricas de caché: prueba', salida)
+            self.assertIn('aviso stderr', salida)
+            self.assertIn(mensaje, salida)
 
 
 class Ejecucion(unittest.TestCase):

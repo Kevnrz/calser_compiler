@@ -35,6 +35,28 @@ python3 tools/sim_cache.py ejercicios/ejercicio3_cifrado/ejercicio3.asm \
 El código de salida es 0 al terminar sin avisos, 1 si hubo avisos de separación
 o se alcanzó el límite y 2 si hay un error de argumentos, ensamblador o archivos.
 
+## Uso desde el IDE
+
+En CALSIDE, Compilar → Simulador elige qué usa F6: Sin caché
+(`sim_asm.py`, predeterminado), Caché: solo memoria principal (`--cache 0`),
+Caché: L1 (`--cache 1`) o Caché: L1 + L2 (`--cache 2`). Las tres últimas
+ejecutan `sim_cache.py`. Compilar → Latencia de memoria permite elegir
+`--mem-div 2/4/5` (39/53/60 ciclos, predeterminado 4) y solo está habilitado
+con las opciones de caché. Ambas preferencias se conservan al reabrir el IDE.
+
+F5 debe generar primero una compilación vigente con listado `.asm`. F6 usa
+esa compilación con `--data-image`, `--traza`, `--max-bundles 100000` y
+`--traza-max 5000`, agregando `--cache` y `--mem-div` al elegir caché.
+La pestaña Ejecución identifica la configuración y muestra la salida del
+simulador, sus métricas y la traza. El código 1 se presenta como aviso o límite;
+el 2 como error. Cancelar detiene la ejecución; se mantiene el límite de 30 s.
+
+Compilar → Métricas de optimización… corre las dos etapas de `make metricas`
+con el Python del IDE y desde la raíz del repositorio, en segundo plano.
+La pestaña Métricas muestra avance y errores; Cancelar detiene la operación.
+Después de dos etapas correctas abre `build/metricas/reporte.html` en el
+navegador del sistema. Ante un fallo no abre el reporte.
+
 ## Instante de medición
 
 El pipeline empieza con dos ciclos de llenado. Un salto tomado introduce una
